@@ -22,13 +22,16 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CACHE_VERSION = 9
+CACHE_VERSION = 10
 CACHE_NAME = ".process-index.pkl"
 TELEMETRY_NAME = "process-api-telemetry.jsonl"
 
 # Only the properties the process API reads, so a reply is short and the cache is small.
 KEEP_PROPS = {
-    "Ticket": ("title", "ticket_type", "priority", "status", "component", "assignee", "issue_path"),
+    "Ticket": ("title", "ticket_type", "priority", "status", "component", "assignee", "issue_path",
+               "state", "url", "unverified"),                  # ADR-DEVKB-007: hosted issues (GH-<n>)
+    "PullRequest": ("number", "title", "state", "merged_at", "base", "head", "url", "merge_style", "merge_commit",
+                    "labels"),                                # ADR-DEVKB-007
     "Spec": ("title", "doc_type", "status", "spec_id"),
     "Symbol": ("kind", "line_start", "line_end", "complexity", "is_public", "docstring_summary",
                "unresolved_calls", "unresolved_files"),  # ODSF-313: what a list answer cannot see
@@ -88,6 +91,10 @@ class CompactIndex:
     ticket_inv: dict[str, list[int]] = field(default_factory=dict)  # word of a ticket title -> tickets
     n_symbols: int = 0
     n_edges: int = 0
+    # ADR-DEVKB-007: what the pull-request layer saw (manifest `github`), and each MERGES/CLOSES edge's confidence and
+    # whether its target is unverified, which the integer adjacency above does not keep.
+    github: dict = field(default_factory=dict)
+    link_meta: dict[tuple[str, int, int], tuple[float, bool]] = field(default_factory=dict)
 
     # ── lookups ────────────────────────────────────────────────────────────
     def node(self, node_type: str, key: str) -> int | None:
@@ -124,7 +131,8 @@ def _signature(devkb_dir: Path) -> list:
 def _build(code: str, repo_root: Path, devkb_dir: Path) -> CompactIndex:
     manifest = _read_manifest(devkb_dir)
     idx = CompactIndex(code=code, repo_root=str(repo_root), built_at=manifest.get("built_at", ""),
-                       git_head=manifest.get("git_head", ""))
+                       git_head=manifest.get("git_head", ""),
+                       github=manifest.get("github") if isinstance(manifest.get("github"), dict) else {})
     uid_to_i: dict[str, int] = {}
     for line in (devkb_dir / "nodes.jsonl").read_text().splitlines():
         if not line:
@@ -155,6 +163,9 @@ def _build(code: str, repo_root: Path, devkb_dir: Path) -> CompactIndex:
         idx.out[verb][a].append(b)
         idx.inn[verb][b].append(a)
         idx.n_edges += 1
+        if verb in ("MERGES", "CLOSES"):
+            props = e["properties"]
+            idx.link_meta[(verb, a, b)] = (float(props.get("confidence") or 0.0), bool(props.get("unverified")))
         if verb == "SIMILAR_TO":
             idx.sim[a].append((b, float(e["properties"].get("weighted_score") or 0.0)))
         elif verb == "STEP":

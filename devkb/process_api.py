@@ -428,6 +428,88 @@ class ProcessAPI:
         t = self.idx.node("Ticket", ticket)
         return (t, None) if t is not None else (None, {"error": f"no ticket {ticket}"})
 
+    # ── pull requests and hosted issues (ADR-DEVKB-007) ──────────────────────────────────────
+    def _link(self, verb: str, p: int, other: int) -> tuple[float | None, bool]:
+        """(confidence, unverified) of a MERGES or CLOSES edge."""
+        return self.idx.link_meta.get((verb, p, other), (None, False))
+
+    def _pr_row(self, p: int, verb: str = "", other: int | None = None) -> dict:
+        props = self.idx.props[p]
+        row = {"id": self._key(p), "title": (props.get("title") or "")[:90], "state": props.get("state")}
+        if props.get("merged_at"):
+            row["merged_at"] = str(props["merged_at"])[:10]
+        if verb and other is not None:
+            conf, unverified = self._link(verb, p, other)
+            if conf is not None and conf < 1.0:
+                row["confidence"] = conf
+            if unverified:
+                row["unverified"] = True
+        return row
+
+    def _ticket_prs(self, t: int) -> list[int]:
+        return sorted(set(self.idx.sources("CLOSES", t)), key=self._key)
+
+    def _pr_unverified(self, t: int, prs: list[int]) -> list[str]:
+        return [self._key(p) for p in prs if self._link("CLOSES", p, t)[1]]
+
+    def pr_coverage(self, unverified: list[str] | None = None) -> dict | None:
+        """What the pull-request layer could not see, in the shape of every other `coverage`: None when the
+        repository has no GitHub remote and no pull request in its graph, so replies for it are unchanged."""
+        gh = self.idx.github
+        if not gh and not self.idx.type_count.get("PullRequest"):
+            return None
+        status = gh.get("status") or "offline"
+        unverified = sorted(set(unverified or []))
+        cov: dict = {"complete": status == "ok" and not unverified, "github": status}
+        if status == "offline":
+            cov["note"] = ("pull-request links come from git alone: rebase merges and issues closed by a pull request's "
+                           "description are not visible (build with --github)")
+        elif status != "ok":
+            cov["note"] = (f"GitHub layer {status}: {gh.get('reason') or 'not fetched'}; not fetched: "
+                           f"{', '.join(gh.get('not_fetched') or []) or 'everything'}; links shown are the offline ones"
+                           + (" and cached data" if gh.get("stale_cache_used") else ""))
+        if unverified:
+            cov["unverified"] = unverified
+            cov.setdefault("note", "offline closing-keyword links whose target may be a pull request, not an issue")
+        return cov
+
+    def _with_pr_coverage(self, reply: dict, unverified: list[str] | None = None) -> dict:
+        cov = self.pr_coverage(unverified)
+        if cov is not None:
+            reply["coverage"] = cov
+        return reply
+
+    @staticmethod
+    def _is_hosted(ticket: str) -> bool:
+        return bool(re.fullmatch(r"(?:[A-Za-z0-9_-]+:)?GH-\d+", ticket))
+
+    def _prs_of_commit(self, c: int) -> list[int]:
+        return sorted(set(self.idx.sources("MERGES", c)), key=self._key)
+
+    def _pr_ref(self, ref: str) -> tuple[int | None, dict | None]:
+        m = re.fullmatch(r"(?i)((?:[A-Za-z0-9_-]+:)?)(?:PR-|#)?(\d+)", str(ref).strip())
+        i = self.idx.node("PullRequest", f"{m.group(1)}PR-{m.group(2)}") if m else None
+        return (i, None) if i is not None else (None, {"error": f"no pull request {ref}"})
+
+    def pull_request(self, pr: str) -> dict:
+        """A pull request: how it was merged, its commits, the issues it closes, and what the graph cannot verify."""
+        p, err = self._pr_ref(pr)
+        if err:
+            return self._with_pr_coverage(err)
+        idx, props = self.idx, self.idx.props[p]
+        commits = sorted(set(idx.targets("MERGES", p)), key=lambda c: (idx.props[c].get("date", ""), self._key(c)))
+        closes = sorted(set(idx.targets("CLOSES", p)), key=self._key)
+        out = {"pr": self._key(p), "title": (props.get("title") or "")[:110], "state": props.get("state"),
+               "merged_at": props.get("merged_at"), "merge_style": props.get("merge_style"), "base": props.get("base"),
+               "head": props.get("head"), "url": props.get("url"),
+               "commits": [{"h": idx.props[c].get("short_hash"), "s": (idx.props[c].get("subject") or "")[:72],
+                            "c": self._link("MERGES", p, c)[0]} for c in commits[:25]],
+               "n_commits": len(commits),
+               "closes": [{"id": self._key(t), "title": (idx.props[t].get("title") or "")[:80], "c": self._link("CLOSES", p, t)[0],
+                           **({"unverified": True} if self._link("CLOSES", p, t)[1] else {})} for t in closes]}
+        return self._with_pr_coverage({k: v for k, v in out.items() if v not in (None, "")},
+                                      [self._key(t) for t in closes if self._link("CLOSES", p, t)[1]])
+
     def sdlc_context(self, ticket: str) -> dict:
         t, err = self._ticket(ticket)
         if err:
@@ -450,7 +532,8 @@ class ProcessAPI:
                 "requirement": [self._key(x) for x in idx.targets("DERIVED_FROM", t)],
                 "docs": [self._key(x) for x in idx.sources("DOCUMENTS", t)][:5],
                 "similar": [{"t": self._key(b), "s": round(s, 2)} for b, s in idx.sim.get(t, [])[:4]],
-                "commits": len(commits), "files": [self._key(f) for f in files]}
+                "commits": len(commits), "files": [self._key(f) for f in files],
+                **({"pull_requests": [self._pr_row(x, "CLOSES", t) for x in self._ticket_prs(t)]} if self._ticket_prs(t) else {})}
 
     def _bmad_stamp(self) -> tuple:
         """(file count, newest modification) of the BMAD ticket store, so a cached status is dropped when it changes."""
@@ -496,6 +579,14 @@ class ProcessAPI:
 
         out = {"ticket": ticket, "type": p.get("ticket_type"), "status": p.get("status"), "epic": link("CHILD_OF"),
                "spec": link("IMPLEMENTS"), "requirement": [{"id": self._key(x)} for x in idx.targets("DERIVED_FROM", t)]}
+        prs = self._ticket_prs(t)
+        if prs:
+            out["pull_requests"] = [self._pr_row(x, "CLOSES", t) for x in prs]
+        children = sorted(set(idx.sources("CHILD_OF", t)), key=self._key) if self._is_hosted(ticket) else []
+        if children:
+            out["sub_issues"] = [{"id": self._key(x), "status": idx.props[x].get("status")} for x in children]
+        if prs or self._is_hosted(ticket):
+            self._with_pr_coverage(out, self._pr_unverified(t, prs))
         if p.get("ticket_type") != "STORY":
             out["gate0"] = "n/a: only STORY tickets are gated"
             return out
@@ -667,6 +758,14 @@ class ProcessAPI:
         tested = self._tests_of(changed)
         untested = [s for s in changed if not self._has_tests(s)]
         tickets = sorted(set(_TICKET_ID.findall(msgs)))
+        # ADR-DEVKB-007: the pull requests that brought these commits in, and the issues those close
+        prs: dict[int, None] = {}
+        for sha in self._git("rev-list", "-n", "300", f"{base}..{head_rev}").split():
+            c = self.idx.node("Commit", sha)
+            for p in (self._prs_of_commit(c) if c is not None else []):
+                prs[p] = None
+        tickets = sorted(set(tickets) | {self._key(t) for p in prs for t in self.idx.targets("CLOSES", p)})
+        pr_cov = self.pr_coverage([self._key(t) for p in prs for t in self.idx.targets("CLOSES", p) if self._link("CLOSES", p, t)[1]])
         docs: list[str] = []
         for tid in tickets:
             t = self.idx.node("Ticket", tid)
@@ -680,7 +779,9 @@ class ProcessAPI:
                 "untested": [self._key(s) for s in untested[:8]], "tickets": tickets[:6], "docs": sorted(set(docs))[:6],
                 "warnings": warnings[:6], "owners": self._owners_of(sorted(files)),
                 **({"drift": drifted[:6], "note": "these files changed after the commit; changed functions were read from the commit itself"} if drifted else {}),
-                **({"unmapped": unmapped[:6]} if unmapped else {})}
+                **({"unmapped": unmapped[:6]} if unmapped else {}),
+                **({"pull_requests": [self._pr_row(p) for p in sorted(prs, key=self._key)[:6]]} if prs else {}),
+                **({"coverage": pr_cov} if pr_cov is not None else {})}
 
     # ── developer tasks: one call for a whole kind of work (ODSF-310) ──────────────
     # A developer does not ask "who calls this?" and stop. They build a feature, change behaviour, fix a ticketed bug,
@@ -738,13 +839,21 @@ class ProcessAPI:
                 if len(self.idx.targets("TOUCHES", c)) <= 40:  # a mass rename tells nothing about this file
                     found.setdefault(c, f)
         top = sorted(found, key=lambda c: (self.idx.props[c].get("date", ""), self._key(c)), reverse=True)[:limit]
-        return [{"h": (self.idx.props[c].get("short_hash") or "")[:8], "d": self.idx.props[c].get("date"),
+        rows = [{"h": (self.idx.props[c].get("short_hash") or "")[:8], "d": self.idx.props[c].get("date"),
                  "s": (self.idx.props[c].get("subject") or "")[:72], "t": sorted(set(_TICKET_ID.findall(self.idx.props[c].get("subject") or ""))),
                  "f": found[c]} for c in top]
+        for row, c in zip(rows, top):
+            prs = self._prs_of_commit(c)
+            if prs:
+                row["pr"] = [self._key(p) for p in prs]
+                closed = sorted({self._key(t) for p in prs for t in self.idx.targets("CLOSES", p)})
+                if closed:
+                    row["closes"] = closed[:4]
+        return rows
 
     def history(self, files: list[str] | str, limit: int = 6) -> dict:
         files = [files] if isinstance(files, str) else list(files)
-        return {"files": files, "commits": self._recent_commits(files, limit)}
+        return self._with_pr_coverage({"files": files, "commits": self._recent_commits(files, limit)})
 
     def _past_tickets(self, text: str, skip: str = "", bugs_only: bool = False, limit: int = 4) -> list[dict]:
         score: dict[int, float] = {}
@@ -914,12 +1023,26 @@ class ProcessAPI:
                 out[verb.lower()] = fwd
             if back:
                 out[f"{verb.lower()}_by"] = back
-        commits = sorted(idx.sources("REFERENCES", t), key=lambda c: idx.props[c].get("date", ""))
+        prs = self._ticket_prs(t)
+        # a pull request that closes the ticket brings its commits into the ticket's history (ADR-DEVKB-007)
+        via_prs = {c for p in prs for c in idx.targets("MERGES", p)}
+        commits = sorted(set(idx.sources("REFERENCES", t)) | via_prs, key=lambda c: idx.props[c].get("date", ""))
         out["commits"] = len(commits)
         if commits:
             out["first"], out["last"] = idx.props[commits[0]].get("short_hash"), idx.props[commits[-1]].get("short_hash")
         out["spec"] = [self._key(x) for x in idx.targets("IMPLEMENTS", t)]
         out["work_package"] = [self._key(x) for x in idx.targets("PART_OF", t)]
+        if prs:
+            out["pull_requests"] = [self._pr_row(x, "CLOSES", t) for x in prs]
+        if self._is_hosted(ticket):
+            epic = [self._key(x) for x in idx.targets("CHILD_OF", t)]
+            kids = [self._key(x) for x in sorted(set(idx.sources("CHILD_OF", t)), key=self._key)]
+            if epic:
+                out["epic"] = epic
+            if kids:
+                out["sub_issues"] = kids
+        if prs or self._is_hosted(ticket):
+            self._with_pr_coverage(out, self._pr_unverified(t, prs))
         return out
 
     # ── configuration and repositories (ADR-SDP-DEVKB-005, ODSF-312) ────────────
@@ -1280,7 +1403,7 @@ TOOL_ARGS = {
     "callees": ("callees", ["symbol"]), "tests-for": ("tests_for", ["ref"]), "tests-to-run": ("tests_to_run", ["files"]),
     "impact": ("impact", ["files"]), "owner": ("owner", ["path"]), "sdlc-context": ("sdlc_context", ["ticket"]),
     "trace": ("trace", ["ticket"]), "find-docs": ("find_docs", ["topic"]), "review-pack": ("review_pack", ["rev"]),
-    "lineage": ("lineage", ["ticket"]),
+    "lineage": ("lineage", ["ticket"]), "pull-request": ("pull_request", ["pr"]),
     "find-code": ("find_code", ["query"]), "history": ("history", ["files"]), "feature-brief": ("feature_brief", ["goal"]),
     "bug-brief": ("bug_brief", ["ticket"]), "rca-trace": ("rca_trace", ["symptom"]), "refactor-scope": ("refactor_scope", ["target"]),
     "explain-area": ("explain_area", ["path"]),

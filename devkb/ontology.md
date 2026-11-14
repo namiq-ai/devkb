@@ -35,6 +35,16 @@ itself to source structure only, by design non-goal to extend).
 | `Evidence` | one evidence record (REA `ev_…` or ODSF `of_…`), `confidence` as recorded, never upgraded | `evidence_id` | evidence packs `.onboarding/evidence/<EVP>/` | BL-14 (ADR-SDP-DEVKB-002) |
 | `Repository` | one registered project's repository, the product's own or a declared member's (ADR-SDP-DEVKB-005) | project code, e.g. `OCO`, `LTCS` | `projects.json` + the product's `pms.config.json` `graph.members` | ODSF-312 |
 | `ConfigKey` | one named setting: an environment variable, or a root `pms.config.json` top-level key (`pms.config.json:<key>`); **its value is never stored**; never prefixed with a member's code | the name | `extractors/configuration.py` | ODSF-312 |
+| `PullRequest` | one pull request (GitHub; GitLab merge requests later). Properties `number`, `title`, `state` (`open`/`merged`/`closed`), `merged_at`, `base`, `head` (branch names; the owner of `owner/branch` is dropped), `labels`, `url`, `merge_style` (`merge`/`squash`/`rebase` when known), `merge_commit`. **Not stored:** description, review comments, author — the login only under `"github": {"authors": true}` | `PR-<number>`; a member repository's key is prefixed `<CODE>:` as for files. One number sequence per repository, so `PR-137` and an issue `GH-137` never both exist | offline: `git log` merge and squash subjects (always on); online: GitHub GraphQL (opt-in), cached in `.devkb/github/` — `extractors/pull_requests.py`, `github.py` | ADR-DEVKB-007 |
+
+**Hosted issues are `Ticket` nodes** (ADR-DEVKB-007), natural key `GH-<number>` (member-prefixed as above), `source`
+`github-issues`, so every ticket tool and pack works on them. Properties: `title`, `state`, `state_reason`, `labels`,
+`milestone`, `url`, `created_at`, `closed_at`, and `status` (`OPEN`/`CLOSED`, the field the tools already read); no body,
+no author (login only under `authors`). `ticket_type` is the issue's type where the repository uses issue types
+(upper-cased: `Bug` → `BUG`), else a label (`epic` → `EPIC`, `bug` → `BUG`, `enhancement`/`feature` → `FEATURE`), else
+`ISSUE`; an issue with sub-issues is `EPIC`. An offline closing keyword creates a stub `GH-<n>` with `source`
+`git-closing-keyword`, `ticket_type` `ISSUE` and `unverified: true` (the number might be a pull request) until an online
+build confirms or removes it.
 
 `Epic` and `Story` are **not** separate types: they are `Ticket` nodes with `ticket_type` `EPIC` /
 `STORY`, and the names are query aliases for them (ADR-SDP-DEVKB-002 §2), so every existing
@@ -55,7 +65,7 @@ STORY → EPIC, malformed evidence pack, one evidence id recorded with two confi
 
 | Verb | From → To | Source | Phase |
 |---|---|---|---|
-| `REFERENCES` | Commit → Ticket | `git log --grep=<ticket>` | 1 |
+| `REFERENCES` | Commit → Ticket | `git log --grep=<ticket>` (1.0); **online only**, a commit message `#N` that resolves to a hosted issue — `source` `git-hash-mention`, confidence 0.8. Offline a bare `#N` makes no edge: it cannot be told from a pull request, and a wrong ticket link is worse than none | 1 / ADR-DEVKB-007 |
 | `CAUSED_BY` | Ticket → Ticket | Bug Lineage `caused_by` | 1 |
 | `REGRESSION_OF` | Ticket → Ticket | Bug Lineage `regression_of` | 1 |
 | `DUPLICATE_OF` | Ticket → Ticket | Bug Lineage `duplicate_of` | 1 |
@@ -79,6 +89,7 @@ STORY → EPIC, malformed evidence pack, one evidence id recorded with two confi
 | `STEP` | Flow → Symbol, `sequence`/weakest-link `confidence` via `Edge.extra` | mechanical BFS over `CALLS`/`CALLS_API` from a detected touch point | BL-12 |
 | `DOCUMENTS` | Spec → Ticket | ADR `Related:` line / bare ticket-id mentions in spec body, only when the ticket is confirmed to exist in the graph. **Narrowed from an earlier `Spec → File\|Ticket` draft** -- `Symbol`/`File` reach a `Spec` via the existing multi-hop path (`Symbol→File→Commit→Ticket→Spec`) instead of a second, more speculative direct edge | BL-13 |
 | `CHILD_OF` | Story (Ticket) → Epic (Ticket) | ticket `## Trace` `Epic` row | BL-14 |
+| `CHILD_OF` *(new source)* | sub-issue (`GH-n`) → parent issue | GitHub sub-issues, online only; `source` `github-sub-issues`, confidence 1.0; a parent in another repository makes no edge | ADR-DEVKB-007 |
 | `DERIVED_FROM` | Ticket → Requirement | ticket `## Trace` `Requirement` row | BL-14 |
 | `IMPLEMENTS` | Ticket → Spec | ticket `## Trace` `Specification` row, resolved to the spec file | BL-14 |
 | `EVIDENCED_BY` | Ticket \| Spec → Evidence | `References` `evidence — <pack>/bundle.json#<id>` or an `## Open Unknowns` evidence id; only when both ends exist | BL-14 |
@@ -86,6 +97,27 @@ STORY → EPIC, malformed evidence pack, one evidence id recorded with two confi
 | `READS` | Symbol → ConfigKey, or File → ConfigKey at module level | literal `os.environ[...]`, `os.environ.get/setdefault/pop`, `os.getenv`, `"X" in os.environ`; test files excluded; `confidence=0.9` | ODSF-312 |
 | `DECLARES` | File → ConfigKey | `*.env.example`/`.env.template`/`.env.sample` `KEY=` lines, compose `environment:` and `${VAR}`, systemd `Environment=`, Dockerfile `ENV`/`ARG`, root `pms.config.json` keys | ODSF-312 |
 | `DEPLOYS` | File → Component | a compose service (`<file>#<service>`), a systemd unit (`systemd:<unit>`), a Dockerfile (its path); `kind`, `image`, `ports`, `exec` as properties | ODSF-312 |
+| `MERGES` | PullRequest → Commit | the commits the pull request brought in. **Offline** (git alone): a merge commit `Merge pull request #N from <owner>/<branch>` → the merge commit and `git rev-list <merge>^1..<merge>^2` (`source` `git-merge-subject`), a single-parent commit whose subject ends `(#N)` (`git-squash-subject`); confidence 0.9, because a subject is text a person can edit. **Online:** the pull request's commit list and merge commit from the API (`github-pr-commits`), confidence 1.0, which also covers rebase merges; for a merged pull request whose complete list the API returned, an offline edge not in it is removed | ADR-DEVKB-007 |
+| `CLOSES` | PullRequest → Ticket | the issues the pull request closes. **Online:** GitHub's own closing references (`github-closing-reference`), confidence 1.0; they replace every offline edge of that pull request. **Offline:** a closing keyword (`Fixes`/`Closes`/`Resolves #N`) in a commit message of the pull request (`git-closing-keyword`), confidence 0.7, `unverified: true` on the edge, since `#N` might be a pull request (no edge is made when `N` is a known pull request) | ADR-DEVKB-007 |
+
+## The pull-request layer (ADR-DEVKB-007)
+
+- **Offline is always on** and reads only git (one `git log` pass, over the same window as the commit baseline). A
+  repository whose `origin` is not a GitHub host (`github.com`, a host containing `github`, or `"github": {"host": …}`
+  in `devkb.json`) gets no new nodes.
+- **Online is opt-in:** `devkb build --github`, or `{"github": {"enabled": true}}` in `devkb.json` (`--no-github`
+  overrides it). Authentication from `GITHUB_TOKEN` (`GH_ENTERPRISE_TOKEN` for another host) or the `gh` login; host and
+  repository from `origin`. One GraphQL request per 100 pull requests or issues, cached in `.devkb/github/` by each
+  item's `updated_at` (a rebuild stops paging at the first item older than the cache). The cache holds only the
+  fields above and never leaves the machine.
+- **When GitHub cannot be reached** (no token, offline, rate-limited, unauthorized) the build completes with the offline
+  layer plus whatever the cache held, prints what it could not fetch, and records it in `manifest.json` under `github`
+  (`status`: `ok`, `partial`, `failed`; `reason`; `not_fetched`; `stale_cache_used`). Every tool reply that shows
+  pull-request links then carries a `coverage` with `complete: false`, `github` (the status) and a `note`; links the
+  offline layer could not verify are listed in `coverage.unverified`.
+- **Privacy:** the queries never ask for descriptions, comments, reviews or e-mail, and the cache stores a whitelist.
+  An author login is requested and stored only with `"github": {"authors": true}`. Without it a commit subject
+  `Merge pull request #N from owner/branch` is stored as `… from branch`, since the owner is a login.
 
 ## Envelope shapes
 

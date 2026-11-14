@@ -14,6 +14,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from devkb import github
 from devkb.model import DevKBGraph
 from devkb.project_context import ProjectContext
 
@@ -100,6 +101,7 @@ def _git_commits(ticket: str, repo_root: Path) -> list[dict[str, str]]:
 
 def extract(ctx: ProjectContext) -> DevKBGraph:
     g = DevKBGraph()
+    authors = github.settings(ctx.repo_root).authors
     for path in _iter_ticket_files(ctx):
         try:
             text = path.read_text(errors="replace")
@@ -138,7 +140,8 @@ def extract(ctx: ProjectContext) -> DevKBGraph:
         for c in commits:
             g.add_node(
                 "Commit", c["hash"], source="git",
-                short_hash=c["hash"][:10], date=c["date"], author=c["author"], subject=c["subject"],
+                short_hash=c["hash"][:10], date=c["date"], author=c["author"],
+                subject=github.public_subject(c["subject"], authors),
             )
             g.add_edge(
                 "REFERENCES", "Commit", c["hash"], "Ticket", ticket,
