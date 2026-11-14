@@ -20,7 +20,7 @@ TOOLS = re.findall(r"    @tool\n    def (\w+)\(", SERVER)
 
 
 def test_the_server_declares_its_read_only_tools_with_one_sentence_descriptions():
-    assert len(TOOLS) == 24 and len(set(TOOLS)) == 24  # 12 single-question (config: ODSF-312), 7 developer-task (ODSF-310), 5 document and role (ODSF-311)
+    assert len(TOOLS) == 25 and len(set(TOOLS)) == 25  # 13 single-question (config: ODSF-312, pull_request: ADR-DEVKB-007), 7 developer-task (ODSF-310), 5 document and role (ODSF-311)
     assert "readOnlyHint=True" in SERVER and "destructiveHint=False" in SERVER
     for name in TOOLS:
         doc = re.search(rf"def {name}\(.*?\n\s+\"\"\"(.*?)\"\"\"", SERVER, re.S).group(1)

@@ -28,10 +28,13 @@ instructions in place. Codex and most agents read `AGENTS.md`; Claude Code reads
 Or by hand:
 
 ```bash
-devkb build --project .                       # writes .devkb/ (add it to .gitignore)
+devkb build --project .                       # writes .devkb/ (add it to .gitignore); pull requests come from merge/squash subjects
+devkb build --project . --github              # opt in: also read issues and pull requests from GitHub (cached in .devkb/github/)
 devkb pack  --project . refactor my_function  # who calls it, which tests, with evidence lines and coverage
 devkb pack  --project . error "message text"  # which route handlers reach the code that raises it
 devkb pack  --project . change path/to/file.py
+devkb pack  --project . pr 42                  # a pull request's commits, changed functions, tests to run, issues it closes
+devkb pack  --project . ticket GH-123          # a hosted issue's pull requests, commits, changed functions, tests
 ```
 
 Serve the graph to an agent over MCP (stdio), for example in Claude Code's `.mcp.json`:

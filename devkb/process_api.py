@@ -297,7 +297,7 @@ class ProcessAPI:
         c = self.idx.type_count
         return {"project": self.idx.code, "nodes": len(self.idx.keys), "edges": self.idx.n_edges,
                 "symbols": c.get("Symbol", 0), "tests": c.get("TestCase", 0), "specs": c.get("Spec", 0),
-                "tickets": c.get("Ticket", 0)}
+                "tickets": c.get("Ticket", 0), **({"pull_requests": c["PullRequest"]} if c.get("PullRequest") else {})}
 
     def symbol(self, name: str, limit: int = 8) -> dict:
         found = self.idx.short.get(name.rsplit(".", 1)[-1], [])
@@ -423,6 +423,51 @@ class ProcessAPI:
         return {"path": path, "owner": sorted({c for _, c in own[:1]}) if own else [], "forbidden_for": forbidden,
                 "subsystem": sub, **({"note": "no role owns this path; TL decides"} if not own else {})}
 
+    # ── pull requests and hosted issues (ADR-DEVKB-007) ────────────────────
+    def _ticket_prs(self, t: int) -> list[int]:
+        return sorted(set(self.idx.sources("CLOSES", t)), key=lambda p: self.idx.props[p].get("number") or 0)
+
+    def _ticket_commits(self, t: int) -> list[int]:
+        """Commits that name the ticket, plus the commits of every pull request that closes it."""
+        found = list(self.idx.sources("REFERENCES", t))
+        for pr in self._ticket_prs(t):
+            found += self.idx.targets("MERGES", pr)
+        return list(dict.fromkeys(found))
+
+    def _pr_row(self, pr: int, ticket: int | None = None) -> dict:
+        p = self.idx.props[pr]
+        row = {"pr": self._key(pr), "title": (p.get("title") or "")[:90], "state": p.get("state")}
+        if ticket is not None and (pr, ticket) in self.idx.unverified:
+            row["unverified"] = True
+        return row
+
+    def _has_prs(self) -> bool:
+        return bool(self.idx.type_count.get("PullRequest"))
+
+    def _pr_coverage(self, unverified: int = 0) -> dict | None:
+        """What the pull-request and issue links in an answer cannot show. None for a graph without pull requests,
+        whose answers are unchanged by ADR-DEVKB-007."""
+        if not self._has_prs():
+            return None
+        gh = self.idx.github or {}
+        notes: list[str] = []
+        if not gh.get("enabled"):
+            notes.append("GitHub was not read: pull requests come from merge and squash subjects only, so rebase merges, open or "
+                         "closed pull requests and closing links written in descriptions are missing; build with `devkb build --github`")
+        elif gh.get("status") != "ok":
+            notes.append(f"GitHub was read {gh.get('status')}: " + "; ".join(gh.get("errors") or ["see the build output"]))
+        if unverified:
+            notes.append(f"{unverified} closing link(s) unverified: found in commit messages, and #N may be a pull request")
+        return {"complete": False, "links": notes} if notes else {"complete": True, "links": "from GitHub"}
+
+    def _pr_fields(self, t: int) -> dict:
+        prs = self._ticket_prs(t)
+        if not prs:
+            cov = self._pr_coverage() if "GH-" in self._key(t) else None
+            return {"coverage": cov} if cov else {}
+        rows = [self._pr_row(pr, t) for pr in prs]
+        return {"pull_requests": rows, "coverage": self._pr_coverage(sum(1 for r in rows if r.get("unverified")))}
+
     # ── S0 to S6: the requirement chain ────────────────────────────────────
     def _ticket(self, ticket: str) -> tuple[int | None, dict | None]:
         t = self.idx.node("Ticket", ticket)
@@ -433,7 +478,7 @@ class ProcessAPI:
         if err:
             return err
         idx, p = self.idx, self.idx.props[t]
-        commits = idx.sources("REFERENCES", t)
+        commits = self._ticket_commits(t)
         touched: dict[int, int] = {}
         for c in commits:
             for f in idx.targets("TOUCHES", c):
@@ -450,7 +495,8 @@ class ProcessAPI:
                 "requirement": [self._key(x) for x in idx.targets("DERIVED_FROM", t)],
                 "docs": [self._key(x) for x in idx.sources("DOCUMENTS", t)][:5],
                 "similar": [{"t": self._key(b), "s": round(s, 2)} for b, s in idx.sim.get(t, [])[:4]],
-                "commits": len(commits), "files": [self._key(f) for f in files]}
+                "commits": len(commits), "files": [self._key(f) for f in files],
+                **self._pr_fields(t)}
 
     def _bmad_stamp(self) -> tuple:
         """(file count, newest modification) of the BMAD ticket store, so a cached status is dropped when it changes."""
@@ -495,7 +541,10 @@ class ProcessAPI:
             return [{"id": self._key(x), "status": idx.props[x].get("status")} for x in idx.targets(verb, t)]
 
         out = {"ticket": ticket, "type": p.get("ticket_type"), "status": p.get("status"), "epic": link("CHILD_OF"),
-               "spec": link("IMPLEMENTS"), "requirement": [{"id": self._key(x)} for x in idx.targets("DERIVED_FROM", t)]}
+               "spec": link("IMPLEMENTS"), "requirement": [{"id": self._key(x)} for x in idx.targets("DERIVED_FROM", t)],
+               **self._pr_fields(t)}
+        if idx.sources("CHILD_OF", t) and self._key(t).split(":")[-1].startswith("GH-"):
+            out["children"] = [self._key(x) for x in idx.sources("CHILD_OF", t)][:20]
         if p.get("ticket_type") != "STORY":
             out["gate0"] = "n/a: only STORY tickets are gated"
             return out
@@ -638,7 +687,7 @@ class ProcessAPI:
         # Three independent git calls, run together: the diff, the commit subjects, the files moved since the graph.
         with ThreadPoolExecutor(max_workers=3) as pool:
             f_diff = pool.submit(self._git, "diff", "-U0", "--no-color", base, head_rev)
-            f_msgs = pool.submit(self._git, "log", "--format=%s", f"{base}..{head_rev}")
+            f_msgs = pool.submit(self._git, "log", "--format=%H %s", f"{base}..{head_rev}")
             f_moved = pool.submit(self._moved_files, head_rev)
             files, msgs, moved = self._parse_diff(f_diff.result()), f_msgs.result(), f_moved.result()
         if not files:
@@ -667,6 +716,10 @@ class ProcessAPI:
         tested = self._tests_of(changed)
         untested = [s for s in changed if not self._has_tests(s)]
         tickets = sorted(set(_TICKET_ID.findall(msgs)))
+        shas = [ln.split(" ", 1)[0] for ln in msgs.splitlines() if ln]
+        in_range = [c for c in (self.idx.node("Commit", h) for h in shas) if c is not None]
+        prs = sorted({self._key(p) for c in in_range for p in self.idx.sources("MERGES", c)})
+        tickets = sorted(set(tickets) | {t for c in in_range for t in self._commit_issues(c)})
         docs: list[str] = []
         for tid in tickets:
             t = self.idx.node("Ticket", tid)
@@ -680,7 +733,64 @@ class ProcessAPI:
                 "untested": [self._key(s) for s in untested[:8]], "tickets": tickets[:6], "docs": sorted(set(docs))[:6],
                 "warnings": warnings[:6], "owners": self._owners_of(sorted(files)),
                 **({"drift": drifted[:6], "note": "these files changed after the commit; changed functions were read from the commit itself"} if drifted else {}),
-                **({"unmapped": unmapped[:6]} if unmapped else {})}
+                **({"unmapped": unmapped[:6]} if unmapped else {}),
+                **({"pull_requests": prs[:6], "coverage": self._pr_coverage(self._unverified_among(prs))} if prs else {})}
+
+    def _unverified_among(self, prs: list[str]) -> int:
+        n = 0
+        for pk in prs:
+            pr = self.idx.node("PullRequest", pk)
+            n += sum(1 for t in self.idx.targets("CLOSES", pr) if (pr, t) in self.idx.unverified)
+        return n
+
+    # ── one pull request (ADR-DEVKB-007) ──────────────────────────────────────────
+    def _pr(self, ref: str | int) -> tuple[int | None, dict | None]:
+        text = str(ref).strip()
+        key = text if text.startswith("PR-") or ":PR-" in text else f"PR-{text.lstrip('#')}"
+        for k in (text, key):
+            i = self.idx.node("PullRequest", k)
+            if i is not None:
+                return i, None
+        return None, {"error": f"no pull request {text}" + ("" if self._has_prs() else " (the graph has none: no merge or squash subject names one)")}
+
+    def pr_range(self, pr: int) -> str | None:
+        """The revision range that is this pull request's net change: the landing commit against its first parent (a
+        merge commit) or its parent (a squash commit); else, for commits only GitHub lists, oldest^..newest."""
+        number = self.idx.props[pr].get("number")
+        hashes = [self._key(c) for c in self.idx.targets("MERGES", pr)]
+        if not hashes:
+            return None
+        landing = [h for h in hashes if re.search(rf"(\(#{number}\)\s*$|^Merge pull request #{number}\b)",
+                                                  self.idx.props[self.idx.node("Commit", h)].get("subject") or "")]
+        if landing:
+            h = landing[0]
+            parents = self._git("rev-list", "--parents", "-n", "1", h).split()
+            return f"{h}^1..{h}" if len(parents) > 2 else f"{h}^..{h}"
+        ordered = sorted(hashes, key=lambda h: self.idx.props[self.idx.node("Commit", h)].get("date", ""))
+        return f"{ordered[0]}^..{ordered[-1]}"
+
+    def pull_request(self, number: str, limit: int = 12) -> dict:
+        pr, err = self._pr(number)
+        if err:
+            return err
+        idx, p = self.idx, self.idx.props[pr]
+        commits = sorted(set(idx.targets("MERGES", pr)), key=lambda c: (idx.props[c].get("date", ""), self._key(c)))
+        closes = sorted(set(idx.targets("CLOSES", pr)), key=self._key)
+        out: dict = {"pr": self._key(pr), "title": (p.get("title") or "")[:110], "state": p.get("state"), "merged_at": p.get("merged_at"),
+                     "merge_style": p.get("merge_style"), "base": p.get("base"), "head": p.get("head"), "url": p.get("url"),
+                     "n_commits": len(commits),
+                     "commits": [{"h": idx.props[c].get("short_hash"), "s": (idx.props[c].get("subject") or "")[:72]} for c in commits[:limit]],
+                     "closes": [{"ticket": self._key(t), "title": (idx.props[t].get("title") or "")[:70], "state": idx.props[t].get("state"),
+                                 **({"unverified": True} if (pr, t) in idx.unverified else {})} for t in closes]}
+        rng = self.pr_range(pr)
+        if rng:
+            r = self.review_pack(rng, limit)
+            if "error" not in r:
+                out.update({k: r[k] for k in ("files", "changed_symbols", "n_changed_symbols", "tests", "untested", "owners") if k in r})
+                if r.get("tests"):
+                    out["run"] = self._run_line([t["f"] for t in r["tests"]])
+        out["coverage"] = self._pr_coverage(sum(1 for t in closes if (pr, t) in idx.unverified)) or {"complete": True}
+        return out
 
     # ── developer tasks: one call for a whole kind of work (ODSF-310) ──────────────
     # A developer does not ask "who calls this?" and stop. They build a feature, change behaviour, fix a ticketed bug,
@@ -739,12 +849,25 @@ class ProcessAPI:
                     found.setdefault(c, f)
         top = sorted(found, key=lambda c: (self.idx.props[c].get("date", ""), self._key(c)), reverse=True)[:limit]
         return [{"h": (self.idx.props[c].get("short_hash") or "")[:8], "d": self.idx.props[c].get("date"),
-                 "s": (self.idx.props[c].get("subject") or "")[:72], "t": sorted(set(_TICKET_ID.findall(self.idx.props[c].get("subject") or ""))),
-                 "f": found[c]} for c in top]
+                 "s": (self.idx.props[c].get("subject") or "")[:72],
+                 "t": sorted(set(_TICKET_ID.findall(self.idx.props[c].get("subject") or "")) | self._commit_issues(c)),
+                 "f": found[c], **({"pr": self._commit_prs(c)} if self.idx.sources("MERGES", c) else {})} for c in top]
+
+    def _commit_prs(self, c: int) -> list[str]:
+        return sorted(self._key(p) for p in self.idx.sources("MERGES", c))
+
+    def _commit_issues(self, c: int) -> set[str]:
+        """Hosted issues a commit belongs to: those its pull requests close, and those its message mentions."""
+        out = {self._key(t) for t in self.idx.targets("REFERENCES", c) if self.idx.types[t] == "Ticket" and "GH-" in self._key(t)}
+        for pr in self.idx.sources("MERGES", c):
+            out |= {self._key(t) for t in self.idx.targets("CLOSES", pr)}
+        return out
 
     def history(self, files: list[str] | str, limit: int = 6) -> dict:
         files = [files] if isinstance(files, str) else list(files)
-        return {"files": files, "commits": self._recent_commits(files, limit)}
+        commits = self._recent_commits(files, limit)
+        cov = self._pr_coverage() if any("pr" in c for c in commits) else None
+        return {"files": files, "commits": commits, **({"coverage": cov} if cov else {})}
 
     def _past_tickets(self, text: str, skip: str = "", bugs_only: bool = False, limit: int = 4) -> list[dict]:
         score: dict[int, float] = {}
@@ -914,7 +1037,8 @@ class ProcessAPI:
                 out[verb.lower()] = fwd
             if back:
                 out[f"{verb.lower()}_by"] = back
-        commits = sorted(idx.sources("REFERENCES", t), key=lambda c: idx.props[c].get("date", ""))
+        commits = sorted(self._ticket_commits(t), key=lambda c: idx.props[c].get("date", ""))
+        out.update(self._pr_fields(t))
         out["commits"] = len(commits)
         if commits:
             out["first"], out["last"] = idx.props[commits[0]].get("short_hash"), idx.props[commits[-1]].get("short_hash")
@@ -1280,7 +1404,7 @@ TOOL_ARGS = {
     "callees": ("callees", ["symbol"]), "tests-for": ("tests_for", ["ref"]), "tests-to-run": ("tests_to_run", ["files"]),
     "impact": ("impact", ["files"]), "owner": ("owner", ["path"]), "sdlc-context": ("sdlc_context", ["ticket"]),
     "trace": ("trace", ["ticket"]), "find-docs": ("find_docs", ["topic"]), "review-pack": ("review_pack", ["rev"]),
-    "lineage": ("lineage", ["ticket"]),
+    "lineage": ("lineage", ["ticket"]), "pull-request": ("pull_request", ["number"]),
     "find-code": ("find_code", ["query"]), "history": ("history", ["files"]), "feature-brief": ("feature_brief", ["goal"]),
     "bug-brief": ("bug_brief", ["ticket"]), "rca-trace": ("rca_trace", ["symptom"]), "refactor-scope": ("refactor_scope", ["target"]),
     "explain-area": ("explain_area", ["path"]),

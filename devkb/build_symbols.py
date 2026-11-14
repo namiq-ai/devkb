@@ -1266,6 +1266,9 @@ def build(code: str) -> tuple[DevKBGraph, Path]:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Refresh devkb's Symbol graph for one project (BL-3, standalone)")
     ap.add_argument("--project", required=True, help="Project code, e.g. ODSF (see projects.json)")
+    # `devkb build` passes its whole command line to both steps; these belong to the process-graph step (devkb/build.py)
+    ap.add_argument("--github", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--allow-foreign-checkout", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
 
     try:

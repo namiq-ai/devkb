@@ -1,8 +1,8 @@
 """`devkb`: one command for every devkb tool.
 
   devkb init    [--hooks] [--remove]        integrate devkb into this repository (AGENTS.md, CLAUDE.md, .mcp.json)
-  devkb build   --project .                 build the graph (symbols, then process) into .devkb/
-  devkb pack    --project . refactor NAME   a pre-computed context pack (error | change | refactor)
+  devkb build   --project . [--github]      build the graph (symbols, then process) into .devkb/; --github also reads GitHub
+  devkb pack    --project . refactor NAME   a pre-computed context pack (error | change | refactor | ticket | pr)
   devkb query   --project . --about ID      the graph's answer about a ticket, file or symbol
   devkb mcp     --project . [--toolset lean] serve the graph to an agent over MCP (stdio)
   devkb audit   --project .                 per-relation counts, fan-out and cost of the graph
