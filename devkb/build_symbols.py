@@ -57,6 +57,10 @@ from devkb.project_context import ProjectContext, resolve  # noqa: E402
 # resolves the same way here. ──────────────────────────────────────────────
 _HTTP_METHODS = {"get", "post", "put", "delete", "patch"}
 _ROUTER_NAMES = {"router", "app"}
+# Routers are often named for what they serve (`public_router`, `user_router`, `admin_app`) or by framework habit
+# (`api`, `bp`): the truth generator accepted any receiver and the graph accepted two names, so a whole router's
+# handlers were invisible. The decorator must still carry a string path, which keeps `cache.get(...)` out.
+_ROUTER_NAME = re.compile(r"(?:^|_)(?:router|app|api|bp|blueprint)$", re.IGNORECASE)
 
 
 def _odoo_route(dec: ast.expr) -> tuple[str, str] | None:
@@ -92,7 +96,7 @@ def _decorator_route(dec: ast.expr) -> tuple[str, str] | None:
         return None
     if dec.func.attr not in _HTTP_METHODS:
         return None
-    if not isinstance(dec.func.value, ast.Name) or dec.func.value.id not in _ROUTER_NAMES:
+    if not isinstance(dec.func.value, ast.Name) or not (dec.func.value.id in _ROUTER_NAMES or _ROUTER_NAME.search(dec.func.value.id)):
         return None
     if not dec.args or not isinstance(dec.args[0], ast.Constant) or not isinstance(dec.args[0].value, str):
         return None

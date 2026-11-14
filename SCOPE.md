@@ -41,7 +41,7 @@ Two things, in one repository, because each is only credible with the other:
 | `devkb/` | the component: extractors, graph model and index, process API, packs, MCP server, CLI, audit and coverage tools |
 | `devkb/bench/` | the benchmark harness, task generators and truth generators used by the study |
 | `skills/` | agent skills that tell an agent which devkb tool answers which developer task |
-| `tests/` | the component's test suite (202 tests, fixture repositories only) |
+| `tests/` | the component's test suite (206 tests, fixture repositories only) |
 | `study/paper/` | the paper source and PDF |
 | `study/preregistration/` | the frozen protocol and addendum (byte-identical, SHA-256 recorded) and the deviations |
 | `study/analysis/`, `study/results/` | the analysis scripts and their outputs |

@@ -109,7 +109,11 @@ def manifest_payload(
 
 def build(code: str, allow_foreign_checkout: bool = False) -> tuple[DevKBGraph, Path]:
     ctx = resolve(code)
-    mismatch = check_builder_matches_target(ctx.repo_root)
+    mismatch = check_builder_matches_target(ctx.repo_root, BUILDER_ROOT)
+    # The guard protects the target's own graph. A build written elsewhere (DEVKB_DIR: a benchmark snapshot) cannot
+    # replace it, so another checkout of the same repository may build it.
+    if mismatch and not ctx.devkb_dir.resolve().is_relative_to(ctx.repo_root.resolve()):
+        mismatch = None
     if mismatch and not allow_foreign_checkout:
         raise ValueError(mismatch)
     if mismatch:

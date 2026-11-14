@@ -11,3 +11,4 @@ study/paper/*.log
 study/paper/*.bbl
 study/paper/*.blg
 study/paper/*.out
+bench-work/

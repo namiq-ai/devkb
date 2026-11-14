@@ -25,7 +25,7 @@ def inputs(task: dict) -> tuple[str, dict]:
         return "ticket", {"ticket_id": re.search(r"Ticket ([A-Z]+-\d+)", prompt).group(1)}
     if task["kind"] == "commit_trace":
         return "commit_trace", {"commit": re.search(r"Commit ([0-9a-f]{7,40})", prompt).group(1)}
-    if task["kind"] == "err_to_handler":
+    if task["kind"] in ("err_to_handler", "rca"):
         return "error", {"message": re.search(r'"(.+?)"\. ', prompt).group(1)}
     name = re.search(r"`([^`]+)`", prompt).group(1)
     path = re.search(r"\(defined in ([^)]+)\)", prompt).group(1)

@@ -1,0 +1,103 @@
+name: bench
+
+# Free on every pull request that touches the registry or devkb: for each repository in bench/repos.yaml, clone it at
+# its pinned commit, build the graph, generate tasks with truth from source, build packs and score them against the
+# truth. Agent runs cost money and start only by hand (Actions -> bench -> Run workflow, with run_agents ticked).
+
+on:
+  pull_request:
+    paths: ["bench/repos.yaml", "devkb/**"]
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: "Repository ids, comma-separated (empty: all)"
+        default: ""
+      run_agents:
+        description: "Also run the agent arms (needs the ANTHROPIC_API_KEY secret; costs money)"
+        type: boolean
+        default: false
+      arms:
+        description: "Arms"
+        default: "plain,core,lean,pack"
+      reps:
+        description: "Repetitions per task and arm"
+        default: "5"
+      model:
+        description: "Model, the same in every arm"
+        default: "sonnet"
+      max_runs:
+        description: "Refuse to start when tasks x arms x reps exceeds this"
+        default: "300"
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.ids.outputs.ids }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ids
+        env:
+          WANTED: ${{ inputs.ids }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, re
+          ids = re.findall(r"^\s*-\s*(?:\{\s*)?id:\s*([a-z0-9-]+)", open("bench/repos.yaml").read(), re.M)
+          wanted = [x.strip() for x in os.environ.get("WANTED", "").split(",") if x.strip()]
+          print("ids=" + json.dumps([i for i in ids if not wanted or i in wanted]))
+          PY
+
+  prepare:
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.matrix.outputs.ids) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the `self` entry is fetched from this checkout at its pinned commit
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+      - name: Prepare (graph, tasks, packs, pack check)
+        run: .venv/bin/python -m devkb.bench.pipeline prepare "${{ matrix.id }}" --work bench-work
+      - name: Summary
+        if: always()
+        run: |
+          f="bench-work/${{ matrix.id }}/pack-check.json"
+          [ -f "$f" ] && python3 -c "
+          import json; c = json.load(open('$f'))['summary']
+          print(f\"### ${{ matrix.id }}\n\nPacks scored as answers against the truth: **{c['mean_score']}** over {c['tasks']} tasks, by kind {c['by_kind']}.\")
+          print('Packs that claim to be complete but are wrong: ' + (', '.join(c['complete_but_wrong']) or 'none'))
+          " >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Agent runs
+        if: ${{ inputs.run_agents }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          [ -n "$ANTHROPIC_API_KEY" ] || { echo "::error::set the ANTHROPIC_API_KEY repository secret to run agents"; exit 1; }
+          n=$(python3 -c "import json; print(len(json.load(open('bench-work/${{ matrix.id }}/tasks.packs.json'))))")
+          arms=$(echo "${{ inputs.arms }}" | tr ',' '\n' | wc -l)
+          total=$(( n * arms * ${{ inputs.reps }} ))
+          echo "$n tasks x $arms arms x ${{ inputs.reps }} reps = $total runs"
+          [ "$total" -le "${{ inputs.max_runs }}" ] || { echo "::error::$total runs exceeds max_runs"; exit 1; }
+          npm install -g @anthropic-ai/claude-code
+          .venv/bin/python -m devkb.bench.pipeline run "${{ matrix.id }}" --work bench-work --arms "${{ inputs.arms }}" --reps "${{ inputs.reps }}" --model "${{ inputs.model }}"
+          .venv/bin/python -m devkb.bench.pipeline report "${{ matrix.id }}" --work bench-work --model "${{ inputs.model }}" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-${{ matrix.id }}
+          path: |
+            bench-work/${{ matrix.id }}/tasks.packs.json
+            bench-work/${{ matrix.id }}/pack-check.json
+            bench-work/${{ matrix.id }}/graph/manifest.json
+            bench-work/${{ matrix.id }}/${{ matrix.id }}.jsonl
+            bench-work/${{ matrix.id }}/report.json
+          if-no-files-found: ignore

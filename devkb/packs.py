@@ -106,6 +106,16 @@ class Packer:
                 break
         return parent
 
+    def _reachers(self, parent: dict[int, int], cap: int = 40) -> list[str]:
+        """Every production function that reaches the subject through calls, each with the call that proves it. A
+        repository without route handlers (a command-line tool, a library) has no other answer to "what reaches it"."""
+        keys = sorted(parent, key=self.api._key)
+        out = ["", f"## Functions that reach it, at any depth ({len(keys)})"]
+        out += [f"- `{self.api._key(c)}` — `{self.call_site(c, self._name(parent[c]))}`" for c in keys[:cap]]
+        if len(keys) > cap:
+            out.append(f"- … {len(keys) - cap} more")
+        return out if keys else out + ["- none the graph resolves"]
+
     def handlers(self, parent: dict[int, int], start: set[int]) -> list[tuple[int, list[int]]]:
         out = []
         for c in sorted(set(parent) | start, key=self.api._key):
@@ -152,14 +162,16 @@ class Packer:
         out = [f"# Graph pack: error \"{message[:80]}\"", "", self.freshness(sorted({self.api._key(x).split('::')[0] for x in closure})), "",
                "## Raised by"]
         out += [f"- `{self.api._key(x)}` — `{self.def_line(x)}`" for x in raisers]
-        out += ["", f"## Route handlers that reach it ({len(hs)})"]
+        out += self._reachers(parent)
+        if self.idx.ep_by_owner:
+            out += ["", f"## Route handlers that reach it ({len(hs)})"]
         for h, path in hs:
             chain = " → ".join(f"`{self.api._key(p).split('::')[-1]}`" for p in path)
             out.append(f"- `{self.api._key(h)}` ({', '.join(self.api._key(e) for e in self.idx.ep_by_owner[self.api._key(h)][:2])})")
             for a, b in zip(path, path[1:]):
                 out.append(f"  - `{self.call_site(a, self._name(b))}`")
             out.append(f"  - path: {chain}")
-        if not hs:
+        if not hs and self.idx.ep_by_owner:
             out.append("- none: no route handler reaches it through calls the graph resolves")
         out += ["", f"## Test files on those paths ({len(tests)})"] + self._tests_section(tests)
         if tests:
@@ -179,14 +191,16 @@ class Packer:
         closure = set(parent) | {i}
         tests = self.tests(closure)
         out = [f"# Graph pack: changing `{self.api._key(i)}`", "",
-               self.freshness(sorted({self.api._key(x).split('::')[0] for x in closure})), "", f"Defined at `{self.def_line(i)}`.", "",
-               f"## Route handlers that reach it ({len(hs)})"]
+               self.freshness(sorted({self.api._key(x).split('::')[0] for x in closure})), "", f"Defined at `{self.def_line(i)}`."]
+        out += self._reachers(parent)
+        if self.idx.ep_by_owner:
+            out += ["", f"## Route handlers that reach it ({len(hs)})"]
         for h, path_ in hs:
             out.append(f"- `{self.api._key(h)}` ({', '.join(self.api._key(e) for e in self.idx.ep_by_owner[self.api._key(h)][:2])}) — path: "
                        + " → ".join(f"`{self.api._key(p).split('::')[-1]}`" for p in path_))
             for a, b in zip(path_, path_[1:]):
                 out.append(f"  - `{self.call_site(a, self._name(b))}`")
-        if not hs:
+        if not hs and self.idx.ep_by_owner:
             out.append("- none: no route handler reaches it through calls the graph resolves")
         out += ["", f"## Test files to run ({len(tests)}): every test calling it or a function on those paths"] + self._tests_section(tests)
         if tests:

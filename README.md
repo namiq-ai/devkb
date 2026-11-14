@@ -50,6 +50,11 @@ devkb reads the repository and runs `git`; it never executes the repository's ow
 classes; nothing is attributed by a bare name. `devkb audit --project .` reports each relation's size, fan-out and
 cost, so you can check what your graph actually contains.
 
+## Benchmark it on more repositories
+
+The benchmark runs on every repository in [`bench/repos.yaml`](bench/repos.yaml); adding one is a pull request.
+See [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
+
 ## Reproduce the paper
 
 ```bash

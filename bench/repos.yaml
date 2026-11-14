@@ -1,0 +1,42 @@
+# Repositories in the devkb benchmark. Adding one is a pull request that adds an entry here (docs/BENCHMARK.md).
+#
+#   id        short name, used for folders and as the "repo" label in the analysis (lowercase letters, digits, dashes)
+#   url       a public https git URL, or `self` for this repository
+#   commit    the full 40-character commit to pin; the graph, the tasks and every run are at this commit
+#   kind      web  - tasks ask which HTTP route handlers reach a function (confirm_tasks.py; FastAPI/Flask-style routes)
+#             cli  - a command-line tool or a library: error traces and refactor scoping (cli_tasks.py)
+#   size      small | medium | large, by Python source
+#   seed      task-generation seed (changing it is a new task set)
+#   per_kind  up to this many tasks of each kind
+#   licence   the repository's licence, for the record
+#
+# CI builds the graph, generates the tasks with truth from source, builds the packs and checks them against the truth
+# for every entry, at no model cost. Agent runs are started by hand.
+
+repos:
+  # 1. devkb on itself
+  - id: devkb
+    url: self
+    commit: b6a2c9ca10ea50063fda2b8552a038dd27f2b1df
+    kind: cli
+    size: small
+    seed: 2029
+    per_kind: 8
+    licence: proprietary until released
+
+  # 2. dogfooding: the first outside product to use devkb
+  - id: lattice-scan
+    url: https://github.com/namiq-ai/lattice-scan.git
+    commit: 17e2aefd7f7b6b7c7d68a6a3538bc51cebf7c6f5
+    kind: cli
+    size: small
+    seed: 2029
+    per_kind: 8
+    licence: Apache-2.0
+  # 3-5. small, medium, large public repositories
+  - {id: click, url: https://github.com/pallets/click.git, commit: e38188e9e205005d5af5f9e59df51904c984586a, kind: cli, size: small, seed: 2029, per_kind: 8, licence: BSD-3-Clause}
+  - {id: lnbits, url: https://github.com/lnbits/lnbits.git, commit: c8d4701304888696768cbdb2424db4d8b227128e, kind: web, size: medium, seed: 2029, per_kind: 4, licence: MIT}
+  - {id: prefect, url: https://github.com/PrefectHQ/prefect.git, commit: c12b3322560bee718479da8968e7af017df2ea33, kind: web, size: large, seed: 2029, per_kind: 4, licence: Apache-2.0}
+  # the paper's two public replication repositories
+  - {id: dispatch, url: https://github.com/Netflix/dispatch.git, commit: dd2837e82a0bf5565b1b4b4b91ea30b7262d4061, kind: web, size: large, seed: 2027, per_kind: 4, licence: Apache-2.0}
+  - {id: mealie, url: https://github.com/mealie-recipes/mealie.git, commit: a083a4dd6e46a91d19666399cacac77a923bd32d, kind: web, size: medium, seed: 2027, per_kind: 4, licence: AGPL-3.0}

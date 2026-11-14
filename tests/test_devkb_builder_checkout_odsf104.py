@@ -138,3 +138,17 @@ class TestTheEscapeHatchStaysOpen:
         with pytest.raises(RuntimeError, match="reached the extractors"):
             build_mod.build("X", allow_foreign_checkout=True)
         assert calls == ["ran"]
+
+
+def test_a_build_written_outside_the_target_is_not_refused(tmp_path: Path, monkeypatch):
+    """A benchmark snapshot (DEVKB_DIR) cannot overwrite the target's own graph, so the guard does not apply."""
+    target, builder = tmp_path / "product", tmp_path / "product-wt"
+    _repo(target)
+    subprocess.run(["git", "clone", "-q", str(target), str(builder)], check=True)
+    monkeypatch.setattr(build_mod, "BUILDER_ROOT", builder)
+    monkeypatch.setenv("DEVKB_DIR", str(tmp_path / "snapshot"))
+    graph, out = build_mod.build(str(target))
+    assert out == tmp_path / "snapshot" and (out / "manifest.json").exists()
+    monkeypatch.delenv("DEVKB_DIR")
+    with pytest.raises(ValueError, match="not the project being built"):
+        build_mod.build(str(target))

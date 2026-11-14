@@ -1,0 +1,22 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+      - name: Tests
+        run: .venv/bin/python -m pytest tests -q
+      - name: Every result in the paper, recomputed from the raw runs
+        run: make verify

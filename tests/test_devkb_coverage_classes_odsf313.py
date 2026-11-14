@@ -95,3 +95,29 @@ def test_a_pack_carries_evidence_lines_coverage_and_freshness(tmp_path, monkeypa
     assert "Changed since, re-read these:" in Packer(api).change("add_edge", "app/store.py")
     err = p.error("a record without a name cannot be saved")
     assert "`app/base.py::Store.save`" in err and "## Route handlers that reach it (1)" in err
+
+
+def test_a_pack_names_every_function_on_the_path_with_the_call_that_proves_it(tmp_path, monkeypatch):
+    """A command-line tool has no route handlers; "what reaches it" is the list of functions on the call paths."""
+    p = Packer(_api(tmp_path, monkeypatch))
+    err = p.error("a record without a name cannot be saved")
+    assert "## Functions that reach it, at any depth (3)" in err
+    assert "- `app/store.py::RuntimeStore.add_edge` — `app/store.py:6: self.save(a)`" in err
+    assert "`app/routes.py::post_record`" in err and "`app/store.py::RuntimeStore.flush`" in err
+
+
+def test_a_repository_without_routes_gets_no_route_section(tmp_path, monkeypatch):
+    monkeypatch.setitem(globals(), "FILES", {k: v for k, v in FILES.items() if k != "app/routes.py"})
+    text = Packer(_api(tmp_path, monkeypatch)).change("add_edge", "app/store.py")
+    assert "Route handlers" not in text and "## Functions that reach it, at any depth (1)" in text
+
+
+def test_a_router_named_for_what_it_serves_still_declares_routes():
+    import ast as _ast
+    from devkb.build_symbols import _decorator_route
+    dec = lambda src: _ast.parse(src).body[0].value  # noqa: E731
+    assert _decorator_route(dec('public_router.post("/token")')) == ("POST", "/token")
+    assert _decorator_route(dec('user_router.get("/me")')) == ("GET", "/me")
+    assert _decorator_route(dec('bp.get("/x")')) == ("GET", "/x")
+    assert _decorator_route(dec('cache.get("key")')) is None, "not a router"
+    assert _decorator_route(dec('router.get(path)')) is None, "a route needs a literal path"
