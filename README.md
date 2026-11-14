@@ -14,6 +14,20 @@ equal or better quality, for two model sizes. Task-shaped tools saved nothing. S
 ```bash
 pip install "devkb[mcp] @ git+https://github.com/namiq-ai/devkb"
 cd your-repo
+devkb init --hooks      # AGENTS.md + CLAUDE.md instructions, .mcp.json server, .gitignore, rebuild hooks; builds the graph
+devkb init --remove     # takes all of it out again, leaving your files as they were
+```
+
+`devkb init` writes marked blocks, never whole files, so your own `AGENTS.md`, `CLAUDE.md`, `.mcp.json` and
+`.gitignore` keep their content and a re-run only refreshes the block. The instructions matter: in the study, agents
+left to choose used the graph for call chains but not for other work, and the savings were measured with these
+instructions in place. Codex and most agents read `AGENTS.md`; Claude Code reads it through `CLAUDE.md`'s
+`@AGENTS.md`. For Codex, add the server to `~/.codex/config.toml`: `[mcp_servers.devkb]`, `command = "devkb"`,
+`args = ["mcp", "--project", ".", "--toolset", "lean"]`.
+
+Or by hand:
+
+```bash
 devkb build --project .                       # writes .devkb/ (add it to .gitignore)
 devkb pack  --project . refactor my_function  # who calls it, which tests, with evidence lines and coverage
 devkb pack  --project . error "message text"  # which route handlers reach the code that raises it

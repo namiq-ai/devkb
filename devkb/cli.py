@@ -1,5 +1,6 @@
 """`devkb`: one command for every devkb tool.
 
+  devkb init    [--hooks] [--remove]        integrate devkb into this repository (AGENTS.md, CLAUDE.md, .mcp.json)
   devkb build   --project .                 build the graph (symbols, then process) into .devkb/
   devkb pack    --project . refactor NAME   a pre-computed context pack (error | change | refactor)
   devkb query   --project . --about ID      the graph's answer about a ticket, file or symbol
@@ -15,6 +16,7 @@ import runpy
 import sys
 
 COMMANDS = {
+    "init": "devkb.init",
     "pack": "devkb.packs",
     "query": "devkb.query",
     "mcp": "devkb.mcp_server",
