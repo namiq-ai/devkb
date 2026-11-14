@@ -151,6 +151,56 @@ def run(e: dict, work: Path, arms: str, reps: int, model: str, workers: int) -> 
     return 0
 
 
+ARM_ORDER = ("plain", "core", "workflow", "lean", "pack")
+
+
+def token_table(rows: list[dict]) -> str:
+    """Per arm, the median run's tokens by kind, and the task-weighted change in context processed against plain.
+
+    input        uncached input tokens            cache write  context written to the prompt cache (first use, or a
+    cache read   context served from the cache                 miss or expiry: the context sent again)
+    output       generated tokens (thinking included)          context      input + cache write + cache read
+    initial ctx  context given to the first model call: system prompt, tool definitions, task, pack
+    peak ctx     the largest context any model call was given
+    Runs recorded before these fields existed show input and cache write combined (fresh - output)."""
+    import collections  # noqa: PLC0415
+    import statistics as st  # noqa: PLC0415
+
+    full = all("cache_write" in r for r in rows)
+
+    def ctx(r):
+        return r.get("input", 0) + r.get("cache_write", 0) + r["cache_read"] if "cache_write" in r else r["fresh"] - r["output"] + r["cache_read"]
+
+    by = collections.defaultdict(lambda: collections.defaultdict(list))
+    for r in rows:
+        by[r["arm"]][r["task"]].append(r)
+    arms = [a for a in ARM_ORDER if a in by]
+    tasks = [t for t in by.get("plain", {}) if all(t in by[a] for a in arms)]
+    base = sum(st.mean(ctx(r) for r in by["plain"][t]) for t in tasks) if "plain" in by and tasks else 0
+    cols = (["cost $", "turns", "model calls", "initial ctx", "peak ctx", "input", "cache write", "cache read", "output",
+             "thinking"] if full else ["cost $", "turns", "input + cache write", "cache read", "output"]) + ["context", "context saved vs plain"]
+    out = ["| arm | runs | " + " | ".join(cols) + " |", "|---|---:|" + "---:|" * len(cols)]
+    for a in arms:
+        rs = [r for t in by[a].values() for r in t]
+        med = lambda f: st.median(f(r) for r in rs)  # noqa: E731
+        vals = [f"{med(lambda r: r['cost'] or 0):.4f}", f"{med(lambda r: r['turns'] or 0):g}"]
+        if full:
+            vals += [f"{med(lambda r: r['model_calls']):g}", f"{med(lambda r: r['ctx_initial']):,.0f}",
+                     f"{med(lambda r: r['ctx_peak']):,.0f}", f"{med(lambda r: r['input']):,.0f}",
+                     f"{med(lambda r: r['cache_write']):,.0f}", f"{med(lambda r: r['cache_read']):,.0f}",
+                     f"{med(lambda r: r['output']):,.0f}", f"{med(lambda r: r['thinking']):,.0f}"]
+        else:
+            vals += [f"{med(lambda r: r['fresh'] - r['output']):,.0f}", f"{med(lambda r: r['cache_read']):,.0f}",
+                     f"{med(lambda r: r['output']):,.0f}"]
+        vals.append(f"{med(ctx):,.0f}")
+        if base and a != "plain":
+            vals.append(f"{1 - sum(st.mean(ctx(r) for r in by[a][t]) for t in tasks) / base:+.0%}")
+        else:
+            vals.append("—")
+        out.append(f"| {a} | {len(rs)} | " + " | ".join(vals) + " |")
+    return "\n".join(out)
+
+
 def report(e: dict, work: Path, model: str) -> int:
     p = paths(work, e["id"])
     sh(sys.executable, str(ROOT / "study" / "analysis" / "analyze.py"), str(p["runs"]), "--model", model,
@@ -161,19 +211,26 @@ def report(e: dict, work: Path, model: str) -> int:
         c, q = x["cost"], x["quality"]
         print(f"  {arm:9s} saved {c['saved']:+.0%} [{c['lo']:+.0%}, {c['hi']:+.0%}]  quality {q['diff']:+.3f} "
               f"[{q['lo']:+.3f}, {q['hi']:+.3f}]")
+    rows = [json.loads(x) for x in p["runs"].read_text().splitlines() if x.strip()]
+    print("\nTokens by kind (median run):\n" + token_table(rows))
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=("list", "prepare", "run", "report"))
+    ap.add_argument("command", choices=("list", "prepare", "run", "report", "tokens"))
     ap.add_argument("id", nargs="?")
     ap.add_argument("--work", default=os.environ.get("BENCH_WORK", "bench-work"))
     ap.add_argument("--arms", default="plain,core,lean,pack")
     ap.add_argument("--reps", type=int, default=5)
     ap.add_argument("--model", default="sonnet")
     ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--runs", nargs="+", help="tokens: runs files to tabulate")
     a = ap.parse_args()
+    if a.command == "tokens":
+        rows = [json.loads(x) for f in a.runs for x in Path(f).read_text().splitlines() if x.strip()]
+        print(token_table(rows))
+        return 0
     reg = registry()
     if a.command == "list":
         for e in reg.values():

@@ -88,12 +88,17 @@ def _run_once(task: dict, arm: str, cfg_dir: Path) -> dict:
         stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
     calls, graph, rbytes, used = 0, 0, 0, []
     final: dict = {}
+    contexts: dict[str, int] = {}  # message id -> tokens of context that message was given (insertion-ordered)
     for line in stdout.splitlines():
         try:
             e = json.loads(line)
         except ValueError:
             continue
         if e.get("type") == "assistant":
+            mu = e["message"].get("usage") or {}
+            if e["message"].get("id") and mu:
+                contexts[e["message"]["id"]] = (mu.get("input_tokens", 0) + mu.get("cache_creation_input_tokens", 0)
+                                                + mu.get("cache_read_input_tokens", 0))
             for c in e["message"].get("content", []):
                 if c.get("type") == "tool_use":
                     calls += 1
@@ -105,9 +110,17 @@ def _run_once(task: dict, arm: str, cfg_dir: Path) -> dict:
         elif e.get("type") == "result":
             final = e
     u = final.get("usage", {})
+    cw = u.get("cache_creation") or {}
+    ctx = list(contexts.values())
     return {"cost": final.get("total_cost_usd"), "turns": final.get("num_turns"), "secs": round(time.time() - t0, 1),
             "fresh": u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) + u.get("output_tokens", 0),
-            "cache_read": u.get("cache_read_input_tokens", 0), "output": u.get("output_tokens", 0), "tool_calls": calls,
+            "cache_read": u.get("cache_read_input_tokens", 0), "output": u.get("output_tokens", 0),
+            # token kinds: uncached input, cache writes (by lifetime), thinking; context size per model call
+            "input": u.get("input_tokens", 0), "cache_write": u.get("cache_creation_input_tokens", 0),
+            "cache_write_5m": cw.get("ephemeral_5m_input_tokens", 0), "cache_write_1h": cw.get("ephemeral_1h_input_tokens", 0),
+            "thinking": (u.get("output_tokens_details") or {}).get("thinking_tokens", 0), "model_calls": len(ctx),
+            "ctx_initial": ctx[0] if ctx else 0, "ctx_peak": max(ctx) if ctx else 0, "ctx_final": ctx[-1] if ctx else 0,
+            "tool_calls": calls,
             "graph_calls": graph, "graph_tools": used, "result_bytes": rbytes,
             "is_error": bool(final.get("is_error")) or not final, "answer": final.get("result", "")}
 

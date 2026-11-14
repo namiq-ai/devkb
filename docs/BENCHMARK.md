@@ -47,6 +47,23 @@ On GitHub: Actions → bench → Run workflow, tick `run_agents`. It needs an `A
 refuses to start when tasks × arms × repetitions exceeds `max_runs` (default 300). As a guide, Sonnet costs about
 $0.05–0.10 per run on these tasks.
 
+## Tokens by kind
+
+`pipeline report` ends with a table per arm (also `pipeline tokens --runs FILE ...` for any runs file). Price differs by
+kind, so the kinds explain a cost difference that total tokens do not:
+
+| Column | Meaning |
+|---|---|
+| input | uncached input tokens |
+| cache write | context written to the prompt cache: on first use, and again after a miss or an expiry (the context "refreshed") |
+| cache read | context served from the cache, the cheapest kind |
+| output, thinking | generated tokens; thinking is included in output |
+| initial ctx | context given to the first model call: system prompt, tool definitions, task and pack |
+| peak ctx | the largest context any model call was given |
+| context | input + cache write + cache read, the context processed over the whole run |
+
+Runs recorded before these fields existed (the paper's) show input and cache writes as one column.
+
 ## Rules that keep the comparison fair
 
 - **The same model in every arm**, and every arm of a repository in **one shuffled session**: the plain arm's cost
