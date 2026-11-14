@@ -191,6 +191,9 @@ def _first_line(docstring: str | None) -> str | None:
     return docstring.strip().splitlines()[0].strip()
 
 
+EXPR = "<expr>"
+
+
 def _call_name(func: ast.expr) -> tuple[str | None, str] | None:
     """(receiver_name_or_None, short_name) for a call target. The receiver
     is used for BL-3b's cross-file resolution (module.func() -> follow
@@ -201,7 +204,9 @@ def _call_name(func: ast.expr) -> tuple[str | None, str] | None:
     if isinstance(func, ast.Name):
         return None, func.id
     if isinstance(func, ast.Attribute):
-        receiver = func.value.id if isinstance(func.value, ast.Name) else None
+        # A call on an expression (`Path(p).resolve()`, `super().setUp()`) has a receiver, just not a name: EXPR,
+        # never None, so it is not mistaken for a bare call to a same-named function of this file.
+        receiver = func.value.id if isinstance(func.value, ast.Name) else EXPR
         return receiver, func.attr
     return None
 
@@ -957,8 +962,12 @@ def extract(repo_root: Path) -> DevKBGraph:
             continue
         symbols = per_file_symbols[rel_path]
         local_by_short: dict[str, list[str]] = {}
+        bare_by_short: dict[str, list[str]] = {}  # what a bare `name()` can mean: never a method, only `self.name()` is
+        method_by_short: dict[str, list[str]] = {}  # what `self.name()` / `cls.name()` can mean in this file
         for s in symbols:
-            local_by_short.setdefault(s["qualified_name"].rsplit(".", 1)[-1], []).append(s["qualified_name"])
+            short = s["qualified_name"].rsplit(".", 1)[-1]
+            local_by_short.setdefault(short, []).append(s["qualified_name"])
+            (method_by_short if s.get("kind") == "method" else bare_by_short).setdefault(short, []).append(s["qualified_name"])
         imports = per_file_imports.get(rel_path, {})
 
         for mw_name, receiver in middleware:
@@ -1022,8 +1031,12 @@ def extract(repo_root: Path) -> DevKBGraph:
     for rel_path, calls in per_file_calls.items():
         symbols = per_file_symbols[rel_path]
         local_by_short: dict[str, list[str]] = {}
+        bare_by_short: dict[str, list[str]] = {}  # what a bare `name()` can mean: never a method, only `self.name()` is
+        method_by_short: dict[str, list[str]] = {}  # what `self.name()` / `cls.name()` can mean in this file
         for s in symbols:
-            local_by_short.setdefault(s["qualified_name"].rsplit(".", 1)[-1], []).append(s["qualified_name"])
+            short = s["qualified_name"].rsplit(".", 1)[-1]
+            local_by_short.setdefault(short, []).append(s["qualified_name"])
+            (method_by_short if s.get("kind") == "method" else bare_by_short).setdefault(short, []).append(s["qualified_name"])
         imports = per_file_imports.get(rel_path, {})
 
         receivers_here = per_file_import_targets.get(rel_path, ({}, {}))[0]
@@ -1033,7 +1046,11 @@ def extract(repo_root: Path) -> DevKBGraph:
             # `mod.f()` on an imported name calls the import's `f`, never a same-named function of this file: a
             # handler `create_x` calling `models.create_x(...)` was recorded as calling itself, and the real chain
             # into the models layer was lost.
-            local_targets = [] if receiver and receiver in receivers_here else local_by_short.get(callee_short, [])
+            # Same file: a bare `f()` is a function or class of this file; `self.f()` / `cls.f()` a method of it. A call on
+            # any other object (`path.resolve()`, an imported module) is never a same-file function: the typed-receiver
+            # and import passes decide those, and `as_path.resolve()` inside `def resolve` was recorded as recursion.
+            local_targets = (method_by_short.get(callee_short, []) if receiver in ("self", "cls") else []) if receiver \
+                else bare_by_short.get(callee_short, [])
             if len(local_targets) == 1:
                 g.add_edge(
                     "CALLS", "Symbol", caller_key, "Symbol", f"{rel_path}::{local_targets[0]}",
@@ -1057,6 +1074,10 @@ def extract(repo_root: Path) -> DevKBGraph:
             if resolved_key is None and receiver and receiver not in receivers and receiver.isidentifier():
                 # A module loaded with importlib and bound to a variable of the same name.
                 resolved_key = _resolve_cross_file_symbol(receiver, rel_path, callee_short, per_file_symbols)
+            if receiver == EXPR:
+                if callee_short in repo_short_names:
+                    unresolved.add((rel_path, caller_qn, callee_short))  # said in coverage, as before: not attributed
+                continue
             if resolved_key is None and receiver and receiver not in receivers:
                 resolved_key = _resolve_via_literals(per_file_literals.get(rel_path, []), callee_short, per_file_symbols)
             if resolved_key is None:

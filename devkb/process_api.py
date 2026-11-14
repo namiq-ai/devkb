@@ -83,8 +83,13 @@ def is_generated_path(path: str) -> bool:
     return bool(_GENERATED.search(path))
 
 
+_TEST_TREE = re.compile(r"(^|/)(tests?/[^/].*\.py|conftest\.py)$")
+
+
 def is_test_path(path: str) -> bool:
-    return bool(_PY_TEST.search(path) or _JS_TEST.search(path))
+    """Test code: a test module by name, or any Python file in a tests/ or test/ tree (fixtures, helpers, conftest),
+    since a change that breaks those breaks the test run just the same."""
+    return bool(_PY_TEST.search(path) or _JS_TEST.search(path) or _TEST_TREE.search(path))
 
 
 def _lines(block: str) -> list[str]:

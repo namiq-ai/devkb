@@ -161,3 +161,33 @@ def test_a_call_through_an_imported_module_never_resolves_to_a_same_named_local_
     calls = {(e.src, e.dst) for e in build_symbols.extract(tmp_path).edges("CALLS")}
     assert ("app/api.py::create_item", "app/models/items.py::create_item") in calls
     assert ("app/api.py::create_item", "app/api.py::create_item") not in calls, "not a call to itself"
+
+
+def test_a_bare_call_inside_a_method_never_means_a_method_of_the_same_name(tmp_path):
+    """Inside `def secret(self)`, a bare `secret()` is the imported function: a class body does not enclose names."""
+    files = {
+        "app/__init__.py": "",
+        "app/crypto.py": "def secret(n):\n    return n\n",
+        "app/api.py": ("from app.crypto import secret\n\n\nclass Host:\n    def secret(self, n):\n        return secret(n)\n"),
+    }
+    for rel, text in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text)
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+        subprocess.run(["git", *cmd], cwd=tmp_path, check=True, capture_output=True)
+    calls = {(e.src, e.dst) for e in build_symbols.extract(tmp_path).edges("CALLS")}
+    assert ("app/api.py::Host.secret", "app/crypto.py::secret") in calls
+    assert ("app/api.py::Host.secret", "app/api.py::Host.secret") not in calls
+
+
+def test_a_method_call_on_an_expression_is_not_a_call_to_a_same_named_function(tmp_path):
+    files = {"app/__init__.py": "",
+             "app/paths.py": ("from pathlib import Path\n\n\ndef resolve(code):\n    return code\n\n\n"
+                              "def external(p):\n    return Path(p).resolve()\n")}
+    for rel, text in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text)
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+        subprocess.run(["git", *cmd], cwd=tmp_path, check=True, capture_output=True)
+    calls = {(e.src, e.dst) for e in build_symbols.extract(tmp_path).edges("CALLS")}
+    assert ("app/paths.py::external", "app/paths.py::resolve") not in calls

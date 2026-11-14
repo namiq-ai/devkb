@@ -10,9 +10,13 @@ the MODULE that defines the function, so equal names in different modules never 
   import dispatch.incident.service as svc  ->  svc.get(...)        ->  dispatch/incident/service.py::get
   a call to a function defined in the same file, by its bare name
 
-Targets are module-level functions only. A call made through an object (`self.x()`, `store.x()`) is not attributed:
-the truth is conservative, so a task is built only on functions whose callers it can see completely (no method on
-the path except a route handler at its end).
+Targets are module-level functions, and methods called as `self.x()` / `cls.x()` from their own class in the same
+file. A call made through any other object (`store.x()`), or reaching a method through a base class, is not
+attributed: the truth is conservative, so a task is built only on functions whose callers it can see completely (no
+method on the path except a route handler, whose own callers in its class are followed).
+
+A raised message is the first positional string argument, or a `detail=` / `message=` / `msg=` / `description=`
+keyword (`HTTPException(status_code=422, detail="...")`).
 """
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ import subprocess
 from pathlib import Path
 
 ROUTE_VERBS = {"get", "post", "put", "delete", "patch"}
+RAISE_KEYWORDS = ("detail", "message", "msg", "description")
 _TEST = re.compile(r"(^|/)(tests?/|test_[^/]*\.py$|[^/]*_test\.py$|conftest\.py$)")
 
 
@@ -41,6 +46,7 @@ class _File(ast.NodeVisitor):
         self.bind_mod: dict[str, str] = {}       # local -> dotted module
         self.bind_obj: dict[str, tuple[str, str]] = {}  # local -> (dotted module, name)
         self.raises: list[tuple[str, str]] = []
+        self.classes: list[str] = []             # qualnames of the enclosing classes, innermost last
 
     def visit_Import(self, node):
         for a in node.names:
@@ -62,7 +68,9 @@ class _File(ast.NodeVisitor):
 
     def visit_ClassDef(self, node):
         self.stack.append(node.name)
+        self.classes.append(".".join(self.stack))
         self.generic_visit(node)
+        self.classes.pop()
         self.stack.pop()
 
     def _fn(self, node):
@@ -86,13 +94,17 @@ class _File(ast.NodeVisitor):
             if isinstance(f, ast.Name):
                 self.calls[self.fn[-1]].add(("", f.id))
             elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
-                self.calls[self.fn[-1]].add((f.value.id, f.attr))
+                if f.value.id in ("self", "cls") and self.classes:
+                    self.calls[self.fn[-1]].add((f"self:{self.classes[-1]}", f.attr))  # the innermost enclosing class
+                else:
+                    self.calls[self.fn[-1]].add((f.value.id, f.attr))
         self.generic_visit(node)
 
     def visit_Raise(self, node):
-        if self.fn and isinstance(node.exc, ast.Call) and node.exc.args:
-            a = node.exc.args[0]
-            if isinstance(a, ast.Constant) and isinstance(a.value, str):
+        if self.fn and isinstance(node.exc, ast.Call):
+            cands = node.exc.args[:1] + [k.value for k in node.exc.keywords if k.arg in RAISE_KEYWORDS]
+            a = next((c for c in cands if isinstance(c, ast.Constant) and isinstance(c.value, str)), None)
+            if a is not None:
                 self.raises.append((self.fn[-1], a.value))
         self.generic_visit(node)
 
@@ -104,7 +116,8 @@ class Truth:
         listed = subprocess.run(["git", "ls-files", "--recurse-submodules", "--", "*.py"], cwd=root,
                                 capture_output=True, text=True).stdout.split()
         for rel in listed:
-            if re.search(r"(^|/)(\.impl-worktrees|node_modules|\.claude|_bmad|migrations|alembic)/", rel):
+            # migrations and alembic versions are callers too: a signature change breaks them like any other file
+            if re.search(r"(^|/)(\.impl-worktrees|node_modules|\.claude|_bmad)/", rel):
                 continue
             try:
                 v = _File(rel)
@@ -129,6 +142,9 @@ class Truth:
 
     def _target(self, rel: str, base: str, name: str) -> tuple[str, str] | None:
         f = self.files[rel]
+        if base.startswith("self:"):
+            qual = f"{base[5:]}.{name}"
+            return (rel, qual) if qual in f.defs else None
         if not base:
             if name in f.bind_obj:
                 mod, orig = f.bind_obj[name]
@@ -183,6 +199,7 @@ class Truth:
                         continue
                     prod.add(c)
                     if self.is_route(c):
+                        nxt.append(c)  # a handler may itself be called by another handler of its class
                         continue
                     if not self.is_function(c):
                         clean = False
