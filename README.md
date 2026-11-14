@@ -12,7 +12,7 @@ equal or better quality, for two model sizes. Task-shaped tools saved nothing. S
 ## Use it on your repository
 
 ```bash
-pip install "devkb[mcp] @ git+https://github.com/hungle-namiq/devkb"
+pip install "devkb[mcp] @ git+https://github.com/namiq-ai/devkb"
 cd your-repo
 devkb build --project .                       # writes .devkb/ (add it to .gitignore)
 devkb pack  --project . refactor my_function  # who calls it, which tests, with evidence lines and coverage

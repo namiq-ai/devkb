@@ -59,7 +59,7 @@ Two things, in one repository, because each is only credible with the other:
 
 ## Integration contract
 
-- `pip install "devkb[mcp] @ git+https://github.com/hungle-namiq/devkb"`, then `devkb build --project .` in any git
+- `pip install "devkb[mcp] @ git+https://github.com/namiq-ai/devkb"`, then `devkb build --project .` in any git
   repository. No configuration is required;
   an optional `devkb.json` declares the ticket prefix, issue and specification folders, role profiles and frontend.
 - devkb only reads the repository and runs `git`. It never executes the analysed repository's code unless that
