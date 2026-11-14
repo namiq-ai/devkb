@@ -121,3 +121,43 @@ def test_a_router_named_for_what_it_serves_still_declares_routes():
     assert _decorator_route(dec('bp.get("/x")')) == ("GET", "/x")
     assert _decorator_route(dec('cache.get("key")')) is None, "not a router"
     assert _decorator_route(dec('router.get(path)')) is None, "a route needs a literal path"
+
+
+def test_any_router_constructor_gives_its_prefix_and_same_routes_in_two_modules_both_survive(tmp_path):
+    files = {
+        "api/__init__.py": "",
+        "api/flows.py": ("from app.routing import ProjectRouter\nrouter = ProjectRouter(prefix='/flows')\n\n"
+                         "@router.post('/history')\ndef flow_history():\n    pass\n\n@router.post('/')\ndef create_flow():\n    pass\n"),
+        "api/tasks.py": ("from app.routing import ProjectRouter\nrouter = ProjectRouter(prefix='/tasks')\n\n"
+                         "@router.post('/history')\ndef task_history():\n    pass\n"),
+        "api/plain.py": "router = make()\n\n@router.post('/')\ndef create_plain():\n    pass\n",
+        "api/other.py": "router = make()\n\n@router.post('/')\ndef create_other():\n    pass\n",
+    }
+    for rel, text in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text)
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+        subprocess.run(["git", *cmd], cwd=tmp_path, check=True, capture_output=True)
+    g = build_symbols.extract(tmp_path)
+    owners = {n.props["owner_symbol"]: (n.natural_key, n.props["path"]) for n in g.nodes("Endpoint") if n.props.get("owner_symbol")}
+    assert owners["api/flows.py::flow_history"] == ("POST /flows/history", "/flows/history")
+    assert owners["api/tasks.py::task_history"] == ("POST /tasks/history", "/tasks/history")
+    assert {"api/plain.py::create_plain", "api/other.py::create_other"} <= set(owners), "POST / in two modules: both kept"
+    assert all(path == "/" for k, (key, path) in owners.items() if k.endswith(("create_plain", "create_other")))
+
+
+def test_a_call_through_an_imported_module_never_resolves_to_a_same_named_local_function(tmp_path):
+    files = {
+        "app/__init__.py": "", "app/models/__init__.py": "",
+        "app/models/items.py": "def create_item(x):\n    return x\n",
+        "app/api.py": ("from app.models import items as items_models\n\n@router.post('/items')\n"
+                       "def create_item(x):\n    return items_models.create_item(x)\n"),
+    }
+    for rel, text in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text)
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+        subprocess.run(["git", *cmd], cwd=tmp_path, check=True, capture_output=True)
+    calls = {(e.src, e.dst) for e in build_symbols.extract(tmp_path).edges("CALLS")}
+    assert ("app/api.py::create_item", "app/models/items.py::create_item") in calls
+    assert ("app/api.py::create_item", "app/api.py::create_item") not in calls, "not a call to itself"

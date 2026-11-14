@@ -81,9 +81,19 @@ Runs recorded before these fields existed (the paper's) show input and cache wri
 | `devkb` | cli | small | devkb measured on itself (4 tasks; packs 0.99) |
 | `lattice-scan` | cli | small | the first outside product to use devkb (12 tasks; packs 1.0) |
 | `click` | cli | small | a widely used command-line library (3 tasks: few module-level functions) |
-| `lnbits` | web | medium | a FastAPI application (12 tasks; packs 0.96 against truth) |
-| `prefect` | web | large | a large FastAPI server and library (10 tasks; packs 0.79: route-handler gaps to fix) |
-| `dispatch`, `mealie` | web | large, medium | the paper's two public replication repositories |
+| `lnbits` | web | medium | a FastAPI application (12 tasks; packs 0.96) |
+| `prefect` | web | large | a large FastAPI server and library (10 tasks; packs 0.97, from 0.79 before the route fixes) |
+| `dispatch`, `mealie` | web | large, medium | the paper's two public replication repositories (Mealie packs 0.97) |
 
 Repositories built almost entirely from classes (for example `encode/httpx`) yield no task: both generators pick module-level
 functions, because their truth resolves calls by import path and does not follow methods through untyped objects.
+
+## Known limits of the truth
+
+A pack can be right where the truth is not. Two cases are known, both found on this registry, and a pack-check score
+below 1.0 should be read against them before it is called a graph gap:
+
+- **Route handlers that are methods of a controller class** (Mealie's `controller_shopping_lists.py`): the graph
+  finds them, the truth's closure does not follow calls made from methods, so it lists fewer handlers.
+- **Messages raised as a keyword argument** (`HTTPException(detail="...")`, Prefect's history endpoints): the graph
+  records the handler as a raiser, the truth counts only messages passed positionally to `raise`.

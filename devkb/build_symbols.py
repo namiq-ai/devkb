@@ -104,11 +104,18 @@ def _decorator_route(dec: ast.expr) -> tuple[str, str] | None:
 
 
 def _router_prefix(tree: ast.Module) -> str:
+    """The prefix a module's router declares. Any constructor named like a router counts (`APIRouter`,
+    `fastapi.APIRouter`, a project's own `PrefectRouter`), and Flask's `Blueprint(url_prefix=...)`: reading only
+    `APIRouter` left a project's prefixes empty, so `POST /` in five modules collapsed into one Endpoint."""
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "APIRouter":
-            for kw in node.keywords:
-                if kw.arg == "prefix" and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
-                    return kw.value.value
+        if not isinstance(node, ast.Call):
+            continue
+        name = node.func.id if isinstance(node.func, ast.Name) else node.func.attr if isinstance(node.func, ast.Attribute) else ""
+        if not (name.endswith("Router") or name == "Blueprint"):
+            continue
+        for kw in node.keywords:
+            if kw.arg in ("prefix", "url_prefix") and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                return kw.value.value
     return ""
 
 
@@ -865,7 +872,12 @@ def extract(repo_root: Path) -> DevKBGraph:
         per_file_daemon_entries[rel_path] = daemon_entries
         per_file_typed_calls[rel_path] = typed_calls
         for qn, method, path in routes:
-            route_index[f"{method} {path}"] = f"{rel_path}::{qn}"
+            key, owner = f"{method} {path}", f"{rel_path}::{qn}"
+            if route_index.get(key, owner) != owner:
+                # Two handlers under one "METHOD path" (routers mounted under prefixes this file cannot see): keep
+                # both. The first keeps the plain key, which CALLS_API matches; the second is told apart by its file.
+                key = f"{method} {path} ({rel_path})"
+            route_index[key] = owner
 
     # ── BL-7: persist Endpoint as a real, independently-queryable node --
     # previously route_index only lived as an in-memory resolution
@@ -874,6 +886,7 @@ def extract(repo_root: Path) -> DevKBGraph:
     # stores stay joinable without a translation table. ─────────────────
     for route_key, owner_symbol in route_index.items():
         method, path = route_key.split(" ", 1)
+        path = path.split(" (", 1)[0]  # a disambiguated key carries its file; the path does not
         g.add_node("Endpoint", route_key, source="ast", method=method, path=path, owner_symbol=owner_symbol)
 
     # security_signals (BL-14) accumulates across RAISES/REGISTERED_ON
@@ -1013,10 +1026,14 @@ def extract(repo_root: Path) -> DevKBGraph:
             local_by_short.setdefault(s["qualified_name"].rsplit(".", 1)[-1], []).append(s["qualified_name"])
         imports = per_file_imports.get(rel_path, {})
 
+        receivers_here = per_file_import_targets.get(rel_path, ({}, {}))[0]
         for caller_qn, receiver, callee_short in calls:
             caller_key = f"{rel_path}::{caller_qn}"
 
-            local_targets = local_by_short.get(callee_short, [])
+            # `mod.f()` on an imported name calls the import's `f`, never a same-named function of this file: a
+            # handler `create_x` calling `models.create_x(...)` was recorded as calling itself, and the real chain
+            # into the models layer was lost.
+            local_targets = [] if receiver and receiver in receivers_here else local_by_short.get(callee_short, [])
             if len(local_targets) == 1:
                 g.add_edge(
                     "CALLS", "Symbol", caller_key, "Symbol", f"{rel_path}::{local_targets[0]}",
@@ -1134,8 +1151,9 @@ def extract(repo_root: Path) -> DevKBGraph:
     by_path: dict[str, list[str]] = {}
     for route_key, owner in route_index.items():
         m, p = route_key.split(" ", 1)
-        shape = ts_symbols.route_shape(p)
-        by_shape[(m, shape)] = owner
+        shape = ts_symbols.route_shape(p.split(" (", 1)[0])
+        # a path two handlers serve is ambiguous: a call to it stays unresolved rather than picking one
+        by_shape[(m, shape)] = owner if by_shape.get((m, shape), owner) == owner else None
         by_path.setdefault(shape, []).append(owner)
     for file_path, symbol_qn, method, path in ts_route_calls:
         target = route_index.get(f"{method} {path}") or by_shape.get((method, ts_symbols.route_shape(path)))
