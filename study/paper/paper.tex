@@ -1,0 +1,190 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs,multirow,amsmath,graphicx,xcolor,url}
+\newcommand{\tbd}[1]{\textcolor{red}{[#1]}}
+% Double-anonymous review: \anontrue hides the author, the affiliation and the artifact location.
+\newif\ifanon
+\anonfalse
+\input{confirmatory-macros.tex}
+
+\begin{document}
+\title{Fewer Turns, Not a Better Graph: A Pre-Registered Study of Process Graphs for Coding Agents}
+
+\ifanon
+\author{\IEEEauthorblockN{Anonymous author(s)}\IEEEauthorblockA{Anonymous institution}}
+\else
+\author{\IEEEauthorblockN{Hung T. Le}\IEEEauthorblockA{NamiQ LLC, Austin, Texas, USA \quad letronghung@gmail.com}}
+\fi
+
+\maketitle
+
+\begin{abstract}
+Coding agents pay to rediscover what a repository already records: callers, tests, tickets, specifications. We built
+a software-process knowledge graph (20 node types, 30 relations) and served it to agents as tools and as pre-computed
+\emph{packs}, with the same model in every arm. In 461 exploratory runs on two industrial repositories, graph-equipped
+agents cost 11--24\% more than plain search, through three mechanisms we document. A pre-registered study on
+\confTasks{} held-out tasks in four repositories (1,020 runs) found the opposite: packs cost 41\% less (95\% CI
+34--48\%) and a small tool set 35\% less, at equal or better quality, for two model sizes; task-shaped tools saved
+nothing, and the saving tracked the number of turns. A pre-registered ablation refuted our own explanation that
+auditing the graph removed the cost penalty; the plain baseline alone varied 39\% between sessions. On process joins,
+packs cost 60\% less but lost quality where the graph had missed a link.
+\end{abstract}
+
+\begin{IEEEkeywords}
+LLM agents, knowledge graphs, software process, retrieval, cost, empirical study, pre-registration
+\end{IEEEkeywords}
+
+\section{Introduction}
+LLM-based coding agents~\cite{jimenez2024swebench,yang2024sweagent,zhang2024autocoderover} navigate a repository with
+text search and file reads, and every read is paid for again on each later turn. A natural idea is to give the agent
+the repository's structure up front: a graph of symbols and calls~\cite{liu2024codexgraph,ouyang2025repograph},
+extended with the development process (tickets, commits, specifications, tests, owners, configuration) and served over
+a tool protocol~\cite{mcp2024}. For a practitioner the question is not whether such a graph is \emph{useful} but whether
+it makes agents \emph{cheaper at equal quality}, on which tasks, and what it takes.
+
+We answer with the same model in every arm. Contributions:
+\begin{itemize}
+\item A software-process knowledge graph for agents, its extraction, and three ways to serve it: single-question
+  tools, task tools, and pre-computed \emph{packs} that carry their own evidence and a completeness statement
+  (Section~\ref{sec:system}).
+\item Three mechanisms by which a graph makes a strong agent \emph{more} expensive, observed in 461 exploratory runs
+  (Section~\ref{sec:exploratory}).
+\item An edge-level audit that measures each relation against truth computed from source (Section~\ref{sec:audit}).
+\item A pre-registered confirmatory study on held-out tasks in four repositories, an ablation separating the audit
+  from the completeness statement, and a study of process-layer joins (Sections~\ref{sec:confirmatory}--\ref{sec:process}),
+  with an artifact that reproduces every number.
+\end{itemize}
+
+\section{The graph and how agents receive it}\label{sec:system}
+\paragraph{Schema} Node types: Ticket, Commit, File, Symbol, TestCase, Endpoint, Flow, ErrorSignature, Spec,
+Requirement, Evidence, WorkPackage, Milestone, Release, WorkUnit, Component, Subsystem, Warning, Repository and
+ConfigKey. Relations include \texttt{CALLS}, \texttt{TESTED\_BY}, \texttt{RAISES}, \texttt{STEP} (ordered call flows
+from entry points), \texttt{TOUCHES}, \texttt{REFERENCES}, \texttt{CHILD\_OF}, \texttt{IMPLEMENTS},
+\texttt{SIMILAR\_TO}, \texttt{READS} and \texttt{DECLARES}, 30 in all. We call it a knowledge graph rather than an
+ontology: it is a typed property graph whose schema changes only through recorded architecture decisions, without
+formal semantics.
+\paragraph{Extraction} Calls are resolved through each file's imports, aliases, relative imports, typed receivers
+(parameter annotations, constructors, \texttt{self} attributes) and base classes; nothing is attributed by a bare name.
+Every list answer carries \emph{coverage}: the call sites under the same name the resolver could not attribute, and the
+files holding them.
+\paragraph{Serving} \emph{Single-question tools} (12): callers, tests for, impact, review pack, ticket context, lineage,
+\dots; \emph{task tools} (7): one call per developer task; a \emph{lean} set (7 tools); and \emph{packs}, written
+before the session from what a task names, placed in the prompt, with no tools loaded. A pack gives every caller,
+handler and test as \texttt{path:line} with the line of code that proves it, a coverage statement, and freshness
+against the working tree.
+
+\section{Method}\label{sec:method}
+\paragraph{Arms} plain (Read, Grep, Glob, read-only git, a neutral efficiency note); core; workflow; lean; pack. Same
+model, same task prompt, a 40-turn cap, no session persistence, a discarded warm-up per arm, runs shuffled with a fixed
+seed. Graph arms are told to use the graph first; whether an agent adopts it unprompted is reported separately.
+\paragraph{Truth} Computed from source and history, never from the graph: calls resolved by import path, grep, git,
+the ticket files' own trace tables.
+\paragraph{Measures} API-equivalent cost per run, turns, tool-result bytes, and a task score in $[0,1]$ (F1 of named
+sets, exact match of a raiser or a trace). Cost effect $=1-\sum_t \overline{c}_{\mathrm{arm},t}/\sum_t
+\overline{c}_{\mathrm{plain},t}$ (positive means cheaper), with 95\% bootstrap intervals resampling runs within task.
+
+\section{Exploratory phase}\label{sec:exploratory}
+\input{table-exploratory.tex}
+Table~\ref{tab:exploratory} summarises five exploratory benchmarks. Across the development lifecycle (E1) the graph cut
+cost where a stage follows call chains (understanding a function, reviewing a commit, checking readiness) and improved
+requirement and solution answers at higher cost. Left to choose, the agent used the graph in 88\% of understanding runs
+and in none of the requirement, solution or review runs. On whole developer tasks (E2--E4) no graph arm saved cost; on
+Repository A the graph arms cost 11--24\% more, with intervals excluding zero (E4). Three mechanisms recur:
+\begin{enumerate}
+\item \emph{Per-call overhead.} Tool definitions and replies cost more than the one or two searches they replace for a
+  one-hop question.
+\item \emph{Re-reading to verify.} A strong model opens the files a tool names before it trusts the answer, so the tool
+  adds cost without removing reads.
+\item \emph{Complete-looking lists.} When a refactor tool's recall rose from 1 to 11 of 16 caller files, accuracy fell
+  from 0.89 to 0.77: a plausible list ended the search, an obviously short one had not.
+\end{enumerate}
+
+\section{Auditing the graph against source truth}\label{sec:audit}
+\input{table-audit.tex}
+We measured every relation against source-derived truth (Table~\ref{tab:audit}). Ticket-marker test links (``a test
+names ticket $T$, so it tests every file $T$ touched'') had 0.7\% precision on 73k edges and were read by no tool;
+38 bulk commits (under 1\% of commits) produced 40\% of commit--file edges; ticket similarity kept 51 neighbours per
+ticket where readers used 8; and the frontend-to-backend relation was empty because API calls built from template
+literals and wrappers were skipped. Restricting, capping or repairing these cut edges by 53\% and disk size by 46\%,
+kept call precision at 0.986, and made every answer marked complete actually complete (from 90.5\%). After the audit
+and the coverage statement, the graph arms' cost effect moved from $-24\%$ to $+5\%$ (E4 to E5). We first read this
+as the audit's effect; the ablation (Section~\ref{sec:ablation}) does not support that reading.
+
+\section{Confirmatory study}\label{sec:confirmatory}
+The exploratory phase tuned tools on its own tasks, so we froze the system and a protocol (hypotheses, outcomes,
+analysis, sample size) before generating any new task. Tasks were generated with a new seed in four repositories
+(Table~\ref{tab:repos}), excluding every function used before. Five deviations are listed in the artifact. Two came
+before any run: call truth resolves by import path instead of requiring unique names (D1), and one-hop error traces are
+admitted (D2). 763 runs that the account's usage limit stopped before they started were re-run in full cells (D3).
+Two concern the analysis: how the no-worse hypothesis H3 is tested (D4), and an ablation baseline from a later
+session (D5).
+\input{table-repos.tex}
+\input{table-confirmatory.tex}
+\input{text-confirmatory.tex}
+
+\section{Ablation: content or completeness statement?}\label{sec:ablation}
+\input{text-ablation.tex}
+
+\section{Process-layer joins}\label{sec:process}
+\input{text-process.tex}
+
+\section{Discussion}
+\paragraph{Fewer turns, not more knowledge} On held-out tasks the saving tracked the number of turns: packs (median 3
+turns) and a small tool set (6) saved 35--41\%, task-shaped tools (9) saved nothing. What a graph buys an agent is the
+removal of turns, and every tool definition and every reply it has to verify gives some of that back.
+\paragraph{Joins are where packs are trusted most and checked least} On process joins, packs were cheapest and the
+agent did not check them; two incomplete joins cost the study its quality margin. A pack must state what it could not
+join, not only what it could not resolve.
+\paragraph{Mechanisms outlast percentages} Prices, caching and models' habits change; the three mechanisms of
+Section~\ref{sec:exploratory} are properties of how agents use tools, and two of them reappeared in the confirmatory
+studies (task tools that cost turns; complete-looking joins).
+\paragraph{Compare arms only within a session} The plain arm alone varied by 39\% between sessions on identical tasks.
+An exploratory before-and-after comparison of that size is noise; the confirmatory design ran every arm of a
+repository in one shuffled session, and we recommend the same to anyone benchmarking agent tooling.
+
+\section{Threats to validity}
+\emph{Construct}: scores compare against an import-resolved truth that does not see calls through untyped objects;
+tasks were selected where that truth is complete. \emph{Internal}: the author built tools, tasks and truth; mitigated by
+pre-registration, held-out tasks, two public repositories and a full artifact. The ablation and the process study are
+secondary and pre-registered in an addendum. \emph{External}: Python web systems, two model sizes from one vendor,
+\confTasks{} confirmatory tasks; error-to-handler tasks were rare in the held-out repositories, so that hypothesis is
+underpowered; process tasks come from the two internal repositories only, because the public ones keep their tickets
+outside the repository. Pack savings were smaller on the two public repositories (15\%) than on the internal ones
+(55--68\%), so the size of the effect depends on the codebase. \emph{Conclusion}: per-task bootstrap and Holm
+correction; score differences below about 0.05 per task kind are within run-to-run noise; cost varies by up to 39\%
+between sessions, so only within-session contrasts are interpreted (Deviations D3--D5).
+
+\section{Related work}
+Repository-level code graphs for agents~\cite{liu2024codexgraph,ouyang2025repograph} and agent-computer
+interfaces~\cite{yang2024sweagent} show that structure helps agents navigate; benchmarks such as
+SWE-bench~\cite{jimenez2024swebench} measure resolution rather than cost at equal quality. Knowledge
+graphs~\cite{hogan2021kg} provide the modelling basis. We are not aware of a study that reports the cost effect of a
+\emph{process} graph (tickets, specifications, tests and configuration as well as code) with the same model in every
+arm, audits the graph's content against source truth, and replicates under a pre-registered protocol.
+\tbd{Extend: retrieval for code agents, repository maps, tool-use cost, pre-registration in software engineering.}
+
+\section{Conclusion}
+On held-out tasks, with the same model in every arm, a software-process knowledge graph made coding agents 35--41\%
+cheaper at equal quality when it was delivered as a pre-computed pack or a small tool set, for a large and a small
+model. Task-shaped tools saved nothing, and on process joins the cheapest delivery lost quality where the graph had
+missed a link. Our own exploratory explanation, that auditing the graph removed a cost penalty, did not survive the
+ablation. The practical rule is the one the data support: deliver the graph in as few turns as possible, and make
+every answer say what it could not see.
+
+\section*{Use of AI tools}
+Following IEEE policy on AI-generated content, we disclose that an AI coding assistant was used to implement the graph
+extractors, tools and benchmark harness, to run the benchmarks, and to draft and edit the text. The author designed the
+study, reviewed every result against the raw data, and takes responsibility for the content. The benchmark agents are
+themselves an LLM, as described in Section~\ref{sec:method}.
+
+\section*{Data and artifact availability}
+\ifanon
+An anonymised artifact (extractors, tools, packs, harness, task generators, tasks with truth, raw runs for the public
+repositories, per-run metrics for the industrial ones, analysis scripts, pre-registration) is available to reviewers.
+\else
+The graph builder, packs and MCP server (\texttt{devkb}), the benchmark harness, the frozen protocol, every analysis script and the raw runs are at \url{https://github.com/hungle-namiq/devkb}. Runs on the two industrial repositories are released as per-run metrics only.
+\fi
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+\end{document}

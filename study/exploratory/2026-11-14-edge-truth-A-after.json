@@ -1,0 +1,69 @@
+{
+ "CALLS": {
+  "sample": 200,
+  "recall": 0.719,
+  "precision": 0.986,
+  "f1": 0.831,
+  "edges_by_source": {
+   "ast-same-file": 9538,
+   "ast-typed-receiver": 3025,
+   "ast-cross-file-import": 6212
+  },
+  "precision_by_source": {
+   "ast-same-file": {
+    "judged": 3895,
+    "precision": 0.981
+   },
+   "ast-typed-receiver": {
+    "judged": 1312,
+    "precision": 0.994
+   },
+   "ast-cross-file-import": {
+    "judged": 2629,
+    "precision": 0.941
+   }
+  }
+ },
+ "inheritance": {
+  "edges": 0,
+  "caller_calls_that_name": 0.0,
+  "examples": []
+ },
+ "TESTED_BY": {
+  "test-marker-grep": {
+   "edges": 11686,
+   "judged": 600,
+   "precision": 0.01
+  },
+  "ast-import-resolution": {
+   "edges": 4305,
+   "judged": 600,
+   "precision": 1.0
+  }
+ },
+ "SIMILAR_TO": {
+  "edges": 8019,
+  "tickets_with_neighbours": 1146,
+  "edges_per_ticket": 7.0,
+  "precision_at_8": 0.47,
+  "random_pair_rate": 0.137
+ },
+ "CALLS_API": {
+  "frontend_files_calling_a_route": 11,
+  "graph_files": 7,
+  "recall": 0.636,
+  "edges": 55
+ },
+ "RAISES": {
+  "truth": 108,
+  "recall_by_function": 1.0
+ },
+ "READS": {
+  "truth": 171,
+  "recall": 1.0
+ },
+ "coverage": {
+  "marked_complete": 180,
+  "truly_complete": 1.0
+ }
+}

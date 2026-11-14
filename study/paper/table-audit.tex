@@ -1,0 +1,19 @@
+\begin{table}[t]\centering\footnotesize
+\caption{Repository A's graph before and after the audit, measured against truth computed from source. Precision at 8 of similar tickets is against random ticket pairs at 0.14.}
+\label{tab:audit}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}p{0.44\columnwidth}p{0.24\columnwidth}p{0.24\columnwidth}@{}}\toprule
+Measure & Before & After \\\midrule
+Edges & 352,556 & 167,399 \\
+Nodes & 67,049 & 53,740 \\
+Size on disk & 109.9 MB & 59.5 MB \\
+Call recall / precision & 0.711 / 0.985 & 0.719 / 0.986 \\
+Import-based test links: precision (edges) & 1.00 (4,305) & 1.00 (4,305) \\
+Ticket-marker test links: precision (edges) & 0.007 (73,132) & 0.01 (11,686) \\
+Commit--file edges (most files in one commit) & 134,900 (13,035) & 83,690 (334) \\
+Similar tickets per ticket; precision at 8 & 51; 0.47 & 7; 0.47 \\
+Frontend-to-route recall & 0 & 0.64 \\
+Error and setting-read recall & 1.00 & 1.00 \\
+Answers marked complete that are complete & 90.5\% & 100\% \\\bottomrule
+\end{tabular}
+\end{table}

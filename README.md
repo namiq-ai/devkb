@@ -1,0 +1,68 @@
+# devkb: a software-process knowledge graph for coding agents
+
+Coding agents pay to rediscover what a repository already records: who calls a function, which tests exercise it,
+which ticket and specification a change belongs to. devkb extracts that into a graph and hands it to an agent in as
+few turns as possible.
+
+In a pre-registered study on 30 held-out tasks in four repositories (1,020 runs, same model in every arm),
+devkb's pre-computed **packs cost 41% less** than plain search (95% CI 34–48%) and its **lean tool set 35% less**, at
+equal or better quality, for two model sizes. Task-shaped tools saved nothing. See [`study/`](study/) and
+[`SCOPE.md`](SCOPE.md).
+
+## Use it on your repository
+
+```bash
+pip install "devkb[mcp] @ git+https://github.com/hungle-namiq/devkb"
+cd your-repo
+devkb build --project .                       # writes .devkb/ (add it to .gitignore)
+devkb pack  --project . refactor my_function  # who calls it, which tests, with evidence lines and coverage
+devkb pack  --project . error "message text"  # which route handlers reach the code that raises it
+devkb pack  --project . change path/to/file.py
+```
+
+Serve the graph to an agent over MCP (stdio), for example in Claude Code's `.mcp.json`:
+
+```json
+{"mcpServers": {"devkb": {"command": "devkb", "args": ["mcp", "--project", ".", "--toolset", "lean"]}}}
+```
+
+`--toolset lean` exposes 7 tools; the default exposes 24 (callers, tests_for, tests_to_run, impact, rca_trace,
+refactor_scope, review_pack, lineage, trace, config, ...). Every list answer carries a **coverage** statement: the
+call sites the resolver could not attribute, so an agent searches only where the graph is blind. The `skills/`
+folder maps developer tasks to tools for agents that load skills.
+
+Nothing to configure for a plain repository. An optional `devkb.json` at the repository root declares what devkb
+cannot guess:
+
+```json
+{"code": "APP", "ticket_prefix": "APP",
+ "paths": {"issues_dir": "issues", "spec_dirs": ["docs", "docs/adr"], "frontend_src": "web/src"}}
+```
+
+devkb reads the repository and runs `git`; it never executes the repository's own code unless `devkb.json` sets
+`"run_repo_scripts": true`.
+
+## What is in the graph
+
+20 node types (Ticket, Commit, File, Symbol, TestCase, Endpoint, Flow, ErrorSignature, Spec, Requirement, ConfigKey,
+...) and 30 relations (CALLS, TESTED_BY, RAISES, STEP, TOUCHES, REFERENCES, IMPLEMENTS, READS, DECLARES, ...); see
+[`devkb/ontology.md`](devkb/ontology.md). Calls are resolved through imports, aliases, typed receivers and base
+classes; nothing is attributed by a bare name. `devkb audit --project .` reports each relation's size, fan-out and
+cost, so you can check what your graph actually contains.
+
+## Reproduce the paper
+
+```bash
+make dev        # a virtual environment with the test and analysis dependencies
+make test       # the component's test suite
+make verify     # recompute every result in study/results from the raw runs and compare byte for byte
+make paper      # build study/paper/paper.pdf (needs a TeX installation)
+```
+
+## Status
+
+Private pre-release. Licence to be chosen before the repository is made public; until then, all rights reserved.
+
+## Cite
+
+Hung T. Le. *Fewer Turns, Not a Better Graph: A Pre-Registered Study of Process Graphs for Coding Agents.* 2026.

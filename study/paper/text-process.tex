@@ -1,0 +1,17 @@
+% Numbers from results-process.json (analyze_process.py).
+Sixteen tasks in Repositories A and B (eight per repository): \emph{ticket-to-code} (which top-level functions did a
+ticket's commits change that still exist, and which test files call them; truth from git history and import
+resolution) and \emph{commit-to-trace} (a commit's ticket, that ticket's epic and specification; truth from the
+ticket's own trace table). Arms plain, core and pack, five runs each (240 runs, all valid).
+
+\paragraph{H6 not supported} Packs cost 60\% less than plain [48, 70] ($p<10^{-4}$), answering in one turn against
+seven, but scored 0.080 lower [$-0.094$, $-0.058$], outside the non-inferiority margin. Plain search was nearly perfect
+on these tasks (mean score 0.99). The full tool set was no cheaper ($-7\%$ [$-23$, 7]) and scored 0.12 lower.
+
+\paragraph{Where it failed} On commit-to-trace, packs matched plain exactly (score 1.0) at 37\% less cost. On
+ticket-to-code, the loss came from two of eight tasks. In one, the graph did not link the ticket to its commits; in
+the other, the pack's test list missed most of the test files. Each time the agent accepted the pack in one turn and
+did not search. This is the third exploratory mechanism, complete-looking lists, recurring in a pre-registered
+setting. The ticket pack's coverage statement reports call sites it could not attribute, but not commits it failed
+to link to the ticket, so a missed join looked like a complete answer. Coverage has to extend to every join a pack
+makes.

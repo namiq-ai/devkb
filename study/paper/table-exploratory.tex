@@ -1,0 +1,24 @@
+\begin{table*}[t]\centering\small
+\caption{Exploratory benchmarks (Sonnet). ``Saved'' is the cost saved against plain search (positive means cheaper):
+E1 reports medians per stage; E2--E5 report per-task bootstrap 95\% intervals. Score is task correctness from 0 to 1,
+graph arm against plain search.}
+\label{tab:exploratory}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}llrlll@{}}\toprule
+Run & Repository and tasks & Runs & Arm & Saved & Score (arm vs.\ plain) \\\midrule
+E1 & B, six lifecycle stages & 117 & forced graph, S1 understand & +54\% & 1.00 vs.\ 0.97 \\
+   & & & forced graph, S8 review & +53\% & 0.99 vs.\ 0.98 \\
+   & & & forced graph, S6 readiness & +61\% & 1.00 vs.\ 1.00 \\
+   & & & forced graph, S3 requirements & $-$54\% & 0.60 vs.\ 0.42 \\
+   & & & forced graph, S4 solutioning & +7\% & 0.88 vs.\ 0.58 \\\midrule
+E2 & B, six developer tasks & 80 & core & $-$11\% [$-$33, +10] & 0.96 vs.\ 1.00 \\
+   & & & workflow & $-$15\% [$-$39, +4] & 0.83 vs.\ 1.00 \\\midrule
+E3 & A, six multi-hop tasks & 72 & core & $-$9\% [$-$43, +16] & 0.95 vs.\ 0.92 \\
+   & & & workflow & $-$6\% [$-$38, +19] & 0.87 vs.\ 0.92 \\\midrule
+E4 & A, same tasks, call-resolution fixes & 72 & core & $-$24\% [$-$40, $-$10] & 0.94 vs.\ 0.94 \\
+   & & & workflow & $-$11\% [$-$20, $-$2] & 0.91 vs.\ 0.94 \\\midrule
+E5 & A, same tasks, audited graph and coverage & 120 & core & +5\% [$-$27, +28] & 0.96 vs.\ 0.93 \\
+   & & & lean & +12\% [$-$18, +35] & 0.95 vs.\ 0.93 \\
+   & & & pack & +24\% [$-$6, +45] & 0.94 vs.\ 0.93 \\\bottomrule
+\end{tabular}
+\end{table*}

@@ -1,0 +1,20 @@
+% Numbers from ablation.json (analyze_ablation.py).
+The ablation crosses graph content (G0: the graph before the audit; G1: after) with the coverage statement (C0: off;
+C1: on), using the full tool set on the six exploratory tasks of Repository A, four runs per cell (96 runs, plus 24
+plain).
+
+\paragraph{Result} Neither factor moved cost measurably. The main effect of the audit on the cost saving was $-1.2$
+points [$-7.5$, 5.3], of the coverage statement $+4.4$ [$-2.2$, 10.9], and their interaction $-2.3$ [$-15.2$, 10.7].
+Quality was 0.93--0.96 in every cell. All four cells, the unaudited graph without coverage among them, cost 22--28\%
+less than the plain baseline.
+
+\paragraph{A baseline from another session} That last comparison should not be trusted, and the reason is a finding in
+itself. The plain baseline was re-run in a later session after the usage limit stopped it (Deviation D3), while the
+four cells ran together. On the same six tasks and the same model, the plain arm's total mean cost was \$0.57, \$0.41
+and \$0.55 in three sessions: a 39\% swing with no change to the arm. Contrasts between cells that ran together are
+sound; a contrast against an arm from another session is not (Deviation D5).
+
+\paragraph{Consequence} The exploratory change from $-24\%$ to $+5\%$ (E4 to E5) lies within the between-session spread
+of the plain arm, and the ablation finds no effect of the audit or of the coverage statement on cost at this size. We
+therefore withdraw the exploratory reading that the audit removed the cost penalty. The audit's value is in what the
+graph says (precision, honest coverage), not demonstrably in what the agent spends.

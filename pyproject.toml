@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "devkb"
+version = "0.1.0"
+description = "A software-process knowledge graph for coding agents: extraction, pre-computed context packs, and an MCP server"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Hung T. Le" }]
+dependencies = ["pyyaml>=6"]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.23,<2"]
+study = ["scipy>=1.10"]
+dev = ["pytest>=8", "mcp>=1.23,<2", "scipy>=1.10"]
+
+[project.scripts]
+devkb = "devkb.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["devkb*"]
+
+[tool.setuptools.package-data]
+devkb = ["*.md"]

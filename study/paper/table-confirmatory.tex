@@ -1,0 +1,14 @@
+\begin{table}[t]\centering\small
+\caption{Confirmatory study: cost saved against plain (positive is cheaper) and quality difference, 95\% bootstrap intervals; 30 held-out tasks, 750 Sonnet and 270 Haiku runs. Plain: median 6 turns (Sonnet), mean score 0.83.}\label{tab:confirmatory}
+\setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{\begin{tabular}{llrrrl}\toprule
+Model & Arm & Cost saved & Quality diff. & Turns & Hyp. \\ \midrule
+Sonnet & core & +15\% [+7, +22] & +0.023 [+0.007, +0.039] & 7 & H3 \\
+Sonnet & workflow & $-$4\% [$-$13, +4] & +0.045 [+0.029, +0.061] & 9 &  \\
+Sonnet & lean & +35\% [+28, +42] & +0.053 [+0.036, +0.072] & 6 & H2 \\
+Sonnet & pack & +41\% [+34, +48] & +0.034 [+0.019, +0.048] & 3 & H1 \\
+\midrule
+Haiku & lean & +36\% [+31, +41] & +0.056 [+0.024, +0.088] & 7 & H5 \\
+Haiku & pack & +39\% [+31, +48] & +0.038 [+0.007, +0.071] & 4 & H5 \\
+\bottomrule\end{tabular}}
+\end{table}

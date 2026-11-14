@@ -1,0 +1,178 @@
+[
+ {
+  "id": "C-ERR-update",
+  "kind": "err_to_handler",
+  "skill": "devkb-rca",
+  "prompt": "Users of the web API get an error whose message is: \"Unable to update cost model. No cost model found with that id.\". Trace it: name the function that raises it, every HTTP route handler function (a function decorated as a FastAPI route) that can reach that function through calls at any depth, and every test file that calls the raising function or any function on a path between it and those handlers. Answer with one JSON object: {\"raiser\": \"path::function\", \"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "raiser": "src/dispatch/cost_model/service.py::update",
+   "handlers": [
+    "src/dispatch/cost_model/views.py::update_cost_model"
+   ],
+   "test_files": [
+    "tests/cost_model/test_cost_model_service.py"
+   ],
+   "closure_size": 1
+  }
+ },
+ {
+  "id": "C-IMP-get_by_name_or_raise",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `get_by_name_or_raise` (defined in src/dispatch/tag/service.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "src/dispatch/data/source/views.py::create_source",
+    "src/dispatch/data/source/views.py::update_source",
+    "src/dispatch/incident_role/views.py::update_incident_role"
+   ],
+   "test_files": [
+    "tests/incident_role/test_incident_role_service.py"
+   ],
+   "closure_size": 7
+  }
+ },
+ {
+  "id": "C-IMP-update_group",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `update_group` (defined in src/dispatch/group/flows.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "src/dispatch/case/views.py::create_case_channel",
+    "src/dispatch/task/views.py::create_task",
+    "src/dispatch/task/views.py::update_task"
+   ],
+   "test_files": [
+    "tests/signal/test_signal_flow.py",
+    "tests/task/test_task_service.py"
+   ],
+   "closure_size": 65
+  }
+ },
+ {
+  "id": "C-IMP-get_signal_engagement_by_name",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `get_signal_engagement_by_name` (defined in src/dispatch/signal/service.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "src/dispatch/signal/views.py::create_signal",
+    "src/dispatch/signal/views.py::update_signal",
+    "src/dispatch/signal/views.py::update_signal_with_filters"
+   ],
+   "test_files": [
+    "tests/signal/test_signal_service.py"
+   ],
+   "closure_size": 7
+  }
+ },
+ {
+  "id": "C-IMP-get_signal_filter_by_name",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `get_signal_filter_by_name` (defined in src/dispatch/signal/service.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "src/dispatch/signal/views.py::create_signal",
+    "src/dispatch/signal/views.py::update_signal",
+    "src/dispatch/signal/views.py::update_signal_with_filters"
+   ],
+   "test_files": [
+    "tests/signal/test_signal_service.py"
+   ],
+   "closure_size": 8
+  }
+ },
+ {
+  "id": "C-WIDE-log_incident_event",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `log_incident_event` (defined in src/dispatch/event/service.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/dispatch/ai/service.py",
+    "src/dispatch/case/flows.py",
+    "src/dispatch/conference/flows.py",
+    "src/dispatch/conversation/flows.py",
+    "src/dispatch/document/flows.py",
+    "src/dispatch/event/flows.py",
+    "src/dispatch/event/service.py",
+    "src/dispatch/group/flows.py",
+    "src/dispatch/incident/flows.py",
+    "src/dispatch/incident/messaging.py",
+    "src/dispatch/incident/service.py",
+    "src/dispatch/participant/flows.py",
+    "src/dispatch/participant_role/flows.py",
+    "src/dispatch/plugins/dispatch_slack/incident/interactive.py",
+    "src/dispatch/report/flows.py",
+    "src/dispatch/storage/flows.py",
+    "src/dispatch/task/service.py",
+    "src/dispatch/ticket/flows.py",
+    "tests/event/test_event_service.py"
+   ],
+   "test_files": [
+    "tests/event/test_event_service.py"
+   ]
+  }
+ },
+ {
+  "id": "C-WIDE-log_case_event",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `log_case_event` (defined in src/dispatch/event/service.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/dispatch/ai/service.py",
+    "src/dispatch/case/flows.py",
+    "src/dispatch/case/messaging.py",
+    "src/dispatch/case/service.py",
+    "src/dispatch/conversation/flows.py",
+    "src/dispatch/document/flows.py",
+    "src/dispatch/event/flows.py",
+    "src/dispatch/event/service.py",
+    "src/dispatch/group/flows.py",
+    "src/dispatch/participant/flows.py",
+    "src/dispatch/participant_role/flows.py",
+    "src/dispatch/plugins/dispatch_slack/case/interactive.py",
+    "src/dispatch/plugins/dispatch_slack/incident/interactive.py",
+    "src/dispatch/storage/flows.py",
+    "src/dispatch/ticket/flows.py",
+    "tests/case/test_case_event_views.py",
+    "tests/case/test_case_service.py",
+    "tests/event/test_event_service.py"
+   ],
+   "test_files": [
+    "tests/case/test_case_event_views.py",
+    "tests/case/test_case_service.py",
+    "tests/event/test_event_service.py"
+   ]
+  }
+ },
+ {
+  "id": "C-WIDE-get_by_email_and_project",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `get_by_email_and_project` (defined in src/dispatch/individual/service.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/dispatch/case/flows.py",
+    "src/dispatch/event/flows.py",
+    "src/dispatch/feedback/service/scheduled.py",
+    "src/dispatch/forms/service.py",
+    "src/dispatch/forms/type/service.py",
+    "src/dispatch/incident/flows.py",
+    "src/dispatch/individual/service.py",
+    "src/dispatch/individual/views.py",
+    "src/dispatch/plugins/dispatch_core/plugin.py",
+    "src/dispatch/plugins/dispatch_slack/feedback/interactive.py",
+    "src/dispatch/plugins/dispatch_slack/incident/interactive.py",
+    "src/dispatch/signal/service.py",
+    "tests/individual_contact/test_individual_contact_service.py"
+   ],
+   "test_files": [
+    "tests/individual_contact/test_individual_contact_service.py"
+   ]
+  }
+ }
+]

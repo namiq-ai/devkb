@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""devkb-sdlc: the software-engineering-process API as an MCP server (ODSF-307).
+
+Read-only tools over one project's devkb graph, one per question a development
+stage asks. Tool descriptions are kept to a sentence on purpose: an MCP
+server's tool list is paid for in every model turn, so a long description is a
+recurring token cost, not a one-off.
+
+  uv run --python ">=3.10" --no-project --with "mcp>=1.23,<2" python devkb/mcp_server.py --project ODSF
+
+Environment: DEVKB_PROJECT (default project), DEVKB_TOOLSET (core, workflow or all), DEVKB_DIR (a pinned graph snapshot
+instead of the live `.devkb/`).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from mcp.server.fastmcp import FastMCP  # noqa: E402
+from mcp.types import ToolAnnotations  # noqa: E402
+
+from devkb.process_api import ProcessAPI, project_for  # noqa: E402
+
+READ_ONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, destructiveHint=False, openWorldHint=False)
+CORE = ["sdlc_context", "trace", "find_docs", "callers", "tests_for", "tests_to_run", "impact", "owner", "review_pack",
+        "lineage", "graph_status", "config"]
+WORKFLOW = ["feature_brief", "bug_brief", "rca_trace", "refactor_scope", "explain_area", "find_code", "history"]
+DOCS = ["design_brief", "flow_sequence", "test_items", "review_doc", "role_brief"]
+# `core`: single-question tools. `workflow`: one tool per kind of development work, plus the few core tools those
+# workflows still need. `docs`: writing and reviewing designs and test specifications, and starting a role's session
+# (ODSF-311). `all`: every tool. A smaller set costs fewer tokens to load, so the choice is a deployment decision.
+TOOLSETS = {"core": CORE, "workflow": WORKFLOW + ["review_pack", "tests_to_run", "impact", "sdlc_context", "find_docs"],
+            "docs": DOCS + ["find_docs", "explain_area", "find_code", "sdlc_context", "history"],
+            # ODSF-313: only the tools the benchmarks showed earn their place (chains and joins), so each turn loads fewer
+            # tool definitions. Their list answers all carry `coverage`.
+            "lean": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config"],
+            "all": CORE + WORKFLOW + DOCS}
+INSTRUCTIONS = ("Dev-process graph for this repository: tickets, specs, commits, symbols, calls, tests, owners. "
+                "Ask it first, then read only the files it names. Every reply says if the graph is stale.")
+
+
+def _compact(reply: dict) -> str:
+    """Compact JSON text. FastMCP pretty-prints a dict return with indentation, which
+    costs the model tokens on every call for no reader."""
+    return json.dumps(reply, separators=(",", ":"))
+
+
+def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
+    mcp = FastMCP("devkb-sdlc", instructions=INSTRUCTIONS)
+    enabled = set(TOOLSETS[toolset])
+
+    def tool(fn):
+        return mcp.tool(annotations=READ_ONLY, structured_output=False)(fn) if fn.__name__ in enabled else fn
+
+    @tool
+    def sdlc_context(ticket: str) -> str:
+        """Brief for a ticket: status, owner role, epic, spec and requirement chain, related docs, similar tickets, commit and file counts."""
+        return _compact(api.call("sdlc_context", ticket=ticket))
+
+    @tool
+    def trace(ticket: str) -> str:
+        """Requirement-to-ticket chain with status, and the Gate 0 readiness verdict for a story."""
+        return _compact(api.call("trace", ticket=ticket))
+
+    @tool
+    def find_docs(topic: str, kinds: list[str] | None = None, limit: int = 8) -> str:
+        """Ranked specs, ADRs and design docs on a topic. kinds: specification, adr, design."""
+        return _compact(api.call("find_docs", topic=topic, kinds=kinds, limit=limit))
+
+    @tool
+    def callers(symbol: str, depth: int = 1) -> str:
+        """Who calls this function (name or path::name), directly and up to depth 3; tests are listed last."""
+        return _compact(api.call("callers", symbol=symbol, depth=depth))
+
+    @tool
+    def tests_for(ref: str) -> str:
+        """Tests linked to a function or file, with a runnable pytest line."""
+        return _compact(api.call("tests_for", ref=ref))
+
+    @tool
+    def tests_to_run(files: list[str]) -> str:
+        """Which tests to run for these changed files, ranked, with a runnable pytest line."""
+        return _compact(api.call("tests_to_run", files=files))
+
+    @tool
+    def impact(files: list[str], depth: int = 2) -> str:
+        """Blast radius of changing these files: affected callers, endpoints, flows, tests to run, owning roles."""
+        return _compact(api.call("impact", files=files, depth=depth))
+
+    @tool
+    def owner(path: str) -> str:
+        """Which role owns a path and which roles must not touch it."""
+        return _compact(api.call("owner", path=path))
+
+    @tool
+    def review_pack(rev: str) -> str:
+        """Review context for a commit or range (a..b): changed symbols, callers outside the diff, tests, untested symbols, docs, warnings, owners."""
+        return _compact(api.call("review_pack", rev=rev))
+
+    @tool
+    def lineage(ticket: str) -> str:
+        """Bug lineage, duplicates, blockers, commits and spec of a ticket."""
+        return _compact(api.call("lineage", ticket=ticket))
+
+    @tool
+    def feature_brief(goal: str, ticket: str = "") -> str:
+        """Build a feature: similar code, governing docs, similar past work, owner and forbidden paths, tests to copy and run."""
+        return _compact(api.call("feature_brief", goal=goal, ticket=ticket))
+
+    @tool
+    def bug_brief(ticket: str = "", text: str = "") -> str:
+        """Fix a bug from a ticket id or symptom text: suspects, entry points, recent commits, similar past bugs and their fixes, tests."""
+        return _compact(api.call("bug_brief", ticket=ticket, text=text))
+
+    @tool
+    def rca_trace(symptom: str, depth: int = 3) -> str:
+        """Root cause: an error message or name to the raising code, callers up to the entry points, recent commits on that path, tests."""
+        return _compact(api.call("rca_trace", symptom=symptom, depth=depth))
+
+    @tool
+    def refactor_scope(target: str, role: str = "") -> str:
+        """Before a refactor: callers by file, test files, endpoints, tests to run, and caller files your role code may not edit."""
+        return _compact(api.call("refactor_scope", target=target, role=role))
+
+    @tool
+    def explain_area(path: str) -> str:
+        """Understand a directory or file: key symbols by dependents, entry points, owners, governing docs, tests, recent commits."""
+        return _compact(api.call("explain_area", path=path))
+
+    @tool
+    def find_code(query: str, under: str = "") -> str:
+        """Find code by plain words matched against symbol names, paths and docstrings; optionally under a path prefix."""
+        return _compact(api.call("find_code", query=query, under=under))
+
+    @tool
+    def history(files: list[str]) -> str:
+        """The latest commits that touched these files, with dates and ticket ids."""
+        return _compact(api.call("history", files=files))
+
+    @tool
+    def design_brief(kind: str, topic: str) -> str:
+        """Before writing a functional, architecture, detailed or sequence design or a test_spec: outline, facts to cite, related docs, next spec id."""
+        return _compact(api.call("design_brief", kind=kind, topic=topic))
+
+    @tool
+    def flow_sequence(entry: str) -> str:
+        """Recorded call order from an endpoint, function or flow id, as numbered messages and Mermaid sequence-diagram text."""
+        return _compact(api.call("flow_sequence", entry=entry))
+
+    @tool
+    def test_items(area: str) -> str:
+        """Test items for a path or function from what it raises, the endpoints it serves and untested branches, marked covered or not."""
+        return _compact(api.call("test_items", area=area))
+
+    @tool
+    def review_doc(path: str, kind: str = "") -> str:
+        """Review a design or test-spec document against the repo: broken references, drift since written, unmentioned code, missing sections."""
+        return _compact(api.call("review_doc", path=path, kind=kind))
+
+    @tool
+    def role_brief(role: str) -> str:
+        """Session start for a role code (QA, BE, TL, OPS, DSA, DE...): territory, waiting tickets, key code, tests, docs, role-specific facts."""
+        return _compact(api.call("role_brief", role=role))
+
+    @tool
+    def config(query: str = "") -> str:
+        """A setting (env var) or service: code reading it, files declaring it, services deploying it, repos; empty for an overview."""
+        return _compact(api.call("config", query=query))
+
+    @tool
+    def graph_status() -> str:
+        """Size of the graph and whether it is stale against the repository."""
+        return _compact(api.call("graph_status"))
+
+    return mcp
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="devkb-sdlc MCP server (stdio)")
+    ap.add_argument("--project", default=os.environ.get("DEVKB_PROJECT"))
+    ap.add_argument("--devkb-dir", default=os.environ.get("DEVKB_DIR"))
+    ap.add_argument("--toolset", default=os.environ.get("DEVKB_TOOLSET", "all"), choices=sorted(TOOLSETS))
+    ns = ap.parse_args()
+    if not ns.project:
+        ns.project = project_for(Path.cwd())
+    if not ns.project:
+        ap.error("--project or DEVKB_PROJECT is required (and the working directory is in no registered project)")
+    api = ProcessAPI(ns.project, devkb_dir=Path(ns.devkb_dir) if ns.devkb_dir else None)
+    build(api, ns.toolset).run(transport="stdio")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

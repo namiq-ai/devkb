@@ -1,0 +1,181 @@
+[
+ {
+  "id": "D-IMP-request_is_https",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `request_is_https` (defined in mealie/routes/auth/auth.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "mealie/routes/auth/auth.py::get_token",
+    "mealie/routes/auth/auth.py::logout",
+    "mealie/routes/auth/auth.py::oauth_callback",
+    "mealie/routes/auth/auth.py::oauth_native_token",
+    "mealie/routes/auth/auth.py::refresh_token",
+    "mealie/routes/auth/auth.py::reverse_proxy_login"
+   ],
+   "test_files": [
+    "tests/unit_tests/test_session_cookie.py"
+   ],
+   "closure_size": 8
+  }
+ },
+ {
+  "id": "D-IMP-session_cookie_attrs",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `session_cookie_attrs` (defined in mealie/routes/auth/auth.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "mealie/routes/auth/auth.py::get_token",
+    "mealie/routes/auth/auth.py::logout",
+    "mealie/routes/auth/auth.py::oauth_callback",
+    "mealie/routes/auth/auth.py::oauth_native_token",
+    "mealie/routes/auth/auth.py::refresh_token",
+    "mealie/routes/auth/auth.py::reverse_proxy_login"
+   ],
+   "test_files": [
+    "tests/unit_tests/test_session_cookie.py"
+   ],
+   "closure_size": 7
+  }
+ },
+ {
+  "id": "D-IMP-publish_list_item_events",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `publish_list_item_events` (defined in mealie/routes/households/controller_shopping_lists.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "mealie/routes/households/controller_shopping_lists.py::add_recipe_ingredients_to_list",
+    "mealie/routes/households/controller_shopping_lists.py::create_many",
+    "mealie/routes/households/controller_shopping_lists.py::delete_many",
+    "mealie/routes/households/controller_shopping_lists.py::remove_recipe_ingredients_from_list",
+    "mealie/routes/households/controller_shopping_lists.py::update_many"
+   ],
+   "test_files": [
+    "tests/unit_tests/services_tests/scheduler/tasks/test_delete_old_checked_shopping_list_items.py"
+   ],
+   "closure_size": 7
+  }
+ },
+ {
+  "id": "D-IMP-set_session_cookie",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `set_session_cookie` (defined in mealie/routes/auth/auth.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "mealie/routes/auth/auth.py::get_token",
+    "mealie/routes/auth/auth.py::oauth_callback",
+    "mealie/routes/auth/auth.py::oauth_native_token",
+    "mealie/routes/auth/auth.py::refresh_token",
+    "mealie/routes/auth/auth.py::reverse_proxy_login"
+   ],
+   "test_files": [
+    "tests/unit_tests/test_session_cookie.py"
+   ],
+   "closure_size": 5
+  }
+ },
+ {
+  "id": "D-WIDE-get_app_dirs",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `get_app_dirs` (defined in mealie/core/config.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "mealie/core/root_logger.py",
+    "mealie/routes/_base/base_controllers.py",
+    "mealie/routes/admin/admin_backups.py",
+    "mealie/routes/media/__init__.py",
+    "mealie/routes/utility_routes.py",
+    "mealie/schema/user/user.py",
+    "mealie/services/_base_service/__init__.py",
+    "mealie/services/scheduler/tasks/purge_group_exports.py",
+    "tests/integration_tests/admin_tests/test_admin_backup.py",
+    "tests/unit_tests/test_security.py"
+   ],
+   "test_files": [
+    "tests/integration_tests/admin_tests/test_admin_backup.py",
+    "tests/unit_tests/test_security.py"
+   ]
+  }
+ },
+ {
+  "id": "D-WIDE-session_context",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `session_context` (defined in mealie/db/db_setup.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "mealie/db/init_db.py",
+    "mealie/routes/users/forgot_password.py",
+    "mealie/scripts/change_password.py",
+    "mealie/scripts/make_admin.py",
+    "mealie/scripts/reprocess_images.py",
+    "mealie/scripts/reset_locked_users.py",
+    "mealie/services/event_bus_service/event_bus_listeners.py",
+    "mealie/services/scheduler/tasks/create_timeline_events.py",
+    "mealie/services/scheduler/tasks/delete_old_checked_shopping_list_items.py",
+    "mealie/services/scheduler/tasks/post_webhooks.py",
+    "mealie/services/scheduler/tasks/purge_expired_share_tokens.py",
+    "mealie/services/scheduler/tasks/purge_group_exports.py",
+    "mealie/services/scheduler/tasks/purge_password_reset.py",
+    "mealie/services/scheduler/tasks/purge_registration.py",
+    "mealie/services/scheduler/tasks/reset_locked_users.py",
+    "tests/fixtures/fixture_users.py",
+    "tests/integration_tests/user_tests/test_user_password_services.py",
+    "tests/unit_tests/services_tests/backup_v2_tests/test_backup_v2.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_brute_parser.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_nlp_parser.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_openai_parser.py",
+    "tests/unit_tests/test_security.py"
+   ],
+   "test_files": [
+    "tests/fixtures/fixture_users.py",
+    "tests/integration_tests/user_tests/test_user_password_services.py",
+    "tests/unit_tests/services_tests/backup_v2_tests/test_backup_v2.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_brute_parser.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_nlp_parser.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_openai_parser.py",
+    "tests/unit_tests/test_security.py"
+   ]
+  }
+ },
+ {
+  "id": "D-WIDE-get_locale_provider",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `get_locale_provider` (defined in mealie/lang/providers.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "mealie/middleware/locale_context.py",
+    "mealie/routes/recipe/timeline_events.py",
+    "tests/integration_tests/test_route_permissions.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_brute_parser.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_nlp_parser.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_openai_parser.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_cleaner.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_cleaner_parts.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_scraper.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_scraper_flaresolverr_fallback.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_scraper_strategies.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_url_identity.py",
+    "tests/unit_tests/test_recipe_parser.py"
+   ],
+   "test_files": [
+    "tests/integration_tests/test_route_permissions.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_brute_parser.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_nlp_parser.py",
+    "tests/unit_tests/services_tests/ingredient_parser/test_openai_parser.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_cleaner.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_cleaner_parts.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_scraper.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_scraper_flaresolverr_fallback.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_scraper_strategies.py",
+    "tests/unit_tests/services_tests/scraper_tests/test_url_identity.py",
+    "tests/unit_tests/test_recipe_parser.py"
+   ]
+  }
+ }
+]

@@ -1,0 +1,97 @@
+"""ODSF-313: base-class and self. resolution, answer coverage, exact error matching, and packs.
+
+ADR-SDP-DEVKB-006 (CONTAINS/EXTENDS) is Proposed, so no new verb is emitted; calls resolved through a base are
+ordinary CALLS tagged ast-typed-receiver-base."""
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from devkb import build_symbols, process_api  # noqa: E402
+from devkb.model import VERBS  # noqa: E402
+from devkb.packs import Packer  # noqa: E402
+from devkb.project_context import ProjectContext  # noqa: E402
+
+FILES = {
+    "app/__init__.py": "",
+    "app/base.py": "class Store:\n    def save(self, x):\n        raise ValueError('a record without a name cannot be saved')\n",
+    "app/store.py": ("from app.base import Store\n\n\nclass RuntimeStore(Store):\n    def add_edge(self, a, b):\n"
+                     "        self.save(a)\n\n    def flush(self):\n        self.add_edge(1, 2)\n"),
+    "app/routes.py": ("from app.store import RuntimeStore\n\n\n@router.post('/records')\ndef post_record(store: RuntimeStore):\n"
+                      "    store.add_edge(1, 2)\n\n\ndef untyped(thing):\n    thing.add_edge(3, 4)\n"),
+    "tests/test_store.py": "from app.store import RuntimeStore\n\n\ndef test_add():\n    RuntimeStore().add_edge(1, 2)\n",
+    "package-lock.json": "{}\n",
+}
+
+
+def _repo(tmp_path: Path) -> Path:
+    for rel, text in FILES.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text)
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+        subprocess.run(["git", *cmd], cwd=tmp_path, check=True, capture_output=True)
+    return tmp_path
+
+
+def test_methods_resolve_through_bases_and_self_and_classes_are_structured(tmp_path):
+    g = build_symbols.extract(_repo(tmp_path))
+    calls = {(e.src, e.dst) for e in g.edges("CALLS")}
+    assert ("app/store.py::RuntimeStore.add_edge", "app/base.py::Store.save") in calls, "self.save() resolves on the base"
+    assert ("app/store.py::RuntimeStore.flush", "app/store.py::RuntimeStore.add_edge") in calls
+    assert ("app/routes.py::post_record", "app/store.py::RuntimeStore.add_edge") in calls
+    via_base = {(e.src, e.dst) for e in g.edges("CALLS") if e.source == "ast-typed-receiver-base"}
+    assert via_base == {("app/store.py::RuntimeStore.add_edge", "app/base.py::Store.save")}, "tagged so the audit can count it"
+    assert "EXTENDS" not in VERBS and "CONTAINS" not in VERBS, "no new verb while ADR-SDP-DEVKB-006 is Proposed"
+    node = next(n for n in g.nodes("Symbol") if n.natural_key == "app/store.py::RuntimeStore.add_edge")
+    assert node.props["unresolved_calls"] == 1 and node.props["unresolved_files"] == ["app/routes.py"], "thing.add_edge() is unattributable"
+
+
+def _api(tmp_path, monkeypatch):
+    root = _repo(tmp_path)
+    g = build_symbols.extract(root)
+    store = root / ".devkb"
+    store.mkdir()
+    d = g.to_dict()
+    (store / "nodes.jsonl").write_text("\n".join(json.dumps(n) for n in d["nodes"]) + "\n")
+    (store / "edges.jsonl").write_text("\n".join(json.dumps(e) for e in d["edges"]) + "\n")
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True).stdout.strip()
+    (store / "manifest.json").write_text(json.dumps({"built_at": "2026-11-14T00:00:00+00:00", "git_head": head}))
+    ctx = ProjectContext(code="TST", repo_root=root, ticket_prefix="TST", issues_dir=root / "issues", tests_dir=root / "tests",
+                         sprint_dir=root / "h", devkb_dir=store, board_file=root / "b.md", wp_map_file=root / "w.json")
+    monkeypatch.setattr(process_api, "resolve", lambda code: ctx)
+    return process_api.ProcessAPI("TST", telemetry=False)
+
+
+def test_list_answers_say_what_they_cannot_see(tmp_path, monkeypatch):
+    api = _api(tmp_path, monkeypatch)
+    r = api.call("callers", symbol="app/store.py::RuntimeStore.add_edge")
+    assert r["coverage"] == {"complete": False, "unresolved_calls": 1, "search_files": []}, "routes.py is already listed"
+    s = api.call("refactor_scope", target="app/store.py::RuntimeStore.add_edge")
+    assert s["coverage"]["complete"] is False
+    assert api.call("callers", symbol="app/base.py::Store.save")["coverage"] == {"complete": True}
+    assert process_api.is_generated_path("webapp/frontend/package-lock.json") and not process_api.is_generated_path("app/store.py")
+
+
+def test_an_exact_message_names_only_its_raiser(tmp_path, monkeypatch):
+    api = _api(tmp_path, monkeypatch)
+    r = api.call("rca_trace", symptom="Saving fails: a record without a name cannot be saved")
+    assert r["raisers"] == ["app/base.py::Store.save"] and "coverage" in r
+
+
+def test_a_pack_carries_evidence_lines_coverage_and_freshness(tmp_path, monkeypatch):
+    api = _api(tmp_path, monkeypatch)
+    p = Packer(api)
+    text = p.change("add_edge", "app/store.py")
+    assert "`app/routes.py:6: store.add_edge(1, 2)`" in text, "each item carries the line that proves it"
+    assert "app/routes.py::post_record" in text and "tests/test_store.py" in text
+    assert "**Incomplete: 1 call site(s)" in text and "None of the files below has changed since" in text
+    (tmp_path / "app" / "routes.py").write_text(FILES["app/routes.py"] + "\n# edited\n")
+    assert "Changed since, re-read these:" in Packer(api).change("add_edge", "app/store.py")
+    err = p.error("a record without a name cannot be saved")
+    assert "`app/base.py::Store.save`" in err and "## Route handlers that reach it (1)" in err

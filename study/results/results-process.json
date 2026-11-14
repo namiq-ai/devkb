@@ -1,0 +1,156 @@
+{
+ "runs": 240,
+ "cost_usd": 15.01,
+ "tasks": 16,
+ "invalid": 0,
+ "describe": {
+  "plain": {
+   "runs": 80,
+   "valid": 80,
+   "median_cost": 0.0704,
+   "median_turns": 7.0,
+   "mean_score": 0.9915,
+   "graph_used": 0.0,
+   "median_result_bytes": 7136.0
+  },
+  "core": {
+   "runs": 80,
+   "valid": 80,
+   "median_cost": 0.0739,
+   "median_turns": 7.5,
+   "mean_score": 0.8685,
+   "graph_used": 1.0,
+   "median_result_bytes": 5746.5
+  },
+  "pack": {
+   "runs": 80,
+   "valid": 80,
+   "median_cost": 0.0172,
+   "median_turns": 1.0,
+   "mean_score": 0.9111,
+   "graph_used": 0.0,
+   "median_result_bytes": 0.0
+  }
+ },
+ "pooled": {
+  "core": {
+   "cost": {
+    "tasks": 16,
+    "saved": -0.068,
+    "lo": -0.2278,
+    "hi": 0.0713,
+    "p_wilcoxon": 0.8387451171875
+   },
+   "quality": {
+    "diff": -0.123,
+    "lo": -0.155,
+    "hi": -0.0947,
+    "non_inferior": false,
+    "arm_mean": 0.8685,
+    "plain_mean": 0.9915
+   }
+  },
+  "pack": {
+   "cost": {
+    "tasks": 16,
+    "saved": 0.5989,
+    "lo": 0.4784,
+    "hi": 0.7023,
+    "p_wilcoxon": 1.52587890625e-05
+   },
+   "quality": {
+    "diff": -0.0804,
+    "lo": -0.0937,
+    "hi": -0.0584,
+    "non_inferior": false,
+    "arm_mean": 0.9111,
+    "plain_mean": 0.9915
+   }
+  }
+ },
+ "by_kind": {
+  "commit_trace": {
+   "core": {
+    "cost": {
+     "tasks": 8,
+     "saved": -0.001,
+     "lo": -0.4043,
+     "hi": 0.2789,
+     "p_wilcoxon": 0.19140625
+    },
+    "quality": {
+     "diff": -0.1498,
+     "lo": -0.1665,
+     "hi": -0.1249,
+     "non_inferior": false,
+     "arm_mean": 0.8501,
+     "plain_mean": 1.0
+    }
+   },
+   "pack": {
+    "cost": {
+     "tasks": 8,
+     "saved": 0.3685,
+     "lo": 0.0376,
+     "hi": 0.6154,
+     "p_wilcoxon": 0.00390625
+    },
+    "quality": {
+     "diff": 0.0,
+     "lo": 0.0,
+     "hi": 0.0,
+     "non_inferior": true,
+     "arm_mean": 1.0,
+     "plain_mean": 1.0
+    }
+   }
+  },
+  "ticket_code": {
+   "core": {
+    "cost": {
+     "tasks": 8,
+     "saved": -0.0983,
+     "lo": -0.2531,
+     "hi": 0.041,
+     "p_wilcoxon": 0.97265625
+    },
+    "quality": {
+     "diff": -0.0961,
+     "lo": -0.1573,
+     "hi": -0.0434,
+     "non_inferior": false,
+     "arm_mean": 0.8868,
+     "plain_mean": 0.983
+    }
+   },
+   "pack": {
+    "cost": {
+     "tasks": 8,
+     "saved": 0.7033,
+     "lo": 0.5914,
+     "hi": 0.7997,
+     "p_wilcoxon": 0.00390625
+    },
+    "quality": {
+     "diff": -0.1607,
+     "lo": -0.1874,
+     "hi": -0.1163,
+     "non_inferior": false,
+     "arm_mean": 0.8223,
+     "plain_mean": 0.983
+    }
+   }
+  }
+ },
+ "H6": {
+  "saved": 0.5989,
+  "ci": [
+   0.4784,
+   0.7023
+  ],
+  "p": 1.52587890625e-05,
+  "quality_diff": -0.0804,
+  "non_inferior": false,
+  "supported": false
+ }
+}

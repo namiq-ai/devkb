@@ -1,0 +1,25 @@
+% Numbers from results-sonnet.json and results-haiku.json (analyze.py); table from fill.py.
+All 1,020 runs produced an answer that could be scored (one Sonnet pack run was invalid and scored 0). Within each
+repository every arm ran in the same session in shuffled order (Deviation D3 re-ran whole repositories, never single
+arms).
+
+\paragraph{Hypotheses} \emph{H1 supported}: packs cost 41\% less than plain [34, 48], Holm-adjusted $p<10^{-4}$, with
+quality $+0.034$ [0.019, 0.048]. \emph{H2 supported}: the lean tool set cost 35\% less [28, 42], $p<10^{-4}$, quality
+$+0.053$. \emph{H3 supported as stated}: the full tool set cost no more than plain; it cost 15\% less [7, 22] with
+quality $+0.023$. Read as a superiority claim inside the Holm family it would not reach significance (adjusted
+$p=0.13$); the pre-registration did not say which reading applies, so we report both (Deviation D4). \emph{H4 not
+supported}: only two error-to-handler tasks qualified, and a one-sided Wilcoxon test on two tasks cannot go below
+$p=0.25$ although both arms were cheaper on both tasks (pack 65\%, lean 33\%). \emph{H5 supported}: with Haiku, packs
+cost 39\% less [31, 48] and lean 36\% less [31, 41], both $p<10^{-3}$ and quality non-inferior.
+
+\paragraph{Where the saving comes from} The saving followed the turn count: packs answered in a median of 3 turns
+against 6 for plain, and the task-shaped tools, which took 9, saved nothing ($-4\%$ [$-13$, 4]). By task kind, packs
+saved 46\% on change-impact tasks (15) and 26\% on refactor tasks (13); the full tool set saved 28\% on change-impact
+and cost 16\% \emph{more} on refactors, where callers must be complete. By repository, pack savings ranged from 15\%
+(C and D, the public repositories; D's interval includes zero) to 55--68\% (A, B). Quality was non-inferior pooled,
+but not in every repository: on Repository A, packs scored 0.029 lower [$-0.054$, $-0.009$].
+
+\paragraph{Why the sign flipped} The exploratory phase found graph arms 11--24\% more expensive, the confirmatory study
+15--41\% cheaper. Three things changed between them, and this design cannot separate them: the graph was audited and
+answers gained a coverage statement (Section~\ref{sec:audit}); the tasks are new and held out; and the tools were
+frozen after tuning on the exploratory tasks. Section~\ref{sec:ablation} tests the first.

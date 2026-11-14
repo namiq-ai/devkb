@@ -1,0 +1,556 @@
+{
+ "nodes": 53740,
+ "edges": 167399,
+ "verbs": {
+  "TOUCHES": {
+   "n": 83690,
+   "share": 0.4999,
+   "pairs": {
+    "Commit->File": 83690
+   },
+   "fanout_p50": 10,
+   "fanout_p99": 122,
+   "fanout_max": 334,
+   "sources": {
+    "git-log-baseline": 51932,
+    "git-diff-tree": 31758
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 64,
+   "tool_reads": 7
+  },
+  "DEFINED_IN": {
+   "n": 26443,
+   "share": 0.158,
+   "pairs": {
+    "Symbol->File": 16527,
+    "TestCase->File": 9916
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 1,
+   "fanout_max": 4,
+   "sources": {
+    "ast": 15290,
+    "test-inventory": 9916,
+    "ast-ts": 1237
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 0
+  },
+  "CALLS": {
+   "n": 18775,
+   "share": 0.1122,
+   "pairs": {
+    "Symbol->Symbol": 18775
+   },
+   "fanout_p50": 2,
+   "fanout_p99": 10,
+   "fanout_max": 42,
+   "sources": {
+    "ast-same-file": 9538,
+    "ast-cross-file-import": 6212,
+    "ast-typed-receiver": 3025
+   },
+   "conf_min": 0.6,
+   "conf_max": 0.8,
+   "conf_distinct": 3,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 16
+  },
+  "TESTED_BY": {
+   "n": 15991,
+   "share": 0.0955,
+   "pairs": {
+    "File->TestCase": 11686,
+    "Symbol->TestCase": 4305
+   },
+   "fanout_p50": 4,
+   "fanout_p99": 106,
+   "fanout_max": 356,
+   "sources": {
+    "test-marker-grep": 11686,
+    "ast-import-resolution": 4305
+   },
+   "conf_min": 0.2,
+   "conf_max": 0.95,
+   "conf_distinct": 2,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 2
+  },
+  "SIMILAR_TO": {
+   "n": 8019,
+   "share": 0.0479,
+   "pairs": {
+    "Ticket->Ticket": 8019
+   },
+   "fanout_p50": 8,
+   "fanout_p99": 8,
+   "fanout_max": 8,
+   "sources": {
+    "file-overlap-inference": 8019
+   },
+   "conf_min": 0.0,
+   "conf_max": 1.0,
+   "conf_distinct": 83,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 1
+  },
+  "REFERENCES": {
+   "n": 5040,
+   "share": 0.0301,
+   "pairs": {
+    "Commit->Ticket": 5040
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 3,
+   "fanout_max": 6,
+   "sources": {
+    "git-log-grep": 5040
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 4
+  },
+  "STEP": {
+   "n": 4715,
+   "share": 0.0282,
+   "pairs": {
+    "Flow->Symbol": 4715
+   },
+   "fanout_p50": 7,
+   "fanout_p99": 127,
+   "fanout_max": 319,
+   "sources": {
+    "touch-point-bfs": 4715
+   },
+   "conf_min": 0.6,
+   "conf_max": 1.0,
+   "conf_distinct": 4,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 5
+  },
+  "GROUPS": {
+   "n": 2180,
+   "share": 0.013,
+   "pairs": {
+    "WorkUnit->Commit": 2180
+   },
+   "fanout_p50": 4,
+   "fanout_p99": 42,
+   "fanout_max": 76,
+   "sources": {
+    "commit-cluster-inference": 2180
+   },
+   "conf_min": 0.5,
+   "conf_max": 0.5,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 0
+  },
+  "RAISES": {
+   "n": 930,
+   "share": 0.0056,
+   "pairs": {
+    "Symbol->ErrorSignature": 930
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 6,
+   "fanout_max": 17,
+   "sources": {
+    "ast": 930
+   },
+   "conf_min": 0.9,
+   "conf_max": 1.0,
+   "conf_distinct": 2,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 3
+  },
+  "DOCUMENTS": {
+   "n": 647,
+   "share": 0.0039,
+   "pairs": {
+    "Spec->Ticket": 647
+   },
+   "fanout_p50": 3,
+   "fanout_p99": 23,
+   "fanout_max": 28,
+   "sources": {
+    "spec-scan": 647
+   },
+   "conf_min": 0.85,
+   "conf_max": 0.85,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 2
+  },
+  "DECLARES": {
+   "n": 250,
+   "share": 0.0015,
+   "pairs": {
+    "File->ConfigKey": 250
+   },
+   "fanout_p50": 12,
+   "fanout_p99": 27,
+   "fanout_max": 68,
+   "sources": {
+    "configuration": 250
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 4
+  },
+  "PART_OF": {
+   "n": 179,
+   "share": 0.0011,
+   "pairs": {
+    "Ticket->WorkPackage": 178
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 1,
+   "fanout_max": 1,
+   "sources": {
+    "wp-map": 179
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 1,
+   "generated": 0,
+   "tool_reads": 1
+  },
+  "READS": {
+   "n": 178,
+   "share": 0.0011,
+   "pairs": {
+    "File->ConfigKey": 100,
+    "Symbol->ConfigKey": 78
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 9,
+   "fanout_max": 59,
+   "sources": {
+    "configuration": 178
+   },
+   "conf_min": 0.9,
+   "conf_max": 0.9,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 9
+  },
+  "CHILD_OF": {
+   "n": 119,
+   "share": 0.0007,
+   "pairs": {
+    "Ticket->Ticket": 119
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 1,
+   "fanout_max": 1,
+   "sources": {
+    "ticket-trace": 119
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 2
+  },
+  "BELONGS_TO": {
+   "n": 67,
+   "share": 0.0004,
+   "pairs": {
+    "WorkPackage->Milestone": 65
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 1,
+   "fanout_max": 2,
+   "sources": {
+    "board-milestone-summary": 67
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 2,
+   "generated": 0,
+   "tool_reads": 0
+  },
+  "CALLS_API": {
+   "n": 55,
+   "share": 0.0003,
+   "pairs": {
+    "Symbol->Symbol": 55
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 2,
+   "fanout_max": 4,
+   "sources": {
+    "ast-route-match": 55
+   },
+   "conf_min": 0.85,
+   "conf_max": 0.85,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 1
+  },
+  "LOGS": {
+   "n": 37,
+   "share": 0.0002,
+   "pairs": {
+    "Symbol->ErrorSignature": 37
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 2,
+   "fanout_max": 3,
+   "sources": {
+    "ast": 37
+   },
+   "conf_min": 0.85,
+   "conf_max": 0.85,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 1
+  },
+  "DEPLOYS": {
+   "n": 27,
+   "share": 0.0002,
+   "pairs": {
+    "File->Component": 27
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 4,
+   "fanout_max": 5,
+   "sources": {
+    "configuration": 27
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 3
+  },
+  "BLOCKS": {
+   "n": 20,
+   "share": 0.0001,
+   "pairs": {
+    "Ticket->Ticket": 19
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 1,
+   "fanout_max": 1,
+   "sources": {
+    "bug-lineage": 20
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 1,
+   "generated": 0,
+   "tool_reads": 1
+  },
+  "CAUSED_BY": {
+   "n": 15,
+   "share": 0.0001,
+   "pairs": {
+    "Ticket->Ticket": 13
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 1,
+   "fanout_max": 1,
+   "sources": {
+    "bug-lineage": 15
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 2,
+   "generated": 0,
+   "tool_reads": 1
+  },
+  "DUPLICATE_OF": {
+   "n": 15,
+   "share": 0.0001,
+   "pairs": {
+    "Ticket->Ticket": 13
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 1,
+   "fanout_max": 1,
+   "sources": {
+    "bug-lineage": 15
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 2,
+   "generated": 0,
+   "tool_reads": 1
+  },
+  "REGISTERED_ON": {
+   "n": 5,
+   "share": 0.0,
+   "pairs": {
+    "Symbol->Endpoint": 5
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 1,
+   "fanout_max": 2,
+   "sources": {
+    "ast": 5
+   },
+   "conf_min": 0.9,
+   "conf_max": 0.9,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 0
+  },
+  "REGRESSION_OF": {
+   "n": 2,
+   "share": 0.0,
+   "pairs": {
+    "Ticket->Ticket": 2
+   },
+   "fanout_p50": 1,
+   "fanout_p99": 1,
+   "fanout_max": 1,
+   "sources": {
+    "bug-lineage": 2
+   },
+   "conf_min": 1.0,
+   "conf_max": 1.0,
+   "conf_distinct": 1,
+   "dangling": 0,
+   "generated": 0,
+   "tool_reads": 1
+  }
+ },
+ "types": {
+  "TestCase": {
+   "n": 16895,
+   "orphans": 3198,
+   "generated": 0
+  },
+  "Symbol": {
+   "n": 16520,
+   "orphans": 0,
+   "generated": 0
+  },
+  "File": {
+   "n": 9611,
+   "orphans": 0,
+   "generated": 3
+  },
+  "Commit": {
+   "n": 6758,
+   "orphans": 0,
+   "generated": 0
+  },
+  "Ticket": {
+   "n": 1742,
+   "orphans": 446,
+   "generated": 0
+  },
+  "ErrorSignature": {
+   "n": 615,
+   "orphans": 0,
+   "generated": 0
+  },
+  "WorkUnit": {
+   "n": 362,
+   "orphans": 0,
+   "generated": 0
+  },
+  "Flow": {
+   "n": 341,
+   "orphans": 0,
+   "generated": 0
+  },
+  "ConfigKey": {
+   "n": 260,
+   "orphans": 0,
+   "generated": 0
+  },
+  "Spec": {
+   "n": 210,
+   "orphans": 74,
+   "generated": 0
+  },
+  "Endpoint": {
+   "n": 191,
+   "orphans": 188,
+   "generated": 0
+  },
+  "WorkPackage": {
+   "n": 182,
+   "orphans": 3,
+   "generated": 0
+  },
+  "Component": {
+   "n": 27,
+   "orphans": 0,
+   "generated": 0
+  },
+  "Milestone": {
+   "n": 23,
+   "orphans": 5,
+   "generated": 0
+  },
+  "Warning": {
+   "n": 2,
+   "orphans": 2,
+   "generated": 0
+  },
+  "Repository": {
+   "n": 1,
+   "orphans": 1,
+   "generated": 0
+  }
+ },
+ "unused_verbs": [
+  "FLAGGED_BY",
+  "TAGS",
+  "REALIZES",
+  "DERIVED_FROM",
+  "IMPLEMENTS",
+  "EVIDENCED_BY",
+  "IN_REPO"
+ ],
+ "bytes": {
+  "nodes.jsonl": 17459228,
+  "edges.jsonl": 42068953
+ },
+ "low_value_share": 0.5609,
+ "generated_edge_share": 0.0004,
+ "dangling_share": 5e-05,
+ "timing": {
+  "cold_build_s": 1.49,
+  "cached_load_s": 0.18,
+  "callers_p50_ms": 0.88,
+  "cache_bytes": 12911525
+ }
+}
