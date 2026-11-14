@@ -15,6 +15,8 @@ loaded, and it carries what makes checking unnecessary:
   python3 devkb/packs.py --project OCO error "workflow needs a non-empty 'states' object"
   python3 devkb/packs.py --project OCO change revoke_user_sessions
   python3 devkb/packs.py --project OCO refactor add_edge --role BE
+  python3 devkb/packs.py --project OCO ticket GH-123      a ticket's pull requests, commits, changed functions, tests
+  python3 devkb/packs.py --project OCO pr 456             a pull request's commits, changed functions, tests, issues closed
 """
 from __future__ import annotations
 
@@ -240,12 +242,8 @@ class Packer:
 
 
     # ── ADDENDUM-1 S2: process joins (ODSF-316) ────────────────────────────────
-    def ticket(self, ticket_id: str) -> str:
-        """A ticket's commits, the module-level functions they changed that exist now, and the tests that call them."""
-        t = self.idx.node("Ticket", ticket_id)
-        if t is None:
-            return f"# Graph pack: ticket {ticket_id}\n\nThe graph has no ticket {ticket_id}. Search the history."
-        commits = sorted(set(self.idx.sources("REFERENCES", t)), key=lambda c: self.idx.props[c].get("date", ""))
+    def _changed_by(self, commits: list[int]) -> dict[int, str]:
+        """Module-level production functions, still present, that these commits changed: {symbol: short hash}."""
         changed: dict[int, str] = {}
         for c in commits:
             r = self.api.review_pack(self.api._key(c)[:12])
@@ -254,16 +252,111 @@ class Packer:
                 i = self.idx.node("Symbol", key)
                 if i is not None and "." not in qual and not is_test_path(path) and self.idx.props[i].get("kind") == "function":
                     changed.setdefault(i, self.idx.props[c].get("short_hash", self.api._key(c)[:10]))
+        return changed
+
+    def _pr_commits_to_read(self, prs: list[int]) -> list[int]:
+        """Each pull request's commits, minus the ones a merge commit already contains: a merge commit's diff is the
+        whole pull request, so reading its second-parent commits too would only repeat it."""
+        out: list[int] = []
+        for p in prs:
+            cs = sorted(set(self.idx.targets("MERGES", p)), key=lambda c: (self.idx.props[c].get("date", ""), self.api._key(c)))
+            merge = self.idx.props[p].get("merge_commit")
+            m = self.idx.node("Commit", merge) if merge else None
+            out += [m] if m is not None and m in cs and self.idx.props[p].get("merge_style") == "merge" else cs
+        return out
+
+    def _pr_lines(self, prs: list[int], ticket: int | None = None, cap: int = 15) -> list[str]:
+        lines = []
+        for p in prs[:cap]:
+            props = self.idx.props[p]
+            how = ", ".join(x for x in (props.get("state"), props.get("merge_style")) if x)
+            mark = ""
+            if ticket is not None:
+                conf, unverified = self.api._link("CLOSES", p, ticket)
+                if conf is not None:
+                    mark = f" — closes it at confidence {conf}" + (", **unverified**: the number may be a pull request, not an issue" if unverified else "")
+            lines.append(f"- `{self.api._key(p)}` ({how}) {(props.get('title') or '')[:90]}{mark}")
+        if len(prs) > cap:
+            lines.append(f"- … {len(prs) - cap} more")
+        return lines or ["- none in the graph"]
+
+    def _pr_coverage_text(self, unverified: list[str]) -> str:
+        cov = self.api.pr_coverage(unverified)
+        if cov is None:
+            return "the repository has no GitHub remote, so no pull-request links were looked for."
+        head = ("**Complete.** The GitHub layer was fetched; the links above are GitHub's own record." if cov["complete"]
+                else f"**Incomplete** (GitHub layer: {cov['github']}).")
+        note = f" {cov['note']}." if cov.get("note") and not cov["complete"] else ""
+        unv = f" Not verified: {', '.join(f'`{u}`' for u in cov['unverified'])}." if cov.get("unverified") else ""
+        return head + note + unv
+
+    def ticket(self, ticket_id: str) -> str:
+        """A ticket's commits (its own and its pull requests'), the module-level functions they changed that exist now,
+        and the tests that call them."""
+        t = self.idx.node("Ticket", ticket_id)
+        if t is None:
+            return f"# Graph pack: ticket {ticket_id}\n\nThe graph has no ticket {ticket_id}. Search the history."
+        prs = self.api._ticket_prs(t)
+        referencing = set(self.idx.sources("REFERENCES", t))
+        via_prs = {c for p in prs for c in self.idx.targets("MERGES", p)}
+        commits = sorted(referencing | via_prs, key=lambda c: self.idx.props[c].get("date", ""))
+        read = sorted(referencing | set(self._pr_commits_to_read(prs)), key=lambda c: self.idx.props[c].get("date", ""))
+        changed = self._changed_by(read)
         tests = self.tests(set(changed))
         out = [f"# Graph pack: ticket {ticket_id} ({(self.idx.props[t].get('title') or '')[:90]})", "",
-               self.freshness(sorted({self.api._key(i).split('::')[0] for i in changed})), "",
-               f"## Commits referencing it ({len(commits)})"]
+               self.freshness(sorted({self.api._key(i).split('::')[0] for i in changed})), ""]
+        if prs or self.api.pr_coverage() is not None:
+            out += [f"## Pull requests that close it ({len(prs)})"] + self._pr_lines(prs, t) + [""]
+        out += [f"## Commits referencing it or brought in by its pull requests ({len(commits)})"]
         out += [f"- `{self.idx.props[c].get('short_hash', '')}` {self.idx.props[c].get('date', '')} {(self.idx.props[c].get('subject') or '')[:90]}"
                 for c in commits[:15]]
         out += ["", f"## Module-level functions those commits changed, still present ({len(changed)})"]
         out += [f"- `{self.api._key(i)}` (changed in `{h}`) — `{self.def_line(i)}`" for i, h in sorted(changed.items(), key=lambda p: self.api._key(p[0]))]
         out += ["", f"## Test files that call them ({len(tests)})"] + self._tests_section(tests)
         out += ["", "## Coverage", self.coverage(sorted(changed, key=self.api._key), set(tests))]
+        if self.api.pr_coverage() is not None:
+            out += ["", "Pull-request links: " + self._pr_coverage_text(self.api._pr_unverified(t, prs))]
+        return "\n".join(out + ["", HOW_TO_USE])
+
+    def pr(self, number: str) -> str:
+        """A pull request: its commits, the functions it changed, the tests that call them, the issues it closes."""
+        p, err = self.api._pr_ref(number)
+        if err:
+            gh = self.idx.github
+            hint = ("" if gh and gh.get("status") == "ok" else
+                    " It may be a rebase merge, which leaves no trace in git (build with --github), or outside the history the graph covers.")
+            return f"# Graph pack: pull request {number}\n\nThe graph has no pull request {number}.{hint} Search the history."
+        props = self.idx.props[p]
+        commits = sorted(set(self.idx.targets("MERGES", p)), key=lambda c: (self.idx.props[c].get("date", ""), self.api._key(c)))
+        closes = sorted(set(self.idx.targets("CLOSES", p)), key=self.api._key)
+        changed = self._changed_by(self._pr_commits_to_read([p]))
+        tests = self.tests(set(changed))
+        facts = [f"{k}: {props[k]}" for k in ("state", "merge_style", "merged_at", "base", "head", "url") if props.get(k)]
+        out = [f"# Graph pack: pull request {self.api._key(p)} ({(props.get('title') or '')[:90]})", "",
+               self.freshness(sorted({self.api._key(i).split('::')[0] for i in changed})), "", "; ".join(facts) + ".",
+               "", f"## Commits it brought in ({len(commits)})"]
+        for c in commits[:25]:
+            conf = self.api._link("MERGES", p, c)[0]
+            out.append(f"- `{self.idx.props[c].get('short_hash', '')}` {self.idx.props[c].get('date', '')} "
+                       f"{(self.idx.props[c].get('subject') or '')[:90]} (confidence {conf})")
+        if len(commits) > 25:
+            out.append(f"- … {len(commits) - 25} more")
+        if not commits:
+            out.append("- none in the graph")
+        out += ["", f"## Issues it closes ({len(closes)})"]
+        for t in closes:
+            conf, unv = self.api._link("CLOSES", p, t)
+            out.append(f"- `{self.api._key(t)}` {(self.idx.props[t].get('title') or '')[:80]} (confidence {conf}"
+                       + (", **unverified**: offline, the number may be a pull request" if unv else "") + ")")
+        if not closes:
+            out.append("- none in the graph")
+        out += ["", f"## Module-level functions it changed, still present ({len(changed)})"]
+        out += [f"- `{self.api._key(i)}` (changed in `{h}`) — `{self.def_line(i)}`" for i, h in sorted(changed.items(), key=lambda x: self.api._key(x[0]))]
+        out += ["", f"## Tests to run: test files that call them ({len(tests)})"] + self._tests_section(tests)
+        if tests:
+            out += ["", f"Run: `{self._run(list(tests))}`"]
+        out += ["", "## Coverage", self.coverage(sorted(changed, key=self.api._key), set(tests)),
+                "", "Pull-request links: " + self._pr_coverage_text([self.api._key(t) for t in closes if self.api._link("CLOSES", p, t)[1]])]
         return "\n".join(out + ["", HOW_TO_USE])
 
     def commit_trace(self, commit: str) -> str:
@@ -296,7 +389,7 @@ HOW_TO_USE = ("---\nThis pack was extracted from the source by the dev-process g
 def main() -> int:
     ap = argparse.ArgumentParser(description="write a predefined graph pack")
     ap.add_argument("--project", required=True)
-    ap.add_argument("kind", choices=("error", "change", "refactor"))
+    ap.add_argument("kind", choices=("error", "change", "refactor", "ticket", "pr"))
     ap.add_argument("subject", nargs="+")
     ap.add_argument("--role", default="")
     ap.add_argument("--path", default="")
@@ -304,7 +397,8 @@ def main() -> int:
     p = Packer(ProcessAPI(ns.project, telemetry=False))
     subject = " ".join(ns.subject)
     print({"error": lambda: p.error(subject), "change": lambda: p.change(subject, ns.path),
-           "refactor": lambda: p.refactor(subject, ns.role, ns.path)}[ns.kind]())
+           "refactor": lambda: p.refactor(subject, ns.role, ns.path), "ticket": lambda: p.ticket(subject),
+           "pr": lambda: p.pr(subject)}[ns.kind]())
     return 0
 
 

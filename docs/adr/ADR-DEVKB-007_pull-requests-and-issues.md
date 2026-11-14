@@ -146,6 +146,16 @@ GitLab merge requests and Jira issues (the same node type and verbs would carry 
 sources), reviews and review comments, CI check results, and people as nodes (ownership, reviewers), which needs its
 own privacy decision.
 
+## Implementation notes
+
+Implemented on branch `exercise/adr007-devkb` with the draft's defaults for both open questions (author logins
+opt-in; online layer only on explicit request). Validation items 4 and 5 are tests
+(`tests/test_devkb_pull_requests_adr007.py`, GitHub faked). Items 1 to 3 and 6 need the real API on the benchmark
+repositories and have not been run in full; a 12-pull-request spot check on lattice-scan found all 19 offline `MERGES`
+edges in GitHub's commit lists. Two choices the ADR did not spell out: the online layer uses GitHub's GraphQL API (one
+request per 100 items, and the only place GitHub exposes its closing references), and a commit subject
+`Merge pull request #N from owner/branch` is stored without the owner unless `authors` is on.
+
 ## Open questions for the decider
 
 1. Should the author login be stored by default for public repositories, where it is already public, or stay

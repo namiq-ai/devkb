@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from devkb import github
 from devkb.extractors.files_tests import _files_touched, is_bulk
 from devkb.extractors.tickets_git import _run
 from devkb.model import DevKBGraph
@@ -45,10 +46,11 @@ def _all_commits(repo_root: Path, since: str) -> list[dict[str, str]]:
 
 def extract(ctx: ProjectContext, since: str = DEFAULT_SINCE) -> DevKBGraph:
     g = DevKBGraph()
+    authors = github.settings(ctx.repo_root).authors
     for c in _all_commits(ctx.repo_root, since):
         g.add_node(
             "Commit", c["hash"], source="git-log-baseline",
-            short_hash=c["hash"][:10], date=c["date"], author=c["author"], subject=c["subject"],
+            short_hash=c["hash"][:10], date=c["date"], author=c["author"], subject=github.public_subject(c["subject"], authors),
         )
         touched = _files_touched(c["hash"], ctx.repo_root)
         if is_bulk(touched):  # ODSF-314: a bulk change keeps its size, not one edge per file
