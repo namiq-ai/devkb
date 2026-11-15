@@ -7,7 +7,7 @@ Two things, in one repository, because each is only credible with the other:
 1. **devkb**, an independent component that any git repository can use: it extracts a software-process knowledge
    graph (code, tests, tickets, commits, specifications, configuration), and gives it to coding agents as
    pre-computed context packs or as tools over MCP.
-2. **The study** behind the paper *Fewer Turns, Not a Better Graph: A Pre-Registered Study of Process Graphs for
+2. **The study** behind the paper *Precomputed Context, Not More Tools: A Pre-Registered Study of Process Graphs for
    Coding Agents*: the frozen protocol, every analysis script, the raw runs, and the paper source, so that every
    number in the paper can be reproduced from this repository.
 

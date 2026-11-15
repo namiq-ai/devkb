@@ -100,4 +100,4 @@ args = ["mcp", "--project", ".", "--toolset", "dev"]
 Pre-release. The licence will be chosen before the repository is made public; until then, all rights reserved.
 Releases: [`docs/RELEASING.md`](docs/RELEASING.md).
 
-> Hung T. Le. *Fewer Turns, Not a Better Graph: A Pre-Registered Study of Process Graphs for Coding Agents.* 2026.
+> Hung T. Le. *Precomputed Context, Not More Tools: A Pre-Registered Study of Process Graphs for Coding Agents.* 2026.
