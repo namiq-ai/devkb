@@ -1,0 +1,104 @@
+{
+ "branch": "<exercise>/plain",
+ "commit": "761e164a0055342ec1948ea10d6b26592ecd78fb",
+ "tests": {
+  "exit": 0,
+  "summary": "247 passed in 26.71s"
+ },
+ "schema": [
+  true,
+  true,
+  true
+ ],
+ "offline": {
+  "lattice-scan": {
+   "exit": 0,
+   "secs": 20.7,
+   "network_connects": 0,
+   "pull_requests": 125,
+   "merges_edges": 217,
+   "keys_ok": true,
+   "closes_edges": 0,
+   "merges_precision": 1.0,
+   "merges_checked": 35,
+   "merges_wrong": [],
+   "recall_merged_prs": 1.0,
+   "recall_denominator": 125
+  },
+  "mealie": {
+   "exit": 0,
+   "secs": 239.6,
+   "network_connects": 0,
+   "pull_requests": 3778,
+   "merges_edges": 4475,
+   "keys_ok": true,
+   "closes_edges": 4,
+   "merges_precision": 1.0,
+   "merges_checked": 29,
+   "merges_wrong": []
+  },
+  "dispatch": {
+   "exit": 0,
+   "secs": 100.4,
+   "network_connects": 0,
+   "pull_requests": 1838,
+   "merges_edges": 1838,
+   "keys_ok": true,
+   "closes_edges": 0,
+   "merges_precision": 0.96,
+   "merges_checked": 25,
+   "merges_wrong": [
+    "PR-5395->2dde1cc280"
+   ]
+  }
+ },
+ "online": {
+  "lattice-scan": {
+   "exit": 0,
+   "secs": 47.4,
+   "switch": "--github",
+   "second_build_secs": 52.0,
+   "issue_tickets": 1,
+   "ticket_types": [
+    "BUG"
+   ],
+   "closes_edges": 1,
+   "pull_requests": 138,
+   "closes_precision": 1.0,
+   "closes_checked": 1,
+   "closes_wrong": []
+  },
+  "mealie": {
+   "exit": "timeout",
+   "note": "the full acceptance run timed out (50 min) in this build; REST rate limit consumed"
+  }
+ },
+ "pack": {
+  "exit": 0,
+  "pr": "PR-137",
+  "words": 218,
+  "names_a_commit": true,
+  "head": "# Graph pack: PR-137 (ci: mark CI and release runs as our own, so they are not counted as users of the tool)\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nState: merged, merged 2026-11-13, merge merge \u2014 https://github.com/namiq-ai/lattice-scan/pull/137\n\n## Commits (2)\n- `17e2aefd7f` Merge pull request #137 from n",
+  "ok": true
+ },
+ "regression": {
+  "lattice-scan": 1.0,
+  "mealie": 1.0,
+  "dispatch": 1.0,
+  "lnbits": 1.0
+ },
+ "privacy": {
+  "emails": [
+   "off-lattice-scan/.process-index.pkl: contact@namiq.io."
+  ],
+  "logins": [],
+  "bodies": [
+   "off-lattice-scan/.process-index.pkl: A Mac has none of the Linux so",
+   "off-lattice-scan/.process-index.pkl: A Mac has none of the Linux so"
+  ],
+  "ok": false,
+  "checked_logins": 16,
+  "checked_bodies": 174
+ },
+ "diff": "16 files changed, 1401 insertions(+), 35 deletions(-)"
+}

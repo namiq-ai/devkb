@@ -1,0 +1,100 @@
+{
+ "branch": "<exercise>/plain",
+ "commit": "53ebb831559527d90b4524c62a8e8a16c324ee44",
+ "tests": {
+  "exit": 0,
+  "summary": "217 passed in 14.28s"
+ },
+ "schema": [
+  false,
+  false,
+  false
+ ],
+ "offline": {
+  "lattice-scan": {
+   "exit": 0,
+   "secs": 16.0,
+   "network_connects": 0,
+   "pull_requests": 0,
+   "merges_edges": 0,
+   "keys_ok": true,
+   "closes_edges": 0,
+   "merges_precision": null,
+   "merges_checked": 0,
+   "merges_wrong": [],
+   "recall_merged_prs": 0.0,
+   "recall_denominator": 125
+  },
+  "mealie": {
+   "exit": 0,
+   "secs": 247.5,
+   "network_connects": 0,
+   "pull_requests": 0,
+   "merges_edges": 0,
+   "keys_ok": true,
+   "closes_edges": 0,
+   "merges_precision": null,
+   "merges_checked": 0,
+   "merges_wrong": []
+  },
+  "dispatch": {
+   "exit": 0,
+   "secs": 99.0,
+   "network_connects": 0,
+   "pull_requests": 0,
+   "merges_edges": 0,
+   "keys_ok": true,
+   "closes_edges": 0,
+   "merges_precision": null,
+   "merges_checked": 0,
+   "merges_wrong": []
+  }
+ },
+ "online": {
+  "lattice-scan": {
+   "exit": 0,
+   "secs": 6.7,
+   "switch": "devkb.json",
+   "second_build_secs": 6.8,
+   "issue_tickets": 0,
+   "ticket_types": [],
+   "closes_edges": 0,
+   "pull_requests": 0,
+   "closes_precision": null,
+   "closes_checked": 0,
+   "closes_wrong": []
+  },
+  "mealie": {
+   "exit": 0,
+   "secs": 67.0,
+   "switch": "devkb.json",
+   "second_build_secs": 65.8,
+   "issue_tickets": 0,
+   "ticket_types": [],
+   "closes_edges": 0,
+   "pull_requests": 0,
+   "closes_precision": null,
+   "closes_checked": 0,
+   "closes_wrong": []
+  }
+ },
+ "pack": {
+  "ok": false,
+  "why": "no MERGES edges to pick a pull request from"
+ },
+ "regression": {
+  "lattice-scan": 1.0,
+  "mealie": 1.0,
+  "dispatch": 1.0,
+  "lnbits": 1.0
+ },
+ "privacy": {
+  "emails": [],
+  "logins": [],
+  "bodies": [],
+  "ok": true,
+  "checked_logins": 1,
+  "checked_bodies": 110
+ },
+ "diff": ""
+}

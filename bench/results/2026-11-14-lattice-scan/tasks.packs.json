@@ -1,0 +1,336 @@
+[
+ {
+  "id": "L-ERR-terms_version",
+  "kind": "rca",
+  "skill": "devkb-rca",
+  "prompt": "A user of this tool reports an error whose message is: \"the key API description has no terms version\". Trace it: name the function that raises it, every function outside the tests that can reach that function through calls at any depth, and every test file that calls the raising function or any of those functions. Answer with one JSON object: {\"raiser\": \"path::function\", \"callers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "raiser": "src/lattice_scan/cli.py::terms_version",
+   "callers": [
+    "src/lattice_scan/cli.py::_main",
+    "src/lattice_scan/cli.py::cmd_get_key",
+    "src/lattice_scan/cli.py::main"
+   ],
+   "test_files": [
+    "tests/test_agent_entry.py",
+    "tests/test_corpus.py",
+    "tests/test_discover_all.py",
+    "tests/test_lattice_scan.py",
+    "tests/test_macos_stop.py",
+    "tests/test_progress.py",
+    "tests/test_project.py"
+   ]
+  },
+  "pack": "# Graph pack: error \"the key API description has no terms version\"\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\n## Raised by\n- `src/lattice_scan/cli.py::terms_version` \u2014 `src/lattice_scan/cli.py:4146: def terms_version() -> str:`\n\n## Functions that reach it, at any depth (3)\n- `src/lattice_scan/cli.py::_main` \u2014 `src/lattice_scan/cli.py:4553: if a.c == \"get-key\": return cmd_get_key(a)`\n- `src/lattice_scan/cli.py::cmd_get_key` \u2014 `src/lattice_scan/cli.py:4188: version = terms_version()`\n- `src/lattice_scan/cli.py::main` \u2014 `src/lattice_scan/cli.py:4583: rc = _main()`\n\n## Test files on those paths (7)\n- `tests/test_agent_entry.py` \u2014 `tests/test_agent_entry.py:117: rc = cli.main()`\n- `tests/test_corpus.py` \u2014 `tests/test_corpus.py:25: rc = cli.main()`\n- `tests/test_discover_all.py` \u2014 `tests/test_discover_all.py:86: rc = cli.main()`\n- `tests/test_lattice_scan.py` \u2014 `tests/test_lattice_scan.py:193: rc = cli.main()`\n- `tests/test_macos_stop.py` \u2014 `tests/test_macos_stop.py:40: cli.main()`\n- `tests/test_progress.py` \u2014 `tests/test_progress.py:43: rc = cli.main()`\n- `tests/test_project.py` \u2014 `tests/test_project.py:359: rc = cli.main()`\n\nRun: `python3 -m pytest tests/test_agent_entry.py tests/test_corpus.py tests/test_discover_all.py tests/test_lattice_scan.py tests/test_macos_stop.py tests/test_progress.py tests/test_project.py -q`\n\n## Coverage\n**Incomplete: 2 call site(s) under this name could not be attributed.** 6 symbols share the name, so most may be calls to the others. Search only these files for them: `src/lattice_scan/scan_report_send.py`.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "error",
+   "message": "the key API description has no terms version"
+  }
+ },
+ {
+  "id": "L-ERR-verify_document",
+  "kind": "rca",
+  "skill": "devkb-rca",
+  "prompt": "A user of this tool reports an error whose message is: \"the signed list is missing generation, rows or exploitedAsOf\". Trace it: name the function that raises it, every function outside the tests that can reach that function through calls at any depth, and every test file that calls the raising function or any of those functions. Answer with one JSON object: {\"raiser\": \"path::function\", \"callers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "raiser": "src/lattice_scan/identities.py::verify_document",
+   "callers": [
+    "packaging/bundle_identities.py::main",
+    "src/lattice_scan/cli.py::cmd_recent",
+    "src/lattice_scan/cli.py::cmd_run",
+    "src/lattice_scan/cli.py::use_identities",
+    "src/lattice_scan/identities.py::_bundled",
+    "src/lattice_scan/identities.py::_read_cache",
+    "src/lattice_scan/identities.py::load"
+   ],
+   "test_files": [
+    "tests/test_identities.py",
+    "tests/test_identity_switch.py",
+    "tests/test_read_cache.py"
+   ]
+  },
+  "pack": "# Graph pack: error \"the signed list is missing generation, rows or exploitedAsOf\"\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\n## Raised by\n- `src/lattice_scan/identities.py::verify_document` \u2014 `src/lattice_scan/identities.py:92: def verify_document(raw: bytes, signature_b64: str, key_id: str, expected_sha256: str | None = None) -> dict:`\n\n## Functions that reach it, at any depth (7)\n- `packaging/bundle_identities.py::main` \u2014 `packaging/bundle_identities.py:34: doc = identities.verify_document(raw, m.get(\"signature\", \"\"), m.get(\"keyId\", \"\"), m.get(\"sha256\"))`\n- `src/lattice_scan/cli.py::cmd_recent` \u2014 `src/lattice_scan/cli.py:3554: use_identities()`\n- `src/lattice_scan/cli.py::cmd_run` \u2014 `src/lattice_scan/cli.py:2661: use_identities()`\n- `src/lattice_scan/cli.py::use_identities` \u2014 `src/lattice_scan/cli.py:1644: r = identity_list.load(cache_dir() / \"identities\", get)`\n- `src/lattice_scan/identities.py::_bundled` \u2014 `src/lattice_scan/identities.py:185: return verify_document(zlib.decompress(base64.b64decode(\"\".join(b.LIST))), m.get(\"signature\", \"\"), m.get(\"keyId\", \"\"), m.get(\"sha256\"))`\n- `src/lattice_scan/identities.py::_read_cache` \u2014 `src/lattice_scan/identities.py:132: return verify_document((folder / CACHE).read_bytes(), state[\"signature\"], state[\"keyId\"], state.get(\"sha256\")), state`\n- `src/lattice_scan/identities.py::load` \u2014 `src/lattice_scan/identities.py:159: doc = verify_document(raw, str(manifest.get(\"signature\") or \"\"), str(manifest.get(\"keyId\", \"\")), manifest[\"sha256\"])`\n\n## Test files on those paths (3)\n- `tests/test_identities.py` (+16 more tests) \u2014 `tests/test_identities.py:115: ids.load(self.dir, Server(*publish(doc())), T0)`\n- `tests/test_identity_switch.py` \u2014 `tests/test_identity_switch.py:98: st = cli.use_identities()`\n- `tests/test_read_cache.py` \u2014 `tests/test_read_cache.py:189: cli.cmd_recent(a)`\n\nRun: `python3 -m pytest tests/test_identities.py tests/test_identity_switch.py tests/test_read_cache.py -q`\n\n## Coverage\n**Incomplete: 4 call site(s) under this name could not be attributed.** 6 symbols share the name, so most may be calls to the others. Search only these files for them: `src/lattice_scan/posture.py`, `src/lattice_scan/macos.py`, `tools/macos-capture.py`.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "error",
+   "message": "the signed list is missing generation, rows or exploitedAsOf"
+  }
+ },
+ {
+  "id": "L-ERR-_check_rows",
+  "kind": "rca",
+  "skill": "devkb-rca",
+  "prompt": "A user of this tool reports an error whose message is: \"the list has a malformed row\". Trace it: name the function that raises it, every function outside the tests that can reach that function through calls at any depth, and every test file that calls the raising function or any of those functions. Answer with one JSON object: {\"raiser\": \"path::function\", \"callers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "raiser": "src/lattice_scan/identities.py::_check_rows",
+   "callers": [
+    "packaging/bundle_identities.py::main",
+    "src/lattice_scan/cli.py::cmd_recent",
+    "src/lattice_scan/cli.py::cmd_run",
+    "src/lattice_scan/cli.py::use_identities",
+    "src/lattice_scan/identities.py::_bundled",
+    "src/lattice_scan/identities.py::_read_cache",
+    "src/lattice_scan/identities.py::load",
+    "src/lattice_scan/identities.py::verify_document"
+   ],
+   "test_files": [
+    "tests/test_identities.py",
+    "tests/test_identity_switch.py",
+    "tests/test_read_cache.py"
+   ]
+  },
+  "pack": "# Graph pack: error \"the list has a malformed row\"\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\n## Raised by\n- `src/lattice_scan/identities.py::_check_rows` \u2014 `src/lattice_scan/identities.py:75: def _check_rows(doc: dict) -> None:`\n\n## Functions that reach it, at any depth (8)\n- `packaging/bundle_identities.py::main` \u2014 `packaging/bundle_identities.py:34: doc = identities.verify_document(raw, m.get(\"signature\", \"\"), m.get(\"keyId\", \"\"), m.get(\"sha256\"))`\n- `src/lattice_scan/cli.py::cmd_recent` \u2014 `src/lattice_scan/cli.py:3554: use_identities()`\n- `src/lattice_scan/cli.py::cmd_run` \u2014 `src/lattice_scan/cli.py:2661: use_identities()`\n- `src/lattice_scan/cli.py::use_identities` \u2014 `src/lattice_scan/cli.py:1644: r = identity_list.load(cache_dir() / \"identities\", get)`\n- `src/lattice_scan/identities.py::_bundled` \u2014 `src/lattice_scan/identities.py:185: return verify_document(zlib.decompress(base64.b64decode(\"\".join(b.LIST))), m.get(\"signature\", \"\"), m.get(\"keyId\", \"\"), m.get(\"sha256\"))`\n- `src/lattice_scan/identities.py::_read_cache` \u2014 `src/lattice_scan/identities.py:132: return verify_document((folder / CACHE).read_bytes(), state[\"signature\"], state[\"keyId\"], state.get(\"sha256\")), state`\n- `src/lattice_scan/identities.py::load` \u2014 `src/lattice_scan/identities.py:159: doc = verify_document(raw, str(manifest.get(\"signature\") or \"\"), str(manifest.get(\"keyId\", \"\")), manifest[\"sha256\"])`\n- `src/lattice_scan/identities.py::verify_document` \u2014 `src/lattice_scan/identities.py:118: _check_rows(doc)`\n\n## Test files on those paths (3)\n- `tests/test_identities.py` (+16 more tests) \u2014 `tests/test_identities.py:115: ids.load(self.dir, Server(*publish(doc())), T0)`\n- `tests/test_identity_switch.py` \u2014 `tests/test_identity_switch.py:98: st = cli.use_identities()`\n- `tests/test_read_cache.py` \u2014 `tests/test_read_cache.py:189: cli.cmd_recent(a)`\n\nRun: `python3 -m pytest tests/test_identities.py tests/test_identity_switch.py tests/test_read_cache.py -q`\n\n## Coverage\n**Incomplete: 4 call site(s) under this name could not be attributed.** 6 symbols share the name, so most may be calls to the others. Search only these files for them: `src/lattice_scan/posture.py`, `src/lattice_scan/macos.py`, `tools/macos-capture.py`.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "error",
+   "message": "the list has a malformed row"
+  }
+ },
+ {
+  "id": "L-ERR-load",
+  "kind": "rca",
+  "skill": "devkb-rca",
+  "prompt": "A user of this tool reports an error whose message is: \"the manifest is not valid\". Trace it: name the function that raises it, every function outside the tests that can reach that function through calls at any depth, and every test file that calls the raising function or any of those functions. Answer with one JSON object: {\"raiser\": \"path::function\", \"callers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "raiser": "src/lattice_scan/identities.py::load",
+   "callers": [
+    "src/lattice_scan/cli.py::cmd_recent",
+    "src/lattice_scan/cli.py::cmd_run",
+    "src/lattice_scan/cli.py::use_identities"
+   ],
+   "test_files": [
+    "tests/test_identities.py",
+    "tests/test_identity_switch.py",
+    "tests/test_read_cache.py"
+   ]
+  },
+  "pack": "# Graph pack: error \"the manifest is not valid\"\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\n## Raised by\n- `src/lattice_scan/identities.py::load` \u2014 `src/lattice_scan/identities.py:137: def load(folder: Path, get, now: dt.datetime | None = None, *, force: bool = False, require_fresh: bool = False) -> dict:`\n\n## Functions that reach it, at any depth (3)\n- `src/lattice_scan/cli.py::cmd_recent` \u2014 `src/lattice_scan/cli.py:3554: use_identities()`\n- `src/lattice_scan/cli.py::cmd_run` \u2014 `src/lattice_scan/cli.py:2661: use_identities()`\n- `src/lattice_scan/cli.py::use_identities` \u2014 `src/lattice_scan/cli.py:1644: r = identity_list.load(cache_dir() / \"identities\", get)`\n\n## Test files on those paths (3)\n- `tests/test_identities.py` (+15 more tests) \u2014 `tests/test_identities.py:115: ids.load(self.dir, Server(*publish(doc())), T0)`\n- `tests/test_identity_switch.py` \u2014 `tests/test_identity_switch.py:98: st = cli.use_identities()`\n- `tests/test_read_cache.py` \u2014 `tests/test_read_cache.py:189: cli.cmd_recent(a)`\n\nRun: `python3 -m pytest tests/test_identities.py tests/test_identity_switch.py tests/test_read_cache.py -q`\n\n## Coverage\n**Incomplete: 4 call site(s) under this name could not be attributed.** Search only these files for them: `src/lattice_scan/posture.py`, `src/lattice_scan/macos.py`, `tools/macos-capture.py`.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "error",
+   "message": "the manifest is not valid"
+  }
+ },
+ {
+  "id": "L-WIDE-posture_block",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `posture_block` (defined in src/lattice_scan/scan_record.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/lattice_scan/scan_record.py",
+    "src/lattice_scan/scan_report_flow.py",
+    "tests/test_report_posture_block.py",
+    "tests/test_report_posture_offer.py"
+   ],
+   "test_files": [
+    "tests/test_report_posture_block.py",
+    "tests/test_report_posture_offer.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/lattice_scan/scan_record.py::posture_block`\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/lattice_scan/scan_record.py:175: def posture_block(p: dict) -> dict:`.\n\n## Files with a direct caller (4, tests included)\n- `src/lattice_scan/scan_record.py` \u2014 `src/lattice_scan/scan_record.py:337: r[\"posture\"] = posture_block(posture)         # only when the person said yes to the second question; without it the key is absent`\n- `src/lattice_scan/scan_report_flow.py` \u2014 `src/lattice_scan/scan_report_flow.py:250: block = rec.posture_block(posture)`\n- `tests/test_report_posture_block.py` (+4 more) \u2014 `tests/test_report_posture_block.py:89: b = rec.posture_block(None)`\n- `tests/test_report_posture_offer.py` \u2014 `tests/test_report_posture_offer.py:56: self.assertEqual(r[\"posture\"], rec.posture_block(POSTURE))      # the preview, the details and the bytes come from one block`\n\n## Test files among them (2)\n- `tests/test_report_posture_block.py`\n- `tests/test_report_posture_offer.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "posture_block",
+   "role": "",
+   "path": "src/lattice_scan/scan_record.py"
+  }
+ },
+ {
+  "id": "L-WIDE-preview",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `preview` (defined in src/lattice_scan/scan_report_flow.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/lattice_scan/scan_report_flow.py",
+    "tests/test_report_dogfood.py",
+    "tests/test_report_preview.py",
+    "tests/test_report_record.py"
+   ],
+   "test_files": [
+    "tests/test_report_dogfood.py",
+    "tests/test_report_preview.py",
+    "tests/test_report_record.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/lattice_scan/scan_report_flow.py::preview`\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/lattice_scan/scan_report_flow.py:169: def preview(p: dict) -> str:`.\n\n## Files with a direct caller (4, tests included)\n- `src/lattice_scan/scan_report_flow.py` \u2014 `src/lattice_scan/scan_report_flow.py:201: print(preview(payload) + ((\"\\n\" + note) if note else \"\"), file=out)`\n- `tests/test_report_dogfood.py` \u2014 `tests/test_report_dogfood.py:40: self.assertIn(\"26 container image name(s)\", flow.preview(r))`\n- `tests/test_report_preview.py` (+1 more) \u2014 `tests/test_report_preview.py:33: self.assertIn(f\"{big['cut']} lower-priority item(s) left out\", flow.preview(big))`\n- `tests/test_report_record.py` \u2014 `tests/test_report_record.py:84: t = flow.preview(rec.build_record(INV, ITEMS, \"quick\", \"Debian\"))`\n\n## Test files among them (3)\n- `tests/test_report_dogfood.py`\n- `tests/test_report_preview.py`\n- `tests/test_report_record.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "preview",
+   "role": "",
+   "path": "src/lattice_scan/scan_report_flow.py"
+  }
+ },
+ {
+  "id": "L-WIDE-image_details",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `image_details` (defined in src/lattice_scan/cli.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/lattice_scan/cli.py",
+    "tests/test_deep_reuse.py",
+    "tests/test_hardening.py",
+    "tests/test_image_inventory.py"
+   ],
+   "test_files": [
+    "tests/test_deep_reuse.py",
+    "tests/test_hardening.py",
+    "tests/test_image_inventory.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/lattice_scan/cli.py::image_details`\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/lattice_scan/cli.py:1393: def image_details(running: list[str]) -> dict[str, dict]:`.\n\n## Files with a direct caller (4, tests included)\n- `src/lattice_scan/cli.py` \u2014 `src/lattice_scan/cli.py:1596: details = image_details(images)`\n- `tests/test_deep_reuse.py` \u2014 `tests/test_deep_reuse.py:44: return cli.image_details([\"redis:7-alpine\"]), d`\n- `tests/test_hardening.py` (+1 more) \u2014 `tests/test_hardening.py:60: cli.image_details([\"--privileged\", \"redis:7-alpine\"])`\n- `tests/test_image_inventory.py` (+6 more) \u2014 `tests/test_image_inventory.py:367: self.assertEqual(cli.image_details([\"redis:7-alpine\"]), {})`\n\n## Test files among them (3)\n- `tests/test_deep_reuse.py`\n- `tests/test_hardening.py`\n- `tests/test_image_inventory.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "image_details",
+   "role": "",
+   "path": "src/lattice_scan/cli.py"
+  }
+ },
+ {
+  "id": "L-WIDE-parse_rpm_sqlite",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `parse_rpm_sqlite` (defined in src/lattice_scan/cli.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/lattice_scan/cli.py",
+    "tests/test_hardening.py",
+    "tests/test_image_inventory.py",
+    "tests/test_source_packages.py"
+   ],
+   "test_files": [
+    "tests/test_hardening.py",
+    "tests/test_image_inventory.py",
+    "tests/test_source_packages.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/lattice_scan/cli.py::parse_rpm_sqlite`\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/lattice_scan/cli.py:1011: def parse_rpm_sqlite(db: bytes) -> dict[str, str]:`.\n\n## Files with a direct caller (4, tests included)\n- `src/lattice_scan/cli.py` \u2014 `src/lattice_scan/cli.py:1235: pk = parse_rpm_sqlite(rpm)`\n- `tests/test_hardening.py` \u2014 `tests/test_hardening.py:76: cli.parse_rpm_sqlite(db)`\n- `tests/test_image_inventory.py` (+3 more) \u2014 `tests/test_image_inventory.py:316: self.assertEqual(cli.parse_rpm_sqlite(db), {})`\n- `tests/test_source_packages.py` \u2014 `tests/test_source_packages.py:81: self.assertEqual(cli.parse_rpm_sqlite(db), {\"examplessh-clients\": \"9.3p1-1.el9\", \"bash\": \"5.2-3\"})`\n\n## Test files among them (3)\n- `tests/test_hardening.py`\n- `tests/test_image_inventory.py`\n- `tests/test_source_packages.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "parse_rpm_sqlite",
+   "role": "",
+   "path": "src/lattice_scan/cli.py"
+  }
+ },
+ {
+  "id": "L-WIDE-candidate",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `candidate` (defined in src/lattice_scan/cli.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "packaging/corpus_score.py",
+    "src/lattice_scan/cli.py",
+    "tests/test_bundled_and_reasons.py",
+    "tests/test_distribution_verdict.py",
+    "tests/test_identity_switch.py",
+    "tests/test_image_inventory.py",
+    "tests/test_lattice_scan.py",
+    "tests/test_macos_scan.py",
+    "tests/test_macos_stop.py",
+    "tests/test_node_source.py",
+    "tests/test_product_match.py",
+    "tests/test_python_source.py"
+   ],
+   "test_files": [
+    "tests/test_bundled_and_reasons.py",
+    "tests/test_distribution_verdict.py",
+    "tests/test_identity_switch.py",
+    "tests/test_image_inventory.py",
+    "tests/test_lattice_scan.py",
+    "tests/test_macos_scan.py",
+    "tests/test_macos_stop.py",
+    "tests/test_node_source.py",
+    "tests/test_product_match.py",
+    "tests/test_python_source.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/lattice_scan/cli.py::candidate`\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/lattice_scan/cli.py:1759: def candidate(entry: dict, inv: dict) -> tuple[str, list[str], list[str]] | None:`.\n\n## Files with a direct caller (12, tests included)\n- `packaging/corpus_score.py` \u2014 `packaging/corpus_score.py:99: m = cli.candidate(e, inv)`\n- `src/lattice_scan/cli.py` (+3 more) \u2014 `src/lattice_scan/cli.py:3563: m = candidate(entry, inv)`\n- `tests/test_bundled_and_reasons.py` (+3 more) \u2014 `tests/test_bundled_and_reasons.py:51: return cli.candidate(e, self.INV), e.get(\"matchBasis\")`\n- `tests/test_distribution_verdict.py` \u2014 `tests/test_distribution_verdict.py:62: m = cli.candidate(e, INV)`\n- `tests/test_identity_switch.py` (+7 more) \u2014 `tests/test_identity_switch.py:102: self.assertEqual(cli.candidate(e, INV), cli.name_candidate(dict(e), INV))`\n- `tests/test_image_inventory.py` (+5 more) \u2014 `tests/test_image_inventory.py:288: why, installed, vers = cli.candidate({\"cve\": \"CVE-2099-9\", \"vendor\": \"x\", \"product\": \"examplepkg\", \"title\": \"t\"}, inv)`\n- `tests/test_lattice_scan.py` (+4 more) \u2014 `tests/test_lattice_scan.py:120: self.assertIsNone(cli.candidate(self.entry(vendor=\"Exampleco\", product=\"Examplelib Otherthing\"), INV))`\n- `tests/test_macos_scan.py` (+5 more) \u2014 `tests/test_macos_scan.py:149: self.assertIsNone(cli.candidate(e, mac(tree(\"14.7.4\"))))`\n- `tests/test_macos_stop.py` \u2014 `tests/test_macos_stop.py:63: self.assertIsNotNone(cli.candidate(entry, linux))`\n- `tests/test_node_source.py` \u2014 `tests/test_node_source.py:48: why, installed, vers = cli.candidate(e, inv)`\n- `tests/test_product_match.py` \u2014 `tests/test_product_match.py:18: return cli.candidate({\"cve\": \"CVE-2099-0001\", \"vendor\": vendor, \"product\": product, \"title\": \"t\"}, inv)`\n- `tests/test_python_source.py` \u2014 `tests/test_python_source.py:77: why, installed, vers = cli.candidate(e, inv)`\n\n## Test files among them (10)\n- `tests/test_bundled_and_reasons.py`\n- `tests/test_distribution_verdict.py`\n- `tests/test_identity_switch.py`\n- `tests/test_image_inventory.py`\n- `tests/test_lattice_scan.py`\n- `tests/test_macos_scan.py`\n- `tests/test_macos_stop.py`\n- `tests/test_node_source.py`\n- `tests/test_product_match.py`\n- `tests/test_python_source.py`\n\n## Coverage\n**Incomplete: 1 call site(s) under this name could not be attributed.** Search only these files for them: `src/lattice_scan/share.py`.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "candidate",
+   "role": "",
+   "path": "src/lattice_scan/cli.py"
+  }
+ },
+ {
+  "id": "L-WIDE-host_artefacts",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `host_artefacts` (defined in src/lattice_scan/lattice_identity.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/lattice_scan/cli.py",
+    "tests/test_identities.py",
+    "tests/test_lattice_identity.py",
+    "tests/test_source_packages.py"
+   ],
+   "test_files": [
+    "tests/test_identities.py",
+    "tests/test_lattice_identity.py",
+    "tests/test_source_packages.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/lattice_scan/lattice_identity.py::host_artefacts`\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/lattice_scan/lattice_identity.py:83: def host_artefacts(inv: Mapping) -> list:`.\n\n## Files with a direct caller (4, tests included)\n- `src/lattice_scan/cli.py` \u2014 `src/lattice_scan/cli.py:1660: arts = [a for a in li.host_artefacts({\"manager\": inv.get(\"manager\") or \"\", \"packages\": inv.get(\"packages\") or {}, \"sources\": inv.get(\"source`\n- `tests/test_identities.py` \u2014 `tests/test_identities.py:180: arts = li.host_artefacts({\"manager\": \"dpkg\", \"packages\": {\"examplessh-client\": \"1:9.2p1-2\"}, \"sources\": {\"examplessh-client\": \"examplessh\"}}`\n- `tests/test_lattice_identity.py` (+3 more) \u2014 `tests/test_lattice_identity.py:95: arts = li.host_artefacts(host({}, kernel=\"6.1.0-25-amd64\", node=\"v20.11.1\"))`\n- `tests/test_source_packages.py` \u2014 `tests/test_source_packages.py:66: arts = li.host_artefacts({\"manager\": inv[\"manager\"], \"packages\": inv[\"packages\"], \"sources\": inv[\"sources\"]})`\n\n## Test files among them (3)\n- `tests/test_identities.py`\n- `tests/test_lattice_identity.py`\n- `tests/test_source_packages.py`\n\n(The defining file `src/lattice_scan/lattice_identity.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "host_artefacts",
+   "role": "",
+   "path": "src/lattice_scan/lattice_identity.py"
+  }
+ },
+ {
+  "id": "L-WIDE-impact",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `impact` (defined in src/lattice_scan/cli.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "packaging/corpus_score.py",
+    "src/lattice_scan/cli.py",
+    "tests/test_distribution_verdict.py",
+    "tests/test_identity_switch.py"
+   ],
+   "test_files": [
+    "tests/test_distribution_verdict.py",
+    "tests/test_identity_switch.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/lattice_scan/cli.py::impact`\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/lattice_scan/cli.py:2194: def impact(entry: dict, inv: dict, installed: list[str], vers: list[str]) -> dict:`.\n\n## Files with a direct caller (4, tests included)\n- `packaging/corpus_score.py` \u2014 `packaging/corpus_score.py:104: imp = cli.impact(e, inv, m[1], m[2])`\n- `src/lattice_scan/cli.py` \u2014 `src/lattice_scan/cli.py:2729: imp = with_exposure(impact(e, inv, m[1], m[2]), m[1], inv)`\n- `tests/test_distribution_verdict.py` \u2014 `tests/test_distribution_verdict.py:63: imp = cli.impact(e, INV, m[1], m[2])`\n- `tests/test_identity_switch.py` \u2014 `tests/test_identity_switch.py:60: imp = cli.impact(e, INV, m[1], m[2])`\n\n## Test files among them (2)\n- `tests/test_distribution_verdict.py`\n- `tests/test_identity_switch.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "impact",
+   "role": "",
+   "path": "src/lattice_scan/cli.py"
+  }
+ },
+ {
+  "id": "L-WIDE-inventory",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `inventory` (defined in src/lattice_scan/cli.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/lattice_scan/cli.py",
+    "tests/test_lattice_scan.py",
+    "tests/test_macos_stop.py",
+    "tests/test_progress.py",
+    "tests/test_python_source.py",
+    "tests/test_source_packages.py"
+   ],
+   "test_files": [
+    "tests/test_lattice_scan.py",
+    "tests/test_macos_stop.py",
+    "tests/test_progress.py",
+    "tests/test_python_source.py",
+    "tests/test_source_packages.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/lattice_scan/cli.py::inventory`\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/lattice_scan/cli.py:1522: def inventory() -> dict:`.\n\n## Files with a direct caller (6, tests included)\n- `src/lattice_scan/cli.py` (+3 more) \u2014 `src/lattice_scan/cli.py:3952: inv = inventory()`\n- `tests/test_lattice_scan.py` \u2014 `tests/test_lattice_scan.py:139: return cli.inventory()`\n- `tests/test_macos_stop.py` \u2014 `tests/test_macos_stop.py:57: self.assertEqual(cli.inventory()[\"os\"], \"x\")`\n- `tests/test_progress.py` \u2014 `tests/test_progress.py:78: cli.inventory()`\n- `tests/test_python_source.py` \u2014 `tests/test_python_source.py:86: a = cli.inventory()`\n- `tests/test_source_packages.py` \u2014 `tests/test_source_packages.py:48: return cli.inventory()`\n\n## Test files among them (5)\n- `tests/test_lattice_scan.py`\n- `tests/test_macos_stop.py`\n- `tests/test_progress.py`\n- `tests/test_python_source.py`\n- `tests/test_source_packages.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "inventory",
+   "role": "",
+   "path": "src/lattice_scan/cli.py"
+  }
+ }
+]
