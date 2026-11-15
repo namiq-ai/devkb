@@ -1,0 +1,77 @@
+[
+ {
+  "id": "click-WIDE-strip_ansi",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `strip_ansi` (defined in src/click/_compat.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/click/_compat.py",
+    "src/click/_termui_impl.py",
+    "src/click/termui.py",
+    "src/click/utils.py",
+    "tests/test_compat.py",
+    "tests/test_formatting.py"
+   ],
+   "test_files": [
+    "tests/test_compat.py",
+    "tests/test_formatting.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/click/_compat.py::strip_ansi`\n\nBuilt from the dev-process graph at commit `e38188e9e2`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/click/_compat.py:491: def strip_ansi(value: str) -> str:`.\n\n## Files with a direct caller (6, tests included)\n- `src/click/_compat.py` \u2014 `src/click/_compat.py:537: return len(strip_ansi(x))`\n- `src/click/_termui_impl.py` \u2014 `src/click/_termui_impl.py:403: text = strip_ansi(text)`\n- `src/click/termui.py` (+1 more) \u2014 `src/click/termui.py:100: text = strip_ansi(text)`\n- `src/click/utils.py` \u2014 `src/click/utils.py:327: out = strip_ansi(out)`\n- `tests/test_compat.py` (+6 more) \u2014 `tests/test_compat.py:218: once = strip_ansi(text)`\n- `tests/test_formatting.py` (+2 more) \u2014 `tests/test_formatting.py:657: assert strip_ansi(rendered) == \"Usage: cli\\n\"`\n\n## Test files among them (2)\n- `tests/test_compat.py`\n- `tests/test_formatting.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "strip_ansi",
+   "role": "",
+   "path": "src/click/_compat.py"
+  }
+ },
+ {
+  "id": "click-WIDE-term_len",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `term_len` (defined in src/click/_compat.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/click/_termui_impl.py",
+    "src/click/_textwrap.py",
+    "src/click/formatting.py",
+    "tests/test_compat.py"
+   ],
+   "test_files": [
+    "tests/test_compat.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/click/_compat.py::term_len`\n\nBuilt from the dev-process graph at commit `e38188e9e2`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/click/_compat.py:536: def term_len(x: str) -> int:`.\n\n## Files with a direct caller (4, tests included)\n- `src/click/_termui_impl.py` \u2014 `src/click/_termui_impl.py:268: clutter_length = term_len(self.format_progress_line())`\n- `src/click/_textwrap.py` \u2014 `src/click/_textwrap.py:52: width = self.width - term_len(indent)`\n- `src/click/formatting.py` (+3 more) \u2014 `src/click/formatting.py:264: if term_len(first) <= first_col - col_spacing:`\n- `tests/test_compat.py` (+3 more) \u2014 `tests/test_compat.py:198: assert term_len(text) == len(text)`\n\n## Test files among them (1)\n- `tests/test_compat.py`\n\n(The defining file `src/click/_compat.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "term_len",
+   "role": "",
+   "path": "src/click/_compat.py"
+  }
+ },
+ {
+  "id": "click-WIDE-_split_opt",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `_split_opt` (defined in src/click/parser.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/click/core.py",
+    "src/click/formatting.py",
+    "src/click/parser.py",
+    "tests/test_options.py"
+   ],
+   "test_files": [
+    "tests/test_options.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/click/parser.py::_split_opt`\n\nBuilt from the dev-process graph at commit `e38188e9e2`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/click/parser.py:111: def _split_opt(opt: str) -> tuple[str, str]:`.\n\n## Files with a direct caller (4, tests included)\n- `src/click/core.py` (+3 more) \u2014 `src/click/core.py:2132: if _split_opt(cmd_name)[0]:`\n- `src/click/formatting.py` \u2014 `src/click/formatting.py:321: prefix = _split_opt(opt)[0]`\n- `src/click/parser.py` (+1 more) \u2014 `src/click/parser.py:142: prefix, value = _split_opt(opt)`\n- `tests/test_options.py` \u2014 `tests/test_options.py:117: assert _split_opt(opt.spec)[1].replace(\"-\", \"_\").lower() == opt.name`\n\n## Test files among them (1)\n- `tests/test_options.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "_split_opt",
+   "role": "",
+   "path": "src/click/parser.py"
+  }
+ }
+]

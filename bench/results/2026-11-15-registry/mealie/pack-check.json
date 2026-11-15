@@ -1,0 +1,90 @@
+{
+ "summary": {
+  "tasks": 7,
+  "mean_score": 1.0,
+  "by_kind": {
+   "impact": 1.0,
+   "refactor": 1.0
+  },
+  "complete_but_wrong": []
+ },
+ "tasks": [
+  {
+   "task": "mealie-IMP-request_is_https",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 374
+  },
+  {
+   "task": "mealie-IMP-session_cookie_attrs",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 325
+  },
+  {
+   "task": "mealie-IMP-publish_list_item_events",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 379
+  },
+  {
+   "task": "mealie-IMP-set_session_cookie",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 271
+  },
+  {
+   "task": "mealie-WIDE-get_app_dirs",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 211
+  },
+  {
+   "task": "mealie-WIDE-session_context",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 324
+  },
+  {
+   "task": "mealie-WIDE-get_locale_provider",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 277
+  }
+ ]
+}
