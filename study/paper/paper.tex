@@ -8,7 +8,7 @@
 \input{confirmatory-macros.tex}
 
 \begin{document}
-\title{Precomputed Context, Not More Tools: A Pre-Registered Study of Process Graphs for Coding Agents}
+\title{\fontsize{21}{25}\selectfont Precomputed Context, Not More Tools:\\ A Pre-Registered Study of Process Graphs for Coding Agents}
 
 \ifanon
 \author{\IEEEauthorblockN{Anonymous author(s)}\IEEEauthorblockA{Anonymous institution}}
@@ -35,7 +35,7 @@ coding agents, LLM agents, knowledge graphs, software process, retrieval, Model 
 \end{IEEEkeywords}
 
 \section{Introduction}
-LLM-based coding agents~\cite{jimenez2024swebench,yang2024sweagent,zhang2024autocoderover} navigate a repository with
+LLM-based coding agents~\cite{jimenez2024swebench,yang2024sweagent} navigate a repository with
 text search and file reads, and every read is paid for again on each later turn. A natural idea is to give the agent
 the repository's structure up front: a graph of symbols and calls~\cite{liu2024codexgraph,ouyang2025repograph},
 extended with the development process (tickets, commits, specifications, tests, owners, configuration) and served over
@@ -163,20 +163,14 @@ to existing agent frameworks; CodexGraph~\cite{liu2024codexgraph} puts a code gr
 agent; LocAgent~\cite{chen2025locagent} gives agents a few traversal tools over a code graph for localization. These
 works build the graph and the means to navigate it; we fix a graph, extend it to the development process, and vary only
 how its answers reach the agent.
-\emph{Repository context.} RepoCoder~\cite{zhang2023repocoder} retrieves iteratively for completion;
-ContextBench~\cite{contextbench2026}, SWE-Explore~\cite{zhang2026sweexplore} and Agent Retrieval
-Bench~\cite{qin2026arb} measure how well agents or retrievers find the context a task needs, and
-SERBench~\cite{feng2026serbench} asks for the minimal sufficient set. SWE-Explore is closest in design, handing an
-explorer's output to a fixed agent; we hand the agent precomputed answers from a graph and compare them with interactive
-tools over the same graph, by cost at equal quality. Aider's repository map~\cite{aider2024repomap} is precomputed
-context in practice: a ranked summary of the whole repository rather than one answer with its evidence.
-\emph{Interfaces and cost.} SWE-agent~\cite{yang2024sweagent} shows that the agent-computer interface shapes results,
-Agentless~\cite{xia2025agentless} that a fixed pipeline can beat complex agents at lower cost, and Kapoor et
-al.~\cite{kapoor2025agents} that agents must be reported on cost and accuracy together; RAG-MCP~\cite{gan2025ragmcp}
-finds that many tools degrade tool selection. Benchmarks such as SWE-bench~\cite{jimenez2024swebench} measure
-resolution rather than cost at equal quality; knowledge graphs~\cite{hogan2021kg} provide the modelling basis.
-Registered reports~\cite{msr2025rr} bring pre-registration to software engineering; this study was pre-registered
-independently.
+\emph{Repository context.} ContextBench~\cite{contextbench2026}, SWE-Explore~\cite{zhang2026sweexplore} and Agent
+Retrieval Bench~\cite{qin2026arb} measure how well agents or retrievers find the context a task needs. SWE-Explore is
+closest in design, handing an explorer's output to a fixed agent; we hand the agent precomputed answers from a graph and
+compare them with interactive tools over the same graph, by cost at equal quality.
+\emph{Interfaces and cost.} The agent-computer interface shapes results~\cite{yang2024sweagent}, a fixed pipeline can
+beat complex agents at lower cost~\cite{xia2025agentless}, agents should be reported on cost and accuracy
+together~\cite{kapoor2025agents}, and many tools degrade tool selection~\cite{gan2025ragmcp}; SWE-bench~\cite{jimenez2024swebench}
+measures resolution, not cost at equal quality.
 
 \section{Conclusion}
 On held-out tasks, with the same model in every arm, a software-process knowledge graph made coding agents 35--41\%
@@ -186,19 +180,11 @@ missed a link. Our own exploratory explanation, that auditing the graph removed 
 ablation. The practical rule is the one the data support: deliver the graph in as few turns as possible, and make
 every answer say what it could not see.
 
-\section*{Use of AI tools}
-Following IEEE policy on AI-generated content, we disclose that an AI coding assistant was used to implement the graph
-extractors, tools and benchmark harness, to run the benchmarks, and to draft and edit the text. The author designed the
-study, reviewed every result against the raw data, and takes responsibility for the content. The benchmark agents are
-themselves an LLM, as described in Section~\ref{sec:method}.
-
-\section*{Data and artifact availability}
-\ifanon
-An anonymised artifact (extractors, tools, packs, harness, task generators, tasks with truth, raw runs for the public
-repositories, per-run metrics for the industrial ones, analysis scripts, pre-registration) is available to reviewers.
-\else
-The graph builder, packs and MCP server (\texttt{devkb}), the benchmark harness, the frozen protocol, every analysis script and the raw runs are at \url{https://github.com/namiq-ai/devkb}. Runs on the two industrial repositories are released as per-run metrics only.
-\fi
+\paragraph*{AI use and artifact} Per IEEE policy: an AI coding assistant helped implement the extractors, tools and
+harness, run the benchmarks, and draft the text; the author designed the study, checked every result against the raw
+data, and is responsible for the content. \ifanon An anonymised artifact (code, tasks with truth, raw runs, analysis,
+pre-registration) is available to reviewers.\else Code, protocol, analysis scripts and raw runs:
+\url{https://github.com/namiq-ai/devkb} (industrial repositories as per-run metrics only).\fi
 
 \bibliographystyle{IEEEtran}
 \bibliography{refs}
