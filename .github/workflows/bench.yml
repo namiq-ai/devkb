@@ -17,7 +17,7 @@ on:
   pull_request:
     paths: ["bench/repos.yaml", "devkb/**"]
   schedule:
-    - cron: "17 7 * * *"   # 07:17 UTC every night, off the hour when scheduled runs queue
+    - cron: "0 8 * * *"   # 08:00 UTC = 2 AM CST (3 AM during daylight time); GitHub may start a scheduled run late
   workflow_dispatch:
     inputs:
       ids:
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
       - id: ids
         env:
-          WANTED: ${{ github.event_name == 'schedule' && vars.BENCH_NIGHTLY_AGENTS == 'true' && (vars.BENCH_NIGHTLY_IDS || 'lattice-scan') || inputs.ids }}
+          WANTED: ${{ inputs.ids }}   # at night: every repository (the free stage); agents only on BENCH_NIGHTLY_IDS
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os, re
@@ -71,7 +71,8 @@ jobs:
       matrix:
         id: ${{ fromJSON(needs.matrix.outputs.ids) }}
     env:
-      RUN_AGENTS: ${{ inputs.run_agents || (github.event_name == 'schedule' && vars.BENCH_NIGHTLY_AGENTS == 'true') }}
+      RUN_AGENTS: ${{ inputs.run_agents || (github.event_name == 'schedule' && vars.BENCH_NIGHTLY_AGENTS == 'true'
+                      && contains(format(',{0},', vars.BENCH_NIGHTLY_IDS || 'lattice-scan'), format(',{0},', matrix.id))) }}
       ARMS: ${{ inputs.arms || 'plain,core,lean,pack' }}
       REPS: ${{ inputs.reps || vars.BENCH_NIGHTLY_REPS || '1' }}
       MODEL: ${{ inputs.model || 'sonnet' }}

@@ -5,7 +5,7 @@ Three GitHub Actions workflows, from every change to a public package:
 | Workflow | Runs | What it does | Costs |
 |---|---|---|---|
 | [`ci`](../.github/workflows/ci.yml) | every push and pull request | the test suite | free |
-| [`bench`](../.github/workflows/bench.yml) | pull requests touching `devkb/` or the registry; **every night** at 07:17 UTC; by hand | the free benchmark stage on every registry repository; agent runs only when enabled | free; agent runs about $0.05–0.16 each |
+| [`bench`](../.github/workflows/bench.yml) | pull requests touching `devkb/` or the registry; **every night** at 2 AM CST (08:00 UTC); by hand | the free benchmark stage on every registry repository; agent runs only when enabled | free; agent runs about $0.05–0.16 each |
 | [`release`](../.github/workflows/release.yml) | a `v*` tag; by hand (no publishing) | dependency audit, tests, build, GitHub release; PyPI only when enabled | free |
 
 ## Nightly benchmark
@@ -15,13 +15,15 @@ at the current devkb code: the graph builds, the task generators find tasks, eve
 source, and an independent implementation finds no caller the truth misses (`bench/truth_check.py`). A regression in
 extraction shows up the next morning, at no model cost.
 
-Agent runs at night are off. To turn them on, set repository variables (Settings → Secrets and variables → Actions →
-Variables) and the `ANTHROPIC_API_KEY` secret:
+Agent runs at night are **on** since 2026-11-15 (`BENCH_NIGHTLY_AGENTS` = `true`), with the defaults below; they need
+the `ANTHROPIC_API_KEY` repository secret (Settings → Secrets and variables → Actions), and a night without it fails
+with a message saying so. The free stage still covers every registry repository; the agent arms run only on
+`BENCH_NIGHTLY_IDS`. The variables:
 
 | Variable | Meaning | Default |
 |---|---|---|
 | `BENCH_NIGHTLY_AGENTS` | `true` runs the agent arms at night | off |
-| `BENCH_NIGHTLY_IDS` | repositories, comma-separated | `lattice-scan` |
+| `BENCH_NIGHTLY_IDS` | repositories, comma-separated without spaces | `lattice-scan` |
 | `BENCH_NIGHTLY_REPS` | repetitions per task and arm | `1` |
 | `BENCH_NIGHTLY_MAX_RUNS` | per repository, refuse when tasks × arms × reps exceeds it | `60` |
 
