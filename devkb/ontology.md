@@ -76,7 +76,7 @@ STORY → EPIC, malformed evidence pack, one evidence id recorded with two confi
 | `TESTED_BY` | File → TestCase | pytest ticket-marker grep | 2 |
 | `FLAGGED_BY` | File → Warning | compliance `evidence` field, only when a real on-disk path is parseable from it (most violations are process-level, not file-level -- see `extractors/warnings.py`) | 3 |
 | `DEFINED_IN` | Symbol → File, or TestCase → File (ADR-SDP-DEVKB-003) | `ast` decomposition | BL-3 |
-| `CALLS` | Symbol → Symbol | `ast.Call`, same-file (0.8) or cross-file via the caller's own import (0.7) -- resolved relative to the repo root first, then to each ancestor directory of the caller's own file (a real per-service src-root import convention, confirmed live against OCO's own `from app.middleware.auth import ...` inside `webapp/backend/`) | BL-3 / BL-3b |
+| `CALLS` | Symbol → Symbol | `ast.Call`, same-file (0.8) or cross-file via the caller's own import (0.7) -- resolved relative to the repo root first, then to each ancestor directory of the caller's own file (a real per-service src-root import convention, confirmed live against OCO's own `from app.middleware.auth import ...` inside `webapp/backend/`). An import is followed through re-exports (`from pkg import f` where `pkg/__init__.py` holds `from .impl import f`, up to six hops) and through a dotted module path (`pkg.mod.f()` after `import pkg.mod`; `models.flow_runs.f()` after `from app import models`). A call made outside every function has no caller Symbol and is not an edge: see `Symbol.module_callers` below | BL-3 / BL-3b |
 | `TAGS` | Release → Commit | `git log -1 <tag>` | BL-2 |
 | `GROUPS` | WorkUnit → Commit | `extractors/work_units.py` clustering, `confidence=0.5` | BL-6 |
 | `CALLS_API` | Symbol (frontend, TS) → Symbol (backend route handler) | a frontend route-call site (incl. object-literal methods, e.g. `const api = { x: () => get(...) }`) resolved against a real backend `Endpoint`'s route | BL-4b |
@@ -160,3 +160,19 @@ policy/criticality detector fired (`path-keyword:<word>`,
 `registered-as-middleware`, `enforces-authz-boundary`), no hand-maintained
 field anywhere. Computed in the same `devkb/build_symbols.py` pass as
 `RAISES`/`REGISTERED_ON`, since both are its own inputs.
+
+## Not governed here: what a call list cannot see (`Symbol` properties)
+
+Properties, not node types or verbs, written by `devkb/build_symbols.py` and read by every list answer's `coverage`
+and by the packs:
+
+| Property | Meaning |
+|---|---|
+| `unresolved_calls` | call sites under this Symbol's short name that the resolver could not attribute to any Symbol |
+| `unresolved_files` | the files holding them, most calls first, at most 20 |
+| `unresolved_file_count` | how many files hold them in all, so a list cut at 20 (or a pack's 10) never reads as complete |
+| `module_callers` | files that call this Symbol outside any function: at import time (`app_dirs = get_app_dirs()`) or in a class body. A signature change breaks them, so the refactor pack and the `callers` tool list them (`module_level_files`); they are not functions, so no call chain passes through them |
+
+When the calls a coverage statement counts are all in files the answer already lists, it says so (`in_listed_files`)
+instead of naming no file.
+
