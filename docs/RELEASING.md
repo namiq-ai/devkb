@@ -15,19 +15,35 @@ at the current devkb code: the graph builds, the task generators find tasks, eve
 source, and an independent implementation finds no caller the truth misses (`bench/truth_check.py`). A regression in
 extraction shows up the next morning, at no model cost.
 
-Agent runs at night are **on** since 2026-11-15 (`BENCH_NIGHTLY_AGENTS` = `true`), with the defaults below; they need
-the `ANTHROPIC_API_KEY` repository secret (Settings → Secrets and variables → Actions), and a night without it fails
-with a message saying so. The free stage still covers every registry repository; the agent arms run only on
-`BENCH_NIGHTLY_IDS`. The variables:
+**Agent runs at night run on the owner's machine**, not in GitHub Actions: a user systemd timer starts
+[`bench/nightly.sh`](../bench/nightly.sh) at 2 AM Central time, which drives the signed-in Claude Code CLI, so no API
+key is stored anywhere. Each night it updates its own worktree to `origin/main` (never a working copy someone edits),
+runs the free stage on every registry repository, then the agent arms on the chosen repositories, and writes
+`~/devkb-nightly/runs/YYYY-MM-DD/` (summary, logs, pack checks, runs, reports; kept 30 days, never committed).
 
-| Variable | Meaning | Default |
+```bash
+bench/nightly.sh install    # install and start the timer (once)
+bench/nightly.sh dry-run    # one night without agent runs, no model cost
+bench/nightly.sh run        # one night now
+bench/nightly.sh status     # the timer and the last night's summary
+journalctl --user -u devkb-nightly    # its log
+```
+
+Settings, in `~/.config/devkb-nightly.env`:
+
+| Setting | Meaning | Default |
 |---|---|---|
-| `BENCH_NIGHTLY_AGENTS` | `true` runs the agent arms at night | off |
-| `BENCH_NIGHTLY_IDS` | repositories, comma-separated without spaces | `lattice-scan` |
-| `BENCH_NIGHTLY_REPS` | repetitions per task and arm | `1` |
-| `BENCH_NIGHTLY_MAX_RUNS` | per repository, refuse when tasks × arms × reps exceeds it | `60` |
+| `NIGHTLY_IDS` | repositories for the agent arms, comma-separated | `lattice-scan` |
+| `NIGHTLY_REPS` | repetitions per task and arm | `1` |
+| `NIGHTLY_ARMS` | arms | `plain,core,lean,pack` |
+| `NIGHTLY_MAX_RUNS` | per repository, refuse when tasks × arms × reps exceeds it | `60` |
+| `NIGHTLY_KEEP_DAYS` | days of results kept | `30` |
 
-With the defaults, a night is 12 tasks × 4 arms × 1 rep = 48 runs on lattice-scan, about $2.50. All seven repositories
+The GitHub `bench` workflow still runs the free stage every night at the same hour, in a clean CI environment; its
+own agent option (`BENCH_NIGHTLY_AGENTS`, needs an API key secret) is off.
+
+With the defaults, a night is 12 tasks × 4 arms × 1 rep = 48 runs on lattice-scan (about $2.50 at API prices,
+counted against the CLI's subscription usage instead). All seven repositories
 at 5 repetitions is about $70 a night. A nightly run is a smoke test of the pipeline, not a result to publish: published
 results keep the protocol in [`BENCHMARK.md`](BENCHMARK.md) (5 repetitions, every arm of a repository in one session).
 A run whose tool arms never reached the graph fails (`pipeline report`), so a broken graph server cannot pass as a

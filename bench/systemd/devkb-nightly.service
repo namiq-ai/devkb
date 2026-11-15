@@ -1,0 +1,10 @@
+[Unit]
+Description=devkb nightly benchmark (free stage on every registry repository; agent runs with the signed-in Claude CLI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@SCRIPT@ run
+Nice=10
+TimeoutStartSec=6h
