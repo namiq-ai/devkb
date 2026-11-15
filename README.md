@@ -1,7 +1,7 @@
 # devkb
 
 **A knowledge graph of your repository for software development agents.** Agents answer "what calls this, what breaks, which tests"
-in one step instead of searching file by file: 56% cheaper, with better answers.
+in one step instead of searching file by file: 56% cheaper, with better answers, in our benchmark.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/benchmark-dark.svg">
