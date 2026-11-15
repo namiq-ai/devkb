@@ -9,7 +9,27 @@ description = "A software-process knowledge graph for coding agents: extraction,
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Hung T. Le" }]
+# license: not chosen yet; set it (SPDX, e.g. license = "Apache-2.0") before the first PyPI upload (docs/RELEASING.md)
+keywords = ["knowledge graph", "coding agents", "mcp", "code intelligence", "call graph", "software process"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Quality Assurance",
+]
 dependencies = ["pyyaml>=6"]
+
+[project.urls]
+Repository = "https://github.com/namiq-ai/devkb"
+Issues = "https://github.com/namiq-ai/devkb/issues"
+Benchmark = "https://github.com/namiq-ai/devkb/blob/main/docs/BENCHMARK.md"
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.23,<2"]

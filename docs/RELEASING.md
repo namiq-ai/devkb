@@ -58,18 +58,25 @@ be recalled. The `pypi` job is therefore off, and when on, it stops unless all o
 2. No internal names or local paths in the package. `scripts/check_dist.py dist/*` scans the built wheel and sdist
    against [`.release-denylist`](../.release-denylist) and the `pypi` job runs it first. At the time of writing it finds
    1,307 matches in 113 files, mostly internal project names and ticket ids in comments; clean them and the check passes.
-3. Package metadata for a public page: `license`, `project.urls` (repository, issues), `classifiers`, `keywords` in
-   `pyproject.toml`.
+3. A `license` in `pyproject.toml` (the URLs, classifiers and keywords are already there).
 
-**One-time setup**
+**Configured (2026-11-15)**
+
+- Package metadata: URLs, keywords, classifiers (`pyproject.toml`); `twine check --strict` passes.
+- GitHub environment `pypi`, deployable only from tags `v*`.
+- Repository variable `PYPI_PUBLISH` = `false`: the switch, off.
+- The `pypi` job: trusted publishing, the internal-name scan before upload.
+
+**Still to do, when going public**
 
 1. On PyPI, add a *pending trusted publisher* (Account → Publishing): owner `namiq-ai`, repository `devkb`, workflow
-   `release.yml`, environment `pypi`. No token is created or stored; PyPI trusts this workflow's OIDC identity for
-   that one project. The name `devkb` was free on PyPI and TestPyPI on 2026-11-15; it is reserved only by the first
-   upload.
-2. In the GitHub repository, create the environment `pypi` (Settings → Environments) with required reviewers, so every
-   upload waits for a person's approval, and restrict it to tags `v*`.
-3. Set the repository variable `PYPI_PUBLISH` to `true`.
+   `release.yml`, environment `pypi`. This needs the owner's PyPI account. No token is created or stored; PyPI trusts
+   this workflow's OIDC identity for that one project. The name `devkb` was free on PyPI and TestPyPI on 2026-11-15; it
+   is reserved only by the first upload (or by the pending publisher).
+2. Add required reviewers to the `pypi` environment (Settings → Environments → pypi), so every upload waits for a
+   person's approval. GitHub offers them on private repositories only on paid plans; on a public repository they are
+   free.
+3. Set `PYPI_PUBLISH` to `true`.
 
 After that, a tag publishes to PyPI once a reviewer approves the `pypi` job. `pip install devkb[mcp]` then replaces
 the `git+https` install in the README.
