@@ -32,6 +32,8 @@ NODE_TYPES = (
     # ADR-SDP-DEVKB-005 (ODSF-312): a product graph spans member repositories; settings are things.
     "Repository",       # one registered project's repository, natural key its project code
     "ConfigKey",        # one named setting (env var or config-file key); its value is never stored
+    # ADR-DEVKB-007: a hosted change set; hosted issues are Ticket nodes (GH-<n>), not a new type.
+    "PullRequest",      # one pull request, natural key PR-<number>
 )
 
 VERBS = (
@@ -67,6 +69,9 @@ VERBS = (
     "READS",            # Symbol | File (module level) -> ConfigKey
     "DECLARES",         # File -> ConfigKey (.env.example, compose environment, systemd Environment=, pms.config.json)
     "DEPLOYS",          # File -> Component (compose service, systemd unit, Dockerfile)
+    # ADR-DEVKB-007, extractors/pull_requests.py. CHILD_OF and REFERENCES gain sources (github-sub-issues, git-hash-mention).
+    "MERGES",           # PullRequest -> Commit (git-merge-subject / git-squash-subject 0.9; GitHub's commit list 1.0)
+    "CLOSES",           # PullRequest -> Ticket (GitHub's closing record 1.0; offline closing keyword 0.7, unverified)
 )
 
 
@@ -173,6 +178,16 @@ class DevKBGraph:
         if verb not in VERBS:
             raise ValueError(f"unknown verb {verb!r}, expected one of {VERBS}")
         self._edges.add(Edge(verb, src, src_type, dst, dst_type, source, confidence, evidence_ref, extra or {}))
+
+    def discard_edges(self, predicate) -> int:
+        """Drop every edge for which `predicate(edge)` is true; returns how many. For reconciling a layer that
+        another layer supersedes (ADR-DEVKB-007: an online answer replaces an unverified offline one)."""
+        doomed = {e for e in self._edges if predicate(e)}
+        self._edges -= doomed
+        return len(doomed)
+
+    def discard_node(self, node_type: str, natural_key: str) -> None:
+        self._nodes.pop((node_type, natural_key), None)
 
     def nodes(self, node_type: str | None = None) -> Iterator[Node]:
         for (t, _key), node in self._nodes.items():

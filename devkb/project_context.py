@@ -17,6 +17,10 @@ devkb.json (every key optional):
 `run_repo_scripts` must be true before devkb imports or runs any script that lives in the analysed
 repository (a readiness gate, a compliance monitor). It is off by default: analysing a repository must
 never execute its code.
+
+`"github": {"enabled": true}` (ADR-DEVKB-007) turns on the online layer: the build reads pull requests and issues from
+the GitHub API (`devkb build --github` does it for one build). Off unless set; building a graph never touches the
+network unless asked to. `"github": {"authors": true}` allows storing the login of an author; without it none is.
 """
 from __future__ import annotations
 
@@ -41,6 +45,14 @@ def load_config(repo_root: Path) -> dict:
 
 def run_repo_scripts(repo_root: Path) -> bool:
     return bool(load_config(repo_root).get("run_repo_scripts")) or os.environ.get("DEVKB_RUN_REPO_SCRIPTS") == "1"
+
+
+def github_config(repo_root: Path) -> dict:
+    """The `github` object of devkb.json (ADR-DEVKB-007): `enabled` turns the online layer on for every build,
+    `authors` allows storing the login of an author. Both are off unless exactly true."""
+    g = load_config(repo_root).get("github")
+    g = g if isinstance(g, dict) else {}
+    return {"enabled": g.get("enabled") is True, "authors": g.get("authors") is True}
 
 
 @dataclass(frozen=True)

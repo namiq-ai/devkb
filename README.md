@@ -32,6 +32,9 @@ devkb build --project .                       # writes .devkb/ (add it to .gitig
 devkb pack  --project . refactor my_function  # who calls it, which tests, with evidence lines and coverage
 devkb pack  --project . error "message text"  # which route handlers reach the code that raises it
 devkb pack  --project . change path/to/file.py
+devkb pack  --project . pr 123                 # a pull request: commits, changed functions, tests, issues it closes
+devkb pack  --project . ticket GH-123          # a hosted issue: its pull requests, commits, changed functions, tests
+devkb build --project . --github              # also read pull requests and issues from GitHub (opt-in; cached in .devkb/github/)
 ```
 
 Serve the graph to an agent over MCP (stdio), for example in Claude Code's `.mcp.json`:
