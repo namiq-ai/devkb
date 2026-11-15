@@ -97,6 +97,13 @@ make verify     # recompute every result in study/results from the raw runs and 
 make paper      # build study/paper/paper.pdf (needs a TeX installation)
 ```
 
+## Releases
+
+Pushing a version tag (`v0.2.0`, matching `pyproject.toml`) runs [`release.yml`](.github/workflows/release.yml): it
+audits every dependency with all extras, pinned with hashes, using pip-audit on Python 3.10 and 3.12, and stops on any
+known vulnerability. It then runs the tests, builds the wheel and sdist, and publishes a GitHub release with them and
+the audit reports. Running it by hand from the Actions tab does everything except publish.
+
 ## Status
 
 Private pre-release. Licence to be chosen before the repository is made public; until then, all rights reserved.

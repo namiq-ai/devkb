@@ -1,0 +1,93 @@
+# Release: audit the dependencies, test, build, publish a GitHub release.
+#
+# Started by pushing a version tag (`git tag v0.2.0 && git push origin v0.2.0`), or by hand from the Actions tab, which
+# runs the audit, the tests and the build without publishing anything.
+#
+# The audit runs first and a release cannot happen without it: every package devkb installs, with all its extras
+# (mcp, study, dev), is resolved to exact pinned versions with hashes and checked by pip-audit against the PyPI and OSV
+# advisory databases. Any known vulnerability fails the run. pip-audit checks dependencies, not devkb's own code.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]   # the oldest supported and the one CI tests on: resolution differs by version
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Lock every dependency, all extras, with hashes
+        run: uv pip compile pyproject.toml --all-extras --generate-hashes --python-version "${{ matrix.python }}" -q -o requirements.lock
+      - name: pip-audit
+        run: |
+          uvx --python "${{ matrix.python }}" --from "pip-audit==2.7.3" pip-audit \
+            -r requirements.lock --require-hashes --disable-pip --strict \
+            --progress-spinner off --desc on --format json --output pip-audit.json || status=$?
+          uvx --python "${{ matrix.python }}" --from "pip-audit==2.7.3" pip-audit \
+            -r requirements.lock --require-hashes --disable-pip --progress-spinner off --desc on \
+            --format markdown >> "$GITHUB_STEP_SUMMARY" || true
+          exit "${status:-0}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pip-audit-py${{ matrix.python }}
+          path: |
+            pip-audit.json
+            requirements.lock
+
+  test:
+    needs: audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+      - name: Tests
+        run: .venv/bin/python -m pytest -q tests
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: The tag names the version in pyproject.toml
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          [ "v$version" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} but pyproject.toml says $version"; exit 1; }
+      - name: Build the wheel and sdist
+        run: uv build --out-dir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # only this job may create the release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create the GitHub release with the build and the audit reports
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for p in 3.10 3.12; do cp "artifacts/pip-audit-py$p/pip-audit.json" "pip-audit-py$p.json"; done
+          gh release create "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --title "${GITHUB_REF_NAME}" \
+            --generate-notes artifacts/dist/* pip-audit-py3.10.json pip-audit-py3.12.json
