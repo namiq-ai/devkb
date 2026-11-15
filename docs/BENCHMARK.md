@@ -43,6 +43,9 @@ Locally, with the Claude Code CLI installed and signed in:
 .venv/bin/python -m devkb.bench.pipeline report <id> --model sonnet
 ```
 
+`report` ends with the per-task detail (median cost, mean score and median turns per arm; each score part per task
+kind; the graph tools each arm called), also available for any runs file as `pipeline detail --runs FILE ...`.
+
 On GitHub: Actions → bench → Run workflow, tick `run_agents`. It needs an `ANTHROPIC_API_KEY` repository secret and
 refuses to start when tasks × arms × repetitions exceeds `max_runs` (default 300). As a guide, Sonnet costs about
 $0.05–0.10 per run on these tasks.

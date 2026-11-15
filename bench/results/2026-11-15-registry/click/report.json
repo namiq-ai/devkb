@@ -1,0 +1,275 @@
+{
+ "model": "sonnet",
+ "runs": 60,
+ "cost_usd": 1.62,
+ "tasks": 3,
+ "repos": [
+  "click"
+ ],
+ "describe": {
+  "plain": {
+   "runs": 15,
+   "valid": 15,
+   "median_cost": 0.0172,
+   "median_turns": 2,
+   "mean_score": 1.0,
+   "graph_used": 0.0,
+   "median_result_bytes": 1907
+  },
+  "core": {
+   "runs": 15,
+   "valid": 15,
+   "median_cost": 0.0265,
+   "median_turns": 5,
+   "mean_score": 1.0,
+   "graph_used": 1.0,
+   "median_result_bytes": 2645
+  },
+  "lean": {
+   "runs": 15,
+   "valid": 15,
+   "median_cost": 0.0158,
+   "median_turns": 4,
+   "mean_score": 1.0,
+   "graph_used": 1.0,
+   "median_result_bytes": 1215
+  },
+  "pack": {
+   "runs": 15,
+   "valid": 15,
+   "median_cost": 0.02,
+   "median_turns": 3,
+   "mean_score": 1.0,
+   "graph_used": 0.0,
+   "median_result_bytes": 554
+  }
+ },
+ "pooled": {
+  "core": {
+   "cost": {
+    "tasks": 3,
+    "saved": -0.437,
+    "lo": -1.4587,
+    "hi": 0.1074,
+    "p_wilcoxon": 1.0
+   },
+   "quality": {
+    "diff": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "non_inferior": true,
+    "arm_mean": 1.0,
+    "plain_mean": 1.0
+   }
+  },
+  "lean": {
+   "cost": {
+    "tasks": 3,
+    "saved": -0.0289,
+    "lo": -0.8788,
+    "hi": 0.4297,
+    "p_wilcoxon": 0.75
+   },
+   "quality": {
+    "diff": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "non_inferior": true,
+    "arm_mean": 1.0,
+    "plain_mean": 1.0
+   }
+  },
+  "pack": {
+   "cost": {
+    "tasks": 3,
+    "saved": -0.1889,
+    "lo": -1.0964,
+    "hi": 0.3104,
+    "p_wilcoxon": 1.0
+   },
+   "quality": {
+    "diff": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "non_inferior": true,
+    "arm_mean": 1.0,
+    "plain_mean": 1.0
+   }
+  }
+ },
+ "by_kind": {
+  "refactor": {
+   "core": {
+    "cost": {
+     "tasks": 3,
+     "saved": -0.437,
+     "lo": -1.4622,
+     "hi": 0.101,
+     "p_wilcoxon": 1.0
+    },
+    "quality": {
+     "diff": 0.0,
+     "lo": 0.0,
+     "hi": 0.0,
+     "non_inferior": true,
+     "arm_mean": 1.0,
+     "plain_mean": 1.0
+    }
+   },
+   "lean": {
+    "cost": {
+     "tasks": 3,
+     "saved": -0.0289,
+     "lo": -0.8804,
+     "hi": 0.4361,
+     "p_wilcoxon": 0.75
+    },
+    "quality": {
+     "diff": 0.0,
+     "lo": 0.0,
+     "hi": 0.0,
+     "non_inferior": true,
+     "arm_mean": 1.0,
+     "plain_mean": 1.0
+    }
+   },
+   "pack": {
+    "cost": {
+     "tasks": 3,
+     "saved": -0.1889,
+     "lo": -1.1059,
+     "hi": 0.307,
+     "p_wilcoxon": 1.0
+    },
+    "quality": {
+     "diff": 0.0,
+     "lo": 0.0,
+     "hi": 0.0,
+     "non_inferior": true,
+     "arm_mean": 1.0,
+     "plain_mean": 1.0
+    }
+   }
+  }
+ },
+ "by_repo": {
+  "click": {
+   "core": {
+    "cost": {
+     "tasks": 3,
+     "saved": -0.437,
+     "lo": -1.4563,
+     "hi": 0.1032,
+     "p_wilcoxon": 1.0
+    },
+    "quality": {
+     "diff": 0.0,
+     "lo": 0.0,
+     "hi": 0.0,
+     "non_inferior": true,
+     "arm_mean": 1.0,
+     "plain_mean": 1.0
+    }
+   },
+   "lean": {
+    "cost": {
+     "tasks": 3,
+     "saved": -0.0289,
+     "lo": -0.8653,
+     "hi": 0.4337,
+     "p_wilcoxon": 0.75
+    },
+    "quality": {
+     "diff": 0.0,
+     "lo": 0.0,
+     "hi": 0.0,
+     "non_inferior": true,
+     "arm_mean": 1.0,
+     "plain_mean": 1.0
+    }
+   },
+   "pack": {
+    "cost": {
+     "tasks": 3,
+     "saved": -0.1889,
+     "lo": -1.1047,
+     "hi": 0.3034,
+     "p_wilcoxon": 1.0
+    },
+    "quality": {
+     "diff": 0.0,
+     "lo": 0.0,
+     "hi": 0.0,
+     "non_inferior": true,
+     "arm_mean": 1.0,
+     "plain_mean": 1.0
+    }
+   }
+  }
+ },
+ "noise": {
+  "plain_score_sd_median": 0.0
+ },
+ "hypotheses": {
+  "H1": {
+   "arm": "pack",
+   "p": 1.0,
+   "cost": {
+    "tasks": 3,
+    "saved": -0.1889,
+    "lo": -1.0964,
+    "hi": 0.3104,
+    "p_wilcoxon": 1.0
+   },
+   "quality": {
+    "diff": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "non_inferior": true,
+    "arm_mean": 1.0,
+    "plain_mean": 1.0
+   },
+   "p_holm": 1.0
+  },
+  "H2": {
+   "arm": "lean",
+   "p": 0.75,
+   "cost": {
+    "tasks": 3,
+    "saved": -0.0289,
+    "lo": -0.8788,
+    "hi": 0.4297,
+    "p_wilcoxon": 0.75
+   },
+   "quality": {
+    "diff": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "non_inferior": true,
+    "arm_mean": 1.0,
+    "plain_mean": 1.0
+   },
+   "p_holm": 1.0
+  },
+  "H3": {
+   "arm": "core",
+   "p": 1.0,
+   "cost": {
+    "tasks": 3,
+    "saved": -0.437,
+    "lo": -1.4587,
+    "hi": 0.1074,
+    "p_wilcoxon": 1.0
+   },
+   "quality": {
+    "diff": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "non_inferior": true,
+    "arm_mean": 1.0,
+    "plain_mean": 1.0
+   },
+   "supported": false
+  }
+ }
+}

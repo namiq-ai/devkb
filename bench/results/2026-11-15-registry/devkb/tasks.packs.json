@@ -1,0 +1,113 @@
+[
+ {
+  "id": "devkb-WIDE-link_repository",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `link_repository` (defined in devkb/extractors/members.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "devkb/build.py",
+    "devkb/extractors/members.py",
+    "tests/test_devkb_audit_efficiency_odsf314.py",
+    "tests/test_devkb_product_graph_odsf312.py"
+   ],
+   "test_files": [
+    "tests/test_devkb_audit_efficiency_odsf314.py",
+    "tests/test_devkb_product_graph_odsf312.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `devkb/extractors/members.py::link_repository`\n\nBuilt from the dev-process graph at commit `b6a2c9ca10`. None of the files below has changed since; the line numbers are current.\n\nDefined at `devkb/extractors/members.py:107: def link_repository(graph: DevKBGraph, code: str, role: str = \"product\", only_prefix: str | None = None) -> None:`.\n\n## Files with a direct caller (4, tests included)\n- `devkb/build.py` \u2014 `devkb/build.py:191: members.link_repository(graph, code)`\n- `devkb/extractors/members.py` \u2014 `devkb/extractors/members.py:143: link_repository(graph, code, role=role, only_prefix=f\"{code}:\")`\n- `tests/test_devkb_audit_efficiency_odsf314.py` \u2014 `tests/test_devkb_audit_efficiency_odsf314.py:56: members.link_repository(g, \"PRD\")`\n- `tests/test_devkb_product_graph_odsf312.py` (+1 more) \u2014 `tests/test_devkb_product_graph_odsf312.py:95: members.link_repository(graph, \"PRD\")`\n\n## Test files among them (2)\n- `tests/test_devkb_audit_efficiency_odsf314.py`\n- `tests/test_devkb_product_graph_odsf312.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "link_repository",
+   "role": "",
+   "path": "devkb/extractors/members.py"
+  }
+ },
+ {
+  "id": "devkb-WIDE-callers_of",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `callers_of` (defined in devkb/bench/workflow_tasks.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "devkb/bench/oco_tasks.py",
+    "devkb/bench/workflow_tasks.py",
+    "devkb/edge_truth.py",
+    "tests/test_devkb_workflow_bench_odsf310.py"
+   ],
+   "test_files": [
+    "tests/test_devkb_workflow_bench_odsf310.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `devkb/bench/workflow_tasks.py::callers_of`\n\nBuilt from the dev-process graph at commit `b6a2c9ca10`. None of the files below has changed since; the line numbers are current.\n\nDefined at `devkb/bench/workflow_tasks.py:105: def callers_of(s: dict, name: str) -> list[tuple[str, str]]:`.\n\n## Files with a direct caller (4, tests included)\n- `devkb/bench/oco_tasks.py` (+2 more) \u2014 `devkb/bench/oco_tasks.py:94: test_files = sorted({k[0] for k in tests} | {c[0] for c in wt.callers_of(s, name) if wt.is_test_file(c[0])})`\n- `devkb/bench/workflow_tasks.py` \u2014 `devkb/bench/workflow_tasks.py:166: cs = callers_of(s, name)`\n- `devkb/edge_truth.py` (+1 more) \u2014 `devkb/edge_truth.py:67: pool = [(n, k) for n, k in unique.items() if not wt.is_test_file(k[0]) and wt.callers_of(s, n)]`\n- `tests/test_devkb_workflow_bench_odsf310.py` (+1 more) \u2014 `tests/test_devkb_workflow_bench_odsf310.py:34: got = {workflow_tasks.short(k) for k in workflow_tasks.callers_of(s, \"resolve\")}`\n\n## Test files among them (1)\n- `tests/test_devkb_workflow_bench_odsf310.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "callers_of",
+   "role": "",
+   "path": "devkb/bench/workflow_tasks.py"
+  }
+ },
+ {
+  "id": "devkb-WIDE-extract",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `extract` (defined in devkb/build_symbols.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "devkb/build_symbols.py",
+    "tests/test_devkb_audit_efficiency_odsf314.py",
+    "tests/test_devkb_bl_baseline_symbols_odsf042.py",
+    "tests/test_devkb_bl_containment_errors_criticality_odsf043.py",
+    "tests/test_devkb_bl_crossfile_ts_api_odsf043.py",
+    "tests/test_devkb_call_resolution_odsf305.py",
+    "tests/test_devkb_coverage_classes_odsf313.py",
+    "tests/test_devkb_typed_calls_odsf312.py"
+   ],
+   "test_files": [
+    "tests/test_devkb_audit_efficiency_odsf314.py",
+    "tests/test_devkb_bl_baseline_symbols_odsf042.py",
+    "tests/test_devkb_bl_containment_errors_criticality_odsf043.py",
+    "tests/test_devkb_bl_crossfile_ts_api_odsf043.py",
+    "tests/test_devkb_call_resolution_odsf305.py",
+    "tests/test_devkb_coverage_classes_odsf313.py",
+    "tests/test_devkb_typed_calls_odsf312.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `devkb/build_symbols.py::extract`\n\nBuilt from the dev-process graph at commit `b6a2c9ca10`. None of the files below has changed since; the line numbers are current.\n\nDefined at `devkb/build_symbols.py:821: def extract(repo_root: Path) -> DevKBGraph:`.\n\n## Files with a direct caller (8, tests included)\n- `devkb/build_symbols.py` \u2014 `devkb/build_symbols.py:1201: graph = extract(ctx.repo_root)`\n- `tests/test_devkb_audit_efficiency_odsf314.py` \u2014 `tests/test_devkb_audit_efficiency_odsf314.py:81: g = build_symbols.extract(tmp_path)`\n- `tests/test_devkb_bl_baseline_symbols_odsf042.py` (+3 more) \u2014 `tests/test_devkb_bl_baseline_symbols_odsf042.py:162: g = build_symbols.extract(tmp_path)`\n- `tests/test_devkb_bl_containment_errors_criticality_odsf043.py` (+12 more) \u2014 `tests/test_devkb_bl_containment_errors_criticality_odsf043.py:184: g = build_symbols.extract(tmp_path)`\n- `tests/test_devkb_bl_crossfile_ts_api_odsf043.py` (+5 more) \u2014 `tests/test_devkb_bl_crossfile_ts_api_odsf043.py:182: g = build_symbols.extract(tmp_path)`\n- `tests/test_devkb_call_resolution_odsf305.py` (+7 more) \u2014 `tests/test_devkb_call_resolution_odsf305.py:88: assert not [c for c in _calls(build_symbols.extract(root)) if c[0] == \"app/run.py::go\"]`\n- `tests/test_devkb_coverage_classes_odsf313.py` (+1 more) \u2014 `tests/test_devkb_coverage_classes_odsf313.py:57: g = build_symbols.extract(root)`\n- `tests/test_devkb_typed_calls_odsf312.py` \u2014 `tests/test_devkb_typed_calls_odsf312.py:35: g = build_symbols.extract(tmp_path)`\n\n## Test files among them (7)\n- `tests/test_devkb_audit_efficiency_odsf314.py`\n- `tests/test_devkb_bl_baseline_symbols_odsf042.py`\n- `tests/test_devkb_bl_containment_errors_criticality_odsf043.py`\n- `tests/test_devkb_bl_crossfile_ts_api_odsf043.py`\n- `tests/test_devkb_call_resolution_odsf305.py`\n- `tests/test_devkb_coverage_classes_odsf313.py`\n- `tests/test_devkb_typed_calls_odsf312.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "extract",
+   "role": "",
+   "path": "devkb/build_symbols.py"
+  }
+ },
+ {
+  "id": "devkb-WIDE-resolve",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `resolve` (defined in devkb/project_context.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "devkb/audit.py",
+    "devkb/build.py",
+    "devkb/build_symbols.py",
+    "devkb/call_recall.py",
+    "devkb/coverage.py",
+    "devkb/process_api.py",
+    "devkb/query.py",
+    "tests/test_devkb_confirmatory_truth_odsf315.py"
+   ],
+   "test_files": [
+    "tests/test_devkb_confirmatory_truth_odsf315.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `devkb/project_context.py::resolve`\n\nBuilt from the dev-process graph at commit `b6a2c9ca10`. None of the files below has changed since; the line numbers are current.\n\nDefined at `devkb/project_context.py:177: def resolve(code: str) -> ProjectContext:`.\n\n## Files with a direct caller (8, tests included)\n- `devkb/audit.py` \u2014 `devkb/audit.py:156: d = resolve(ns.project).devkb_dir`\n- `devkb/build.py` \u2014 `devkb/build.py:111: ctx = resolve(code)`\n- `devkb/build_symbols.py` \u2014 `devkb/build_symbols.py:1200: ctx = resolve(code)`\n- `devkb/call_recall.py` \u2014 `devkb/call_recall.py:121: ctx = resolve(code)`\n- `devkb/coverage.py` \u2014 `devkb/coverage.py:141: rows = measure(resolve(args.project))`\n- `devkb/process_api.py` \u2014 `devkb/process_api.py:139: self.ctx = resolve(code)`\n- `devkb/query.py` \u2014 `devkb/query.py:231: ctx = resolve(args.project)`\n- `tests/test_devkb_confirmatory_truth_odsf315.py` \u2014 `tests/test_devkb_confirmatory_truth_odsf315.py:55: project_context.resolve(\"NOT-REGISTERED-315\")`\n\n## Test files among them (1)\n- `tests/test_devkb_confirmatory_truth_odsf315.py`\n\n(The defining file `devkb/project_context.py` is not counted as a caller.)\n\n## Coverage\n**Incomplete: 12 call site(s) under this name could not be attributed.** Search only these files for them: `devkb/project_context.py`, `devkb/bench/run.py`, `devkb/bench/workflow_run.py`, `devkb/bench/workflow_tasks.py`, `devkb/extractors/component_subsystem.py`, `devkb/extractors/members.py`, `devkb/module_file_bridge.py`.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "resolve",
+   "role": "",
+   "path": "devkb/project_context.py"
+  }
+ }
+]

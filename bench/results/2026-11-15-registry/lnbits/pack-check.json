@@ -1,0 +1,150 @@
+{
+ "summary": {
+  "tasks": 12,
+  "mean_score": 1.0,
+  "by_kind": {
+   "err_to_handler": 1.0,
+   "impact": 1.0,
+   "refactor": 1.0
+  },
+  "complete_but_wrong": []
+ },
+ "tasks": [
+  {
+   "task": "lnbits-ERR-decode_key",
+   "kind": "err_to_handler",
+   "score": 1.0,
+   "parts": {
+    "raiser": 1.0,
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 378
+  },
+  {
+   "task": "lnbits-ERR-onchain_key_status",
+   "kind": "err_to_handler",
+   "score": 1.0,
+   "parts": {
+    "raiser": 1.0,
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 412
+  },
+  {
+   "task": "lnbits-ERR-validate_identity",
+   "kind": "err_to_handler",
+   "score": 1.0,
+   "parts": {
+    "raiser": 1.0,
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 372
+  },
+  {
+   "task": "lnbits-ERR-descriptor_script",
+   "kind": "err_to_handler",
+   "score": 1.0,
+   "parts": {
+    "raiser": 1.0,
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 278
+  },
+  {
+   "task": "lnbits-IMP-clear_wallet_cache",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 308
+  },
+  {
+   "task": "lnbits-IMP-create_access_token",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 826
+  },
+  {
+   "task": "lnbits-IMP-stop_wasm_extension_invocations",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 361
+  },
+  {
+   "task": "lnbits-IMP-scan_wallet",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 316
+  },
+  {
+   "task": "lnbits-WIDE-get_wallet",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 309
+  },
+  {
+   "task": "lnbits-WIDE-set_settings_field",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 250
+  },
+  {
+   "task": "lnbits-WIDE-random_secret_and_hash",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 315
+  },
+  {
+   "task": "lnbits-WIDE-get_settings_field",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 220
+  }
+ ]
+}

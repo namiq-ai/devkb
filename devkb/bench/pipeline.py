@@ -201,6 +201,45 @@ def token_table(rows: list[dict]) -> str:
     return "\n".join(out)
 
 
+def detail_table(rows: list[dict]) -> str:
+    """Per task: median cost, mean score and median turns in each arm; then the mean of each score part per task kind
+    and arm (which part of the answer an arm got wrong), and the graph tools each arm called."""
+    import collections  # noqa: PLC0415
+    import statistics as st  # noqa: PLC0415
+
+    by = collections.defaultdict(list)
+    for r in rows:
+        by[(r["task"], r["arm"])].append(r)
+    arms = [a for a in ARM_ORDER if any(r["arm"] == a for r in rows)]
+    tasks = sorted({(r["kind"], r["task"]) for r in rows})
+    out = ["Per task: median cost $ / mean score / median turns.", "",
+           "| kind | task | " + " | ".join(arms) + " |", "|---|---|" + "---|" * len(arms)]
+    for kind, t in tasks:
+        cells = []
+        for a in arms:
+            rs = by.get((t, a), [])
+            cells.append(f"{st.median((r['cost'] or 0) for r in rs):.3f} / {st.mean(r['score'] for r in rs):.2f} / "
+                         f"{st.median((r['turns'] or 0) for r in rs):g}" if rs else "—")
+        out.append(f"| {kind} | {t} | " + " | ".join(cells) + " |")
+    out += ["", "Mean of each score part:", ""]
+    for kind in sorted({k for k, _ in tasks}):
+        parts = sorted({p for r in rows if r["kind"] == kind for p in (r.get("parts") or {})})
+        out += [f"| {kind} | " + " | ".join(parts) + " | runs |", "|---|" + "---:|" * (len(parts) + 1)]
+        for a in arms:
+            rs = [r for r in rows if r["kind"] == kind and r["arm"] == a]
+            if rs:
+                out.append(f"| {a} | " + " | ".join(
+                    f"{st.mean((r.get('parts') or {}).get(p, 0) for r in rs):.2f}" for p in parts) + f" | {len(rs)} |")
+        out.append("")
+    out += ["Graph tools called (all runs):", ""]
+    for a in arms:
+        c = collections.Counter(t for r in rows if r["arm"] == a for t in (r.get("graph_tools") or []))
+        total = sum((r["cost"] or 0) for r in rows if r["arm"] == a)
+        used = ", ".join(f"`{k}` {v}" for k, v in c.most_common()) or "none"
+        out.append(f"- **{a}**: ${total:.2f} in all; {used}")
+    return "\n".join(out)
+
+
 def report(e: dict, work: Path, model: str) -> int:
     p = paths(work, e["id"])
     sh(sys.executable, str(ROOT / "study" / "analysis" / "analyze.py"), str(p["runs"]), "--model", model,
@@ -213,12 +252,13 @@ def report(e: dict, work: Path, model: str) -> int:
               f"[{q['lo']:+.3f}, {q['hi']:+.3f}]")
     rows = [json.loads(x) for x in p["runs"].read_text().splitlines() if x.strip()]
     print("\nTokens by kind (median run):\n" + token_table(rows))
+    print("\n" + detail_table(rows))
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=("list", "prepare", "run", "report", "tokens"))
+    ap.add_argument("command", choices=("list", "prepare", "run", "report", "tokens", "detail"))
     ap.add_argument("id", nargs="?")
     ap.add_argument("--work", default=os.environ.get("BENCH_WORK", "bench-work"))
     ap.add_argument("--arms", default="plain,core,lean,pack")
@@ -227,9 +267,9 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--runs", nargs="+", help="tokens: runs files to tabulate")
     a = ap.parse_args()
-    if a.command == "tokens":
+    if a.command in ("tokens", "detail"):
         rows = [json.loads(x) for f in a.runs for x in Path(f).read_text().splitlines() if x.strip()]
-        print(token_table(rows))
+        print(token_table(rows) if a.command == "tokens" else detail_table(rows))
         return 0
     reg = registry()
     if a.command == "list":

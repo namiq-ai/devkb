@@ -1,0 +1,114 @@
+{
+ "summary": {
+  "tasks": 9,
+  "mean_score": 1.0,
+  "by_kind": {
+   "err_to_handler": 1.0,
+   "impact": 1.0,
+   "refactor": 1.0
+  },
+  "complete_but_wrong": []
+ },
+ "tasks": [
+  {
+   "task": "prefect-ERR-from_page_token",
+   "kind": "err_to_handler",
+   "score": 1.0,
+   "parts": {
+    "raiser": 1.0,
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 207
+  },
+  {
+   "task": "prefect-IMP-_get_base_config_defaults",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 458
+  },
+  {
+   "task": "prefect-IMP-_automation_event",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 539
+  },
+  {
+   "task": "prefect-IMP-_resolve_default_reference",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 530
+  },
+  {
+   "task": "prefect-IMP-_sync_automation_related_resources",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 450
+  },
+  {
+   "task": "prefect-WIDE-read_flow_run",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 236
+  },
+  {
+   "task": "prefect-WIDE-LimitBody",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 278
+  },
+  {
+   "task": "prefect-WIDE-command_to_string",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 228
+  },
+  {
+   "task": "prefect-WIDE-Completed",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 316
+  }
+ ]
+}
