@@ -88,8 +88,19 @@ def prepare(e: dict, work: Path) -> int:
     sh(py, str(BENCH / "add_packs.py"), str(p["checkout"]), str(p["tasks"]), str(p["packs"]),
        env={"DEVKB_DIR": str(p["graph"]), "DEVKB_REPO": str(p["checkout"])})
     check = pack_check(json.loads(p["packs"].read_text()))
+    # The pack check compares the pack with the truth; a blind spot both share scores 1.0. A second implementation
+    # of the refactor truth, sharing no code with either, catches that before any run is paid for.
+    sys.path.insert(0, str(BENCH))
+    import truth_check  # noqa: PLC0415
+    rows = truth_check.check(p["checkout"], json.loads(p["packs"].read_text()))
+    check["truth_check"] = rows
+    check["summary"]["truth_missing_callers"] = {r["task"]: r["missing"] for r in rows if r["missing"]}
     p["check"].write_text(json.dumps(check, indent=1))
     print(json.dumps(check["summary"], indent=1))
+    if check["summary"]["truth_missing_callers"]:
+        print(f"{e['id']}: the truth misses callers an independent check proves (pack-check.json, truth_check); "
+              "fix the truth before running agents", file=sys.stderr)
+        return 1
     return 0
 
 

@@ -34,6 +34,12 @@ and goes through the same pipeline.
 The pack check is the cheapest test of the graph on a new repository. A score below 1.0 is a graph gap; a pack that
 says **Complete** and still scores below 1.0 is the worst kind, because an agent stops searching. Both are listed.
 
+The pack check cannot see a mistake the pack and the truth share. On lnbits, both missed every caller that imported
+`get_wallet` through its package's `__init__.py` (22 of 39 files), so the pack scored 1.0 while the agents who found
+those callers were marked down. `prepare` therefore also runs `bench/truth_check.py`, a second implementation of the
+refactor truth that shares no code with the graph or the generators, and fails when it proves a caller the truth lacks
+(`pack-check.json`, `truth_check`).
+
 ## Run the agents (costs money)
 
 Locally, with the Claude Code CLI installed and signed in:

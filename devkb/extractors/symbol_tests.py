@@ -19,8 +19,8 @@ from __future__ import annotations
 import ast
 
 from devkb.build_symbols import (
-    _calls_in_body, _import_descriptors, _import_targets, _imports, _module_paths, _py_literals,
-    _resolve_cross_file_symbol, _resolve_via_literals,
+    EXPR, _calls_in_body, _import_descriptors, _import_targets, _imports, _module_paths, _py_literals,
+    _list_python_files, _resolve_cross_file_symbol, _resolve_via_literals, collect_reexports, register_reexports,
 )
 from devkb.model import DevKBGraph
 from devkb.project_context import ProjectContext
@@ -55,6 +55,8 @@ def extract(ctx: ProjectContext, graph: DevKBGraph) -> DevKBGraph:
     for s in graph.nodes("Symbol"):
         path, _, qualified = s.natural_key.partition("::")
         symbols_by_file.setdefault(path, []).append({"qualified_name": qualified})
+    # `from pkg import f` where `pkg/__init__.py` re-exports f from a submodule
+    register_reexports(symbols_by_file, collect_reexports(ctx.repo_root, _list_python_files(ctx.repo_root)))
 
     # ODSF-304: every tracked python test file, wherever it lives.
     for py in (ctx.repo_root / rel for rel in list_test_files(ctx.repo_root, ctx.tests_dir) if rel.endswith(".py")):
@@ -75,6 +77,13 @@ def extract(ctx: ProjectContext, graph: DevKBGraph) -> DevKBGraph:
             resolved: set[str] = set()
             # ODSF-305: `module.func()` and aliased or relative imports.
             for receiver, short in pairs:
+                if receiver and "." in receiver and receiver != EXPR:  # `pkg.mod.f()` after `import pkg.mod`
+                    root, rest = receiver.split(".", 1)
+                    modules = [f"{m}.{rest}" for m in receivers.get(root, [])]
+                    hit = next((h for h in (_resolve_cross_file_symbol(m, rel, short, symbols_by_file) for m in modules) if h), None)
+                    if hit:
+                        resolved.add(hit)
+                    continue
                 if receiver:
                     modules = receivers.get(receiver) or ([receiver] if receiver.isidentifier() else [])
                     hit = None

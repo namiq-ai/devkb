@@ -27,8 +27,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 TOOL_ROOT = Path(os.environ.get("BENCH_TOOL_ROOT", str(HERE.parent.parent)))  # checkout holding devkb/mcp_server.py
-CHECKOUT = os.environ.get("BENCH_CHECKOUT", "")  # pinned worktree the agents work in
-SNAPSHOT = os.environ.get("BENCH_GRAPH", "")     # graph snapshot built at that worktree's HEAD
+# Absolute: the MCP server starts inside the checkout, so a relative graph path would point nowhere and the tool arms
+# would run with no tools while still told to use them (the 2026-11-15 addendum's first attempt).
+CHECKOUT = str(Path(os.environ["BENCH_CHECKOUT"]).resolve()) if os.environ.get("BENCH_CHECKOUT") else ""  # pinned worktree
+SNAPSHOT = str(Path(os.environ["BENCH_GRAPH"]).resolve()) if os.environ.get("BENCH_GRAPH") else ""  # graph at its HEAD
 MODEL = os.environ.get("BENCH_MODEL", "sonnet")
 PROJECT = os.environ.get("BENCH_PROJECT", "ODSF")
 sys.path.insert(0, str(HERE))
@@ -88,13 +90,17 @@ def _run_once(task: dict, arm: str, cfg_dir: Path) -> dict:
         stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
     calls, graph, rbytes, used = 0, 0, 0, []
     final: dict = {}
+    mcp_ok = arm in ("plain", "pack")  # a tool arm counts only when its graph server connected
     contexts: dict[str, int] = {}  # message id -> tokens of context that message was given (insertion-ordered)
     for line in stdout.splitlines():
         try:
             e = json.loads(line)
         except ValueError:
             continue
-        if e.get("type") == "assistant":
+        if e.get("type") == "system" and e.get("subtype") == "init":
+            mcp_ok = mcp_ok or any(m.get("name") == "devkb-sdlc" and m.get("status") == "connected"
+                                   for m in e.get("mcp_servers") or [])
+        elif e.get("type") == "assistant":
             mu = e["message"].get("usage") or {}
             if e["message"].get("id") and mu:
                 contexts[e["message"]["id"]] = (mu.get("input_tokens", 0) + mu.get("cache_creation_input_tokens", 0)
@@ -122,7 +128,8 @@ def _run_once(task: dict, arm: str, cfg_dir: Path) -> dict:
             "ctx_initial": ctx[0] if ctx else 0, "ctx_peak": max(ctx) if ctx else 0, "ctx_final": ctx[-1] if ctx else 0,
             "tool_calls": calls,
             "graph_calls": graph, "graph_tools": used, "result_bytes": rbytes,
-            "is_error": bool(final.get("is_error")) or not final, "answer": final.get("result", "")}
+            "mcp_connected": mcp_ok,
+            "is_error": bool(final.get("is_error")) or not final or not mcp_ok, "answer": final.get("result", "")}
 
 
 def score(task: dict, answer: str) -> dict:
@@ -178,7 +185,10 @@ def main() -> int:
         valid = not res["is_error"] and bool(base.parse(res["answer"]))
         row = {"task": t["id"], "kind": t["kind"], "arm": arm, "rep": rep, "valid": valid, "model": MODEL, "project": PROJECT,
                **{k: v for k, v in res.items() if k != "answer"},
-               **(score(t, res["answer"]) if valid else {"score": 0.0, "parts": {}}), "answer": res["answer"][:1500]}
+               **(score(t, res["answer"]) if valid else {"score": 0.0, "parts": {}}),
+               # the whole answer (capped far above any real one), so a run can be rescored when a truth is corrected;
+               # 1,500 characters cut most long file lists in two (lnbits get_wallet, 2026-11-15)
+               "answer": res["answer"][:50000]}
         with lock, open(ns.out, "a") as out:
             out.write(json.dumps(row) + "\n")
         print(t["id"], arm, rep, "valid" if valid else "INVALID", row["score"], row["cost"], row["turns"], row["graph_calls"], flush=True)
