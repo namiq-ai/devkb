@@ -22,7 +22,7 @@ repos:
     size: small
     seed: 2029
     per_kind: 8
-    licence: proprietary until released
+    licence: Apache-2.0
 
   # 2. dogfooding: the first outside product to use devkb
   - id: lattice-scan

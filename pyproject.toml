@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -9,7 +9,8 @@ description = "A software-process knowledge graph for software development agent
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Hung T. Le" }]
-# license: not chosen yet; set it (SPDX, e.g. license = "Apache-2.0") before the first PyPI upload (docs/RELEASING.md)
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 keywords = ["knowledge graph", "software development agents", "coding agents", "mcp", "code intelligence", "call graph", "software process"]
 classifiers = [
     "Development Status :: 3 - Alpha",

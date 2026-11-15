@@ -97,7 +97,8 @@ args = ["mcp", "--project", ".", "--toolset", "dev"]
 
 ## 4. Licence and citation
 
-Pre-release. The licence will be chosen before the repository is made public; until then, all rights reserved.
-Releases: [`docs/RELEASING.md`](docs/RELEASING.md).
+Code: [Apache-2.0](LICENSE). The study in [`study/`](study/) (paper, figures, pre-registration, data):
+[CC BY 4.0](study/LICENSE). Benchmark results quote third-party code under its own licences
+([`bench/results/NOTICE`](bench/results/NOTICE)). Releases: [`docs/RELEASING.md`](docs/RELEASING.md).
 
 > Hung T. Le. *Precomputed Context, Not More Tools: A Pre-Registered Study of Process Graphs for Coding Agents.* 2026.

@@ -1,0 +1,12 @@
+Third-party excerpts in bench/results/
+
+The tasks, packs and agent answers in this folder quote file paths, function names and source lines from the
+repositories below, at the commits pinned in bench/repos.yaml. Those excerpts remain under each repository's own
+licence; they are reproduced here for research and benchmarking, and no licence is granted for them by devkb's.
+
+- lattice-scan: https://github.com/namiq-ai/lattice-scan.git (Apache-2.0)
+- click: https://github.com/pallets/click.git (BSD-3-Clause)
+- lnbits: https://github.com/lnbits/lnbits.git (MIT)
+- prefect: https://github.com/PrefectHQ/prefect.git (Apache-2.0)
+- dispatch: https://github.com/Netflix/dispatch.git (Apache-2.0)
+- mealie: https://github.com/mealie-recipes/mealie.git (AGPL-3.0)

@@ -1,0 +1,11 @@
+devkb
+Copyright 2026 NamiQ LLC
+
+This product is licensed under the Apache License, Version 2.0 (LICENSE).
+
+The study in study/ (paper, figures, pre-registration, results and data) is licensed under the Creative Commons
+Attribution 4.0 International licence (study/LICENSE).
+
+bench/results/ contains short excerpts of third-party source code (file paths, function names and quoted lines) from
+the benchmarked repositories, in tasks, packs and agent answers. Those excerpts remain under their own licences; see
+bench/results/NOTICE.
