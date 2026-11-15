@@ -39,6 +39,10 @@ TOOLSETS = {"core": CORE, "workflow": WORKFLOW + ["review_pack", "tests_to_run",
             # ODSF-313: only the tools the benchmarks showed earn their place (chains and joins), so each turn loads fewer
             # tool definitions. Their list answers all carry `coverage`.
             "lean": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config"],
+            # `devkb init`'s default: lean, plus orienting in an area before writing new code there. Lean alone left an
+            # agent implementing a feature with nothing to ask (it read whole files instead); lean stays as measured.
+            "dev": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config",
+                    "explain_area", "feature_brief", "find_code"],
             "all": CORE + WORKFLOW + DOCS}
 INSTRUCTIONS = ("Dev-process graph for this repository: tickets, specs, commits, symbols, calls, tests, owners. "
                 "Ask it first, then read only the files it names. Every reply says if the graph is stale.")

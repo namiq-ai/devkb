@@ -59,3 +59,12 @@ def test_dry_run_writes_nothing(tmp_path):
     root = _repo(tmp_path, ORIGINAL)
     assert init.run(root, "lean", hooks=False, dry_run=True)
     assert all((root / rel).read_text() == text for rel, text in ORIGINAL.items())
+
+
+def test_the_default_gives_agents_the_dev_toolset_with_orientation_tools(tmp_path):
+    from devkb.mcp_server import TOOLSETS
+    root = _repo(tmp_path, {})
+    assert init.main(["--project", str(root), "--no-build"]) == 0
+    assert json.loads((root / ".mcp.json").read_text())["mcpServers"]["devkb"]["args"][-1] == "dev"
+    assert {"explain_area", "feature_brief", "find_code"} <= set(TOOLSETS["dev"]) and set(TOOLSETS["lean"]) < set(TOOLSETS["dev"])
+    assert "`explain_area`" in (root / "AGENTS.md").read_text()

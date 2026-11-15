@@ -23,7 +23,7 @@ devkb init --remove     # takes all of it out again, leaving your files as they 
 left to choose used the graph for call chains but not for other work, and the savings were measured with these
 instructions in place. Codex and most agents read `AGENTS.md`; Claude Code reads it through `CLAUDE.md`'s
 `@AGENTS.md`. For Codex, add the server to `~/.codex/config.toml`: `[mcp_servers.devkb]`, `command = "devkb"`,
-`args = ["mcp", "--project", ".", "--toolset", "lean"]`.
+`args = ["mcp", "--project", ".", "--toolset", "dev"]`.
 
 Or by hand:
 
@@ -37,10 +37,11 @@ devkb pack  --project . change path/to/file.py
 Serve the graph to an agent over MCP (stdio), for example in Claude Code's `.mcp.json`:
 
 ```json
-{"mcpServers": {"devkb": {"command": "devkb", "args": ["mcp", "--project", ".", "--toolset", "lean"]}}}
+{"mcpServers": {"devkb": {"command": "devkb", "args": ["mcp", "--project", ".", "--toolset", "dev"]}}}
 ```
 
-`--toolset lean` exposes 7 tools; the default exposes 24 (callers, tests_for, tests_to_run, impact, rca_trace,
+`devkb init` configures `--toolset dev` (10 tools: lean plus `explain_area`, `feature_brief`, `find_code` for orienting before new
+code); `--toolset lean` exposes the 7 the benchmark measured; the server default exposes 24 (callers, tests_for, tests_to_run, impact, rca_trace,
 refactor_scope, review_pack, lineage, trace, config, ...). Every list answer carries a **coverage** statement: the
 call sites the resolver could not attribute, so an agent searches only where the graph is blind. The `skills/`
 folder maps developer tasks to tools for agents that load skills.

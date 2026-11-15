@@ -37,6 +37,9 @@ faster with grep.
 
 | Question | Use |
 |---|---|
+| Before writing code in an area you have not read: its files, key functions, tests, docs | `explain_area` with the folder |
+| Where a new feature or change belongs: related code, docs, past work, tests to run | `feature_brief` with the goal |
+| Code that does something, found by what it does | `find_code` |
 | An error message: where it is raised and what reaches it | `rca_trace` |
 | The impact of changing a function: its callers at any depth, route handlers, tests | `impact` |
 | Who calls a function | `callers` |
@@ -150,7 +153,7 @@ def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool) -> list[str
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="devkb init", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", default=".")
-    ap.add_argument("--toolset", default="lean", help="the MCP toolset agents get (lean, core, workflow, all)")
+    ap.add_argument("--toolset", default="dev", help="the MCP toolset agents get (dev, lean, core, workflow, all)")
     ap.add_argument("--hooks", action="store_true", help="rebuild the graph after commits, merges and checkouts")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--remove", action="store_true", help="take devkb out of the repository again")
