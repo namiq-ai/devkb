@@ -15,6 +15,11 @@ file. A call made through any other object (`store.x()`), or reaching a method t
 attributed: the truth is conservative, so a task is built only on functions whose callers it can see completely (no
 method on the path except a route handler, whose own callers in its class are followed).
 
+A name imported from a package that re-exports it (`from lnbits.core.crud import get_wallet`, with
+`from .wallets import get_wallet` in `crud/__init__.py`) is followed to the module that defines it. A call made outside
+every function (`app_dirs = get_app_dirs()` at import time, or in a class body) has the caller `<module>`: it counts
+for the files a signature change breaks, and is not a function on a call chain.
+
 A raised message is the first positional string argument, or a `detail=` / `message=` / `msg=` / `description=`
 keyword (`HTTPException(status_code=422, detail="...")`).
 """
@@ -28,6 +33,7 @@ from pathlib import Path
 
 ROUTE_VERBS = {"get", "post", "put", "delete", "patch"}
 RAISE_KEYWORDS = ("detail", "message", "msg", "description")
+MODULE = "<module>"
 _TEST = re.compile(r"(^|/)(tests?/|test_[^/]*\.py$|[^/]*_test\.py$|conftest\.py$)")
 
 
@@ -89,16 +95,28 @@ class _File(ast.NodeVisitor):
     visit_FunctionDef = visit_AsyncFunctionDef = _fn
 
     def visit_Call(self, node):
-        if self.fn:
-            f = node.func
-            if isinstance(f, ast.Name):
-                self.calls[self.fn[-1]].add(("", f.id))
-            elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
-                if f.value.id in ("self", "cls") and self.classes:
-                    self.calls[self.fn[-1]].add((f"self:{self.classes[-1]}", f.attr))  # the innermost enclosing class
-                else:
-                    self.calls[self.fn[-1]].add((f.value.id, f.attr))
+        caller = self.fn[-1] if self.fn else MODULE
+        f = node.func
+        if isinstance(f, ast.Name):
+            self.calls[caller].add(("", f.id))
+        elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
+            if f.value.id in ("self", "cls") and self.classes:
+                if self.fn:
+                    self.calls[caller].add((f"self:{self.classes[-1]}", f.attr))  # the innermost enclosing class
+            else:
+                self.calls[caller].add((f.value.id, f.attr))
+        elif isinstance(f, ast.Attribute):  # `prefect.context.get_run_context()` after `import prefect.context`
+            parts, v = [], f.value
+            while isinstance(v, ast.Attribute):
+                parts.insert(0, v.attr)
+                v = v.value
+            if isinstance(v, ast.Name) and v.id not in ("self", "cls"):
+                self.calls[caller].add((".".join([v.id, *parts]), f.attr))
         self.generic_visit(node)
+
+    def visit_Lambda(self, node):  # a lambda's body runs when it is called, not at import: no module-level call
+        if self.fn:
+            self.generic_visit(node)
 
     def visit_Raise(self, node):
         if self.fn and isinstance(node.exc, ast.Call):
@@ -140,6 +158,18 @@ class Truth:
         hits = self.suffix.get(dotted, [])
         return hits[0] if len(hits) == 1 else None
 
+    def _defined(self, target: str | None, name: str, depth: int = 0) -> tuple[str, str] | None:
+        """(file, name) where `name`, looked up in module file `target`, is defined: there, or through the import that
+        makes it importable from there (a package's `__init__.py` re-export), a bounded number of hops."""
+        if target is None:
+            return None
+        if name in self.files[target].functions:
+            return (target, name)
+        via = self.files[target].bind_obj.get(name)
+        if via and depth < 6:
+            return self._defined(self.module_file(via[0]), via[1], depth + 1)
+        return None
+
     def _target(self, rel: str, base: str, name: str) -> tuple[str, str] | None:
         f = self.files[rel]
         if base.startswith("self:"):
@@ -148,21 +178,23 @@ class Truth:
         if not base:
             if name in f.bind_obj:
                 mod, orig = f.bind_obj[name]
-                target = self.module_file(mod)
-                if target and orig in self.files[target].functions:
-                    return (target, orig)
-                return None
+                return self._defined(self.module_file(mod), orig)
             return (rel, name) if name in f.functions else None
+        if "." in base:  # a module path: its root must be an imported module
+            root, rest = base.split(".", 1)
+            if root in f.bind_mod:
+                return self._defined(self.module_file(f"{f.bind_mod[root]}.{rest}"), name)
+            if root in f.bind_obj:
+                mod, orig = f.bind_obj[root]
+                return self._defined(self.module_file(".".join(x for x in (mod, orig, rest) if x)), name)
+            return None
         dotted = f.bind_mod.get(base)
         if dotted is None and base in f.bind_obj:
             mod, orig = f.bind_obj[base]
             dotted = f"{mod}.{orig}" if mod else orig
         if dotted is None:
             return None
-        target = self.module_file(dotted)
-        if target and name in self.files[target].functions:
-            return (target, name)
-        return None
+        return self._defined(self.module_file(dotted), name)
 
     def callers(self) -> dict[tuple[str, str], set[tuple[str, str]]]:
         if self._callers is None:
@@ -192,8 +224,8 @@ class Truth:
             nxt = []
             for k in frontier:
                 for c in callers.get(k, ()):
-                    if c in prod or c in tests:
-                        continue
+                    if c in prod or c in tests or c[1] == MODULE:
+                        continue  # an import-time call is no function on a chain
                     if is_test(c[0]):
                         tests.add(c)
                         continue

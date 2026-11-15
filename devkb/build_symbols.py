@@ -206,8 +206,21 @@ def _call_name(func: ast.expr) -> tuple[str | None, str] | None:
     if isinstance(func, ast.Attribute):
         # A call on an expression (`Path(p).resolve()`, `super().setUp()`) has a receiver, just not a name: EXPR,
         # never None, so it is not mistaken for a bare call to a same-named function of this file.
-        receiver = func.value.id if isinstance(func.value, ast.Name) else EXPR
+        receiver = func.value.id if isinstance(func.value, ast.Name) else _dotted(func.value) or EXPR
         return receiver, func.attr
+    return None
+
+
+def _dotted(node: ast.expr) -> str | None:
+    """`a.b.c` for an attribute chain rooted at a plain name (`prefect.context` in `prefect.context.get_run_context()`,
+    after `import prefect.context`), else None. Resolved only when its root is an imported module; any other chain
+    (`self._store`, `request.app`) is treated as an expression, as before."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.insert(0, node.attr)
+        node = node.value
+    if isinstance(node, ast.Name) and parts and node.id not in ("self", "cls"):
+        return ".".join([node.id, *parts])
     return None
 
 
@@ -229,6 +242,29 @@ def _calls_in_body(node: ast.AST) -> list[tuple[str | None, str]]:
             walk(child, top=False)
 
     walk(node, top=True)
+    return calls
+
+
+# A call made when the module is imported (`app_dirs = get_app_dirs()`), or in a class body, outside every function.
+# It has no Symbol to start a CALLS edge from (Symbol is a function, class or method), so it is resolved like any call
+# and recorded on the called Symbol as `module_callers`: the files a signature change breaks.
+MODULE_CALLER = "<module>"
+
+
+def _module_level_calls(tree: ast.Module) -> list[tuple[str | None, str]]:
+    calls: list[tuple[str | None, str]] = []
+
+    def walk(n: ast.AST) -> None:
+        for child in ast.iter_child_nodes(n):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                continue
+            if isinstance(child, ast.Call):
+                hit = _call_name(child.func)
+                if hit:
+                    calls.append(hit)
+            walk(child)
+
+    walk(tree)
     return calls
 
 
@@ -350,8 +386,33 @@ def _resolve_via_literals(
     return hits[0] if len(hits) == 1 else None
 
 
+# Re-exports: file -> {name it makes importable: (dotted module it imported that name from, original name)}, so
+# `from pkg import f` resolves when `pkg/__init__.py` holds `from .impl import f`. Registered per symbol table (the
+# table object itself is kept, so a reused id() can never pick up another build's map).
+_REEXPORTS: dict[int, tuple[dict, dict[str, dict[str, tuple[str, str]]]]] = {}
+
+
+def register_reexports(per_file_symbols: dict[str, list[dict]], reexports: dict[str, dict[str, tuple[str, str]]]) -> None:
+    _REEXPORTS[id(per_file_symbols)] = (per_file_symbols, reexports)
+
+
+def collect_reexports(repo_root: Path, rel_paths: list[str]) -> dict[str, dict[str, tuple[str, str]]]:
+    """Every file's from-imports, as `_import_targets` resolves them (relative imports anchored on the file)."""
+    out: dict[str, dict[str, tuple[str, str]]] = {}
+    for rel in rel_paths:
+        try:
+            tree = ast.parse((repo_root / rel).read_text(errors="replace"))
+        except (SyntaxError, OSError, ValueError, RecursionError):
+            continue
+        bare = _import_targets(_import_descriptors(tree), rel)[1]
+        if bare:
+            out[rel] = bare
+    return out
+
+
 def _resolve_cross_file_symbol(
     dotted_module: str, caller_rel_path: str, short_name: str, per_file_symbols: dict[str, list[dict]],
+    _depth: int = 0,
 ) -> str | None:
     """Resolves `dotted_module`'s `short_name` symbol to a real
     `path::qualified_name`, repo-root-relative first, then relative to
@@ -361,12 +422,22 @@ def _resolve_cross_file_symbol(
     webapp/backend/ means webapp/backend/app/middleware/auth.py, not a
     repo-root-level app/; confirmed live, not a hypothetical). None when
     no candidate resolves to exactly one match -- skipped, not guessed."""
+    entry = _REEXPORTS.get(id(per_file_symbols))
+    reexports = entry[1] if entry and entry[0] is per_file_symbols else {}
+
     def _match(guess: str) -> str | None:
-        guess_symbols = per_file_symbols.get(guess)
-        if not guess_symbols:
+        hits = [s["qualified_name"] for s in per_file_symbols.get(guess) or []
+                if s["qualified_name"].rsplit(".", 1)[-1] == short_name]
+        if len(hits) == 1:
+            return f"{guess}::{hits[0]}"
+        if hits:
             return None
-        hits = [s["qualified_name"] for s in guess_symbols if s["qualified_name"].rsplit(".", 1)[-1] == short_name]
-        return f"{guess}::{hits[0]}" if len(hits) == 1 else None
+        # Not defined here: the module may re-export it (`from .wallets import get_wallet` in a package's
+        # `__init__.py`). Follow that import, a bounded number of hops.
+        via = reexports.get(guess, {}).get(short_name)
+        if via and _depth < 6:
+            return _resolve_cross_file_symbol(via[0], guess, via[1], per_file_symbols, _depth + 1)
+        return None
 
     candidates = _module_paths(dotted_module)
     for guess in candidates:
@@ -828,6 +899,7 @@ def _parse_python_file(
     v = _Visitor()
     v.router_prefix = _router_prefix(tree)
     v.visit(tree)
+    v.calls.extend((MODULE_CALLER, receiver, callee) for receiver, callee in _module_level_calls(tree))
     module_docstring = ast.get_docstring(tree)
     return (v.symbols, v.calls, _imports(tree), v.routes, module_docstring, v.raises, v.logs,
             _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree), _py_literals(tree),
@@ -853,6 +925,8 @@ def extract(repo_root: Path) -> DevKBGraph:
     per_file_daemon_entries: dict[str, list[str]] = {}
     per_file_typed_calls: dict[str, list[tuple[str, str, str]]] = {}
     route_index: dict[str, str] = {}  # "METHOD /path" -> Symbol natural_key
+    reexports: dict[str, dict[str, tuple[str, str]]] = {}  # every parsed file's from-imports, symbols or not
+    module_callers: dict[str, set[str]] = {}  # called Symbol -> files that call it outside any function
 
     for rel_path in _list_python_files(repo_root):
         (symbols, calls, imports, routes, module_doc, raises, logs, middleware, router_prefix,
@@ -862,12 +936,15 @@ def extract(repo_root: Path) -> DevKBGraph:
         # + `app.add_middleware(...)` calls, no def/class at all) would
         # otherwise silently lose its own middleware registrations here,
         # a real bug this exact shape caught live (BL-10's own test).
-        if not symbols and not middleware and not module_doc and not daemon_entries:
+        targets = _import_targets(descriptors, rel_path)
+        if targets[1]:
+            reexports[rel_path] = targets[1]
+        if not symbols and not middleware and not module_doc and not daemon_entries and not calls:
             continue
         per_file_symbols[rel_path] = symbols
         per_file_calls[rel_path] = calls
         per_file_imports[rel_path] = dict(imports)
-        per_file_import_targets[rel_path] = _import_targets(descriptors, rel_path)
+        per_file_import_targets[rel_path] = targets
         per_file_literals[rel_path] = literals
         per_file_docstring[rel_path] = module_doc
         per_file_raises[rel_path] = raises
@@ -883,6 +960,8 @@ def extract(repo_root: Path) -> DevKBGraph:
                 # both. The first keeps the plain key, which CALLS_API matches; the second is told apart by its file.
                 key = f"{method} {path} ({rel_path})"
             route_index[key] = owner
+
+    register_reexports(per_file_symbols, reexports)
 
     # ── BL-7: persist Endpoint as a real, independently-queryable node --
     # previously route_index only lived as an in-memory resolution
@@ -1040,8 +1119,25 @@ def extract(repo_root: Path) -> DevKBGraph:
         imports = per_file_imports.get(rel_path, {})
 
         receivers_here = per_file_import_targets.get(rel_path, ({}, {}))[0]
+        receivers_dotted = per_file_import_targets.get(rel_path, ({}, {}))[0]
         for caller_qn, receiver, callee_short in calls:
             caller_key = f"{rel_path}::{caller_qn}"
+            dotted_hit = None
+            if receiver and "." in receiver and receiver != EXPR:
+                root, rest = receiver.split(".", 1)
+                for module in receivers_dotted.get(root, []):
+                    dotted_hit = _resolve_cross_file_symbol(f"{module}.{rest}", rel_path, callee_short, per_file_symbols)
+                    if dotted_hit:
+                        break
+                if dotted_hit is None:
+                    receiver = EXPR  # a chain not through an imported module: an expression, as before
+            if dotted_hit:
+                if caller_qn == MODULE_CALLER:
+                    module_callers.setdefault(dotted_hit, set()).add(rel_path)
+                else:
+                    g.add_edge("CALLS", "Symbol", caller_key, "Symbol", dotted_hit, source="ast-cross-file-import",
+                               confidence=0.7, evidence_ref=f"{rel_path}::{caller_qn} calls {receiver}.{callee_short}")
+                continue
 
             # `mod.f()` on an imported name calls the import's `f`, never a same-named function of this file: a
             # handler `create_x` calling `models.create_x(...)` was recorded as calling itself, and the real chain
@@ -1051,6 +1147,9 @@ def extract(repo_root: Path) -> DevKBGraph:
             # and import passes decide those, and `as_path.resolve()` inside `def resolve` was recorded as recursion.
             local_targets = (method_by_short.get(callee_short, []) if receiver in ("self", "cls") else []) if receiver \
                 else bare_by_short.get(callee_short, [])
+            if len(local_targets) == 1 and caller_qn == MODULE_CALLER:
+                module_callers.setdefault(f"{rel_path}::{local_targets[0]}", set()).add(rel_path)
+                continue
             if len(local_targets) == 1:
                 g.add_edge(
                     "CALLS", "Symbol", caller_key, "Symbol", f"{rel_path}::{local_targets[0]}",
@@ -1088,7 +1187,9 @@ def extract(repo_root: Path) -> DevKBGraph:
                     continue  # nothing to resolve against
                 if dotted_module:
                     resolved_key = _resolve_cross_file_symbol(dotted_module, rel_path, callee_short, per_file_symbols)
-            if resolved_key:
+            if resolved_key and caller_qn == MODULE_CALLER:
+                module_callers.setdefault(resolved_key, set()).add(rel_path)
+            elif resolved_key:
                 g.add_edge(
                     "CALLS", "Symbol", caller_key, "Symbol", resolved_key,
                     source="ast-cross-file-import", confidence=0.7,
@@ -1121,7 +1222,10 @@ def extract(repo_root: Path) -> DevKBGraph:
             if files:
                 ranked = sorted(files, key=lambda f: (-files[f], f))
                 g.add_node("Symbol", f"{rel_path}::{s['qualified_name']}", source="ast",
-                           unresolved_calls=sum(files.values()), unresolved_files=ranked[:20])
+                           unresolved_calls=sum(files.values()), unresolved_files=ranked[:20],
+                           unresolved_file_count=len(ranked))
+    for key, files in module_callers.items():
+        g.add_node("Symbol", key, source="ast", module_callers=sorted(files))
 
     # ── BL-3c: TypeScript/TSX Symbols + their own route-call sites ─────────
     ts_route_calls: list[tuple[str, str, str, str]] = []  # (file, symbol_qn, method, path)

@@ -312,6 +312,7 @@ class ProcessAPI:
         names: dict[str, int] = {}
         files: dict[str, None] = {}
         n = 0
+        file_total = 0
         for s in syms:
             name = self._key(s).split("::")[-1].split(".")[-1]
             if name in names:
@@ -319,13 +320,19 @@ class ProcessAPI:
             p = self.idx.props[s]
             names[name] = len(self.idx.short.get(name, []))
             n += int(p.get("unresolved_calls") or 0)
-            for f in p.get("unresolved_files") or []:
+            listed = p.get("unresolved_files") or []
+            file_total += int(p.get("unresolved_file_count") or len(listed)) - sum(1 for f in listed if shown and f in shown)
+            for f in listed:
                 if not shown or f not in shown:
                     files[f] = None
         if not n:
             return {"complete": True}
         shared = max(names.values(), default=1)
-        return {"complete": False, "unresolved_calls": n, "search_files": list(files)[:10],
+        # search_files is the first 10 by call count; search_file_count says how many files hold such calls in all.
+        more = {"search_file_count": file_total} if file_total > min(len(files), 10) else {}
+        if not files and any(self.idx.props[s].get("unresolved_files") for s in syms):
+            more["in_listed_files"] = True  # every such call is in a file the answer already lists
+        return {"complete": False, "unresolved_calls": n, "search_files": list(files)[:10], **more,
                 **({"shared_by": shared, "note": f"{shared} symbols share this name; most of these calls may be to the others"}
                    if shared > 3 else {})}
 
@@ -340,7 +347,10 @@ class ProcessAPI:
             out["indirect"] = [self._key(c) for lv in levels[1:] for c in lv[:limit]][:limit]
         if len(levels[0]) > limit:
             out["truncated"] = True
-        out["coverage"] = self._coverage([i], {self._key(c).split("::")[0] for c in levels[0]})
+        at_module = self.idx.props[i].get("module_callers") or []
+        if at_module:  # calls outside any function: no caller symbol, only the file
+            out["module_level_files"] = list(at_module)[:limit]
+        out["coverage"] = self._coverage([i], {self._key(c).split("::")[0] for c in levels[0]} | set(at_module))
         return out
 
     def callees(self, symbol: str, limit: int = 25) -> dict:

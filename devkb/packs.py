@@ -29,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from devkb.process_api import ProcessAPI, is_test_path  # noqa: E402
+from devkb.service import GraphNotBuilt  # noqa: E402
 
 MAX_DEPTH = 6
 
@@ -85,10 +86,19 @@ class Packer:
         c = self.api._coverage(syms, shown)
         if c.get("complete"):
             return "**Complete.** Every call site under these names was attributed to its target; nothing else calls them."
-        files = ", ".join(f"`{f}`" for f in c.get("search_files", [])) or "(files not recorded)"
+        names = {self.api._key(x).split("::")[-1].split(".")[-1] for x in syms}
+        name = next(iter(names)) if len(names) == 1 else ""
+        listed = c.get("search_files", [])
+        total = max(c.get("search_file_count") or 0, len(listed))
+        files = ", ".join(f"`{f}`" for f in listed) or "(files not recorded)"
         shared = f" {c['shared_by']} symbols share the name, so most may be calls to the others." if c.get("shared_by") else ""
-        return (f"**Incomplete: {c['unresolved_calls']} call site(s) under this name could not be attributed.**{shared} "
-                f"Search only these files for them: {files}.")
+        head = f"**Incomplete: {c['unresolved_calls']} call site(s) under this name could not be attributed.**{shared} "
+        if c.get("in_listed_files"):
+            return head + "They are in files already listed above; check those files' other calls under this name."
+        if total <= len(listed):
+            return head + f"Search only these files for them: {files}."
+        return head + (f"They are in {total} files; the {len(listed)} with the most: {files}. Search the whole "
+                       f"repository for the rest" + (f" (`grep -rn '{name}(' --include='*.py' .`)" if name else "") + ".")
 
     # ── walking ───────────────────────────────────────────────────────────────
     def up(self, start: set[int]) -> dict[int, int]:
@@ -258,13 +268,19 @@ class Packer:
         for c in callers:
             by_file.setdefault(self.api._key(c).split("::")[0], []).append(c)
         own = self.api._key(i).split("::")[0]
+        # Calls made outside any function (import time, class bodies) have no caller Symbol; the graph keeps their files.
+        at_module = sorted(f for f in (self.idx.props[i].get("module_callers") or []) if f != own and f not in by_file)
         dnt = self.api._role_table().get(role, {}).get("dnt", []) if role else []
-        blocked = sorted(f for f in by_file if any(f.startswith(p) for p in dnt))
-        tests = sorted(f for f in by_file if is_test_path(f))
+        files = sorted(set(by_file) | set(at_module))
+        blocked = sorted(f for f in files if any(f.startswith(p) for p in dnt))
+        tests = sorted(f for f in files if is_test_path(f))
         out = [f"# Graph pack: changing the signature of `{self.api._key(i)}`" + (f" as role {role}" if role else ""), "",
-               self.freshness(sorted(by_file)), "", f"Defined at `{self.def_line(i)}`.", "",
-               f"## Files with a direct caller ({len(by_file)}, tests included)"]
-        for f in sorted(by_file):
+               self.freshness(files), "", f"Defined at `{self.def_line(i)}`.", "",
+               f"## Files with a direct caller ({len(files)}, tests included)"]
+        for f in files:
+            if f not in by_file:
+                out.append(f"- `{f}` — called at module level, outside any function")
+                continue
             c = by_file[f][0]
             more = f" (+{len(by_file[f]) - 1} more)" if len(by_file[f]) > 1 else ""
             out.append(f"- `{f}`{more} — `{self.call_site(c, self._name(i))}`")
@@ -273,7 +289,7 @@ class Packer:
             out += ["", f"## Files role {role} must not edit ({len(blocked)})"] + ([f"- `{f}`" for f in blocked] or ["- none"])
         if own not in by_file:
             out += ["", f"(The defining file `{own}` is not counted as a caller.)"]
-        out += ["", "## Coverage", self.coverage([i], set(by_file))]
+        out += ["", "## Coverage", self.coverage([i], set(files))]
         return "\n".join(out + ["", HOW_TO_USE])
 
 
@@ -430,7 +446,11 @@ def main() -> int:
     ap.add_argument("--role", default="")
     ap.add_argument("--path", default="")
     ns = ap.parse_args()
-    p = Packer(ProcessAPI(ns.project, telemetry=False))
+    try:
+        p = Packer(ProcessAPI(ns.project, telemetry=False))
+    except GraphNotBuilt as e:
+        print(f"devkb pack: {e}", file=sys.stderr)
+        return 2
     subject = " ".join(ns.subject)
     print({"file": lambda: p.file(subject), "error": lambda: p.error(subject), "change": lambda: p.change(subject, ns.path),
            "refactor": lambda: p.refactor(subject, ns.role, ns.path), "ticket": lambda: p.ticket(subject),

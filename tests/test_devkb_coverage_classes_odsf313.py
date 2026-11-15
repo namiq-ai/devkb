@@ -71,7 +71,8 @@ def _api(tmp_path, monkeypatch):
 def test_list_answers_say_what_they_cannot_see(tmp_path, monkeypatch):
     api = _api(tmp_path, monkeypatch)
     r = api.call("callers", symbol="app/store.py::RuntimeStore.add_edge")
-    assert r["coverage"] == {"complete": False, "unresolved_calls": 1, "search_files": []}, "routes.py is already listed"
+    assert r["coverage"] == {"complete": False, "unresolved_calls": 1, "search_files": [], "in_listed_files": True}, \
+        "routes.py is already listed"
     s = api.call("refactor_scope", target="app/store.py::RuntimeStore.add_edge")
     assert s["coverage"]["complete"] is False
     assert api.call("callers", symbol="app/base.py::Store.save")["coverage"] == {"complete": True}

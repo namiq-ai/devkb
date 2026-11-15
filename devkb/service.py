@@ -22,7 +22,11 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CACHE_VERSION = 10
+class GraphNotBuilt(FileNotFoundError):
+    """The project has no graph yet; the message says which command builds it."""
+
+
+CACHE_VERSION = 11  # re-exports followed; module_callers, unresolved_file_count kept
 CACHE_NAME = ".process-index.pkl"
 TELEMETRY_NAME = "process-api-telemetry.jsonl"
 
@@ -34,7 +38,8 @@ KEEP_PROPS = {
                     "labels"),                                # ADR-DEVKB-007
     "Spec": ("title", "doc_type", "status", "spec_id"),
     "Symbol": ("kind", "line_start", "line_end", "complexity", "is_public", "docstring_summary",
-               "unresolved_calls", "unresolved_files"),  # ODSF-313: what a list answer cannot see
+               "unresolved_calls", "unresolved_files", "unresolved_file_count",  # ODSF-313: what a list answer cannot see
+               "module_callers"),  # calls made outside any function (import time, class bodies)
     "ErrorSignature": ("kind", "label", "message_template", "status_code"),
     "TestCase": ("function", "file", "line"),
     "Commit": ("short_hash", "subject", "date"),
@@ -252,6 +257,8 @@ def load_index(code: str, repo_root: Path, devkb_dir: Path, use_cache: bool = Tr
                 return idx
         except Exception:  # a stale or corrupt cache is rebuilt, never trusted
             pass
+    if not (Path(devkb_dir) / "nodes.jsonl").exists():
+        raise GraphNotBuilt(f"no devkb graph at {devkb_dir}: run `devkb build --project {repo_root}` first")
     idx = _build(code, repo_root, devkb_dir)
     try:
         with open(cache, "wb") as fh:
