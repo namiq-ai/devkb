@@ -34,21 +34,38 @@ tickets.
 
 ## 2. How much it saves
 
-Same model, same tasks, answers scored against truth computed from the source. Saving of a devkb pack against plain
-search, by kind of task:
+Latest benchmark: the 7 open-source repositories in [`bench/repos.yaml`](bench/repos.yaml), 52 tasks, 1,038 agent
+runs, the same model (Sonnet) in every arm, answers scored against truth computed from the source. Cost, turns and
+tokens are the median run; saving is per task against plain search, averaged over tasks; quality is the mean score:
 
-| Task | Saving | Quality |
-|---|---|---|
-| An error message → the route handlers that reach it | **77%** | +0.075 |
-| A change → the route handlers it affects, the tests to run | **66%** | +0.088 |
-| An error in a command-line tool → every function on its path | **60%** | +0.172 |
-| A signature change → the files that call it (one hop) | 21% | +0.007 |
+| | Plain search | devkb, 12 tools | devkb, 7 tools | devkb pack |
+|---|---|---|---|---|
+| **Cost per task** | $0.075 | $0.060 | $0.042 | **$0.026** |
+| **Saving** | — | 19% | 39% | **56%** |
+| **Quality** (0–1) | 0.928 | 0.951 (+0.023) | 0.961 (+0.033) | **0.979 (+0.051)** |
+| Turns | 5.5 | 7 | 6 | **3** |
+| Context processed (tokens) | 164k | 187k | 156k | **77k** |
+| of which cache reads | 155k | 173k | 146k | 76k |
+| of which new input and cache writes | 9.2k | 4.7k | 2.2k | 1.4k |
+| Output tokens | 1.6k | 1.8k | 1.3k | 0.9k |
 
-The saving is in call chains; on one-hop questions plain search is already good. An earlier pre-registered study (30
-held-out tasks, 1,020 runs, two model sizes) found packs 41% cheaper and the lean tools 35% ([`study/`](study/),
-`make verify` recomputes it). Per-repository results and corrections:
-[`bench/results/2026-11-15-registry`](bench/results/2026-11-15-registry/); add a repository:
-[`docs/BENCHMARK.md`](docs/BENCHMARK.md).
+Saving and quality gain by repository (95% intervals in the results):
+
+| Repository | Tasks | 7 tools: saving / quality | pack: saving / quality |
+|---|---|---|---|
+| lnbits | 10 | 53% / +0.032 | **66%** / +0.049 |
+| Netflix Dispatch | 8 | 45% / +0.040 | **61%** / +0.081 |
+| Prefect | 9 | 41% / −0.017 | **59%** / +0.047 |
+| lattice-scan | 12 | 36% / +0.052 | **51%** / +0.058 |
+| Mealie | 6 | 18% / +0.095 | **42%** / +0.062 |
+| devkb | 4 | 1% / +0.004 | **40%** / +0.004 |
+| click | 3 | −3% / 0 | −19% / 0 |
+
+The saving is in call chains (66–77% on tasks that trace an error or a change to the route handlers that reach it);
+on one-hop questions, as in click, plain search is already good. An earlier pre-registered study (30 held-out tasks,
+1,020 runs, two model sizes) found packs 41% cheaper and the lean tools 35% ([`study/`](study/); `make verify`
+recomputes it). Details and corrections: [`bench/results/2026-11-15-registry`](bench/results/2026-11-15-registry/);
+add a repository: [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
 
 ## 3. Set up
 
