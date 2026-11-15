@@ -40,7 +40,9 @@ text search and file reads, and every read is paid for again on each later turn.
 the repository's structure up front: a graph of symbols and calls~\cite{liu2024codexgraph,ouyang2025repograph},
 extended with the development process (tickets, commits, specifications, tests, owners, configuration) and served over
 a tool protocol~\cite{mcp2024}. For a practitioner the question is not whether such a graph is \emph{useful} but whether
-it makes agents \emph{cheaper at equal quality}, on which tasks, and what it takes.
+it makes agents \emph{cheaper at equal quality}, on which tasks, and what it takes. Prior work builds such graphs and
+the means to navigate them, or measures how well agents find context (Section~\ref{sec:related}); we hold the knowledge
+fixed and vary how it is delivered: interactive tools of different sizes, or precomputed context.
 
 We answer with the same model in every arm. Contributions:
 \begin{itemize}
@@ -129,7 +131,7 @@ session (D5).
 \input{text-process.tex}
 
 \section{Discussion}
-\paragraph{Fewer turns, not more knowledge} On held-out tasks the saving tracked the number of turns: packs (median 3
+\paragraph{Precomputed context, not more tools} On held-out tasks the saving tracked the number of turns: packs (median 3
 turns) and a small tool set (6) saved 35--41\%, task-shaped tools (9) saved nothing. What a graph buys an agent is the
 removal of turns, and every tool definition and every reply it has to verify gives some of that back.
 \paragraph{Joins are where packs are trusted most and checked least} On process joins, packs were cheapest and the
@@ -150,18 +152,31 @@ secondary and pre-registered in an addendum. \emph{External}: Python web systems
 \confTasks{} confirmatory tasks; error-to-handler tasks were rare in the held-out repositories, so that hypothesis is
 underpowered; process tasks come from the two internal repositories only, because the public ones keep their tickets
 outside the repository. Pack savings were smaller on the two public repositories (15\%) than on the internal ones
-(55--68\%), so the size of the effect depends on the codebase. \emph{Conclusion}: per-task bootstrap and Holm
+(55--68\%), so the size of the effect depends on the codebase, and the percentages are results on these tasks, not a
+general saving for coding agents: on one-hop questions the saving was small. \emph{Conclusion}: per-task bootstrap and Holm
 correction; score differences below about 0.05 per task kind are within run-to-run noise; cost varies by up to 39\%
 between sessions, so only within-session contrasts are interpreted (Deviations D3--D5).
 
-\section{Related work}
-Repository-level code graphs for agents~\cite{liu2024codexgraph,ouyang2025repograph} and agent-computer
-interfaces~\cite{yang2024sweagent} show that structure helps agents navigate; benchmarks such as
-SWE-bench~\cite{jimenez2024swebench} measure resolution rather than cost at equal quality. Knowledge
-graphs~\cite{hogan2021kg} provide the modelling basis. We are not aware of a study that reports the cost effect of a
-\emph{process} graph (tickets, specifications, tests and configuration as well as code) with the same model in every
-arm, audits the graph's content against source truth, and replicates under a pre-registered protocol.
-\tbd{Extend: retrieval for code agents, repository maps, tool-use cost, pre-registration in software engineering.}
+\section{Related work}\label{sec:related}
+\emph{Repository graphs for agents.} RepoGraph~\cite{ouyang2025repograph} adds a graph of definitions and references
+to existing agent frameworks; CodexGraph~\cite{liu2024codexgraph} puts a code graph database behind a query-writing
+agent; LocAgent~\cite{chen2025locagent} gives agents a few traversal tools over a code graph for localization. These
+works build the graph and the means to navigate it; we fix a graph, extend it to the development process, and vary only
+how its answers reach the agent.
+\emph{Repository context.} RepoCoder~\cite{zhang2023repocoder} retrieves iteratively for completion;
+ContextBench~\cite{contextbench2026}, SWE-Explore~\cite{zhang2026sweexplore} and Agent Retrieval
+Bench~\cite{qin2026arb} measure how well agents or retrievers find the context a task needs, and
+SERBench~\cite{feng2026serbench} asks for the minimal sufficient set. SWE-Explore is closest in design, handing an
+explorer's output to a fixed agent; we hand the agent precomputed answers from a graph and compare them with interactive
+tools over the same graph, by cost at equal quality. Aider's repository map~\cite{aider2024repomap} is precomputed
+context in practice: a ranked summary of the whole repository rather than one answer with its evidence.
+\emph{Interfaces and cost.} SWE-agent~\cite{yang2024sweagent} shows that the agent-computer interface shapes results,
+Agentless~\cite{xia2025agentless} that a fixed pipeline can beat complex agents at lower cost, and Kapoor et
+al.~\cite{kapoor2025agents} that agents must be reported on cost and accuracy together; RAG-MCP~\cite{gan2025ragmcp}
+finds that many tools degrade tool selection. Benchmarks such as SWE-bench~\cite{jimenez2024swebench} measure
+resolution rather than cost at equal quality; knowledge graphs~\cite{hogan2021kg} provide the modelling basis.
+Registered reports~\cite{msr2025rr} bring pre-registration to software engineering; this study was pre-registered
+independently.
 
 \section{Conclusion}
 On held-out tasks, with the same model in every arm, a software-process knowledge graph made coding agents 35--41\%
