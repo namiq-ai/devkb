@@ -1,8 +1,7 @@
 # devkb
 
-**A knowledge graph of your repository for coding agents.** devkb extracts who calls what, which tests reach a
-function, which route handlers reach an error, and which commits, pull requests and tickets a change belongs to. An
-agent gets the answer in one step instead of searching file by file.
+**A knowledge graph of your repository for coding agents.** Agents answer "what calls this, what breaks, which tests"
+in one step instead of searching file by file: 56% cheaper, with better answers.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/benchmark-dark.svg">
