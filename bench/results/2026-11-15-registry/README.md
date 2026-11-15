@@ -14,7 +14,7 @@ tools, and four tasks had a truth that missed callers. The numbers below are the
   for devkb and click (error traces and refactor scopes), `confirm_tasks.py` for the web repositories (error to route
   handler, impact on route handlers, refactor scope). Every pack scored 1.0 against the truth before any run
   (`<repo>/pack-check.json`).
-- **Arms**: `plain` (search and read), `core` (24 devkb tools), `lean` (7 tools), `pack` (a pre-computed pack in the
+- **Arms**: `plain` (search and read), `core` (12 single-question devkb tools), `lean` (7 tools), `pack` (a pre-computed pack in the
   prompt, no tools).
 - **Protocol**: Sonnet in every arm, 5 repetitions, every arm of a repository in one shuffled session, a discarded
   warm-up per arm, 40-turn cap.
@@ -75,7 +75,7 @@ Per task, score parts and the graph tools each arm called: `<repo>/detail.md`.
 - **Packs are the consistent result**: cheaper and better on every repository with chain tasks (42–66%), 56% pooled.
   The saving is where the answer is a chain: 66–77% on route-handler tasks, 60% on error traces, 21% on one-hop
   refactor scopes.
-- **Tools pay off on chains and cost extra on one-hop work.** The 24-tool set is 17% dearer than plain on refactor
+- **Tools pay off on chains and cost extra on one-hop work.** The 12-tool set is 17% dearer than plain on refactor
   scopes and 30–32% cheaper on route-handler chains; the 7-tool set breaks even on refactors and saves 47–58% on
   chains.
 - **Prefect, the largest repository, behaves like the others** once its tool arms have tools: lean 41% cheaper,

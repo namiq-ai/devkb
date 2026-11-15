@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 ARMS = [("plain", "Plain search", "search and read files"),
-        ("core", "devkb, 24 tools", "full MCP tool set"),
+        ("core", "devkb, 12 tools", "single-question tools"),
         ("lean", "devkb, 7 tools", "lean MCP tool set"),
         ("pack", "devkb pack", "pre-computed context")]
 THEMES = {
