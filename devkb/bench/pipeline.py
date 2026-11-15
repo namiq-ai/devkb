@@ -264,7 +264,18 @@ def report(e: dict, work: Path, model: str) -> int:
     rows = [json.loads(x) for x in p["runs"].read_text().splitlines() if x.strip()]
     print("\nTokens by kind (median run):\n" + token_table(rows))
     print("\n" + detail_table(rows))
+    silent = tool_arms_without_tools(rows)
+    if silent:
+        print(f"\nWARNING: {', '.join(silent)} never called the graph: their tools were probably unavailable "
+              "(check `mcp_connected`); do not report them as tool arms.", file=sys.stderr)
+        return 1
     return 0
+
+
+def tool_arms_without_tools(rows: list[dict]) -> list[str]:
+    """Tool arms with runs but not one graph call: Prefect's 90 tool-arm runs of 2026-11-15 ran so, unnoticed."""
+    arms = {r["arm"] for r in rows if r["arm"] not in ("plain", "pack")}
+    return sorted(a for a in arms if not any(r.get("graph_calls") for r in rows if r["arm"] == a))
 
 
 def main() -> int:

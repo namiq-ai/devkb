@@ -21,3 +21,10 @@ def test_detail_table_cells_parts_and_tools():
     assert "| plain | 0.75 | 0.75 | 2 |" in out
     assert "- **lean**: $0.02 in all; `callers` 2, `tests_for` 1" in out
     assert "- **plain**: $0.41 in all; none" in out
+
+
+def test_a_tool_arm_that_never_called_the_graph_is_flagged():
+    from devkb.bench.pipeline import tool_arms_without_tools
+    rows = [{"arm": "plain", "graph_calls": 0}, {"arm": "core", "graph_calls": 0}, {"arm": "core", "graph_calls": 0},
+            {"arm": "lean", "graph_calls": 0}, {"arm": "lean", "graph_calls": 3}, {"arm": "pack", "graph_calls": 0}]
+    assert tool_arms_without_tools(rows) == ["core"]
