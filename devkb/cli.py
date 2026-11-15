@@ -1,8 +1,9 @@
 """`devkb`: one command for every devkb tool.
 
   devkb init    [--hooks] [--remove]        integrate devkb into this repository (AGENTS.md, CLAUDE.md, .mcp.json)
-  devkb build   --project .                 build the graph (symbols, then process) into .devkb/
-  devkb pack    --project . refactor NAME   a pre-computed context pack (error | change | refactor)
+  devkb build   --project . [--github]      build the graph (symbols, then process) into .devkb/; --github also
+                                            fetches pull requests and issues (ADR-DEVKB-007), otherwise no network
+  devkb pack    --project . refactor NAME   a pre-computed context pack (error | change | refactor | ticket ID | pr N)
   devkb query   --project . --about ID      the graph's answer about a ticket, file or symbol
   devkb mcp     --project . [--toolset lean] serve the graph to an agent over MCP (stdio)
   devkb audit   --project .                 per-relation counts, fan-out and cost of the graph
@@ -42,7 +43,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     cmd, rest = argv[0], argv[1:]
     if cmd == "build":
-        return _run("devkb.build_symbols", rest) or _run("devkb.build", rest)
+        # --github belongs to the process build (the symbol refresh never touches the network)
+        return _run("devkb.build_symbols", [a for a in rest if a != "--github"]) or _run("devkb.build", rest)
     if cmd not in COMMANDS:
         print(f"devkb: unknown command {cmd!r}\n{__doc__}", file=sys.stderr)
         return 2

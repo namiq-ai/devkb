@@ -15,6 +15,8 @@ loaded, and it carries what makes checking unnecessary:
   python3 devkb/packs.py --project OCO error "workflow needs a non-empty 'states' object"
   python3 devkb/packs.py --project OCO change revoke_user_sessions
   python3 devkb/packs.py --project OCO refactor add_edge --role BE
+  python3 devkb/packs.py --project . ticket GH-123      a ticket's pull requests, commits, changed functions, tests
+  python3 devkb/packs.py --project . pr 42              a pull request's commits, changed functions, tests, issues it closes
 """
 from __future__ import annotations
 
@@ -245,25 +247,95 @@ class Packer:
         t = self.idx.node("Ticket", ticket_id)
         if t is None:
             return f"# Graph pack: ticket {ticket_id}\n\nThe graph has no ticket {ticket_id}. Search the history."
-        commits = sorted(set(self.idx.sources("REFERENCES", t)), key=lambda c: self.idx.props[c].get("date", ""))
-        changed: dict[int, str] = {}
-        for c in commits:
-            r = self.api.review_pack(self.api._key(c)[:12])
-            for key in r.get("changed_symbols", []):
-                path, _, qual = key.partition("::")
-                i = self.idx.node("Symbol", key)
-                if i is not None and "." not in qual and not is_test_path(path) and self.idx.props[i].get("kind") == "function":
-                    changed.setdefault(i, self.idx.props[c].get("short_hash", self.api._key(c)[:10]))
+        prs = self.api._ticket_prs(t)
+        commits = sorted(self.api._ticket_commits(t), key=lambda c: (self.idx.props[c].get("date", ""), self.api._key(c)))
+        changed, truncated = self.changed_functions(commits)
         tests = self.tests(set(changed))
+        unverified = self.api._unverified(prs)
         out = [f"# Graph pack: ticket {ticket_id} ({(self.idx.props[t].get('title') or '')[:90]})", "",
-               self.freshness(sorted({self.api._key(i).split('::')[0] for i in changed})), "",
-               f"## Commits referencing it ({len(commits)})"]
+               self.freshness(sorted({self.api._key(i).split('::')[0] for i in changed})), ""]
+        if prs:
+            out += [f"## Pull requests that close it ({len(prs)})"] + self._pr_lines(prs) + [""]
+        out += ["## Commits referencing it" + (" or merged by those pull requests" if prs else "") + f" ({len(commits)})"]
         out += [f"- `{self.idx.props[c].get('short_hash', '')}` {self.idx.props[c].get('date', '')} {(self.idx.props[c].get('subject') or '')[:90]}"
                 for c in commits[:15]]
         out += ["", f"## Module-level functions those commits changed, still present ({len(changed)})"]
         out += [f"- `{self.api._key(i)}` (changed in `{h}`) — `{self.def_line(i)}`" for i, h in sorted(changed.items(), key=lambda p: self.api._key(p[0]))]
         out += ["", f"## Test files that call them ({len(tests)})"] + self._tests_section(tests)
         out += ["", "## Coverage", self.coverage(sorted(changed, key=self.api._key), set(tests))]
+        out += self._pr_coverage(len(unverified), truncated, len(commits), hosted=ticket_id.rsplit(":", 1)[-1].startswith("GH-"))
+        return "\n".join(out + ["", HOW_TO_USE])
+
+    # ── ADR-DEVKB-007: pull requests ──────────────────────────────────────────
+    MAX_PACK_COMMITS = 40
+
+    def changed_functions(self, commits: list[int]) -> tuple[dict[int, str], int]:
+        """{function: short hash of the commit that changed it} for module-level functions still present, over at most
+        MAX_PACK_COMMITS commits (a review_pack per commit); the second value is how many commits were not read."""
+        changed: dict[int, str] = {}
+        for c in commits[: self.MAX_PACK_COMMITS]:
+            r = self.api.review_pack(self.api._key(c)[:12])
+            for key in r.get("changed_symbols", []):
+                path, _, qual = key.partition("::")
+                i = self.idx.node("Symbol", key)
+                if i is not None and "." not in qual and not is_test_path(path) and self.idx.props[i].get("kind") == "function":
+                    changed.setdefault(i, self.idx.props[c].get("short_hash", self.api._key(c)[:10]))
+        return changed, max(0, len(commits) - self.MAX_PACK_COMMITS)
+
+    def _pr_lines(self, prs: list[int]) -> list[str]:
+        lines = []
+        for p in prs:
+            pp, n = self.idx.props[p], len(self.idx.targets("MERGES", p))
+            lines.append(f"- `{self.api._key(p)}` {pp.get('state', '')}"
+                         + (f" ({pp['merge_style']})" if pp.get("merge_style") else "")
+                         + f": {(pp.get('title') or '')[:90]} — {n} commit(s) in the graph" + (f" — {pp['url']}" if pp.get("url") else ""))
+        return lines
+
+    def _pr_coverage(self, unverified: int, unread_commits: int, n_commits: int, hosted: bool = True) -> list[str]:
+        out = []
+        note = self.api._pr_note(unverified) if (hosted or unverified or self.idx.type_count.get("PullRequest")) else None
+        if note:
+            out.append(note)
+        if unread_commits:
+            out.append(f"Changed functions were read from the first {self.MAX_PACK_COMMITS} of {n_commits} commits; {unread_commits} were not read.")
+        return out
+
+    def pr(self, number: str) -> str:
+        """A pull request's commits, the functions they changed, the tests to run and the issues it closes."""
+        raw = str(number).strip().lstrip("#")
+        key = raw if raw.rsplit(":", 1)[-1].upper().startswith("PR-") else f"PR-{raw}"
+        p = self.idx.node("PullRequest", key)
+        if p is None:
+            note = self.api._pr_note()
+            return (f"# Graph pack: pull request {key}\n\nThe graph has no pull request {key}. Search the history."
+                    + (f"\n\n## Coverage\n{note}" if note else ""))
+        pp = self.idx.props[p]
+        commits = sorted(set(self.idx.targets("MERGES", p)), key=lambda c: (self.idx.props[c].get("date", ""), self.api._key(c)))
+        closes = sorted(set(self.idx.targets("CLOSES", p)), key=self.api._key)
+        changed, truncated = self.changed_functions(commits)
+        tests = self.tests(set(changed))
+        out = [f"# Graph pack: pull request {key} ({(pp.get('title') or '')[:90]})", "",
+               self.freshness(sorted({self.api._key(i).split('::')[0] for i in changed})), "",
+               f"State: {pp.get('state', 'unknown')}" + (f", merged {pp['merged_at']}" if pp.get("merged_at") else "")
+               + (f", {pp['head']} → {pp['base']}" if pp.get("head") and pp.get("base") else "")
+               + (f", merge style {pp['merge_style']}" if pp.get("merge_style") else "") + (f". {pp['url']}" if pp.get("url") else "."),
+               "", f"## Commits it brought in ({len(commits)})"]
+        out += [f"- `{self.idx.props[c].get('short_hash', '')}` {self.idx.props[c].get('date', '')} {(self.idx.props[c].get('subject') or '')[:90]}"
+                for c in commits[:20]] or ["- none of its commits is in the graph"]
+        out += ["", f"## Issues it closes ({len(closes)})"]
+        for t in closes:
+            tp = self.idx.props[t]
+            out.append(f"- `{self.api._key(t)}` {(tp.get('title') or '(title not fetched)')[:80]}"
+                       + (" — **unverified**: a closing keyword in a commit; the number may be a pull request" if tp.get("unverified") else ""))
+        if not closes:
+            out.append("- none the graph knows")
+        out += ["", f"## Module-level functions it changed, still present ({len(changed)})"]
+        out += [f"- `{self.api._key(i)}` (changed in `{h}`) — `{self.def_line(i)}`" for i, h in sorted(changed.items(), key=lambda q: self.api._key(q[0]))]
+        out += ["", f"## Test files to run ({len(tests)}): every test calling those functions"] + self._tests_section(tests)
+        if tests:
+            out += ["", f"Run: `{self._run(list(tests))}`"]
+        out += ["", "## Coverage", self.coverage(sorted(changed, key=self.api._key), set(tests))]
+        out += self._pr_coverage(len(self.api._unverified([p])), truncated, len(commits))
         return "\n".join(out + ["", HOW_TO_USE])
 
     def commit_trace(self, commit: str) -> str:
@@ -295,8 +367,8 @@ HOW_TO_USE = ("---\nThis pack was extracted from the source by the dev-process g
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="write a predefined graph pack")
-    ap.add_argument("--project", required=True)
-    ap.add_argument("kind", choices=("error", "change", "refactor"))
+    ap.add_argument("--project", default=".", help="repository path or registered code (default: the current directory)")
+    ap.add_argument("kind", choices=("error", "change", "refactor", "ticket", "pr"))
     ap.add_argument("subject", nargs="+")
     ap.add_argument("--role", default="")
     ap.add_argument("--path", default="")
@@ -304,7 +376,8 @@ def main() -> int:
     p = Packer(ProcessAPI(ns.project, telemetry=False))
     subject = " ".join(ns.subject)
     print({"error": lambda: p.error(subject), "change": lambda: p.change(subject, ns.path),
-           "refactor": lambda: p.refactor(subject, ns.role, ns.path)}[ns.kind]())
+           "refactor": lambda: p.refactor(subject, ns.role, ns.path), "ticket": lambda: p.ticket(subject),
+           "pr": lambda: p.pr(subject)}[ns.kind]())
     return 0
 
 

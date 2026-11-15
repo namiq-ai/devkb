@@ -54,13 +54,21 @@ cannot guess:
  "paths": {"issues_dir": "issues", "spec_dirs": ["docs", "docs/adr"], "frontend_src": "web/src"}}
 ```
 
+**Pull requests and issues** (ADR-DEVKB-007). Every build recovers pull requests from git alone (`Merge pull request #N`
+and `... (#N)` subjects become `PullRequest` nodes with `MERGES` edges; a closing keyword in their commits gives an
+`unverified` `CLOSES`). `devkb build --github` (or `{"github": {"enabled": true}}` in `devkb.json`) also reads GitHub's
+own record, with `GITHUB_TOKEN` or your `gh` login: issues become `GH-<n>` tickets, `CLOSES` and rebase merges are
+exact, and responses are cached in `.devkb/github/`. Without the flag a build never uses the network; if GitHub cannot
+be reached the build completes from git and every affected answer's `coverage` says so. No description, review text or
+author login is stored unless `{"github": {"authors": true}}`. `devkb pack --project . pr 42` and `... ticket GH-7`.
+
 devkb reads the repository and runs `git`; it never executes the repository's own code unless `devkb.json` sets
 `"run_repo_scripts": true`.
 
 ## What is in the graph
 
-20 node types (Ticket, Commit, File, Symbol, TestCase, Endpoint, Flow, ErrorSignature, Spec, Requirement, ConfigKey,
-...) and 30 relations (CALLS, TESTED_BY, RAISES, STEP, TOUCHES, REFERENCES, IMPLEMENTS, READS, DECLARES, ...); see
+21 node types (Ticket, Commit, PullRequest, File, Symbol, TestCase, Endpoint, Flow, ErrorSignature, Spec, Requirement, ConfigKey,
+...) and 32 relations (CALLS, MERGES, CLOSES, TESTED_BY, RAISES, STEP, TOUCHES, REFERENCES, IMPLEMENTS, READS, DECLARES, ...); see
 [`devkb/ontology.md`](devkb/ontology.md). Calls are resolved through imports, aliases, typed receivers and base
 classes; nothing is attributed by a bare name. `devkb audit --project .` reports each relation's size, fan-out and
 cost, so you can check what your graph actually contains.

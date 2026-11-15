@@ -54,7 +54,8 @@ Rules:
   change.
 - Before a change, a whole answer in one step: `devkb pack --project . refactor NAME`, `devkb pack --project . change
   PATH`, `devkb pack --project . error "MESSAGE"`. A pack gives every item with the line of code that proves it and
-  says what it could not see."""
+  says what it could not see. For a hosted issue or pull request: `devkb pack --project . ticket GH-123`, `devkb pack
+  --project . pr 42` (pull requests and issues come from git alone unless the graph was built with `devkb build --github`)."""
 
 
 def _between(text: str, begin: str, end: str) -> re.Pattern:
