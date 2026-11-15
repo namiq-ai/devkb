@@ -31,6 +31,9 @@ Or by hand:
 devkb build --project .                       # writes .devkb/ (add it to .gitignore)
 devkb pack  --project . file path/to/file.py  # before editing: what depends on it, tests that reach it
 devkb pack  --project . refactor my_function  # who calls it, which tests, with evidence lines and coverage
+devkb build --project . --github               # also read pull requests and issues from GitHub (opt-in; ADR-DEVKB-007)
+devkb pack  --project . pr 42                  # a pull request's commits, changed functions, tests and the issues it closes
+devkb pack  --project . ticket GH-123          # a ticket's pull requests, commits, changed functions and tests
 devkb pack  --project . error "message text"  # which route handlers reach the code that raises it
 devkb pack  --project . change path/to/file.py
 ```

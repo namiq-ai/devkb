@@ -68,7 +68,7 @@ def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
 
     @tool
     def trace(ticket: str) -> str:
-        """Requirement-to-ticket chain with status, and the Gate 0 readiness verdict for a story."""
+        """Requirement-to-ticket chain and Gate 0 verdict for a story; a ticket lists its pull requests, PR-<n> gives a pull request's commits and issues."""
         return _compact(api.call("trace", ticket=ticket))
 
     @tool
@@ -103,12 +103,12 @@ def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
 
     @tool
     def review_pack(rev: str) -> str:
-        """Review context for a commit or range (a..b): changed symbols, callers outside the diff, tests, untested symbols, docs, warnings, owners."""
+        """Review context for a commit or range: changed symbols, outside callers, tests, untested symbols, docs, warnings, owners, pull requests and the issues they close."""
         return _compact(api.call("review_pack", rev=rev))
 
     @tool
     def lineage(ticket: str) -> str:
-        """Bug lineage, duplicates, blockers, commits and spec of a ticket."""
+        """Bug lineage, duplicates, blockers, commits (with those of closing pull requests), sub-issues and spec of a ticket."""
         return _compact(api.call("lineage", ticket=ticket))
 
     @tool
@@ -143,7 +143,7 @@ def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
 
     @tool
     def history(files: list[str]) -> str:
-        """The latest commits that touched these files, with dates and ticket ids."""
+        """The latest commits that touched these files, with dates, ticket ids and pull requests."""
         return _compact(api.call("history", files=files))
 
     @tool

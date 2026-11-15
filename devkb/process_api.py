@@ -36,6 +36,7 @@ from devkb.service import CompactIndex, Staleness, Telemetry, load_index, words 
 from devkb.test_discovery import _JS_TEST, _PY_TEST  # noqa: E402
 
 _TICKET_ID = re.compile(r"\b[A-Z][A-Z0-9]{1,6}-\d+\b")
+_PR_REF = re.compile(r"^((?:[A-Z][A-Z0-9]*:)?)PR-(\d+)$", re.IGNORECASE)  # ADR-DEVKB-007
 # ODSF writes `### OWN:`; OCO writes `### YOU OWN:`, `### YOU OWN (read + write freely):` or `### TL OWNS:`.
 _OWN = re.compile(r"### (?:YOU OWN|OWN|[A-Z]{2,3} OWNS)\b[^\n]*:\s*```[\w]*\n(.*?)```", re.DOTALL)
 _DNT = re.compile(r"### DO NOT TOUCH:\s*```[\w]*\n(.*?)```", re.DOTALL)
@@ -428,6 +429,69 @@ class ProcessAPI:
         t = self.idx.node("Ticket", ticket)
         return (t, None) if t is not None else (None, {"error": f"no ticket {ticket}"})
 
+    # ── pull requests and hosted issues (ADR-DEVKB-007) ────────────────────
+    def _has_prs(self) -> bool:
+        return bool(self.idx.type_count.get("PullRequest") or self.idx.github)
+
+    def _pr_node(self, ref: str) -> int | None:
+        """The PullRequest named by `PR-12` (or `CODE:PR-12`), else None."""
+        m = _PR_REF.match(str(ref).strip())
+        return self.idx.node("PullRequest", f"{m.group(1)}PR-{m.group(2)}") if m else None
+
+    def _closing_prs(self, ticket: int) -> list[int]:
+        return sorted(self.idx.sources("CLOSES", ticket), key=self._key)
+
+    def _pr_row(self, p: int) -> dict:
+        pr = self.idx.props[p]
+        row = {"id": self._key(p), "title": (pr.get("title") or "")[:80], "state": pr.get("state")}
+        if pr.get("merge_style"):
+            row["merge_style"] = pr["merge_style"]
+        return row
+
+    def _closes_rows(self, p: int) -> list[dict]:
+        rows = []
+        for t in sorted(self.idx.targets("CLOSES", p), key=self._key):
+            conf, unverified = self.idx.pr_links.get(("CLOSES", p, t), (1.0, False))
+            rows.append({"id": self._key(t), "confidence": conf, **({"unverified": True} if unverified else {})})
+        return rows
+
+    def pr_coverage(self) -> str:
+        """What the pull-request links in an answer can and cannot be trusted for, from how the graph was built."""
+        g = self.idx.github
+        unverified = sum(1 for (verb, _a, _b), (_c, u) in self.idx.pr_links.items() if verb == "CLOSES" and u)
+        if not g:
+            text = ("Pull-request links come from git alone: merge-commit and squash subjects (confidence 0.9) and closing "
+                    "keywords in commit messages (0.7). Rebase merges and closing links made in a description or by hand are "
+                    "not visible; `devkb build --github` reads them from GitHub.")
+        elif g.get("status") == "complete":
+            text = f"Pull requests, issues and their links were read from GitHub ({g.get('repo')}) when the graph was built."
+        else:
+            text = (f"The GitHub layer is {g.get('status')}: " + "; ".join(g.get("problems") or ["nothing was fetched"])
+                    + ". Links that could not be fetched fall back to what git shows.")
+        if unverified:
+            text += f" {unverified} closing link(s) are unverified: offline, `#N` may be a pull request, not an issue."
+        return text
+
+    def _add_pr_coverage(self, reply: dict) -> dict:
+        if self._has_prs():
+            cov = reply.get("coverage")
+            if cov is None:
+                reply["coverage"] = cov = {}
+            if isinstance(cov, dict):
+                cov["pull_requests"] = self.pr_coverage()
+        return reply
+
+    def _pr_view(self, p: int) -> dict:
+        idx, pr = self.idx, self.idx.props[p]
+        commits = sorted(idx.targets("MERGES", p), key=lambda c: (idx.props[c].get("date", ""), self._key(c)))
+        confs = [idx.pr_links.get(("MERGES", p, c), (1.0, False))[0] for c in commits]
+        out = {"pull_request": self._key(p), "title": (pr.get("title") or "")[:110], "state": pr.get("state"),
+               "merge_style": pr.get("merge_style"), "base": pr.get("base"), "head": pr.get("head"),
+               "merged_at": pr.get("merged_at"), "url": pr.get("url"), "n_commits": len(commits),
+               "commits": [idx.props[c].get("short_hash") or self._key(c)[:10] for c in commits[:12]],
+               "commit_link_confidence": min(confs) if confs else None, "closes": self._closes_rows(p)}
+        return self._add_pr_coverage({k: v for k, v in out.items() if v is not None})
+
     def sdlc_context(self, ticket: str) -> dict:
         t, err = self._ticket(ticket)
         if err:
@@ -442,7 +506,8 @@ class ProcessAPI:
         files = [f for f in sorted(touched, key=lambda f: (-touched[f], self._key(f)))
                  if len(idx.sources("TOUCHES", f)) < 150 and not self._key(f).startswith(issues_rel)][:10]
         owner_role = self._config().get("component_to_role", {}).get(p.get("component", ""), "")
-        return {"ticket": ticket, "title": (p.get("title") or "")[:110], "type": p.get("ticket_type"), "status": p.get("status"),
+        prs = self._closing_prs(t)
+        return self._add_pr_coverage({"ticket": ticket, "title": (p.get("title") or "")[:110], "type": p.get("ticket_type"), "status": p.get("status"),
                 "priority": p.get("priority"), "component": p.get("component"), "assignee": p.get("assignee"),
                 "owner_role": owner_role,
                 "epic": [self._key(x) for x in idx.targets("CHILD_OF", t)],
@@ -450,7 +515,8 @@ class ProcessAPI:
                 "requirement": [self._key(x) for x in idx.targets("DERIVED_FROM", t)],
                 "docs": [self._key(x) for x in idx.sources("DOCUMENTS", t)][:5],
                 "similar": [{"t": self._key(b), "s": round(s, 2)} for b, s in idx.sim.get(t, [])[:4]],
-                "commits": len(commits), "files": [self._key(f) for f in files]}
+                "commits": len(commits), "files": [self._key(f) for f in files],
+                **({"pull_requests": [self._pr_row(x) for x in prs]} if prs else {})})
 
     def _bmad_stamp(self) -> tuple:
         """(file count, newest modification) of the BMAD ticket store, so a cached status is dropped when it changes."""
@@ -486,6 +552,9 @@ class ProcessAPI:
         return (row or {}).get("unknown") or ""
 
     def trace(self, ticket: str) -> dict:
+        pr = self._pr_node(ticket)
+        if pr is not None:
+            return self._pr_view(pr)
         t, err = self._ticket(ticket)
         if err:
             return err
@@ -496,6 +565,10 @@ class ProcessAPI:
 
         out = {"ticket": ticket, "type": p.get("ticket_type"), "status": p.get("status"), "epic": link("CHILD_OF"),
                "spec": link("IMPLEMENTS"), "requirement": [{"id": self._key(x)} for x in idx.targets("DERIVED_FROM", t)]}
+        prs = self._closing_prs(t)
+        if prs:
+            out["pull_requests"] = [self._pr_row(x) for x in prs]
+        self._add_pr_coverage(out)
         if p.get("ticket_type") != "STORY":
             out["gate0"] = "n/a: only STORY tickets are gated"
             return out
@@ -667,6 +740,17 @@ class ProcessAPI:
         tested = self._tests_of(changed)
         untested = [s for s in changed if not self._has_tests(s)]
         tickets = sorted(set(_TICKET_ID.findall(msgs)))
+        prs_out: list[dict] = []
+        if self._has_prs():  # ADR-DEVKB-007: the pull requests these commits belong to, and the issues they close
+            seen: dict[int, None] = {}
+            for h in self._git("rev-list", f"{base}..{head_rev}").split():
+                c = self.idx.node("Commit", h)
+                for p in (self.idx.sources("MERGES", c) if c is not None else []):
+                    seen.setdefault(p)
+            for p in sorted(seen, key=self._key):
+                closes = self._closes_rows(p)
+                prs_out.append({**self._pr_row(p), **({"closes": closes} if closes else {})})
+                tickets = sorted(set(tickets) | {c["id"] for c in closes})
         docs: list[str] = []
         for tid in tickets:
             t = self.idx.node("Ticket", tid)
@@ -674,13 +758,14 @@ class ProcessAPI:
                 docs += [self._key(x) for x in self.idx.sources("DOCUMENTS", t)] + [self._key(x) for x in self.idx.targets("IMPLEMENTS", t)]
         warnings = sorted({self.idx.props[w].get("rule", "?") for f in files for fi in [self.idx.node("File", f)] if fi is not None
                            for w in self.idx.targets("FLAGGED_BY", fi)})
-        return {"rev": rev, "files": len(files), "changed_symbols": [self._key(s) for s in changed[:limit]],
+        return self._add_pr_coverage({"rev": rev, "files": len(files), "changed_symbols": [self._key(s) for s in changed[:limit]],
                 "n_changed_symbols": len(changed), "callers_outside": [self._key(c) for c in outside[:limit]],
                 "n_callers_outside": len(outside), "tests": [{"f": f, "t": sorted(v)[:3]} for f, v in sorted(tested.items())[:8]],
                 "untested": [self._key(s) for s in untested[:8]], "tickets": tickets[:6], "docs": sorted(set(docs))[:6],
                 "warnings": warnings[:6], "owners": self._owners_of(sorted(files)),
                 **({"drift": drifted[:6], "note": "these files changed after the commit; changed functions were read from the commit itself"} if drifted else {}),
-                **({"unmapped": unmapped[:6]} if unmapped else {})}
+                **({"unmapped": unmapped[:6]} if unmapped else {}),
+                **({"pull_requests": prs_out[:6]} if prs_out else {})})
 
     # ── developer tasks: one call for a whole kind of work (ODSF-310) ──────────────
     # A developer does not ask "who calls this?" and stop. They build a feature, change behaviour, fix a ticketed bug,
@@ -738,13 +823,18 @@ class ProcessAPI:
                 if len(self.idx.targets("TOUCHES", c)) <= 40:  # a mass rename tells nothing about this file
                     found.setdefault(c, f)
         top = sorted(found, key=lambda c: (self.idx.props[c].get("date", ""), self._key(c)), reverse=True)[:limit]
-        return [{"h": (self.idx.props[c].get("short_hash") or "")[:8], "d": self.idx.props[c].get("date"),
+        rows = [{"h": (self.idx.props[c].get("short_hash") or "")[:8], "d": self.idx.props[c].get("date"),
                  "s": (self.idx.props[c].get("subject") or "")[:72], "t": sorted(set(_TICKET_ID.findall(self.idx.props[c].get("subject") or ""))),
                  "f": found[c]} for c in top]
+        for row, c in zip(rows, top):
+            prs = sorted(self._key(p) for p in self.idx.sources("MERGES", c))  # ADR-DEVKB-007
+            if prs:
+                row["pr"] = prs
+        return rows
 
     def history(self, files: list[str] | str, limit: int = 6) -> dict:
         files = [files] if isinstance(files, str) else list(files)
-        return {"files": files, "commits": self._recent_commits(files, limit)}
+        return self._add_pr_coverage({"files": files, "commits": self._recent_commits(files, limit)})
 
     def _past_tickets(self, text: str, skip: str = "", bugs_only: bool = False, limit: int = 4) -> list[dict]:
         score: dict[int, float] = {}
@@ -902,6 +992,9 @@ class ProcessAPI:
 
     # ── S9, S10: close and knowledge ───────────────────────────────────────
     def lineage(self, ticket: str) -> dict:
+        pr = self._pr_node(ticket)
+        if pr is not None:
+            return self._pr_view(pr)
         t, err = self._ticket(ticket)
         if err:
             return err
@@ -914,13 +1007,21 @@ class ProcessAPI:
                 out[verb.lower()] = fwd
             if back:
                 out[f"{verb.lower()}_by"] = back
-        commits = sorted(idx.sources("REFERENCES", t), key=lambda c: idx.props[c].get("date", ""))
+        commits = idx.sources("REFERENCES", t)
+        prs = self._closing_prs(t)
+        if prs:  # the commits of the pull requests that close it are its commits too
+            commits = list(set(commits) | {c for x in prs for c in idx.targets("MERGES", x)})
+            out["pull_requests"] = [self._pr_row(x) for x in prs]
+        commits = sorted(commits, key=lambda c: (idx.props[c].get("date", ""), self._key(c)))
+        sub_issues = [self._key(x) for x in idx.sources("CHILD_OF", t) if self._key(x).startswith("GH-")]
+        if sub_issues:
+            out["sub_issues"] = sub_issues[:12]
         out["commits"] = len(commits)
         if commits:
             out["first"], out["last"] = idx.props[commits[0]].get("short_hash"), idx.props[commits[-1]].get("short_hash")
         out["spec"] = [self._key(x) for x in idx.targets("IMPLEMENTS", t)]
         out["work_package"] = [self._key(x) for x in idx.targets("PART_OF", t)]
-        return out
+        return self._add_pr_coverage(out)
 
     # ── configuration and repositories (ADR-SDP-DEVKB-005, ODSF-312) ────────────
     def _repo_of(self, key: str) -> str:
