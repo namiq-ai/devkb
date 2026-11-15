@@ -8,9 +8,9 @@
 <path d="M206,86 h296.0 a4,4 0 0 1 4,4 v12 a4,4 0 0 1 -4,4 h-296.0 z" fill="#6b6a65"><title>Plain search: $0.075 median per task</title></path>
 <text x="514.0" y="103" font-size="13" fill="#f0efec">$0.075</text>
 <text x="618" y="103" font-size="14" font-weight="600" fill="#f0efec">0.928</text>
-<text x="24" y="141" font-size="14" font-weight="600" fill="#f0efec">devkb, 24 tools</text>
-<text x="24" y="158" font-size="12" fill="#c3c2b7">full MCP tool set</text>
-<path d="M206,132 h236.4 a4,4 0 0 1 4,4 v12 a4,4 0 0 1 -4,4 h-236.4 z" fill="#3987e5"><title>devkb, 24 tools: $0.060 median per task</title></path>
+<text x="24" y="141" font-size="14" font-weight="600" fill="#f0efec">devkb, 12 tools</text>
+<text x="24" y="158" font-size="12" fill="#c3c2b7">single-question tools</text>
+<path d="M206,132 h236.4 a4,4 0 0 1 4,4 v12 a4,4 0 0 1 -4,4 h-236.4 z" fill="#3987e5"><title>devkb, 12 tools: $0.060 median per task</title></path>
 <text x="454.4" y="149" font-size="13" fill="#f0efec">$0.060  ·  19% cheaper</text>
 <text x="618" y="149" font-size="14" font-weight="600" fill="#f0efec">0.951</text>
 <text x="666" y="149" font-size="12" fill="#0ca30c">+0.023</text>

@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "devkb"
 version = "0.1.0"
-description = "A software-process knowledge graph for coding agents: extraction, pre-computed context packs, and an MCP server"
+description = "A software-process knowledge graph for software development agents: extraction, pre-computed context packs, and an MCP server"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Hung T. Le" }]
 # license: not chosen yet; set it (SPDX, e.g. license = "Apache-2.0") before the first PyPI upload (docs/RELEASING.md)
-keywords = ["knowledge graph", "coding agents", "mcp", "code intelligence", "call graph", "software process"]
+keywords = ["knowledge graph", "software development agents", "coding agents", "mcp", "code intelligence", "call graph", "software process"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

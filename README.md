@@ -1,11 +1,11 @@
 # devkb
 
-**A knowledge graph of your repository for coding agents.** Agents answer "what calls this, what breaks, which tests"
+**A knowledge graph of your repository for software development agents.** Agents answer "what calls this, what breaks, which tests"
 in one step instead of searching file by file: 56% cheaper, with better answers.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/benchmark-dark.svg">
-  <img alt="Median cost per task: plain search $0.075 (quality 0.928); devkb 24 tools $0.060, 19% cheaper (0.951); devkb 7 tools $0.042, 39% cheaper (0.961); devkb pack $0.026, 56% cheaper (0.979)" src="docs/img/benchmark-light.svg">
+  <img alt="Median cost per task: plain search $0.075 (quality 0.928); devkb 12 tools $0.060, 19% cheaper (0.951); devkb 7 tools $0.042, 39% cheaper (0.961); devkb pack $0.026, 56% cheaper (0.979)" src="docs/img/benchmark-light.svg">
 </picture>
 
 ## 1. What devkb is
