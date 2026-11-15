@@ -2,9 +2,9 @@
 id: ADR-DEVKB-007
 title: "ADR-DEVKB-007: pull requests and hosted issues join the graph"
 type: adr
-status: proposed
+status: accepted
 created: 2026-11-14
-updated: 2026-11-14
+updated: 2026-11-15
 owner: Hung T. Le
 supersedes: []
 superseded_by: null
@@ -12,8 +12,9 @@ superseded_by: null
 
 # ADR-DEVKB-007: pull requests and hosted issues join the graph
 
-**Status**: Proposed, awaiting a decision by the owner. It adds one node type and two verbs to `devkb/ontology.md`
-and gives two existing verbs a new source. ADR-SDP-DEVKB-001 allows such a change only through an Accepted ADR.
+**Status**: Accepted on 2026-11-15 by Hung T. Le, the owner, as drafted, with the draft's answers to both open
+questions (author logins opt-in; the online layer only on explicit request). It adds one node type and two verbs to
+`devkb/ontology.md` and gives two existing verbs a new source. ADR-SDP-DEVKB-001 allows such a change only through an Accepted ADR.
 Numbering continues ADR-SDP-DEVKB-001 to 006, recorded before devkb became a standalone component; ADR-SDP-DEVKB-006
 is still Proposed and independent of this one.
 
@@ -146,7 +147,26 @@ GitLab merge requests and Jira issues (the same node type and verbs would carry 
 sources), reviews and review comments, CI check results, and people as nodes (ownership, reviewers), which needs its
 own privacy decision.
 
-## Open questions for the decider
+## Implementation and validation
+
+Implemented by the ADR-DEVKB-007 exercise (`bench/exercises/adr007/`): six independent implementations were checked
+against a pre-registered acceptance check and ranked blind; the top-ranked one was merged after fixing the defects its
+reviewer marked certain. Measured on the merged code at the pinned benchmark commits (2026-11-15):
+
+| Validation item | Result |
+|---|---|
+| 1 Offline precision | `MERGES` precision 1.0 against GitHub's commit lists on lattice-scan, Mealie and Netflix Dispatch (89 edges sampled from 125, 3,778 and 1,838 pull requests) |
+| 2 Offline recall | lattice-scan 1.0 (125 of 125 merged pull requests in the pinned history) |
+| 3 Issue links | Mealie: 2,079 issues, 966 `CLOSES` edges; a 25-edge sample matched GitHub's closing record (1.0); first build 300 s, cached rebuild 87 s |
+| 4 No network by default | a default build of each repository made no network connection (strace) |
+| 5 Privacy | no description text, author login or e-mail in the new nodes, edges or the GitHub cache |
+| 6 Pack check | `devkb pack pr N` names its commits; the registry's pack check still scores 1.0 |
+
+Two choices the ADR left open: the online layer uses GitHub's GraphQL API (about one request per 100 records, and the
+only place GitHub exposes its closing record), and a listing too large for one rate-limit window is read across
+builds, resuming from a saved cursor.
+
+## Open questions (resolved at acceptance: the draft's defaults)
 
 1. Should the author login be stored by default for public repositories, where it is already public, or stay
    opt-in everywhere? This draft keeps it opt-in.

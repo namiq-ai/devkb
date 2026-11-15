@@ -1,0 +1,128 @@
+{
+ "branch": "<exercise>/devkb",
+ "commit": "15473a13698b7af2da13d302d55a80cc6268c1d4",
+ "tests": {
+  "exit": 0,
+  "summary": "255 passed, 2 warnings in 30.20s"
+ },
+ "schema": [
+  true,
+  true,
+  true
+ ],
+ "offline": {
+  "lattice-scan": {
+   "exit": 0,
+   "secs": 18.9,
+   "network_connects": 0,
+   "pull_requests": 125,
+   "merges_edges": 217,
+   "keys_ok": true,
+   "closes_edges": 0,
+   "merges_precision": 1.0,
+   "merges_checked": 35,
+   "merges_wrong": [],
+   "recall_merged_prs": 1.0,
+   "recall_denominator": 125
+  },
+  "mealie": {
+   "exit": 0,
+   "secs": 214.8,
+   "network_connects": 0,
+   "pull_requests": 4841,
+   "merges_edges": 5715,
+   "keys_ok": true,
+   "closes_edges": 88,
+   "merges_precision": 1.0,
+   "merges_checked": 25,
+   "merges_wrong": []
+  },
+  "dispatch": {
+   "exit": 0,
+   "secs": 86.6,
+   "network_connects": 0,
+   "pull_requests": 5199,
+   "merges_edges": 5277,
+   "keys_ok": true,
+   "closes_edges": 2,
+   "merges_precision": 1.0,
+   "merges_checked": 25,
+   "merges_wrong": []
+  }
+ },
+ "online": {
+  "lattice-scan": {
+   "exit": 0,
+   "secs": 65.4,
+   "switch": "--github",
+   "second_build_secs": 15.0,
+   "issue_tickets": 1,
+   "ticket_types": [
+    "BUG"
+   ],
+   "closes_edges": 1,
+   "pull_requests": 138,
+   "closes_precision": 1.0,
+   "closes_checked": 1,
+   "closes_wrong": []
+  },
+  "mealie": {
+   "exit": 0,
+   "secs": 1051.3,
+   "switch": "--github",
+   "second_build_secs": 286.2,
+   "issue_tickets": 2079,
+   "ticket_types": [
+    "BUG",
+    "FEATURE",
+    "ISSUE",
+    "TASK"
+   ],
+   "closes_edges": 88,
+   "pull_requests": 4841,
+   "closes_precision": 0.28,
+   "closes_checked": 25,
+   "closes_wrong": [
+    "PR-310->GH-275",
+    "PR-326->GH-291",
+    "PR-764->GH-741",
+    "PR-1207->GH-1208",
+    "PR-467->GH-463",
+    "PR-310->GH-306",
+    "PR-5512->GH-5511",
+    "PR-448->GH-428",
+    "PR-236->GH-196",
+    "PR-326->GH-314"
+   ]
+  }
+ },
+ "pack": {
+  "exit": 0,
+  "pr": "PR-137",
+  "words": 217,
+  "names_a_commit": true,
+  "head": "# Graph pack: pull request PR-137 (ci: mark CI and release runs as our own, so they are not counted as users of the tool)\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nState merged, merged 2026-11-13, merge merge. https://github.com/namiq-ai/lattice-scan/pull/137\n\n## Commits it brought in (2)\n- `17e2aefd7f` 2026-",
+  "ok": true
+ },
+ "regression": {
+  "lattice-scan": 1.0,
+  "mealie": 1.0,
+  "dispatch": 1.0,
+  "lnbits": 1.0
+ },
+ "privacy": {
+  "emails": [
+   "off-lattice-scan/.process-index.pkl: contact@namiq.io."
+  ],
+  "logins": [],
+  "bodies": [
+   "off-lattice-scan/.process-index.pkl: A Mac has none of the Linux so",
+   "off-lattice-scan/.process-index.pkl: A Mac has none of the Linux so",
+   "off-dispatch/new-nodes: Unprocessable entity on any AP"
+  ],
+  "ok": false,
+  "checked_logins": 20,
+  "checked_bodies": 169
+ },
+ "diff": "17 files changed, 1533 insertions(+), 37 deletions(-)"
+}

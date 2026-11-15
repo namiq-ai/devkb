@@ -1,0 +1,115 @@
+{
+ "branch": ".",
+ "commit": "6e7ba5d4af8d13fedf9cf8272bd62458a356a399",
+ "tests": {
+  "exit": 0,
+  "summary": "260 passed in 43.90s"
+ },
+ "schema": [
+  true,
+  true,
+  true
+ ],
+ "offline": {
+  "lattice-scan": {
+   "exit": 0,
+   "secs": 22.5,
+   "network_connects": 0,
+   "pull_requests": 125,
+   "merges_edges": 217,
+   "keys_ok": true,
+   "closes_edges": 0,
+   "merges_precision": 1.0,
+   "merges_checked": 35,
+   "merges_wrong": [],
+   "recall_merged_prs": 1.0,
+   "recall_denominator": 125
+  },
+  "mealie": {
+   "exit": 0,
+   "secs": 280.6,
+   "network_connects": 0,
+   "pull_requests": 3778,
+   "merges_edges": 4475,
+   "keys_ok": true,
+   "closes_edges": 4,
+   "merges_precision": 1.0,
+   "merges_checked": 29,
+   "merges_wrong": []
+  },
+  "dispatch": {
+   "exit": 0,
+   "secs": 117.9,
+   "network_connects": 0,
+   "pull_requests": 1838,
+   "merges_edges": 1838,
+   "keys_ok": true,
+   "closes_edges": 0,
+   "merges_precision": 1.0,
+   "merges_checked": 25,
+   "merges_wrong": []
+  }
+ },
+ "online": {
+  "lattice-scan": {
+   "exit": 0,
+   "secs": 11.0,
+   "switch": "--github",
+   "second_build_secs": 9.5,
+   "issue_tickets": 1,
+   "ticket_types": [
+    "BUG"
+   ],
+   "closes_edges": 1,
+   "pull_requests": 138,
+   "closes_precision": 1.0,
+   "closes_checked": 1,
+   "closes_wrong": []
+  },
+  "mealie": {
+   "exit": 0,
+   "secs": 300.0,
+   "switch": "--github",
+   "second_build_secs": 86.8,
+   "issue_tickets": 2079,
+   "ticket_types": [
+    "BUG",
+    "FEATURE",
+    "ISSUE"
+   ],
+   "closes_edges": 966,
+   "pull_requests": 5605,
+   "closes_precision": 1.0,
+   "closes_checked": 25,
+   "closes_wrong": []
+  }
+ },
+ "pack": {
+  "exit": 0,
+  "pr": "PR-137",
+  "words": 221,
+  "names_a_commit": true,
+  "head": "# Graph pack: pull request PR-137 (ci: mark CI and release runs as our own, so they are not counted as users of the tool)\n\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\nstate: merged; merge_style: merge; merged_at: 2026-11-13T23:53:00-06:00; head: ci/BE/mark-ci-runs-as-tests; url: https://github.com/namiq-ai/latti",
+  "ok": true
+ },
+ "regression": {
+  "lattice-scan": 1.0,
+  "mealie": 1.0,
+  "dispatch": 1.0,
+  "lnbits": 1.0
+ },
+ "privacy": {
+  "emails": [
+   "off-lattice-scan/.process-index.pkl: contact@namiq.io."
+  ],
+  "logins": [],
+  "bodies": [
+   "off-lattice-scan/.process-index.pkl: A Mac has none of the Linux so",
+   "off-lattice-scan/.process-index.pkl: A Mac has none of the Linux so"
+  ],
+  "ok": false,
+  "checked_logins": 16,
+  "checked_bodies": 175
+ },
+ "diff": "41 files changed, 3943 insertions(+), 52 deletions(-)"
+}

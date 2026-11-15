@@ -24,33 +24,44 @@ repository? Exploratory, one run per arm per round; the acceptance check was fix
 
 ## Results
 
-| | Round 1 plain | Round 1 devkb | Round 2 plain | Round 2 devkb | Round 3 |
-|---|---|---|---|---|---|
-| devkb uses | — | **0** | — | **0** | running |
-| Cost | $2.20 | $2.18 | $2.26 | $1.98 | |
-| Wall time | 11:10 | 12:00 | 11:26 | 9:24 | |
-| Turns | 57 | 86 | 64 | 61 | |
-| Share of tool output spent reading code | 87% | 92% | 86% | 89% | |
-| Tests at the end | 247 | 250 | 252 | 255 | |
-| Offline links precision, lattice-scan / Mealie / Dispatch | 1.0 / 1.0 / 1.0 † | 1.0 / 1.0 / 1.0 | pending | pending | |
-| GitHub layer on Mealie | did not finish in 50 min: rate limit | 6 min; 966 closing links, precision 1.0 | pending | pending | |
-| GitHub client | REST, one request per pull request | GraphQL, ~100 per request | GraphQL | REST, one request per pull request | |
-| Blind review prefers | | this one (~65%) | this one (~75%) | | |
+| | R1 plain | R1 devkb | R2 plain | R2 devkb | R3 plain | R3 devkb |
+|---|---|---|---|---|---|---|
+| devkb uses | — | **0** | — | **0** | — | **0** |
+| Cost | $2.20 | $2.18 | $2.26 | $1.98 | $1.99 | $1.63 |
+| Wall time | 11:10 | 12:00 | 11:26 | 9:24 | 11:37 | 7:52 |
+| Turns | 57 | 86 | 64 | 61 | 56 | 43 |
+| Share of tool output spent reading code | 87% | 92% | 86% | 89% | 92% | 95% |
+| Tests at the end | 247 | 250 | 252 | 255 | 252 | 246 |
+| Offline link precision (lattice-scan / Mealie / Dispatch) | 1.0 / 1.0 / 1.0 † | 1.0 / 1.0 / 1.0 | 1.0 / 1.0 / 1.0 | 1.0 / 1.0 / 1.0 | 1.0 / 1.0 / 1.0 | 1.0 / 1.0 / 1.0 |
+| GitHub layer on Mealie | did not finish in 50 min (rate limit) | 6.0 min; 966 closing links, 1.0 | 5.2 min; 966, 1.0 | 17.5 min; **88 closing links, 0.28** | 23 min ‡; 966, 1.0 | 8.2 min; 966, 1.0 |
+| Acceptance check | fail | **pass** | **pass** | fail | **pass** | **pass** |
+| Blind review | pair: lost | pair: won (~65%) | pair: won (~75%) | pair: lost | final: 2nd | final: 3rd |
+| Final four-way ranking | | **1st** | 4th | | 2nd | 3rd |
 
 † The check first scored Dispatch 0.96: the one link it called wrong is pull request 5395's own merge commit; the API
-lookup had failed on the rate limit, which this branch had consumed. The plain branch's round-1 checks after the
-timeout were run with `rest_plain.py` (the same functions, Mealie's online build recorded as timed out).
+lookup had failed on the rate limit. ‡ Measured while two other checks shared the GitHub API.
 
-Raw results: `baseline.json`, `round*/acceptance-*.json`, `round*/process.jsonl`, `round*/summary-*.md` (each
-agent's own final summary), `round*/review.md` (the blind reviews, with the key).
+**Merged**: round 1's devkb arm, ranked first in the final blind ranking (`final/ranking-review.md`), after fixing the
+defects its reviewer marked certain (plus the possible ones), with a test each. The merged code passes the same
+acceptance check (`final/acceptance-merged.json`): 260 tests, offline precision 1.0 on all three repositories, recall
+1.0 on lattice-scan, no network by default, Mealie's GitHub layer in 5.0 min with 966 closing links at precision 1.0,
+the `pr` pack, privacy, and no regression in the registry's pack check.
 
-## Findings so far
+Raw results: `baseline.json`, `round*/acceptance-*.json`, `round*/process.jsonl`, `round*/summary-*.md` (each agent's
+own final summary), `round*/review.md` and `final/ranking-review.md` (the blind reviews, with their keys).
 
-1. **No agent used devkb** in rounds 1 and 2, with a tool table or with orientation tools offered. The work was
-   reading how the code is written (86–92% of tool output), which the graph does not store, in a repository small
-   enough (about 10k lines) to read; a detailed prompt and an ADR naming the files outweighed general instructions.
-2. **The preferred implementation flipped between rounds** and followed the agent's design of the GitHub client
-   (bulk GraphQL or a REST request per pull request), not the arm. With devkb unused, the difference between arms is
-   run-to-run variation.
-3. **The exercise does not measure devkb in use.** That is measured in `bench/results/` and the paper (35–51% cheaper
-   on call-chain tasks when used). Round 3 tests whether a task-shaped trigger makes agents use it unprompted.
+## Findings
+
+1. **No agent used devkb in three rounds**, with a tool table, with orientation tools, or with a step-by-step trigger
+   (`devkb pack file PATH` before editing a file). The work was reading how the code is written (86–95% of tool
+   output), which the graph does not store, in a repository small enough (about 10k lines) to read; a detailed prompt
+   and an ADR naming the files outweighed every form of instruction in `AGENTS.md`.
+2. **The quality of an implementation followed the agent's design, not the arm.** Every run that chose one REST
+   request per pull request failed at scale or lost closing links; the bulk GraphQL designs passed. The preferred
+   arm flipped between rounds. With devkb unused, the difference between arms is run-to-run variation; the cost
+   differences are too ($1.63 to $2.26 across runs that never touched the graph).
+3. **The exercise did not measure devkb in use.** That is measured in `bench/results/` and the paper: 35–51% cheaper
+   on call-chain tasks when the agent uses it.
+4. **What did decide quality** was evidence the agents never saw: a pre-registered acceptance check against the real
+   API, and blind review. Two of six implementations that passed their own test suites failed at scale, and the
+   reviewers' "certain" defects were confirmed by measurement (request-per-PR timeouts, 0.28 closing-link precision).

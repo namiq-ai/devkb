@@ -1,0 +1,116 @@
+{
+ "branch": "<exercise>/devkb",
+ "commit": "793202d77cf7b1b59794cea99be967adcefc92d8",
+ "tests": {
+  "exit": 0,
+  "summary": "246 passed in 31.32s"
+ },
+ "schema": [
+  true,
+  true,
+  true
+ ],
+ "offline": {
+  "lattice-scan": {
+   "exit": 0,
+   "secs": 23.4,
+   "network_connects": 0,
+   "pull_requests": 125,
+   "merges_edges": 217,
+   "keys_ok": true,
+   "closes_edges": 0,
+   "merges_precision": 1.0,
+   "merges_checked": 35,
+   "merges_wrong": [],
+   "recall_merged_prs": 1.0,
+   "recall_denominator": 125
+  },
+  "mealie": {
+   "exit": 0,
+   "secs": 284.2,
+   "network_connects": 0,
+   "pull_requests": 4841,
+   "merges_edges": 5715,
+   "keys_ok": true,
+   "closes_edges": 76,
+   "merges_precision": 1.0,
+   "merges_checked": 25,
+   "merges_wrong": []
+  },
+  "dispatch": {
+   "exit": 0,
+   "secs": 119.1,
+   "network_connects": 0,
+   "pull_requests": 5199,
+   "merges_edges": 5277,
+   "keys_ok": true,
+   "closes_edges": 2,
+   "merges_precision": 1.0,
+   "merges_checked": 25,
+   "merges_wrong": []
+  }
+ },
+ "online": {
+  "lattice-scan": {
+   "exit": 0,
+   "secs": 14.4,
+   "switch": "--github",
+   "second_build_secs": 11.3,
+   "issue_tickets": 1,
+   "ticket_types": [
+    "BUG"
+   ],
+   "closes_edges": 1,
+   "pull_requests": 138,
+   "closes_precision": 1.0,
+   "closes_checked": 1,
+   "closes_wrong": []
+  },
+  "mealie": {
+   "exit": 0,
+   "secs": 491.6,
+   "switch": "--github",
+   "second_build_secs": 92.3,
+   "issue_tickets": 2079,
+   "ticket_types": [
+    "BUG",
+    "FEATURE",
+    "ISSUE"
+   ],
+   "closes_edges": 966,
+   "pull_requests": 5603,
+   "closes_precision": 1.0,
+   "closes_checked": 25,
+   "closes_wrong": []
+  }
+ },
+ "pack": {
+  "exit": 0,
+  "pr": "PR-137",
+  "words": 218,
+  "names_a_commit": true,
+  "head": "# Graph pack: pull request #137 (ci: mark CI and release runs as our own, so they are not counted as users of the tool)\n\nmerged, merged 2026-11-13, merge merge.\nBuilt from the dev-process graph at commit `17e2aefd7f`. None of the files below has changed since; the line numbers are current.\n\n## Commits it merged (2; links from git-subject)\n- `17e2aefd7f` 2026-11-13 Merge pull request #137 from nami",
+  "ok": true
+ },
+ "regression": {
+  "lattice-scan": 1.0,
+  "mealie": 1.0,
+  "dispatch": 1.0,
+  "lnbits": 1.0
+ },
+ "privacy": {
+  "emails": [
+   "off-lattice-scan/.process-index.pkl: contact@namiq.io."
+  ],
+  "logins": [],
+  "bodies": [
+   "off-lattice-scan/.process-index.pkl: A Mac has none of the Linux so",
+   "off-lattice-scan/.process-index.pkl: A Mac has none of the Linux so",
+   "off-dispatch/new-nodes: Unprocessable entity on any AP"
+  ],
+  "ok": false,
+  "checked_logins": 20,
+  "checked_bodies": 169
+ },
+ "diff": "19 files changed, 1325 insertions(+), 61 deletions(-)"
+}
