@@ -29,6 +29,7 @@ Or by hand:
 
 ```bash
 devkb build --project .                       # writes .devkb/ (add it to .gitignore)
+devkb pack  --project . file path/to/file.py  # before editing: what depends on it, tests that reach it
 devkb pack  --project . refactor my_function  # who calls it, which tests, with evidence lines and coverage
 devkb pack  --project . error "message text"  # which route handlers reach the code that raises it
 devkb pack  --project . change path/to/file.py

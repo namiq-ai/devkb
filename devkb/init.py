@@ -29,32 +29,34 @@ BEGIN, END = "<!-- devkb:begin (managed by `devkb init`; edit outside this block
 HASH_BEGIN, HASH_END = "# devkb:begin (managed by `devkb init`)", "# devkb:end"
 HOOKS = ("post-commit", "post-merge", "post-checkout")
 
-AGENTS_BLOCK = """## devkb: this repository's process graph
+AGENTS_BLOCK = """## devkb: before you change code
 
-A graph of this repository (calls, tests, raised errors, commits, configuration) is served by the `devkb` MCP server
-and built into `.devkb/` by `devkb build --project .`. Use it where it saves several searches; a one-hop lookup is
-faster with grep.
+This repository has a graph of its code (calls, tests, raised errors, commits, configuration) in `.devkb/`. Use it at
+these steps; each command prints the answer with the line of code that proves every item and says what it could not
+see:
+
+1. **Before you edit an existing file**, run `devkb pack --project . file PATH`: which of its functions other files
+   call (your change must keep them working), the files that depend on it, and the tests that exercise it.
+2. **Before you change a function's signature or behaviour**, run `devkb pack --project . refactor NAME` (every
+   caller, tests among them) or `devkb pack --project . change NAME --path PATH` (callers at any depth, tests to run).
+3. **When you start from an error message**, run `devkb pack --project . error "MESSAGE"`.
+4. **After editing**, run the tests the pack named first, then the full suite.
+5. If you edited many files, rebuild first: `devkb build --project .` (a few seconds on most repositories).
+
+The same graph is served by the `devkb` MCP server for questions in between:
 
 | Question | Use |
 |---|---|
-| Before writing code in an area you have not read: its files, key functions, tests, docs | `explain_area` with the folder |
-| Where a new feature or change belongs: related code, docs, past work, tests to run | `feature_brief` with the goal |
+| An area you have not read: its files, key functions, tests, docs | `explain_area` with the folder |
+| Where a new feature or change belongs: related code, docs, tests | `feature_brief` with the goal |
 | Code that does something, found by what it does | `find_code` |
-| An error message: where it is raised and what reaches it | `rca_trace` |
-| The impact of changing a function: its callers at any depth, route handlers, tests | `impact` |
-| Who calls a function | `callers` |
-| Which tests to run for a change | `tests_to_run`, or `tests_for` a file or function |
+| Who calls a function / the impact of a change | `callers` / `impact` |
+| Which tests to run | `tests_to_run`, or `tests_for` a file or function |
 | A commit or a diff to review | `review_pack` |
-| A setting or a service: who reads it, where it is declared and deployed | `config` |
+| A setting or a service | `config` |
 
-Rules:
-- Every list answer carries `coverage`. If `complete` is true, the list is the answer: do not search again. If it is
-  false, search only the files it names in `search_files`.
-- If an answer's `_meta.stale` is true, the graph is older than the working tree: re-read the files that decide the
-  change.
-- Before a change, a whole answer in one step: `devkb pack --project . refactor NAME`, `devkb pack --project . change
-  PATH`, `devkb pack --project . error "MESSAGE"`. A pack gives every item with the line of code that proves it and
-  says what it could not see."""
+Rules: a pack or answer marked **Complete** is the whole answer: do not search again. If it is incomplete, search only
+the files it names. If it says files changed since the graph was built, re-read those files."""
 
 
 def _between(text: str, begin: str, end: str) -> re.Pattern:

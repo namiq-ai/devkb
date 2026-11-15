@@ -29,7 +29,7 @@ def test_init_adds_blocks_keeps_the_repository_s_content_and_is_idempotent(tmp_p
     changes = init.run(root, "lean", hooks=False, dry_run=False)
     assert sorted(changes) == ["update .gitignore", "update .mcp.json", "update AGENTS.md", "update CLAUDE.md"]
     agents = (root / "AGENTS.md").read_text()
-    assert agents.startswith("# Agents\n\nUse ruff.\n") and "`rca_trace`" in agents and "`coverage`" in agents
+    assert agents.startswith("# Agents\n\nUse ruff.\n") and "devkb pack --project . file PATH" in agents and "**Complete**" in agents
     assert (root / "CLAUDE.md").read_text().startswith("# Project rules") and "@AGENTS.md" in (root / "CLAUDE.md").read_text()
     servers = json.loads((root / ".mcp.json").read_text())["mcpServers"]
     assert servers["other"] == {"command": "x"} and servers["devkb"]["args"] == ["mcp", "--project", ".", "--toolset", "lean"]
@@ -68,3 +68,13 @@ def test_the_default_gives_agents_the_dev_toolset_with_orientation_tools(tmp_pat
     assert json.loads((root / ".mcp.json").read_text())["mcpServers"]["devkb"]["args"][-1] == "dev"
     assert {"explain_area", "feature_brief", "find_code"} <= set(TOOLSETS["dev"]) and set(TOOLSETS["lean"]) < set(TOOLSETS["dev"])
     assert "`explain_area`" in (root / "AGENTS.md").read_text()
+
+
+def test_the_file_pack_lists_what_depends_on_a_file_and_the_tests_reaching_it(tmp_path, monkeypatch):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_devkb_coverage_classes_odsf313 import _api  # noqa: PLC0415
+    from devkb.packs import Packer  # noqa: PLC0415
+    text = Packer(_api(tmp_path, monkeypatch)).file("app/store.py")
+    assert "## Functions other files call (2 of 3)" in text and "`RuntimeStore.add_edge` — 2 file(s): `app/routes.py:6" in text
+    assert "`app/routes.py`" in text and "tests/test_store.py" in text
+    assert "The graph has no code" in Packer(_api(tmp_path / "x", monkeypatch)).file("nowhere.py")

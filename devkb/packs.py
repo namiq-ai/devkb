@@ -208,6 +208,42 @@ class Packer:
         out += ["", "## Coverage", self.coverage(sorted(closure, key=self.api._key)[:40], set(tests) | {self.api._key(x).split('::')[0] for x in closure})]
         return "\n".join(out + ["", HOW_TO_USE])
 
+    def file(self, path: str, cap: int = 25) -> str:
+        """Before editing a file: which of its functions other files depend on (each with the call that proves it),
+        the tests that exercise it, and what the graph could not attribute. A file's contract is what is called from
+        outside it, so those functions come first and its private helpers are only counted."""
+        path = path.strip().lstrip("./")
+        syms = list(self.idx.sym_by_file.get(path, []))
+        if not syms:
+            return f"# Graph pack: file\n\nThe graph has no code in `{path}`. Search the code."
+        rows = []
+        for i in syms:
+            outside: dict[str, int] = {}
+            for c in self.idx.sources("CALLS", i):
+                f = self.api._key(c).split("::")[0]
+                if f != path:
+                    outside.setdefault(f, c)
+            rows.append((i, outside))
+        used = sorted((r for r in rows if r[1]), key=lambda r: (-len(r[1]), self.api._key(r[0])))
+        tests = self.tests(set(syms) | set(self.up(set(syms))))  # tests that reach the file through calls at any depth
+        dependants = sorted({f for _, o in used for f in o})
+        out = [f"# Graph pack: before editing `{path}`", "", self.freshness([path] + dependants[:40]), "",
+               f"## Functions other files call ({len(used)} of {len(syms)})"]
+        for i, outside in used[:cap]:
+            f, c = next(iter(sorted(outside.items())))
+            more = f" and {len(outside) - 1} more file(s)" if len(outside) > 1 else ""
+            out.append(f"- `{self.api._key(i).split('::', 1)[1]}` — {len(outside)} file(s): `{self.call_site(c, self._name(i))}`{more}")
+        if len(used) > cap:
+            out.append(f"- … {len(used) - cap} more")
+        if not used:
+            out.append("- none: nothing outside this file calls into it through calls the graph resolves")
+        out += ["", f"## Files that depend on it ({len(dependants)})"] + [f"- `{f}`" for f in dependants[:40]]
+        out += ["", f"## Tests that exercise it, directly or through callers ({len(tests)})"] + self._tests_section(tests)
+        if tests:
+            out += ["", f"Run: `{self._run(list(tests))}`"]
+        out += ["", "## Coverage", self.coverage(sorted(syms, key=self.api._key)[:40], set(dependants) | set(tests))]
+        return "\n".join(out + ["", HOW_TO_USE])
+
     def refactor(self, name: str, role: str = "", path: str = "") -> str:
         i, err = self.api._resolve(f"{path}::{name}" if path and "::" not in name else name)
         if i is None:
@@ -296,14 +332,14 @@ HOW_TO_USE = ("---\nThis pack was extracted from the source by the dev-process g
 def main() -> int:
     ap = argparse.ArgumentParser(description="write a predefined graph pack")
     ap.add_argument("--project", required=True)
-    ap.add_argument("kind", choices=("error", "change", "refactor"))
+    ap.add_argument("kind", choices=("file", "error", "change", "refactor"))
     ap.add_argument("subject", nargs="+")
     ap.add_argument("--role", default="")
     ap.add_argument("--path", default="")
     ns = ap.parse_args()
     p = Packer(ProcessAPI(ns.project, telemetry=False))
     subject = " ".join(ns.subject)
-    print({"error": lambda: p.error(subject), "change": lambda: p.change(subject, ns.path),
+    print({"file": lambda: p.file(subject), "error": lambda: p.error(subject), "change": lambda: p.change(subject, ns.path),
            "refactor": lambda: p.refactor(subject, ns.role, ns.path)}[ns.kind]())
     return 0
 
