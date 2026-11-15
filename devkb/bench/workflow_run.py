@@ -65,7 +65,10 @@ def _run_once(task: dict, arm: str, cfg_dir: Path) -> dict:
     cfg = {"mcpServers": {}}
     if arm not in ("plain", "pack"):  # a pack arm loads no graph tools: the graph's answer is already in the prompt
         cfg["mcpServers"]["devkb-sdlc"] = {
-            "command": "uv", "args": ["run", "--python", ">=3.10", "--no-project", "--with", "mcp>=1.23,<2", "python",
+            # --no-config: uv starts inside the checkout, and a repository's own uv settings (Prefect pins
+            # `required-version`) must not stop the graph server; on 2026-11-15 they silently left Prefect's tool arms
+            # without tools in all 90 runs.
+            "command": "uv", "args": ["run", "--no-config", "--python", ">=3.10", "--no-project", "--with", "mcp>=1.23,<2", "python",
                                       str(TOOL_ROOT / "devkb" / "mcp_server.py"), "--project", PROJECT],
             "env": {"DEVKB_DIR": SNAPSHOT, "DEVKB_REPO": CHECKOUT, "DEVKB_TOOLSET": arm,
                     **({"DEVKB_EXTERNAL": "1"} if os.environ.get("DEVKB_EXTERNAL") == "1" else {}),
