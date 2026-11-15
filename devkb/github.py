@@ -35,7 +35,7 @@ Transport = Callable[[str, dict], dict]
 
 PAGE = 100
 MAX_COMMIT_PAGES = 5            # the API lists at most 250 commits of a pull request anyway
-CACHE_VERSION = 1
+CACHE_VERSION = 2             # 2: a listing records whether it finished, and where to resume
 
 
 class GitHubError(Exception):
@@ -123,7 +123,9 @@ def origin_remote(repo_root: Path, extra_host: str | None = None) -> Remote | No
 def resolve_token(host: str) -> str | None:
     """GITHUB_TOKEN (github.com) or the enterprise variables, else the `gh` login for that host. A token is only ever
     sent to the host it was found for."""
-    names = ("GITHUB_TOKEN", "GH_TOKEN") if host == "github.com" else ("GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
+    names: tuple[str, ...] = ("GITHUB_TOKEN", "GH_TOKEN") if host == "github.com" else ("GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
+    if host != "github.com" and (os.environ.get("GH_HOST") == host or host in (os.environ.get("GITHUB_SERVER_URL") or "")):
+        names += ("GITHUB_TOKEN", "GH_TOKEN")    # CI on that enterprise host (GitHub Actions sets GITHUB_SERVER_URL)
     for name in names:
         if os.environ.get(name):
             return os.environ[name].strip()
@@ -177,7 +179,7 @@ query($owner: String!, $name: String!, $after: String) {
         number title state mergedAt updatedAt baseRefName headRefName url
         mergeCommit { oid }
         labels(first: 30) { nodes { name } }
-        closingIssuesReferences(first: 50) { nodes { number } }
+        closingIssuesReferences(first: 50) { nodes { number repository { nameWithOwner } } }
         %(commits)s
         %(author)s
       }
@@ -227,14 +229,21 @@ def _labels(node: dict) -> list[str]:
     return sorted({n.get("name") for n in ((node.get("labels") or {}).get("nodes") or []) if n and n.get("name")})
 
 
-def _pr_record(node: dict, authors: bool) -> dict:
+def _same_repo(ref: dict, repo_slug: str) -> bool:
+    name = (ref.get("repository") or {}).get("nameWithOwner")
+    return not name or not repo_slug or name.lower() == repo_slug.lower()
+
+
+def _pr_record(node: dict, authors: bool, repo_slug: str = "") -> dict:
     state = str(node.get("state") or "").lower()
     rec = {
         "number": int(node["number"]), "title": node.get("title") or "", "state": state if state in ("open", "merged", "closed") else "closed",
         "merged_at": node.get("mergedAt"), "updated_at": node.get("updatedAt") or "", "base": node.get("baseRefName"),
         "head": node.get("headRefName"), "url": node.get("url"), "labels": _labels(node),
         "merge_commit": ((node.get("mergeCommit") or {}).get("oid")),
-        "closes": sorted({int(n["number"]) for n in ((node.get("closingIssuesReferences") or {}).get("nodes") or []) if n}),
+        # only this repository's issues: a reference to another repository's #N is not this repository's GH-N
+        "closes": sorted({int(n["number"]) for n in ((node.get("closingIssuesReferences") or {}).get("nodes") or [])
+                          if n and _same_repo(n, repo_slug)}),
         "commits": [c["commit"]["oid"] for c in ((node.get("commits") or {}).get("nodes") or []) if c and c.get("commit")],
         "commits_total": int((node.get("commits") or {}).get("totalCount") or 0),
     }
@@ -244,10 +253,9 @@ def _pr_record(node: dict, authors: bool) -> dict:
 
 
 def issue_type_from(issue_type: str | None, labels: list[str], has_children: bool) -> str:
-    """ADR-DEVKB-007 item 2: the issue's type, else a label (bug, epic, enhancement/feature), else ISSUE; an issue
-    with sub-issues is an epic."""
-    if has_children:
-        return "EPIC"
+    """ADR-DEVKB-007 item 2: the issue's type, else a label (bug, epic, enhancement/feature), else EPIC when it has
+    sub-issues, else ISSUE. A typed issue keeps its type when it has sub-issues (a Bug with sub-issues stays a Bug);
+    `has_sub_issues` is recorded beside it and the `epics` alias reads both."""
     if issue_type:
         return re.sub(r"[^A-Z0-9]+", "_", issue_type.upper()).strip("_") or "ISSUE"
     lower = {l.lower() for l in labels}
@@ -257,7 +265,7 @@ def issue_type_from(issue_type: str | None, labels: list[str], has_children: boo
         return "BUG"
     if lower & {"enhancement", "feature"}:
         return "FEATURE"
-    return "ISSUE"
+    return "EPIC" if has_children else "ISSUE"
 
 
 def _issue_record(node: dict, authors: bool, repo_slug: str) -> dict:
@@ -273,6 +281,7 @@ def _issue_record(node: dict, authors: bool, repo_slug: str) -> dict:
         "ticket_type": issue_type_from((node.get("issueType") or {}).get("name"), labels,
                                        int((node.get("subIssues") or {}).get("totalCount") or 0) > 0),
         "parent": int(parent["number"]) if parent.get("number") and same_repo else None,
+        "has_sub_issues": int((node.get("subIssues") or {}).get("totalCount") or 0) > 0,
     }
     if authors and (node.get("author") or {}).get("login"):
         rec["author"] = node["author"]["login"]
@@ -289,29 +298,29 @@ class Cache:
     def _path(self, kind: str) -> Path:
         return self.dir / f"{kind}.json"
 
-    def load(self, kind: str) -> tuple[dict[int, dict], str]:
-        """(records by number, when they were fetched). Empty when the cache is for another repository, another
-        schema, or was written without the author logins now asked for."""
+    def load(self, kind: str) -> tuple[dict[int, dict], str, dict]:
+        """(records by number, when they were fetched, listing state {"complete", "cursor"}). Empty when the cache is
+        for another repository, another schema, or was written without the author logins now asked for."""
         try:
             data = json.loads(self._path(kind).read_text())
         except (OSError, ValueError):
-            return {}, ""
+            return {}, "", {}
         if not isinstance(data, dict) or data.get("version") != CACHE_VERSION or data.get("repo") != self.remote.slug:
-            return {}, ""
+            return {}, "", {}
         if self.authors and not data.get("authors"):
-            return {}, ""
+            return {}, "", {}
         items = {int(k): v for k, v in (data.get("items") or {}).items() if isinstance(v, dict)}
         if not self.authors:
             for v in items.values():
                 v.pop("author", None)
-        return items, str(data.get("fetched_at") or "")
+        return items, str(data.get("fetched_at") or ""), {"complete": bool(data.get("complete")), "cursor": data.get("cursor")}
 
-    def save(self, kind: str, items: dict[int, dict]) -> None:
+    def save(self, kind: str, items: dict[int, dict], complete: bool = True, cursor: str | None = None) -> None:
         clean = {str(n): ({k: v for k, v in rec.items() if self.authors or k != "author"}) for n, rec in sorted(items.items())}
         try:
             self.dir.mkdir(parents=True, exist_ok=True)
             self._path(kind).write_text(json.dumps({
-                "version": CACHE_VERSION, "repo": self.remote.slug, "authors": self.authors,
+                "version": CACHE_VERSION, "repo": self.remote.slug, "authors": self.authors, "complete": complete, "cursor": cursor,
                 "fetched_at": datetime.now(timezone.utc).isoformat(), "items": clean}, indent=0))
         except OSError:
             pass
@@ -346,33 +355,55 @@ def _gql(transport: Transport, query: str, variables: dict) -> dict:
 
 
 def _walk(transport: Transport, query: str, remote: Remote, connection: str, keep: Callable[[dict], dict],
-          cached: dict[int, dict]) -> tuple[dict[int, dict], int]:
-    """Page through newest-updated-first and stop once a page reaches records older than anything cached, so a
-    rebuild fetches only what changed. Returns (fresh records by number, requests made)."""
-    newest_cached = max((r.get("updated_at") or "" for r in cached.values()), default="")
+          items: dict[int, dict], state: dict, save: Callable[[dict[int, dict], bool, str | None], None],
+          finish: Callable[[dict], None] | None = None) -> tuple[dict[int, dict], int]:
+    """Read one listing, newest-updated first, into `items`. Returns (records read, requests made); a GitHubError
+    propagates after what was read is kept.
+
+    A finished listing is refreshed incrementally: paging stops at records older than anything cached, and the cache
+    is written only when that pass ends, because a partial pass would raise the "newest cached" mark over records not
+    yet read. An unfinished listing (a first build, or one cut short) is resumed from its saved cursor and written
+    after every page with `complete` false until the last page, so a repository too large for one rate-limit window
+    is read across several builds instead of starting over each time."""
+    resume = not state.get("complete")
+    after = state.get("cursor") if resume else None
+    newest = "" if resume else max((r.get("updated_at") or "" for r in items.values()), default="")
     fresh: dict[int, dict] = {}
-    after, calls = None, 0
+    calls = 0
     while True:
         data = _gql(transport, query, {"owner": remote.owner, "name": remote.repo, "after": after})
         calls += 1
         conn = ((data.get("repository") or {}).get(connection)) or {}
+        page: dict[int, dict] = {}
         stop = False
         for node in conn.get("nodes") or []:
             if not node:
                 continue
             rec = keep(node)
-            if newest_cached and rec["updated_at"] and rec["updated_at"] < newest_cached:
+            if newest and rec["updated_at"] and rec["updated_at"] < newest:
                 stop = True
                 continue
-            fresh[rec["number"]] = rec
+            page[rec["number"]] = rec
+        for rec in page.values():
+            if finish:
+                finish(rec)
+        fresh.update(page)
         info = conn.get("pageInfo") or {}
-        if stop or not info.get("hasNextPage"):
+        more = bool(info.get("hasNextPage")) and not stop
+        if resume:
+            items.update(page)
+            save(items, not more, info.get("endCursor") if more else None)
+        if not more:
+            if not resume:
+                items.update(fresh)
+                save(items, True, None)
             return fresh, calls
         after = info.get("endCursor")
 
 
 def _more_commits(transport: Transport, remote: Remote, rec: dict) -> None:
-    """A pull request with more than 100 commits: read the rest, up to the API's own cap."""
+    """A pull request with more than 100 commits: read the rest, up to the API's own cap. Raises GitHubError; the
+    caller keeps the commits read so far, and `commits_total` then says the list is cut short."""
     after, pages = rec.pop("_after", None), 1
     while after and pages < MAX_COMMIT_PAGES:
         data = _gql(transport, _PR_MORE_COMMITS, {"owner": remote.owner, "name": remote.repo, "number": rec["number"], "after": after})
@@ -388,8 +419,8 @@ def fetch(remote: Remote, cache_dir: Path, authors: bool = False, transport: Tra
     `report`: status `ok`, `partial` (one kind failed), or `failed` (neither could be fetched), with the reason."""
     cache = Cache(cache_dir, remote, authors)
     out = Online()
-    out.prs, pr_at = cache.load("pull_requests")
-    out.issues, is_at = cache.load("issues")
+    out.prs, pr_at, pr_state = cache.load("pull_requests")
+    out.issues, is_at, is_state = cache.load("issues")
     report: dict = {"remote": remote.slug, "mode": "online", "authors": authors, "status": "ok", "reason": None,
                     "not_fetched": [], "requests": 0}
     if transport is None:
@@ -405,36 +436,43 @@ def fetch(remote: Remote, cache_dir: Path, authors: bool = False, transport: Tra
     reasons: list[str] = []
     stale_cache = {k: bool(v) for k, v in (("pull_requests", out.prs), ("issues", out.issues))}
 
+    slug = f"{remote.owner}/{remote.repo}"
+    commits_cut: list[int] = []
+
     def keep_pr(node: dict) -> dict:
-        rec = _pr_record(node, authors)
+        rec = _pr_record(node, authors, slug)
         info = (node.get("commits") or {}).get("pageInfo") or {}
         if info.get("hasNextPage"):
             rec["_after"] = info.get("endCursor")
         return rec
 
-    try:
-        fresh, calls = _walk(transport, pr_query(authors), remote, "pullRequests", keep_pr, out.prs)
-        report["requests"] += calls
-        for rec in fresh.values():
+    def finish_pr(rec: dict) -> None:
+        """The rest of a long commit list; a failure here costs that one list, never the page."""
+        try:
             _more_commits(transport, remote, rec)
-            rec.pop("_after", None)
-        out.prs.update(fresh)
-        cache.save("pull_requests", out.prs)
+        except GitHubError:
+            commits_cut.append(rec["number"])
+        rec.pop("_after", None)
+
+    try:
+        fresh, calls = _walk(transport, pr_query(authors), remote, "pullRequests", keep_pr, out.prs, pr_state,
+                             lambda items, done, cursor: cache.save("pull_requests", items, done, cursor), finish_pr)
+        report["requests"] += calls
         ok["pull_requests"] = True
         report["pull_requests_fetched"] = len(fresh)
     except GitHubError as exc:
         reasons.append(f"pull requests: {exc.kind}: {exc.message}")
         report["kind"] = exc.kind
 
-    slug = f"{remote.owner}/{remote.repo}"
+    if commits_cut:
+        report["commit_lists_not_fetched"] = sorted(commits_cut)[:50]
     last_error: GitHubError | None = None
     for extra in (_ISSUE_EXTRA_FULL, _ISSUE_EXTRA_BASIC, _ISSUE_EXTRA_MIN):
         try:
             fresh, calls = _walk(transport, issue_query(authors, extra), remote, "issues",
-                                 lambda n: _issue_record(n, authors, slug), out.issues)
+                                 lambda n: _issue_record(n, authors, slug), out.issues, is_state,
+                                 lambda items, done, cursor: cache.save("issues", items, done, cursor))
             report["requests"] += calls
-            out.issues.update(fresh)
-            cache.save("issues", out.issues)
             ok["issues"] = True
             report["issues_fetched"] = len(fresh)
             report["issue_fields"] = "full" if extra == _ISSUE_EXTRA_FULL else "basic"
@@ -448,6 +486,8 @@ def fetch(remote: Remote, cache_dir: Path, authors: bool = False, transport: Tra
         reasons.append(f"issues: {last_error.kind}: {last_error.message}")
         report.setdefault("kind", last_error.kind)
 
+    report["listing_incomplete"] = [k for k in ("pull_requests", "issues")
+                                    if not Cache(cache_dir, remote, authors).load(k)[2].get("complete")]
     report["not_fetched"] = [k for k, v in ok.items() if not v]
     if not report["not_fetched"]:
         report["status"] = "ok"
@@ -471,7 +511,5 @@ def _describe(report: dict, out: Online, ok: dict[str, bool]) -> None:
     truncated = sorted(n for n, r in out.prs.items() if r.get("commits_total", 0) > len(r.get("commits", [])))
     if truncated:
         report["commit_lists_truncated"] = truncated[:50]
-    if not ok["pull_requests"] or not ok["issues"]:
-        report.setdefault("status", "failed")
     # callers read the report from the returned object; keep it on `out` even on the early return
     out.report = report

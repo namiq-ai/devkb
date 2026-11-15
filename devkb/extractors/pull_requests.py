@@ -60,6 +60,7 @@ class OfflinePR:
     #: sha -> source of the claim
     commits: dict[str, str] = field(default_factory=dict)
     closes: set[int] = field(default_factory=set)
+    too_large: bool = False      # a merge that brought in more than MAX_BROUGHT_IN commits: only the merge is linked
 
 
 # ── offline ──────────────────────────────────────────────────────────────────────────────
@@ -78,14 +79,16 @@ def read_log(repo_root: Path, since: str = DEFAULT_SINCE) -> list[GitCommit]:
     return commits
 
 
-def brought_in(repo_root: Path, merge: str) -> list[str]:
-    """The commits a merge commit brought in: `git rev-list <merge>^1..<merge>^2`."""
+def brought_in(repo_root: Path, merge: str) -> list[str] | None:
+    """The commits a merge commit brought in: `git rev-list <merge>^1..<merge>^2`. None when there are more than
+    MAX_BROUGHT_IN: such a list is not trusted, and the build reports the pull request instead of linking nothing
+    silently."""
     try:
         out = subprocess.run(["git", "rev-list", f"{merge}^1..{merge}^2"], cwd=str(repo_root), capture_output=True,
                              text=True, timeout=60).stdout.split()
     except (OSError, subprocess.SubprocessError):
         return []
-    return out if len(out) <= MAX_BROUGHT_IN else []
+    return out if len(out) <= MAX_BROUGHT_IN else None
 
 
 def closing_numbers(text: str) -> set[int]:
@@ -100,11 +103,13 @@ def scan(commits: list[GitCommit], repo_root: Path,
     for c in sorted(commits, key=lambda c: c.committed):
         m = _MERGE.match(c.subject)
         members: list[str] = []
+        listed: list[str] | None = []
         if m and len(c.parents) >= 2:
             n, style, source = int(m.group(1)), "merge", MERGE_SOURCE
             title = next((ln.strip() for ln in c.body.splitlines() if ln.strip()), "")
             head = m.group(2).split("/", 1)[-1]      # drop the owner: it is a login
-            members = [s for s in brought(repo_root, c.sha) if s in by_sha and s != c.sha]
+            listed = brought(repo_root, c.sha)
+            members = [s for s in (listed or []) if s in by_sha and s != c.sha]
         else:
             m = _SQUASH.search(c.subject)
             if not m or len(c.parents) != 1:
@@ -112,6 +117,8 @@ def scan(commits: list[GitCommit], repo_root: Path,
             n, style, source = int(m.group(1)), "squash", SQUASH_SOURCE
             title, head = c.subject[:m.start()].rstrip(), None
         pr = prs.setdefault(n, OfflinePR(n))
+        if style == "merge" and listed is None:
+            pr.too_large = True
         if not pr.merge_commit:
             pr.title, pr.head, pr.merge_style = title, head, style
             pr.merged_at, pr.merge_commit = c.committed, c.sha
@@ -140,7 +147,9 @@ def build_graph(remote: github.Remote, commits: list[GitCommit], offline: dict[i
     known = {c.sha: c for c in commits}
     prs_online = online.prs if online else {}
     issues_online = online.issues if online else {}
-    pr_numbers = set(offline) | set(prs_online)
+    # One number sequence per repository: when GitHub returns N as an issue, a `(#N)` subject named that issue, not a
+    # pull request, so the offline guess PR-N is dropped and the issue kept.
+    pr_numbers = (set(offline) - set(issues_online)) | set(prs_online)
 
     def commit_node(sha: str) -> None:
         c = known[sha]
@@ -153,7 +162,8 @@ def build_graph(remote: github.Remote, commits: list[GitCommit], offline: dict[i
         g.add_node("Ticket", _gh(n), source="github-issues", title=rec["title"], ticket_type=rec["ticket_type"],
                    status=rec["state"].upper(), state=rec["state"], state_reason=rec.get("state_reason"),
                    labels=rec["labels"], milestone=rec.get("milestone"), url=rec.get("url") or remote.web("issues", n),
-                   created_at=rec.get("created_at"), closed_at=rec.get("closed_at"), author=rec.get("author"))
+                   created_at=rec.get("created_at"), closed_at=rec.get("closed_at"), author=rec.get("author"),
+                   has_sub_issues=bool(rec.get("has_sub_issues")))
     for n, rec in sorted(issues_online.items()):
         parent = rec.get("parent")
         if parent and parent in issues_online and n not in pr_numbers:
@@ -203,8 +213,9 @@ def build_graph(remote: github.Remote, commits: list[GitCommit], offline: dict[i
         # CLOSES: GitHub's own record replaces whatever the commit messages suggested
         if on:
             for t in on["closes"]:
-                if t not in issues_online:
-                    g.add_node("Ticket", _gh(t), source="github-issues", ticket_type="ISSUE", url=remote.web("issues", t))
+                if t not in issues_online:   # closed by GitHub's record, but not in the issue listing (not read yet, or moved)
+                    g.add_node("Ticket", _gh(t), source="github-closing-reference", ticket_type="ISSUE", fetched=False,
+                               url=remote.web("issues", t))
                 g.add_edge("CLOSES", "PullRequest", _pr(n), "Ticket", _gh(t), source="github-closing-reference", confidence=1.0,
                            evidence_ref="GitHub: closing issue reference")
         elif off:
@@ -244,6 +255,7 @@ def extract(ctx: ProjectContext, github_flag: bool | None = None, transport: git
     commits = read_log(ctx.repo_root, since)
     offline = scan(commits, ctx.repo_root)
     online: github.Online | None = None
+    large = sorted(n for n, pr in offline.items() if pr.too_large)
     report: dict = {"remote": remote.slug, "mode": "offline", "status": "offline",
                     "reason": "online layer not requested", "offline_pull_requests": len(offline)}
     if cfg.enabled:
@@ -253,5 +265,7 @@ def extract(ctx: ProjectContext, github_flag: bool | None = None, transport: git
             print(f"devkb build: github layer {report['status']} ({report.get('reason')}); "
                   f"not fetched: {', '.join(report.get('not_fetched') or [])}; the answers use the offline layer"
                   + (" and the cache" if report.get("stale_cache_used") else ""), file=sys.stderr)
+    if large:
+        report["merges_not_expanded"] = large[:50]  # more than MAX_BROUGHT_IN commits: only the merge commit is linked
     return build_graph(remote, commits, offline, online if online and (online.prs or online.issues) else None,
                        cfg.authors), report

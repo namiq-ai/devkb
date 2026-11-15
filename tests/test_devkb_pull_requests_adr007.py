@@ -273,7 +273,8 @@ def test_hosted_issues_are_tickets_with_types_children_and_mentions(repo):
 def test_labels_decide_the_ticket_type_when_there_is_no_issue_type():
     t = github.issue_type_from
     assert (t(None, ["Bug"], False), t(None, ["epic"], False), t(None, ["enhancement"], False), t(None, ["feature"], False),
-            t(None, ["docs"], False), t("Task", ["bug"], False), t("Bug", [], True)) == ("BUG", "EPIC", "FEATURE", "FEATURE", "ISSUE", "TASK", "EPIC")
+            t(None, ["docs"], False), t("Task", ["bug"], False), t("Bug", [], True), t(None, [], True)) == \
+        ("BUG", "EPIC", "FEATURE", "FEATURE", "ISSUE", "TASK", "BUG", "EPIC"), "a typed issue keeps its type; sub-issues alone make an epic"
 
 
 def test_a_host_without_issue_types_gets_a_reduced_query(repo):
@@ -298,17 +299,17 @@ def test_the_cache_is_keyed_by_updated_at_so_a_rebuild_fetches_only_what_changed
             self.calls.append((query, dict(variables)))
             if "pullRequests(" in query:
                 changed = [dict(p) for p in self.prs if p["number"] in (11, 9)]
-                changed[0]["title"] = "Open work, renamed"
+                next(p for p in changed if p["number"] == 11)["title"] = "Open work, renamed"
                 return {"data": {"repository": {"pullRequests": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": changed}}}}
             return {"data": {"repository": {"issues": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": []}}}}
 
     newer = Newer(s)
-    newer.prs[3]["title"] = "ignored, replaced in __call__"
     graph, _ = build_graph(root, github=True, github_transport=newer)
     assert first == 2 and len(newer.calls) == 2
     assert node(graph, "PullRequest", "PR-5").props["labels"] == ["enhancement"], "unchanged records come from the cache"
     assert node(graph, "Ticket", "GH-7") is not None, "so do issues"
-    assert node(graph, "PullRequest", "PR-11").props["title"] in ("Open work, renamed", "ignored, replaced in __call__")
+    assert node(graph, "PullRequest", "PR-11").props["title"] == "Open work, renamed", "a changed record replaces the cached one"
+    assert node(graph, "PullRequest", "PR-9").props["title"] == "Tidy notes"
 
 
 def test_long_pull_requests_get_their_remaining_commits(repo):
@@ -533,12 +534,23 @@ def test_pack_cli_accepts_pr_and_ticket(online_api, capsys, monkeypatch):
     assert "pull request PR-6" in capsys.readouterr().out
 
 
-def test_cli_build_accepts_the_github_flags_in_both_stages():
-    import argparse
-    for module in (build_symbols, build_mod):
-        src = Path(module.__file__).read_text()
-        assert "--github" in src and "--no-github" in src
-    assert argparse  # the flags are parsed by argparse in both stages; `devkb build --github` passes the same argv to each
+def test_cli_build_parses_the_github_flags_and_devkb_json_follows_them(repo, monkeypatch):
+    """`devkb build --github` and `--no-github` through the real argument parsers of both stages."""
+    root, s = repo
+    fake = FakeGitHub(s)
+    monkeypatch.setattr(github, "resolve_token", lambda host: "test-token")
+    monkeypatch.setattr(github, "http_transport", lambda host, token, timeout=60.0: fake)
+
+    def run(*flags):
+        for module in (build_symbols, build_mod):
+            monkeypatch.setattr(sys, "argv", [module.__name__, "--project", str(root), *flags])
+            assert module.main() == 0
+        return json.loads((root / ".devkb" / "manifest.json").read_text())["github"]
+
+    assert run("--github")["mode"] == "online" and fake.calls, "--github fetched through the transport"
+    calls = len(fake.calls)
+    (root / "devkb.json").write_text(json.dumps({"github": {"enabled": True}}))
+    assert run("--no-github")["mode"] == "offline" and len(fake.calls) == calls, "--no-github overrides devkb.json"
 
 
 def test_graph_verbs_and_types_are_registered():
@@ -550,3 +562,124 @@ def test_graph_verbs_and_types_are_registered():
 def test_member_graph_prefixes_pull_request_and_issue_keys():
     from devkb.extractors import members
     assert members._prefixed("LIB", "PullRequest", "PR-5") == "LIB:PR-5" and members._prefixed("LIB", "Ticket", "GH-7") == "LIB:GH-7"
+
+
+# ── fixes found by the blind review (ADR-DEVKB-007, before merging) ─────────────────────────
+class Paged(FakeGitHub):
+    """Serves the pull-request listing one record per page, and fails with a rate limit on the request numbered
+    `fail_at` (counting every request), as a large first build does when it runs out of its hourly budget."""
+
+    def __init__(self, shas, fail_at=None):
+        super().__init__(shas)
+        self.fail_at, self.n = fail_at, 0
+
+    def __call__(self, query, variables):
+        self.n += 1
+        self.calls.append((query, dict(variables)))
+        if self.fail_at and self.n == self.fail_at:
+            raise github.GitHubError("rate-limited", "budget spent")
+        if "pullRequests(" in query:
+            ordered = sorted(self.prs, key=lambda p: p["updatedAt"], reverse=True)
+            i = int(variables.get("after") or 0)
+            return {"data": {"repository": {"pullRequests": {
+                "pageInfo": {"hasNextPage": i + 1 < len(ordered), "endCursor": str(i + 1)}, "nodes": ordered[i:i + 1]}}}}
+        return super().__call__(query, variables)
+
+
+def test_a_first_build_cut_short_by_the_rate_limit_resumes_where_it_stopped(repo):
+    root, s = repo
+    first = Paged(s, fail_at=3)                      # pages 1-2 read, the third request is refused
+    build_graph(root, github=True, github_transport=first)
+    state = json.loads((root / ".devkb" / "github" / "pull_requests.json").read_text())
+    assert state["complete"] is False and state["cursor"] == "2" and len(state["items"]) == 2, "progress is kept"
+    manifest = json.loads((root / ".devkb" / "manifest.json").read_text())["github"]
+    assert "pull_requests" in manifest["listing_incomplete"]
+
+    second = Paged(s)
+    graph, _ = build_graph(root, github=True, github_transport=second)
+    pr_pages = [v for q, v in second.calls if "pullRequests(" in q]
+    assert pr_pages[0]["after"] == "2", "the second build resumes from the saved cursor, not from page 1"
+    assert {n.natural_key for n in graph.nodes("PullRequest") if n.source == "github-pull-requests"} == {"PR-5", "PR-6", "PR-9", "PR-11"}
+    state = json.loads((root / ".devkb" / "github" / "pull_requests.json").read_text())
+    assert state["complete"] is True and state["cursor"] is None
+
+
+def test_a_failed_commit_continuation_costs_one_list_not_the_page(repo):
+    root, s = repo
+
+    class Long(FakeGitHub):
+        def __call__(self, query, variables):
+            if "pullRequest(number" in query:
+                self.calls.append((query, dict(variables)))
+                raise github.GitHubError("rate-limited", "commits ran out")
+            return super().__call__(query, variables)
+
+    fake = Long(s)
+    fake.prs[0]["commits"]["pageInfo"] = {"hasNextPage": True, "endCursor": "c1"}
+    fake.prs[0]["commits"]["totalCount"] = 150
+    graph, devkb_dir = build_graph(root, github=True, github_transport=fake)
+    report = json.loads((devkb_dir / "manifest.json").read_text())["github"]
+    assert report["status"] == "ok" and report["commit_lists_not_fetched"] == [5]
+    assert node(graph, "PullRequest", "PR-6").source == "github-pull-requests", "the rest of the page was kept"
+    assert edges(graph, "MERGES")[("PR-5", s["b1"])].confidence == 1.0
+
+
+def test_closing_references_to_another_repository_are_not_this_repositorys_issues(repo):
+    root, s = repo
+    fake = FakeGitHub(s)
+    fake.prs[0]["closingIssuesReferences"] = {"nodes": [{"number": 7, "repository": {"nameWithOwner": "acme/widgets"}},
+                                                        {"number": 99, "repository": {"nameWithOwner": "other/lib"}}]}
+    graph, _ = build_graph(root, github=True, github_transport=fake)
+    assert {dst for (src, dst) in edges(graph, "CLOSES") if src == "PR-5"} == {"GH-7"}
+    assert node(graph, "Ticket", "GH-99") is None
+
+
+def test_a_closed_issue_missing_from_the_listing_is_marked_not_fetched(repo):
+    root, s = repo
+    fake = FakeGitHub(s)
+    fake.issues = [i for i in fake.issues if i["number"] != 7]
+    graph, _ = build_graph(root, github=True, github_transport=fake)
+    gh7 = node(graph, "Ticket", "GH-7")
+    assert gh7.source == "github-closing-reference" and gh7.props["fetched"] is False
+
+
+def test_a_number_github_returns_as_an_issue_is_not_an_offline_pull_request(repo):
+    root, s = repo
+    commit(root, {"notes.txt": "n3\n"}, "Document the limits (#12)")   # a squash-shaped subject naming issue 12
+    fake = FakeGitHub(s)
+    fake.issues.append({**fake.issues[1], "number": 12, "title": "Limits are undocumented", "url": "https://github.com/acme/widgets/issues/12"})
+    graph, _ = build_graph(root, github=True, github_transport=fake)
+    assert node(graph, "PullRequest", "PR-12") is None and node(graph, "Ticket", "GH-12") is not None
+    offline, _ = build_graph(root)
+    assert node(offline, "PullRequest", "PR-12") is not None, "offline, the subject is all there is"
+
+
+def test_an_issue_with_sub_issues_answers_to_epics_and_keeps_its_type(repo):
+    root, s = repo
+    fake = FakeGitHub(s)
+    fake.issues[2]["issueType"] = {"name": "Bug"}                 # #10 has a sub-issue
+    graph, _ = build_graph(root, github=True, github_transport=fake)
+    gh10 = node(graph, "Ticket", "GH-10")
+    assert gh10.props["ticket_type"] == "BUG" and gh10.props["has_sub_issues"] is True
+    from devkb import query
+    with_epics = [n for n in graph.nodes("Ticket") if n.props.get("ticket_type") == "EPIC" or n.props.get("has_sub_issues")]
+    assert [n.natural_key for n in with_epics] == ["GH-10"]
+    assert "has_sub_issues" in Path(query.__file__).read_text()
+
+
+def test_an_enterprise_host_accepts_github_token_only_where_ci_names_that_host(monkeypatch):
+    monkeypatch.setattr(github.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no gh")))
+    for name in ("GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST", "GITHUB_SERVER_URL", "GH_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GITHUB_TOKEN", "ci-token")
+    assert github.resolve_token("git.corp.example") is None, "a github.com token is not sent to another host"
+    monkeypatch.setenv("GITHUB_SERVER_URL", "https://git.corp.example")
+    assert github.resolve_token("git.corp.example") == "ci-token"
+
+
+def test_a_merge_too_large_to_expand_is_reported(repo, monkeypatch):
+    root, s = repo
+    monkeypatch.setattr(pull_requests, "MAX_BROUGHT_IN", 1)
+    _graph, devkb_dir = build_graph(root)
+    report = json.loads((devkb_dir / "manifest.json").read_text())["github"]
+    assert report["merges_not_expanded"] == [5]
