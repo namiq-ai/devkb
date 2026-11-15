@@ -1,12 +1,23 @@
 name: bench
 
-# Free on every pull request that touches the registry or devkb: for each repository in bench/repos.yaml, clone it at
-# its pinned commit, build the graph, generate tasks with truth from source, build packs and score them against the
-# truth. Agent runs cost money and start only by hand (Actions -> bench -> Run workflow, with run_agents ticked).
+# Free on every pull request that touches the registry or devkb, and every night on main: for each repository in
+# bench/repos.yaml, clone it at its pinned commit, build the graph, generate tasks with truth from source, build packs,
+# score them against the truth, and check the truth against an independent implementation (bench/truth_check.py).
+#
+# Agent runs cost money (Sonnet: about $0.05-0.16 per run; all seven repositories x 4 arms x 5 reps is about $70).
+# They start by hand (Actions -> bench -> Run workflow, run_agents ticked) or, at night, only when the repository
+# variable BENCH_NIGHTLY_AGENTS is "true". The nightly scope comes from variables, with small defaults:
+#   BENCH_NIGHTLY_IDS       repositories, comma-separated   (default: lattice-scan)
+#   BENCH_NIGHTLY_REPS      repetitions per task and arm      (default: 1)
+#   BENCH_NIGHTLY_MAX_RUNS  refuse when tasks x arms x reps exceeds it, per repository (default: 60)
+# Results are artifacts of the run; nothing is committed. A nightly result is a smoke test of the pipeline at the
+# current code, not a study: publishable runs keep the protocol in docs/BENCHMARK.md (5 reps, one session per repo).
 
 on:
   pull_request:
     paths: ["bench/repos.yaml", "devkb/**"]
+  schedule:
+    - cron: "17 7 * * *"   # 07:17 UTC every night, off the hour when scheduled runs queue
   workflow_dispatch:
     inputs:
       ids:
@@ -41,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
       - id: ids
         env:
-          WANTED: ${{ inputs.ids }}
+          WANTED: ${{ github.event_name == 'schedule' && vars.BENCH_NIGHTLY_AGENTS == 'true' && (vars.BENCH_NIGHTLY_IDS || 'lattice-scan') || inputs.ids }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os, re
@@ -56,8 +67,15 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 3   # agent runs share one API key's rate limit
       matrix:
         id: ${{ fromJSON(needs.matrix.outputs.ids) }}
+    env:
+      RUN_AGENTS: ${{ inputs.run_agents || (github.event_name == 'schedule' && vars.BENCH_NIGHTLY_AGENTS == 'true') }}
+      ARMS: ${{ inputs.arms || 'plain,core,lean,pack' }}
+      REPS: ${{ inputs.reps || vars.BENCH_NIGHTLY_REPS || '1' }}
+      MODEL: ${{ inputs.model || 'sonnet' }}
+      MAX_RUNS: ${{ inputs.max_runs || vars.BENCH_NIGHTLY_MAX_RUNS || '60' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,21 +93,23 @@ jobs:
           import json; c = json.load(open('$f'))['summary']
           print(f\"### ${{ matrix.id }}\n\nPacks scored as answers against the truth: **{c['mean_score']}** over {c['tasks']} tasks, by kind {c['by_kind']}.\")
           print('Packs that claim to be complete but are wrong: ' + (', '.join(c['complete_but_wrong']) or 'none'))
+          print('Truth missing callers an independent check proves: ' + (', '.join(c.get('truth_missing_callers') or {}) or 'none'))
           " >> "$GITHUB_STEP_SUMMARY" || true
       - name: Agent runs
-        if: ${{ inputs.run_agents }}
+        if: ${{ env.RUN_AGENTS == 'true' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           [ -n "$ANTHROPIC_API_KEY" ] || { echo "::error::set the ANTHROPIC_API_KEY repository secret to run agents"; exit 1; }
           n=$(python3 -c "import json; print(len(json.load(open('bench-work/${{ matrix.id }}/tasks.packs.json'))))")
-          arms=$(echo "${{ inputs.arms }}" | tr ',' '\n' | wc -l)
-          total=$(( n * arms * ${{ inputs.reps }} ))
-          echo "$n tasks x $arms arms x ${{ inputs.reps }} reps = $total runs"
-          [ "$total" -le "${{ inputs.max_runs }}" ] || { echo "::error::$total runs exceeds max_runs"; exit 1; }
+          arms=$(echo "$ARMS" | tr ',' '\n' | wc -l)
+          total=$(( n * arms * REPS ))
+          echo "$n tasks x $arms arms x $REPS reps = $total runs"
+          [ "$total" -le "$MAX_RUNS" ] || { echo "::error::$total runs exceeds max_runs ($MAX_RUNS)"; exit 1; }
           npm install -g @anthropic-ai/claude-code
-          .venv/bin/python -m devkb.bench.pipeline run "${{ matrix.id }}" --work bench-work --arms "${{ inputs.arms }}" --reps "${{ inputs.reps }}" --model "${{ inputs.model }}"
-          .venv/bin/python -m devkb.bench.pipeline report "${{ matrix.id }}" --work bench-work --model "${{ inputs.model }}" | tee -a "$GITHUB_STEP_SUMMARY"
+          .venv/bin/python -m devkb.bench.pipeline run "${{ matrix.id }}" --work bench-work --arms "$ARMS" --reps "$REPS" --model "$MODEL"
+          set -o pipefail   # report fails when a tool arm never reached the graph; that must fail the job
+          .venv/bin/python -m devkb.bench.pipeline report "${{ matrix.id }}" --work bench-work --model "$MODEL" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

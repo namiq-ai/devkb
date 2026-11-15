@@ -102,7 +102,8 @@ make paper      # build study/paper/paper.pdf (needs a TeX installation)
 Pushing a version tag (`v0.2.0`, matching `pyproject.toml`) runs [`release.yml`](.github/workflows/release.yml): it
 audits every dependency with all extras, pinned with hashes, using pip-audit on Python 3.10 and 3.12, and stops on any
 known vulnerability. It then runs the tests, builds the wheel and sdist, and publishes a GitHub release with them and
-the audit reports. Running it by hand from the Actions tab does everything except publish.
+the audit reports. Running it by hand from the Actions tab does everything except publish. PyPI publishing and the
+nightly benchmark are described in [`docs/RELEASING.md`](docs/RELEASING.md); both stay off until enabled.
 
 ## Status
 
