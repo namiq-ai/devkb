@@ -1,0 +1,155 @@
+[
+ {
+  "id": "lnbits-IMP-clear_wallet_cache",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `clear_wallet_cache` (defined in lnbits/core/crud/wallets.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "lnbits/core/views/admin_api.py::api_reset_all_wallet_keys",
+    "lnbits/core/views/user_api.py::api_users_delete_user",
+    "lnbits/core/views/user_api.py::api_users_toggle_activated",
+    "lnbits/core/views/wallet_api.py::api_reset_wallet_keys"
+   ],
+   "test_files": [
+    "tests/api/test_auth.py",
+    "tests/api/test_onchain_wallet.py",
+    "tests/api/test_scheduler_api.py",
+    "tests/api/test_wallet_key_access.py",
+    "tests/api/test_wallet_key_reset.py",
+    "tests/conftest.py",
+    "tests/unit/test_crud_users.py",
+    "tests/unit/test_decorators.py",
+    "tests/unit/test_first_install.py",
+    "tests/unit/test_scheduler.py",
+    "tests/unit/test_services_shared_wallet.py"
+   ],
+   "closure_size": 7
+  },
+  "pack": "# Graph pack: changing `lnbits/core/crud/wallets.py::clear_wallet_cache`\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\nDefined at `lnbits/core/crud/wallets.py:641: def clear_wallet_cache(wallet: BaseWallet):`.\n\n## Functions that reach it, at any depth (8)\n- `lnbits/core/crud/users.py::clear_user_cache` \u2014 `lnbits/core/crud/users.py:329: clear_wallet_cache(wallet)`\n- `lnbits/core/crud/users.py::clear_user_id_cache` \u2014 `lnbits/core/crud/users.py:319: clear_user_cache(user)`\n- `lnbits/core/crud/users.py::delete_account` \u2014 `lnbits/core/crud/users.py:84: await clear_user_id_cache(user_id)`\n- `lnbits/core/crud/wallets.py::reset_all_wallet_keys` \u2014 `lnbits/core/crud/wallets.py:95: clear_wallet_cache(wallet)`\n- `lnbits/core/views/admin_api.py::api_reset_all_wallet_keys` \u2014 `lnbits/core/views/admin_api.py:70: count = await reset_all_wallet_keys()`\n- `lnbits/core/views/user_api.py::api_users_delete_user` \u2014 `lnbits/core/views/user_api.py:187: await delete_account(user_id)`\n- `lnbits/core/views/user_api.py::api_users_toggle_activated` \u2014 `lnbits/core/views/user_api.py:264: await clear_user_id_cache(user_id)`\n- `lnbits/core/views/wallet_api.py::api_reset_wallet_keys` \u2014 `lnbits/core/views/wallet_api.py:165: clear_wallet_cache(wallet)`\n\n## Route handlers that reach it (4)\n- `lnbits/core/views/admin_api.py::api_reset_all_wallet_keys` (POST /admin/api/v1/wallets/reset-keys) \u2014 path: `api_reset_all_wallet_keys` \u2192 `reset_all_wallet_keys` \u2192 `clear_wallet_cache`\n  - `lnbits/core/views/admin_api.py:70: count = await reset_all_wallet_keys()`\n  - `lnbits/core/crud/wallets.py:95: clear_wallet_cache(wallet)`\n- `lnbits/core/views/user_api.py::api_users_delete_user` (DELETE /users/api/v1/user/{user_id}) \u2014 path: `api_users_delete_user` \u2192 `delete_account` \u2192 `clear_user_id_cache` \u2192 `clear_user_cache` \u2192 `clear_wallet_cache`\n  - `lnbits/core/views/user_api.py:187: await delete_account(user_id)`\n  - `lnbits/core/crud/users.py:84: await clear_user_id_cache(user_id)`\n  - `lnbits/core/crud/users.py:319: clear_user_cache(user)`\n  - `lnbits/core/crud/users.py:329: clear_wallet_cache(wallet)`\n- `lnbits/core/views/user_api.py::api_users_toggle_activated` (PUT /users/api/v1/user/{user_id}/activate) \u2014 path: `api_users_toggle_activated` \u2192 `clear_user_id_cache` \u2192 `clear_user_cache` \u2192 `clear_wallet_cache`\n  - `lnbits/core/views/user_api.py:264: await clear_user_id_cache(user_id)`\n  - `lnbits/core/crud/users.py:319: clear_user_cache(user)`\n  - `lnbits/core/crud/users.py:329: clear_wallet_cache(wallet)`\n- `lnbits/core/views/wallet_api.py::api_reset_wallet_keys` (PUT /api/v1/wallet/reset/{wallet_id}) \u2014 path: `api_reset_wallet_keys` \u2192 `clear_wallet_cache`\n  - `lnbits/core/views/wallet_api.py:165: clear_wallet_cache(wallet)`\n\n## Test files to run (11): every test calling it or a function on those paths\n- `tests/api/test_auth.py` \u2014 `tests/api/test_auth.py:2167: await delete_account(user.id)`\n- `tests/api/test_onchain_wallet.py` \u2014 `tests/api/test_onchain_wallet.py:1034: await delete_account(user.id)`\n- `tests/api/test_scheduler_api.py` \u2014 `tests/api/test_scheduler_api.py:199: await delete_account(account.id)`\n- `tests/api/test_wallet_key_access.py` \u2014 `tests/api/test_wallet_key_access.py:32: await delete_account(user.id)`\n- `tests/api/test_wallet_key_reset.py` (+1 more tests) \u2014 `tests/api/test_wallet_key_reset.py:241: assert await reset_all_wallet_keys() == len(before)`\n- `tests/conftest.py` \u2014 `tests/conftest.py:160: await delete_account(account.id)`\n- `tests/unit/test_crud_users.py` (+2 more tests) \u2014 `tests/unit/test_crud_users.py:94: await delete_account(account.id)`\n- `tests/unit/test_decorators.py` (+1 more tests) \u2014 `tests/unit/test_decorators.py:73: await delete_account(account.id)`\n- `tests/unit/test_first_install.py` (+1 more tests) \u2014 `tests/unit/test_first_install.py:140: await delete_account(temp_super_user)`\n- `tests/unit/test_scheduler.py` (+1 more tests) \u2014 `tests/unit/test_scheduler.py:1027: await user_crud.delete_account(\"alice\")`\n- `tests/unit/test_services_shared_wallet.py` \u2014 `tests/unit/test_services_shared_wallet.py:438: await delete_account(invited_user.id)`\n\nRun: `python3 -m pytest tests/api/test_auth.py tests/api/test_onchain_wallet.py tests/api/test_scheduler_api.py tests/api/test_wallet_key_access.py tests/api/test_wallet_key_reset.py tests/conftest.py tests/unit/test_crud_users.py tests/unit/test_decorators.py tests/unit/test_first_install.py tests/unit/test_scheduler.py tests/unit/test_services_shared_wallet.py -q`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "change",
+   "name": "clear_wallet_cache",
+   "path": "lnbits/core/crud/wallets.py"
+  }
+ },
+ {
+  "id": "lnbits-WIDE-get_wallet",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `get_wallet` (defined in lnbits/core/crud/wallets.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "lnbits/core/crud/payments.py",
+    "lnbits/core/services/fiat_providers.py",
+    "lnbits/core/services/lightning_address.py",
+    "lnbits/core/services/notifications.py",
+    "lnbits/core/services/payments.py",
+    "lnbits/core/services/wallets.py",
+    "lnbits/core/views/extension_api.py",
+    "lnbits/core/views/payment_api.py",
+    "lnbits/core/views/user_api.py",
+    "lnbits/core/views/wallet_api.py",
+    "lnbits/core/wasm_ext/api/background_payments.py",
+    "lnbits/core/wasm_ext/api/host.py",
+    "lnbits/core/wasm_ext/wasm/events.py",
+    "tests/api/test_fiat_wallet_type.py",
+    "tests/api/test_force_resend_api.py",
+    "tests/api/test_lnurl_api.py",
+    "tests/api/test_onchain_wallet.py",
+    "tests/api/test_payment_status_api.py",
+    "tests/api/test_user_api.py",
+    "tests/api/test_wallet_api.py",
+    "tests/api/test_wallet_key_access.py",
+    "tests/regtest/test_real_invoice.py",
+    "tests/regtest/test_real_lnbits_hold_invoice.py",
+    "tests/regtest/test_real_offer.py",
+    "tests/unit/test_bolt12.py",
+    "tests/unit/test_bolt12_clnrest_errors.py",
+    "tests/unit/test_bolt12_eclair_fees.py",
+    "tests/unit/test_bolt12_idempotency.py",
+    "tests/unit/test_bolt12_invoice_amount.py",
+    "tests/unit/test_bolt12_pending.py",
+    "tests/unit/test_bolt12_phoenixd_responses.py",
+    "tests/unit/test_db.py",
+    "tests/unit/test_fiat_invoice_expiry.py",
+    "tests/unit/test_force_resend.py",
+    "tests/unit/test_pay_invoice.py",
+    "tests/unit/test_security_accounting.py",
+    "tests/unit/test_services_hold_invoice.py",
+    "tests/unit/test_services_lnurl.py",
+    "tests/unit/test_services_shared_wallet.py"
+   ],
+   "test_files": [
+    "tests/api/test_fiat_wallet_type.py",
+    "tests/api/test_force_resend_api.py",
+    "tests/api/test_lnurl_api.py",
+    "tests/api/test_onchain_wallet.py",
+    "tests/api/test_payment_status_api.py",
+    "tests/api/test_user_api.py",
+    "tests/api/test_wallet_api.py",
+    "tests/api/test_wallet_key_access.py",
+    "tests/regtest/test_real_invoice.py",
+    "tests/regtest/test_real_lnbits_hold_invoice.py",
+    "tests/regtest/test_real_offer.py",
+    "tests/unit/test_bolt12.py",
+    "tests/unit/test_bolt12_clnrest_errors.py",
+    "tests/unit/test_bolt12_eclair_fees.py",
+    "tests/unit/test_bolt12_idempotency.py",
+    "tests/unit/test_bolt12_invoice_amount.py",
+    "tests/unit/test_bolt12_pending.py",
+    "tests/unit/test_bolt12_phoenixd_responses.py",
+    "tests/unit/test_db.py",
+    "tests/unit/test_fiat_invoice_expiry.py",
+    "tests/unit/test_force_resend.py",
+    "tests/unit/test_pay_invoice.py",
+    "tests/unit/test_security_accounting.py",
+    "tests/unit/test_services_hold_invoice.py",
+    "tests/unit/test_services_lnurl.py",
+    "tests/unit/test_services_shared_wallet.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `lnbits/core/crud/wallets.py::get_wallet`\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\nDefined at `lnbits/core/crud/wallets.py:205: async def get_wallet(`.\n\n## Files with a direct caller (39, tests included)\n- `lnbits/core/crud/payments.py` (+5 more) \u2014 `lnbits/core/crud/payments.py:249: wallet = await get_wallet(data.wallet_id, conn=conn)`\n- `lnbits/core/services/fiat_providers.py` \u2014 `lnbits/core/services/fiat_providers.py:320: faucet_wallet = await get_wallet(limits.service_faucet_wallet_id, conn=conn)`\n- `lnbits/core/services/lightning_address.py` \u2014 `lnbits/core/services/lightning_address.py:199: fee_wallet = await get_wallet(settings.lnbits_service_fee_wallet)`\n- `lnbits/core/services/notifications.py` (+1 more) \u2014 `lnbits/core/services/notifications.py:262: wallet = await get_wallet(payment.wallet_id)`\n- `lnbits/core/services/payments.py` (+8 more) \u2014 `lnbits/core/services/payments.py:1275: fees_wallet = await get_wallet(limits.service_fee_wallet_id, conn=conn)`\n- `lnbits/core/services/wallets.py` \u2014 `lnbits/core/services/wallets.py:105: mirror_wallet = await get_wallet(share.shared_with_wallet_id)`\n- `lnbits/core/views/extension_api.py` (+3 more) \u2014 `lnbits/core/views/extension_api.py:1153: wallet = await get_wallet(data.wallet_id)`\n- `lnbits/core/views/payment_api.py` \u2014 `lnbits/core/views/payment_api.py:443: wallet = await get_wallet(payment.wallet_id)`\n- `lnbits/core/views/user_api.py` (+3 more) \u2014 `lnbits/core/views/user_api.py:405: wallet = await get_wallet(data.id)`\n- `lnbits/core/views/wallet_api.py` (+3 more) \u2014 `lnbits/core/views/wallet_api.py:231: wallet = await get_wallet(wallet_id)`\n- `lnbits/core/wasm_ext/api/background_payments.py` \u2014 `lnbits/core/wasm_ext/api/background_payments.py:109: destination_wallet = await get_wallet(internal_payment.wallet_id)`\n- `lnbits/core/wasm_ext/api/host.py` (+5 more) \u2014 `lnbits/core/wasm_ext/api/host.py:830: wallet = await get_wallet(invocation.wallet_id)`\n- `lnbits/core/wasm_ext/wasm/events.py` (+1 more) \u2014 `lnbits/core/wasm_ext/wasm/events.py:84: return await get_wallet(wallet_id)`\n- `tests/api/test_fiat_wallet_type.py` (+6 more) \u2014 `tests/api/test_fiat_wallet_type.py:324: current = await get_wallet(wallet.id)`\n- `tests/api/test_force_resend_api.py` \u2014 `tests/api/test_force_resend_api.py:200: wallet = await get_wallet(wallet_id)`\n- `tests/api/test_lnurl_api.py` \u2014 `tests/api/test_lnurl_api.py:107: backfilled = await get_wallet(disabled_wallet.id)`\n- `tests/api/test_onchain_wallet.py` (+9 more) \u2014 `tests/api/test_onchain_wallet.py:275: stored = await get_wallet(wallet_id, conn=conn)`\n- `tests/api/test_payment_status_api.py` (+4 more) \u2014 `tests/api/test_payment_status_api.py:102: stored_wallet = await get_wallet(payment.wallet_id)`\n- `tests/api/test_user_api.py` (+1 more) \u2014 `tests/api/test_user_api.py:119: updated_wallet = await get_wallet(wallet.id)`\n- `tests/api/test_wallet_api.py` (+1 more) \u2014 `tests/api/test_wallet_api.py:273: charged_wallet = await get_wallet(wallet.id)`\n- `tests/api/test_wallet_key_access.py` \u2014 `tests/api/test_wallet_key_access.py:76: stored = user.get_wallet(wallet[\"id\"])`\n- `tests/regtest/test_real_invoice.py` (+1 more) \u2014 `tests/regtest/test_real_invoice.py:135: wallet_before = await get_wallet(from_wallet.id)`\n- `tests/regtest/test_real_lnbits_hold_invoice.py` (+2 more) \u2014 `tests/regtest/test_real_lnbits_hold_invoice.py:187: recipient = await get_wallet(wallet_id)`\n- `tests/regtest/test_real_offer.py` (+1 more) \u2014 `tests/regtest/test_real_offer.py:52: wallet_before = await get_wallet(from_wallet.id)`\n- `tests/unit/test_bolt12.py` (+1 more) \u2014 `tests/unit/test_bolt12.py:224: after = await get_wallet(wallet.id)`\n- `tests/unit/test_bolt12_clnrest_errors.py` \u2014 `tests/unit/test_bolt12_clnrest_errors.py:113: after = await get_wallet(wallet.id)`\n- `tests/unit/test_bolt12_eclair_fees.py` \u2014 `tests/unit/test_bolt12_eclair_fees.py:97: after = await get_wallet(wallet.id)`\n- `tests/unit/test_bolt12_idempotency.py` (+2 more) \u2014 `tests/unit/test_bolt12_idempotency.py:98: after = await get_wallet(offer_wallet.id)`\n- `tests/unit/test_bolt12_invoice_amount.py` \u2014 `tests/unit/test_bolt12_invoice_amount.py:126: after = await get_wallet(wallet.id)`\n- `tests/unit/test_bolt12_pending.py` (+1 more) \u2014 `tests/unit/test_bolt12_pending.py:59: reserved = await get_wallet(offer_wallet.id)`\n- `tests/unit/test_bolt12_phoenixd_responses.py` (+3 more) \u2014 `tests/unit/test_bolt12_phoenixd_responses.py:98: after = await get_wallet(wallet.id)`\n- `tests/unit/test_db.py` \u2014 `tests/unit/test_db.py:130: del_wallet = await get_wallet(wallet.id)`\n- `tests/unit/test_fiat_invoice_expiry.py` \u2014 `tests/unit/test_fiat_invoice_expiry.py:58: credited = await get_wallet(wallet_id)`\n- `tests/unit/test_force_resend.py` \u2014 `tests/unit/test_force_resend.py:420: wallet = await get_wallet(wallet_id)`\n- `tests/unit/test_pay_invoice.py` (+5 more) \u2014 `tests/unit/test_pay_invoice.py:469: wallet = await get_wallet(from_wallet.id)`\n- `tests/unit/test_security_accounting.py` (+2 more) \u2014 `tests/unit/test_security_accounting.py:132: fee_wallet = await get_wallet(fee_wallet.id)`\n- `tests/unit/test_services_hold_invoice.py` \u2014 `tests/unit/test_services_hold_invoice.py:144: balance = await get_wallet(recipient.id)`\n- `tests/unit/test_services_lnurl.py` \u2014 `tests/unit/test_services_lnurl.py:380: stored_wallet = await get_wallet(wallet.id)`\n- `tests/unit/test_services_shared_wallet.py` (+8 more) \u2014 `tests/unit/test_services_shared_wallet.py:525: source_wallet = await get_wallet(source_wallet.id)`\n\n## Test files among them (26)\n- `tests/api/test_fiat_wallet_type.py`\n- `tests/api/test_force_resend_api.py`\n- `tests/api/test_lnurl_api.py`\n- `tests/api/test_onchain_wallet.py`\n- `tests/api/test_payment_status_api.py`\n- `tests/api/test_user_api.py`\n- `tests/api/test_wallet_api.py`\n- `tests/api/test_wallet_key_access.py`\n- `tests/regtest/test_real_invoice.py`\n- `tests/regtest/test_real_lnbits_hold_invoice.py`\n- `tests/regtest/test_real_offer.py`\n- `tests/unit/test_bolt12.py`\n- `tests/unit/test_bolt12_clnrest_errors.py`\n- `tests/unit/test_bolt12_eclair_fees.py`\n- `tests/unit/test_bolt12_idempotency.py`\n- `tests/unit/test_bolt12_invoice_amount.py`\n- `tests/unit/test_bolt12_pending.py`\n- `tests/unit/test_bolt12_phoenixd_responses.py`\n- `tests/unit/test_db.py`\n- `tests/unit/test_fiat_invoice_expiry.py`\n- `tests/unit/test_force_resend.py`\n- `tests/unit/test_pay_invoice.py`\n- `tests/unit/test_security_accounting.py`\n- `tests/unit/test_services_hold_invoice.py`\n- `tests/unit/test_services_lnurl.py`\n- `tests/unit/test_services_shared_wallet.py`\n\n(The defining file `lnbits/core/crud/wallets.py` is not counted as a caller.)\n\n## Coverage\n**Incomplete: 1 call site(s) under this name could not be attributed.** They are in files already listed above; check those files' other calls under this name.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "get_wallet",
+   "role": "",
+   "path": "lnbits/core/crud/wallets.py"
+  }
+ },
+ {
+  "id": "mealie-WIDE-get_app_dirs",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `get_app_dirs` (defined in mealie/core/config.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "mealie/alembic/versions/2026-09-03-16.12.44_4b91d3a7c0e2_backfill_recipe_image_column.py",
+    "mealie/core/dependencies/dependencies.py",
+    "mealie/core/root_logger.py",
+    "mealie/routes/_base/base_controllers.py",
+    "mealie/routes/admin/admin_backups.py",
+    "mealie/routes/media/__init__.py",
+    "mealie/routes/utility_routes.py",
+    "mealie/schema/recipe/recipe.py",
+    "mealie/schema/recipe/recipe_timeline_events.py",
+    "mealie/schema/user/user.py",
+    "mealie/services/_base_service/__init__.py",
+    "mealie/services/scheduler/tasks/purge_group_exports.py",
+    "tests/integration_tests/admin_tests/test_admin_backup.py",
+    "tests/unit_tests/test_security.py"
+   ],
+   "test_files": [
+    "tests/integration_tests/admin_tests/test_admin_backup.py",
+    "tests/unit_tests/test_security.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `mealie/core/config.py::get_app_dirs`\n\nBuilt from the dev-process graph at commit `a083a4dd6e`. None of the files below has changed since; the line numbers are current.\n\nDefined at `mealie/core/config.py:37: def get_app_dirs() -> AppDirectories:`.\n\n## Files with a direct caller (14, tests included)\n- `mealie/alembic/versions/2026-09-03-16.12.44_4b91d3a7c0e2_backfill_recipe_image_column.py` \u2014 `mealie/alembic/versions/2026-09-03-16.12.44_4b91d3a7c0e2_backfill_recipe_image_column.py:59: recipe_data_dir = get_app_dirs().RECIPE_DATA_DIR`\n- `mealie/core/dependencies/dependencies.py` \u2014 called at module level, outside any function\n- `mealie/core/root_logger.py` \u2014 `mealie/core/root_logger.py:30: dirs = get_app_dirs()`\n- `mealie/routes/_base/base_controllers.py` \u2014 `mealie/routes/_base/base_controllers.py:66: self._folders = get_app_dirs()`\n- `mealie/routes/admin/admin_backups.py` (+2 more) \u2014 `mealie/routes/admin/admin_backups.py:23: backup_dir = get_app_dirs().BACKUP_DIR`\n- `mealie/routes/media/__init__.py` \u2014 `mealie/routes/media/__init__.py:16: folders = get_app_dirs()`\n- `mealie/routes/utility_routes.py` \u2014 `mealie/routes/utility_routes.py:19: dirs = get_app_dirs()`\n- `mealie/schema/recipe/recipe.py` \u2014 called at module level, outside any function\n- `mealie/schema/recipe/recipe_timeline_events.py` \u2014 called at module level, outside any function\n- `mealie/schema/user/user.py` (+1 more) \u2014 `mealie/schema/user/user.py:270: group_dir = get_app_dirs().GROUPS_DIR / str(id)`\n- `mealie/services/_base_service/__init__.py` \u2014 `mealie/services/_base_service/__init__.py:7: self.directories = get_app_dirs()`\n- `mealie/services/scheduler/tasks/purge_group_exports.py` \u2014 `mealie/services/scheduler/tasks/purge_group_exports.py:39: directories = get_app_dirs()`\n- `tests/integration_tests/admin_tests/test_admin_backup.py` \u2014 `tests/integration_tests/admin_tests/test_admin_backup.py:9: dirs = get_app_dirs()`\n- `tests/unit_tests/test_security.py` \u2014 `tests/unit_tests/test_security.py:188: dirs = get_app_dirs()`\n\n## Test files among them (2)\n- `tests/integration_tests/admin_tests/test_admin_backup.py`\n- `tests/unit_tests/test_security.py`\n\n(The defining file `mealie/core/config.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "get_app_dirs",
+   "role": "",
+   "path": "mealie/core/config.py"
+  }
+ }
+]

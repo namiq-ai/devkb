@@ -81,12 +81,13 @@ and packs need Python.
 The benchmark runs on every repository in [`bench/repos.yaml`](bench/repos.yaml); adding one is a pull request.
 See [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
 
-On all seven registry repositories (55 tasks, 1,100 runs, Sonnet; exploratory, not pre-registered), packs cost 56%
-less than plain search [51, 60] with quality up 0.051, the lean tools 28% less, the full tool set 9% less; the saving
-is on call chains (68–78% on route-handler tasks), not on one-hop refactors, where the full tool set costs 17% more
-([`bench/results/2026-11-15-registry/`](bench/results/2026-11-15-registry/)). Four of those 55 tasks had a truth that
-missed callers the graph also missed; `prepare` now checks every truth against an independent implementation before
-any run is paid for, and the addendum there reruns those four.
+On all seven registry repositories (52 tasks, 1,038 runs, Sonnet; exploratory, not pre-registered), packs cost 56%
+less than plain search [52, 60] with quality up 0.051, the lean tools 39% less, the full tool set 19% less; the saving
+is on call chains (66–77% on route-handler tasks), not on one-hop refactors, where the full tool set costs 17% more
+([`bench/results/2026-11-15-registry/`](bench/results/2026-11-15-registry/)). Those numbers are corrected: the first
+session ran Prefect's tool arms without tools, and four tasks had a truth that missed callers the graph also missed.
+`prepare` now checks every truth against an independent implementation before any run is paid for, and a run whose
+tool arms never reached the graph fails.
 
 ## Reproduce the paper
 
