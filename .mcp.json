@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "devkb": {
+      "command": "devkb",
+      "args": [
+        "mcp",
+        "--project",
+        ".",
+        "--toolset",
+        "dev"
+      ]
+    }
+  }
+}
