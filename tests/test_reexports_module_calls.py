@@ -126,3 +126,22 @@ def test_calls_through_a_dotted_module_path(tmp_path):
     assert callers == {"pkg/user.py::run"}, "a chain through an object (`request.app`) is not attributed"
     t = mt.Truth(tmp_path)
     assert t.callers()[("pkg/context.py", "get_run_context")] == {("pkg/user.py", "run")}
+
+
+def test_overloaded_function_resolves(tmp_path):
+    files = {"pkg/__init__.py": "from .termui import prompt as prompt\n",
+             "pkg/termui.py": ("import typing as t\n\n\n@t.overload\ndef prompt(text: str) -> str: ...\n\n\n"
+                               "@t.overload\ndef prompt(text: str, default: int) -> int: ...\n\n\n"
+                               "def prompt(text, default=None):\n    return default\n"),
+             "pkg/core.py": "from .termui import prompt\n\n\ndef ask():\n    return prompt('x')\n",
+             "tests/test_prompt.py": "import pkg\n\n\ndef test_it():\n    pkg.prompt('y')\n"}
+    for rel, text in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text)
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+        subprocess.run(["git", *cmd], cwd=tmp_path, check=True)
+    g = build_symbols.extract(tmp_path)
+    callers = {e.src for e in g.edges("CALLS") if e.dst == "pkg/termui.py::prompt"}
+    assert callers == {"pkg/core.py::ask", "tests/test_prompt.py::test_it"}
+    node = next(n for n in g.nodes("Symbol") if n.natural_key == "pkg/termui.py::prompt")
+    assert node.props["line_start"] == 12, "the implementation, not an overload"

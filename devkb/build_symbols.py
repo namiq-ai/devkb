@@ -931,6 +931,10 @@ def extract(repo_root: Path) -> DevKBGraph:
     for rel_path in _list_python_files(repo_root):
         (symbols, calls, imports, routes, module_doc, raises, logs, middleware, router_prefix,
          daemon_entries, descriptors, literals, typed_calls) = _parse_python_file(repo_root / rel_path)
+        # `@typing.overload` signatures and the implementation share one qualified name, and so one Symbol key: keep
+        # one entry (the last, the implementation), or every lookup by name sees several and resolves nothing
+        # (click's `prompt`: all 13 call sites were left unattributed).
+        symbols = list({s["qualified_name"]: s for s in symbols}.values())
         # Keep the file even with zero functions/classes when it still has
         # something real to attach -- a bare entrypoint (`app.py`: imports
         # + `app.add_middleware(...)` calls, no def/class at all) would
