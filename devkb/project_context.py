@@ -12,7 +12,10 @@ devkb.json (every key optional):
      "paths": {"issues_dir": "issues", "spec_dirs": ["docs", "docs/adr"], "frontend_src": "web/src",
                "frontend_kind": "nextjs", "sprint_dir": "sprints", "board_file": "BOARD.md"},
      "role_profiles": {"BE": "roles/backend.md"}, "roles_dir": "roles", "graph": {"members": []},
-     "run_repo_scripts": false}
+     "run_repo_scripts": false, "github": {"enabled": false, "authors": false}}
+
+`github.enabled` (or `devkb build --github`) turns on the online GitHub layer (ADR-DEVKB-007); `github.authors` stores
+pull request and issue author logins. Both are off by default.
 
 `run_repo_scripts` must be true before devkb imports or runs any script that lives in the analysed
 repository (a readiness gate, a compliance monitor). It is off by default: analysing a repository must
@@ -37,6 +40,14 @@ def load_config(repo_root: Path) -> dict:
         if isinstance(cfg, dict):
             return cfg
     return {}
+
+
+def github_config(repo_root: Path) -> dict:
+    """`{"github": {"enabled": false, "authors": false}}` from devkb.json (ADR-DEVKB-007). Both default off: building a
+    graph never touches the network unless asked to, and an author's login is stored only when the repository opts in."""
+    raw = load_config(repo_root).get("github")
+    raw = raw if isinstance(raw, dict) else {}
+    return {"enabled": raw.get("enabled") is True, "authors": raw.get("authors") is True}
 
 
 def run_repo_scripts(repo_root: Path) -> bool:

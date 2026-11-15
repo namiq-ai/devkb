@@ -28,7 +28,7 @@ from devkb.process_api import ProcessAPI, project_for  # noqa: E402
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, destructiveHint=False, openWorldHint=False)
 CORE = ["sdlc_context", "trace", "find_docs", "callers", "tests_for", "tests_to_run", "impact", "owner", "review_pack",
-        "lineage", "graph_status", "config"]
+        "lineage", "graph_status", "config", "pull_request"]
 WORKFLOW = ["feature_brief", "bug_brief", "rca_trace", "refactor_scope", "explain_area", "find_code", "history"]
 DOCS = ["design_brief", "flow_sequence", "test_items", "review_doc", "role_brief"]
 # `core`: single-question tools. `workflow`: one tool per kind of development work, plus the few core tools those
@@ -103,13 +103,18 @@ def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
 
     @tool
     def review_pack(rev: str) -> str:
-        """Review context for a commit or range (a..b): changed symbols, callers outside the diff, tests, untested symbols, docs, warnings, owners."""
+        """Review context for a commit or range (a..b): pull requests and issues closed, changed symbols, callers outside the diff, tests, untested symbols, docs, warnings, owners."""
         return _compact(api.call("review_pack", rev=rev))
 
     @tool
     def lineage(ticket: str) -> str:
         """Bug lineage, duplicates, blockers, commits and spec of a ticket."""
         return _compact(api.call("lineage", ticket=ticket))
+
+    @tool
+    def pull_request(number: int) -> str:
+        """A pull request: state, merge style, commits it merged, issues it closes (unverified ones marked), and what the links rest on."""
+        return _compact(api.call("pull_request", number=number))
 
     @tool
     def feature_brief(goal: str, ticket: str = "") -> str:

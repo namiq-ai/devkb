@@ -192,7 +192,7 @@ def implementing(idx: DevKBIndex, kind: str, ref: str) -> dict[str, Any]:
             if ticket is None or ticket["type"] != "Ticket":
                 continue
             props = ticket.get("properties", {})
-            if wanted is not None and props.get("ticket_type") != wanted:
+            if wanted is not None and props.get("ticket_type") != wanted and not (wanted == "EPIC" and props.get("has_sub_issues")):
                 continue
             results[ticket["natural_key"]] = {
                 **_linked_summary(ticket),

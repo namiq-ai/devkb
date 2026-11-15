@@ -15,7 +15,7 @@ itself to source structure only, by design non-goal to extend).
 
 | Type | Meaning | Natural key | Primary source | Phase |
 |---|---|---|---|---|
-| `Ticket` | one issue | ticket id, e.g. `ODSF-021` | `issues/*.md` filename + body | 1 |
+| `Ticket` | one issue; a hosted GitHub issue is also a `Ticket` (ADR-DEVKB-007) | ticket id, e.g. `ODSF-021`; hosted: `GH-<number>` (member: `<CODE>:GH-<number>`) | `issues/*.md` filename + body; hosted: the GitHub issues API (opt-in), `source` `github-issues` | 1 |
 | `Commit` | one git commit | full 40-char sha | `git log` | 1 |
 | `WorkPackage` | one work package | WP id | `PROJECT_BOARD.md` + `wp-map.json` | 1 |
 | `Milestone` | one milestone | milestone name | `PROJECT_BOARD.md` milestone summary | 1 |
@@ -35,6 +35,7 @@ itself to source structure only, by design non-goal to extend).
 | `Evidence` | one evidence record (REA `ev_…` or ODSF `of_…`), `confidence` as recorded, never upgraded | `evidence_id` | evidence packs `.onboarding/evidence/<EVP>/` | BL-14 (ADR-SDP-DEVKB-002) |
 | `Repository` | one registered project's repository, the product's own or a declared member's (ADR-SDP-DEVKB-005) | project code, e.g. `OCO`, `LTCS` | `projects.json` + the product's `pms.config.json` `graph.members` | ODSF-312 |
 | `ConfigKey` | one named setting: an environment variable, or a root `pms.config.json` top-level key (`pms.config.json:<key>`); **its value is never stored**; never prefixed with a member's code | the name | `extractors/configuration.py` | ODSF-312 |
+| `PullRequest` | one pull request (GitHub; GitLab merge requests later). A member repository's key is prefixed `<CODE>:`. Properties: `number`, `title`, `state` (`open`/`merged`/`closed`), `merged_at`, `base`, `head` (branch names, no owner), `labels`, `url`, `merge_style` (`merge`/`squash`, `rebase` when known), and `merges_source`/`closes_source` (what its links rest on). **Not stored:** description, review comments, author — the author's login only with `"github": {"authors": true}` in `devkb.json` | `PR-<number>` | offline: `Merge pull request #N from …` and `… (#N)` commit subjects (`git log`); online (opt-in): the GitHub API | ADR-DEVKB-007 |
 
 `Epic` and `Story` are **not** separate types: they are `Ticket` nodes with `ticket_type` `EPIC` /
 `STORY`, and the names are query aliases for them (ADR-SDP-DEVKB-002 §2), so every existing
@@ -51,11 +52,29 @@ reference that does not resolve (unknown epic, spec or evidence id, an `Epic` ro
 STORY → EPIC, malformed evidence pack, one evidence id recorded with two confidences) is
 **reported on stderr at build** and produces no edge — never a guess.
 
+**Hosted issues and pull requests (ADR-DEVKB-007).** A hosted issue is a `Ticket` with `source` `github-issues`, so every ticket
+query, tool and pack keeps working. Its properties are `title`, `state` (also in `status`), `state_reason`, `labels`,
+`milestone`, `url`, `created_at`, `closed_at`, `has_sub_issues` and, only with `authors`, `author`; never the body. `ticket_type`
+is the issue's type where the repository uses issue types (`Bug` → `BUG`), else its labels (`bug` → `BUG`, `epic` → `EPIC`,
+`enhancement`/`feature` → `FEATURE`), else `ISSUE`. An epic is an issue whose `ticket_type` is `EPIC` or which has sub-issues
+(`has_sub_issues`); the `epics` query alias covers both. A `Ticket` created offline from a closing keyword (`GH-N` named by a
+`Fixes #N` in a pull request's commit message) carries `unverified: true` and no title, because `#N` may be a pull request:
+the online layer replaces it with the issue, or removes the edge when `#N` is a pull request.
+
+**Two layers, one graph.** The *offline* layer is always on and reads git only. The *online* layer is opt-in
+(`devkb build --github`, or `{"github": {"enabled": true}}` in `devkb.json`); a build never touches the network otherwise. It
+takes the host and repository from the `origin` remote, authenticates with `GITHUB_TOKEN` or the `gh` login (commit lists and
+closing references use GraphQL and need a token), and caches what it reads in `.devkb/github/` keyed by each item's
+`updated_at` (gitignored by `devkb init` with the rest of `.devkb/`). If GitHub cannot be reached or rate-limits, the build
+completes with the offline layer and the cache, lists what it could not fetch on stderr and in `manifest.json`'s `github`
+entry, and every affected answer's `hosting` / Coverage line says so. Only an allow-listed projection of each API item is cached
+or stored: descriptions, review text, e-mail addresses and author logins are dropped before anything is written.
+
 ## Edge verbs
 
 | Verb | From → To | Source | Phase |
 |---|---|---|---|
-| `REFERENCES` | Commit → Ticket | `git log --grep=<ticket>` | 1 |
+| `REFERENCES` | Commit → Ticket | `git log --grep=<ticket>`; hosted (online only): a `#N` in a commit message that the API resolves to an issue, `source` `git-hash-mention`, 0.8 — offline a bare `#N` makes no edge, because it cannot be told from a pull request | 1, ADR-DEVKB-007 |
 | `CAUSED_BY` | Ticket → Ticket | Bug Lineage `caused_by` | 1 |
 | `REGRESSION_OF` | Ticket → Ticket | Bug Lineage `regression_of` | 1 |
 | `DUPLICATE_OF` | Ticket → Ticket | Bug Lineage `duplicate_of` | 1 |
@@ -78,7 +97,7 @@ STORY → EPIC, malformed evidence pack, one evidence id recorded with two confi
 | `SIMILAR_TO` | Ticket ↔ Ticket | any nonzero overlap of **evidence-bearing** touched files, carrying `shared_file_count`/`overlap_score`/`weighted_score` (`Edge.extra`) -- still no significance threshold at build time; ranking and capping are query-time concerns and `devkb/query.py` now performs them. A file touched by >10% of tickets is bookkeeping rather than subject matter and is excluded from evidence entirely (computed, reported at build; see `ticket_similarity.hub_files`) | BL-11 |
 | `STEP` | Flow → Symbol, `sequence`/weakest-link `confidence` via `Edge.extra` | mechanical BFS over `CALLS`/`CALLS_API` from a detected touch point | BL-12 |
 | `DOCUMENTS` | Spec → Ticket | ADR `Related:` line / bare ticket-id mentions in spec body, only when the ticket is confirmed to exist in the graph. **Narrowed from an earlier `Spec → File\|Ticket` draft** -- `Symbol`/`File` reach a `Spec` via the existing multi-hop path (`Symbol→File→Commit→Ticket→Spec`) instead of a second, more speculative direct edge | BL-13 |
-| `CHILD_OF` | Story (Ticket) → Epic (Ticket) | ticket `## Trace` `Epic` row | BL-14 |
+| `CHILD_OF` | Story (Ticket) → Epic (Ticket); hosted: sub-issue → parent issue | ticket `## Trace` `Epic` row; hosted: the issue's parent (`source` `github-sub-issues`, 1.0) | BL-14, ADR-DEVKB-007 |
 | `DERIVED_FROM` | Ticket → Requirement | ticket `## Trace` `Requirement` row | BL-14 |
 | `IMPLEMENTS` | Ticket → Spec | ticket `## Trace` `Specification` row, resolved to the spec file | BL-14 |
 | `EVIDENCED_BY` | Ticket \| Spec → Evidence | `References` `evidence — <pack>/bundle.json#<id>` or an `## Open Unknowns` evidence id; only when both ends exist | BL-14 |
@@ -86,6 +105,8 @@ STORY → EPIC, malformed evidence pack, one evidence id recorded with two confi
 | `READS` | Symbol → ConfigKey, or File → ConfigKey at module level | literal `os.environ[...]`, `os.environ.get/setdefault/pop`, `os.getenv`, `"X" in os.environ`; test files excluded; `confidence=0.9` | ODSF-312 |
 | `DECLARES` | File → ConfigKey | `*.env.example`/`.env.template`/`.env.sample` `KEY=` lines, compose `environment:` and `${VAR}`, systemd `Environment=`, Dockerfile `ENV`/`ARG`, root `pms.config.json` keys | ODSF-312 |
 | `DEPLOYS` | File → Component | a compose service (`<file>#<service>`), a systemd unit (`systemd:<unit>`), a Dockerfile (its path); `kind`, `image`, `ports`, `exec` as properties | ODSF-312 |
+| `MERGES` | PullRequest → Commit | the commits the pull request brought in. Offline: a merge commit `Merge pull request #N from <owner>/<branch>` (to the merge commit and to `git rev-list <merge>^1..<merge>^2`, `source` `git-merge-subject`) and a squash commit whose subject ends `(#N)` (`git-squash-subject`), confidence 0.9 because a subject is editable text. Online: the API's commit list, `github-api`, 1.0 (also finds rebase merges, which leave no trace in git); for a pull request whose list the API gave completely, an offline edge it does not contain is dropped | ADR-DEVKB-007 |
+| `CLOSES` | PullRequest → Ticket | the issues a pull request closes. Online: GitHub's closing references, `github-closing-references`, 1.0, replacing every offline edge of a pull request it was read for. Offline: a closing keyword (`Fixes`/`Closes`/`Resolves #N`) in a commit message of the pull request, `git-closing-keyword`, 0.7, with `unverified: true` on the edge and the target | ADR-DEVKB-007 |
 
 ## Envelope shapes
 

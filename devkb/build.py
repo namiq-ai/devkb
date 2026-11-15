@@ -22,12 +22,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from devkb import build_symbols
 from devkb.extractors import (
     backlog, component_subsystem, configuration, files_tests, flows, lifecycle, members, releases, source_baseline,
-    spec_docs, symbol_tests,
+    pull_requests, spec_docs, symbol_tests,
     test_inventory, ticket_similarity, tickets_git, warnings, work_units,
 )
 from devkb.gitutil import git_head
 from devkb.model import DevKBGraph, merge
-from devkb.project_context import resolve
+from devkb import github_api
+from devkb.project_context import github_config, resolve
 
 
 #: This checkout — the one whose extractor code is about to run. Distinct from
@@ -83,7 +84,7 @@ def check_builder_matches_target(repo_root: Path, builder_root: Path = BUILDER_R
 
 
 def manifest_payload(
-    code: str, repo_root: Path, node_count: int, edge_count: int,
+    code: str, repo_root: Path, node_count: int, edge_count: int, github: dict | None = None,
 ) -> dict[str, object]:
     """What `.devkb/manifest.json` records about this build.
 
@@ -104,10 +105,12 @@ def manifest_payload(
         "builder_git_head": git_head(BUILDER_ROOT),
         "node_count": node_count,
         "edge_count": edge_count,
+        # ADR-DEVKB-007: what the online layer did, so every answer can say what it could not see.
+        "github": github or {"enabled": False},
     }
 
 
-def build(code: str, allow_foreign_checkout: bool = False) -> tuple[DevKBGraph, Path]:
+def build(code: str, allow_foreign_checkout: bool = False, github: bool = False) -> tuple[DevKBGraph, Path]:
     ctx = resolve(code)
     mismatch = check_builder_matches_target(ctx.repo_root, BUILDER_ROOT)
     # The guard protects the target's own graph. A build written elsewhere (DEVKB_DIR: a benchmark snapshot) cannot
@@ -181,6 +184,23 @@ def build(code: str, allow_foreign_checkout: bool = False) -> tuple[DevKBGraph, 
     for e in lifecycle_graph.edges():
         graph.add_edge(e.verb, e.src_type, e.src, e.dst_type, e.dst, e.source, e.confidence, e.evidence_ref, e.extra)
 
+    # ADR-DEVKB-007: pull requests and hosted issues. The git layer always runs; the GitHub layer only on request.
+    cfg = github_config(ctx.repo_root)
+    online = None
+    gh_state: dict = {"enabled": False}
+    if github or cfg["enabled"]:
+        online = github_api.fetch(ctx.repo_root, ctx.devkb_dir / github_api.CACHE_DIR, cfg["authors"])
+        gh_state = online.summary()
+        for err in online.errors + ([f"skipped: {online.skipped}"] if online.skipped else []):
+            print(f"devkb build: github: {err}", file=sys.stderr)
+    pr_graph, pr_summary = pull_requests.extract(ctx.repo_root, online, cfg["authors"])
+    for n in pr_graph.nodes():
+        graph.add_node(n.type, n.natural_key, n.source, **n.props)
+    for e in pr_graph.edges():
+        graph.add_edge(e.verb, e.src_type, e.src, e.dst_type, e.dst, e.source, e.confidence, e.evidence_ref, e.extra)
+    gh_state["offline"] = pr_summary
+    gh_state["authors"] = cfg["authors"]
+
     flows_graph = flows.extract(ctx, graph)
     for n in flows_graph.nodes():
         graph.add_node(n.type, n.natural_key, n.source, **n.props)
@@ -210,7 +230,7 @@ def build(code: str, allow_foreign_checkout: bool = False) -> tuple[DevKBGraph, 
     nodes_path.write_text("\n".join(json.dumps(n) for n in data["nodes"]) + ("\n" if data["nodes"] else ""))
     edges_path.write_text("\n".join(json.dumps(e) for e in data["edges"]) + ("\n" if data["edges"] else ""))
     manifest_path.write_text(json.dumps(
-        manifest_payload(ctx.code, ctx.repo_root, graph.node_count(), graph.edge_count()),
+        manifest_payload(ctx.code, ctx.repo_root, graph.node_count(), graph.edge_count(), gh_state),
         indent=2,
     ))
 
@@ -226,10 +246,15 @@ def main() -> int:
              "default, because a build from a worktree silently overwrites the main "
              "graph with that worktree's code)",
     )
+    ap.add_argument(
+        "--github", action="store_true",
+        help="also read issues and pull requests from GitHub (ADR-DEVKB-007; also {\"github\": {\"enabled\": true}} "
+             "in devkb.json). Never on by default: a build touches the network only when asked to",
+    )
     args = ap.parse_args()
 
     try:
-        graph, devkb_dir = build(args.project, allow_foreign_checkout=args.allow_foreign_checkout)
+        graph, devkb_dir = build(args.project, allow_foreign_checkout=args.allow_foreign_checkout, github=args.github)
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

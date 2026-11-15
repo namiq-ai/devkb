@@ -32,6 +32,8 @@ NODE_TYPES = (
     # ADR-SDP-DEVKB-005 (ODSF-312): a product graph spans member repositories; settings are things.
     "Repository",       # one registered project's repository, natural key its project code
     "ConfigKey",        # one named setting (env var or config-file key); its value is never stored
+    # ADR-DEVKB-007: a pull request, natural key PR-<number> (member repositories: <CODE>:PR-<number>).
+    "PullRequest",
 )
 
 VERBS = (
@@ -67,6 +69,9 @@ VERBS = (
     "READS",            # Symbol | File (module level) -> ConfigKey
     "DECLARES",         # File -> ConfigKey (.env.example, compose environment, systemd Environment=, pms.config.json)
     "DEPLOYS",          # File -> Component (compose service, systemd unit, Dockerfile)
+    # ADR-DEVKB-007, extractors/pull_requests.py.
+    "MERGES",           # PullRequest -> Commit (git merge/squash subject 0.9, GitHub commit list 1.0)
+    "CLOSES",           # PullRequest -> Ticket (GitHub closing references 1.0, commit-message keyword 0.7 unverified)
 )
 
 

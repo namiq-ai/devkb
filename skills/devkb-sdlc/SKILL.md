@@ -19,7 +19,7 @@ to decide **what to read**, not instead of reading.
 | S5 Backlog, S6 Readiness | Is the chain requirement, spec, epic, story complete? | `trace` (the verdict mirrors Gate 0; `make gate-0` decides) |
 | S7 Build | What does this change reach? Which tests to run? May my role touch this path? | `impact`, `tests_to_run`, `owner` |
 | S8 Review | What changed, who calls it outside the diff, what is untested? | `review_pack` |
-| S9, S10 Close, Knowledge | Lineage, duplicates, blockers of a ticket | `lineage` |
+| S9, S10 Close, Knowledge | Lineage, duplicates, blockers of a ticket; the pull requests that closed it | `lineage`, `pull_request` |
 
 ## Rules
 

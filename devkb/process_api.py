@@ -180,6 +180,66 @@ class ProcessAPI:
     def _key(self, i: int) -> str:
         return self.idx.keys[i]
 
+    # ── pull requests and hosted issues (ADR-DEVKB-007) ──────────────────────
+    def _hosting(self) -> str:
+        """What the pull-request and issue links in an answer rest on, and what they cannot show."""
+        gh = self.idx.github or {}
+        if not gh.get("enabled"):
+            return ("Pull request links come from git alone (merge and squash commit subjects); rebase merges and hosted "
+                    "issue links are not visible. `devkb build --github` adds GitHub's own record.")
+        problems = list(gh.get("errors") or []) + ([f"skipped: {gh['skipped']}"] if gh.get("skipped") else [])
+        if problems:
+            return ("The GitHub layer was requested but incomplete, so some links are from git alone or the last cache: "
+                    + "; ".join(problems)[:300])
+        return "Pull request and issue links include GitHub's own record (commit lists and closing references)."
+
+    def _prs_of(self, commit: int) -> list[int]:
+        return self.idx.sources("MERGES", commit)
+
+    def _pr_row(self, pr: int) -> dict:
+        p = self.idx.props[pr]
+        return {"id": self._key(pr), "state": p.get("state"), "title": (p.get("title") or "")[:90],
+                **({"merged_at": p["merged_at"][:10]} if p.get("merged_at") else {})}
+
+    def _ticket_commits(self, t: int) -> list[int]:
+        """Commits that mention a ticket, plus those of the pull requests that close it."""
+        found = list(self.idx.sources("REFERENCES", t))
+        for pr in self.idx.sources("CLOSES", t):
+            found += self.idx.targets("MERGES", pr)
+        return list(dict.fromkeys(found))
+
+    def _hosted(self, t: int) -> dict:
+        """The hosted-issue facts of a ticket: pull requests closing it, sub-issues, and what is unverified."""
+        idx, out = self.idx, {}
+        prs = [self._pr_row(pr) for pr in sorted(idx.sources("CLOSES", t), key=self._key)]
+        if prs:
+            out["pull_requests"] = prs
+        kids = sorted(self._key(x) for x in idx.sources("CHILD_OF", t) if self._key(x).startswith("GH-"))
+        if kids:
+            out["sub_issues"] = kids[:20]
+        if idx.props[t].get("unverified"):
+            out["unverified"] = "GH-N came from a closing keyword in a commit message; offline it may be a pull request, not an issue"
+        if prs or kids or self._key(t).startswith("GH-"):
+            out["hosting"] = self._hosting()
+        return out
+
+    def pull_request(self, number: int | str, limit: int = 12) -> dict:
+        n = str(number).strip().lstrip("#").removeprefix("PR-")
+        pr = self.idx.node("PullRequest", f"PR-{n}")
+        if pr is None:
+            return {"error": f"no pull request {n}", "hosting": self._hosting()}
+        idx = self.idx
+        commits = sorted(idx.targets("MERGES", pr), key=lambda c: (idx.props[c].get("date", ""), self._key(c)))
+        closes = [self._key(x) for x in idx.targets("CLOSES", pr)]
+        return {**self._pr_row(pr), "merge_style": idx.props[pr].get("merge_style"), "base": idx.props[pr].get("base"),
+                "head": idx.props[pr].get("head"), "n_commits": len(commits),
+                "commits": [{"h": (idx.props[c].get("short_hash") or self._key(c)[:10]), "s": (idx.props[c].get("subject") or "")[:72]}
+                            for c in commits[:limit]],
+                "closes": [{"id": k, **({"unverified": True} if idx.props[idx.node("Ticket", k)].get("unverified") else {})}
+                           for k in closes],
+                "links": {"commits": idx.props[pr].get("merges_source"), "closes": idx.props[pr].get("closes_source")},
+                "hosting": self._hosting()}
+
     def _resolve(self, ref: str) -> tuple[int | None, dict | None]:
         idx = self.idx
         if "::" in ref:
@@ -433,7 +493,7 @@ class ProcessAPI:
         if err:
             return err
         idx, p = self.idx, self.idx.props[t]
-        commits = idx.sources("REFERENCES", t)
+        commits = self._ticket_commits(t)
         touched: dict[int, int] = {}
         for c in commits:
             for f in idx.targets("TOUCHES", c):
@@ -450,7 +510,7 @@ class ProcessAPI:
                 "requirement": [self._key(x) for x in idx.targets("DERIVED_FROM", t)],
                 "docs": [self._key(x) for x in idx.sources("DOCUMENTS", t)][:5],
                 "similar": [{"t": self._key(b), "s": round(s, 2)} for b, s in idx.sim.get(t, [])[:4]],
-                "commits": len(commits), "files": [self._key(f) for f in files]}
+                "commits": len(commits), "files": [self._key(f) for f in files], **self._hosted(t)}
 
     def _bmad_stamp(self) -> tuple:
         """(file count, newest modification) of the BMAD ticket store, so a cached status is dropped when it changes."""
@@ -495,7 +555,8 @@ class ProcessAPI:
             return [{"id": self._key(x), "status": idx.props[x].get("status")} for x in idx.targets(verb, t)]
 
         out = {"ticket": ticket, "type": p.get("ticket_type"), "status": p.get("status"), "epic": link("CHILD_OF"),
-               "spec": link("IMPLEMENTS"), "requirement": [{"id": self._key(x)} for x in idx.targets("DERIVED_FROM", t)]}
+               "spec": link("IMPLEMENTS"), "requirement": [{"id": self._key(x)} for x in idx.targets("DERIVED_FROM", t)],
+               **self._hosted(t)}
         if p.get("ticket_type") != "STORY":
             out["gate0"] = "n/a: only STORY tickets are gated"
             return out
@@ -640,7 +701,9 @@ class ProcessAPI:
             f_diff = pool.submit(self._git, "diff", "-U0", "--no-color", base, head_rev)
             f_msgs = pool.submit(self._git, "log", "--format=%s", f"{base}..{head_rev}")
             f_moved = pool.submit(self._moved_files, head_rev)
+            f_hashes = pool.submit(self._git, "log", "--format=%H", f"{base}..{head_rev}")
             files, msgs, moved = self._parse_diff(f_diff.result()), f_msgs.result(), f_moved.result()
+            hashes = f_hashes.result().split()
         if not files:
             return {"error": f"no diff for {rev}"}
         changed: list[int] = []
@@ -667,6 +730,9 @@ class ProcessAPI:
         tested = self._tests_of(changed)
         untested = [s for s in changed if not self._has_tests(s)]
         tickets = sorted(set(_TICKET_ID.findall(msgs)))
+        prs = sorted({p for h in hashes for c in [self.idx.node("Commit", h)] if c is not None for p in self._prs_of(c)})
+        closed = sorted({self._key(t) for p in prs for t in self.idx.targets("CLOSES", p)})
+        tickets = sorted(set(tickets) | set(closed))
         docs: list[str] = []
         for tid in tickets:
             t = self.idx.node("Ticket", tid)
@@ -679,6 +745,7 @@ class ProcessAPI:
                 "n_callers_outside": len(outside), "tests": [{"f": f, "t": sorted(v)[:3]} for f, v in sorted(tested.items())[:8]],
                 "untested": [self._key(s) for s in untested[:8]], "tickets": tickets[:6], "docs": sorted(set(docs))[:6],
                 "warnings": warnings[:6], "owners": self._owners_of(sorted(files)),
+                **({"pull_requests": [self._key(p) for p in prs[:6]], "closes": closed[:6], "hosting": self._hosting()} if prs else {}),
                 **({"drift": drifted[:6], "note": "these files changed after the commit; changed functions were read from the commit itself"} if drifted else {}),
                 **({"unmapped": unmapped[:6]} if unmapped else {})}
 
@@ -740,7 +807,15 @@ class ProcessAPI:
         top = sorted(found, key=lambda c: (self.idx.props[c].get("date", ""), self._key(c)), reverse=True)[:limit]
         return [{"h": (self.idx.props[c].get("short_hash") or "")[:8], "d": self.idx.props[c].get("date"),
                  "s": (self.idx.props[c].get("subject") or "")[:72], "t": sorted(set(_TICKET_ID.findall(self.idx.props[c].get("subject") or ""))),
-                 "f": found[c]} for c in top]
+                 "f": found[c], **self._commit_links(c)} for c in top]
+
+    def _commit_links(self, c: int) -> dict:
+        """`pr` (the pull requests that merged this commit) and `closes` (the issues those close), when the graph has any."""
+        prs = sorted(self._key(p) for p in self._prs_of(c))
+        if not prs:
+            return {}
+        closes = sorted({self._key(t) for p in self._prs_of(c) for t in self.idx.targets("CLOSES", p)})
+        return {"pr": prs, **({"closes": closes} if closes else {})}
 
     def history(self, files: list[str] | str, limit: int = 6) -> dict:
         files = [files] if isinstance(files, str) else list(files)
@@ -914,12 +989,16 @@ class ProcessAPI:
                 out[verb.lower()] = fwd
             if back:
                 out[f"{verb.lower()}_by"] = back
-        commits = sorted(idx.sources("REFERENCES", t), key=lambda c: idx.props[c].get("date", ""))
+        commits = sorted(self._ticket_commits(t), key=lambda c: idx.props[c].get("date", ""))
         out["commits"] = len(commits)
         if commits:
             out["first"], out["last"] = idx.props[commits[0]].get("short_hash"), idx.props[commits[-1]].get("short_hash")
         out["spec"] = [self._key(x) for x in idx.targets("IMPLEMENTS", t)]
         out["work_package"] = [self._key(x) for x in idx.targets("PART_OF", t)]
+        out.update(self._hosted(t))
+        parents = [self._key(x) for x in idx.targets("CHILD_OF", t) if self._key(x).startswith("GH-")]
+        if parents:
+            out["parent_issue"] = parents
         return out
 
     # ── configuration and repositories (ADR-SDP-DEVKB-005, ODSF-312) ────────────
