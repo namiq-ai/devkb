@@ -1,0 +1,10 @@
+# Regular expressions that must not appear in a published distribution (scripts/check_dist.py).
+# Internal project names and their ticket ids
+\bODSF\b
+\bOCO\b
+\bDTLN\b
+\b(?:ODSF|OCO|DTLN|PJES|SDP)-[A-Z0-9-]*\d
+\bBL-\d+[a-z]?\b
+# Local paths
+/home/[a-z]
+/tmp/claude
