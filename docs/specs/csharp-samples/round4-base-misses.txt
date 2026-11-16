@@ -1,0 +1,60 @@
+######## efcore
+ClearProjection              src/EFCore.Cosmos/Query/Internal/CosmosQueryableMethodTranslatingExpressionVisitor.cs:429: subquery.ClearProjection();
+CreateResponseMessage        test/EFCore.Cosmos.Tests/Storage/Internal/CosmosClientWrapperTest.cs:217: null => new TestFeedIterator(CreateResponseMessage(HttpStatusCode.OK, "{\"Documents\":[\"A\",\"B\"]}", "ct1")),
+DateFromParts                test/EFCore.SqlServer.FunctionalTests/Query/NorthwindDbFunctionsQuerySqlServerTest.cs:684: c => c.OrderDate > EF.Functions.DateFromParts(DateTime.Now.Year, 12, 31),
+GetExtension                 eng/Tools/ApiChief/Commands/EmitDelta.cs:486: => Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase)
+GetExtension                 src/EFCore.Design/Query/Internal/PrecompiledQueryCodeGenerator.cs:398: ".EFInterceptors" + suffix + Path.GetExtension(syntaxTree.FilePath));
+GetExtension                 src/EFCore.Tasks/Tasks/Internal/OperationTaskBase.cs:134: && Path.GetExtension(StartupAssembly.ItemSpec) != ".exe")
+GetExtension                 src/dotnet-ef/RootCommand.cs:352: .Where(f => !string.Equals(Path.GetExtension(f), ".xproj", StringComparison.OrdinalIgnoreCase))
+GetOrCreateUniqueConstraints test/EFCore.NativeAotTests/CompiledModels/NativeAotContextModelBuilder.cs:60: RelationalModel.GetOrCreateUniqueConstraints(pK_UsersUc).Add(pK_Users);
+GetOrCreateUniqueConstraints test/EFCore.SqlServer.FunctionalTests/Scaffolding/Baselines/BigModel/DbContextModelBuilder.cs:4070: RelationalModel.GetOrCreateUniqueConstraints(pK_DependentBasebyteKey).Add(pK_DependentBasebyte);
+GetOrCreateUniqueConstraints test/EFCore.SqlServer.FunctionalTests/Scaffolding/Baselines/BigModel_with_JSON_columns/DbContextModelBuilder.cs:3922: RelationalModel.GetOrCreateUniqueConstraints(pK_DependentBasebyteKey).Add(pK_DependentBasebyte);
+GetOrCreateUniqueConstraints test/EFCore.SqlServer.FunctionalTests/Scaffolding/Baselines/CheckConstraints/DbContextModelBuilder.cs:81: RelationalModel.GetOrCreateUniqueConstraints(pK_DataKey).Add(pK_Data);
+GetUInt32                    src/EFCore/Storage/Json/JsonUInt32ReaderWriter.cs:26: => manager.CurrentReader.GetUInt32();
+IncreaseReferenceCount       src/EFCore/Metadata/Conventions/Internal/MetadataTracker.cs:47: reference.IncreaseReferenceCount();
+MakeMemberAccess             src/EFCore.Design/Query/Internal/CSharpToLinqTranslator.cs:852: : MakeMemberAccess(
+MakeMemberAccess             src/EFCore.InMemory/Query/Internal/InMemoryExpressionTranslatingExpressionVisitor.cs:1209: Expression.MakeMemberAccess(valueBufferVariable, ValueBufferIsEmpty),
+MakeMemberAccess             src/EFCore.InMemory/Query/Internal/InMemoryQueryableMethodTranslatingExpressionVisitor.cs:1179: Expression.MakeMemberAccess(cond.IfTrue, memberExpression.Member),
+MakeMemberAccess             src/EFCore.Relational/Query/RelationalQueryableMethodTranslatingExpressionVisitor.cs:1781: : Expression.MakeMemberAccess(
+NullStringToNonNullStringConverter test/EFCore.Specification.Tests/ValueConvertersEndToEndTestBase.cs:246: var converter = new NullStringToNonNullStringConverter().ConvertToProviderExpression.Compile();
+NullStringToNonNullStringConverter test/EFCore.SqlServer.FunctionalTests/ValueConvertersEndToEndSqlServerJsonTest.cs:228: b.Property(e => e.NullStringToNonNullString).HasConversion(new NullStringToNonNullStringConverter()).IsRequired();
+ReportAsync                  src/EFCore.Relational/Query/Internal/BufferedDataReader.cs:261: await _commandErrorReporter.Value.ReportAsync(exception, cancellationToken).ConfigureAwait(false);
+ReportAsync                  src/EFCore.Relational/Storage/RelationalCommand.cs:720: await commandErrorReporter.Value.ReportAsync(exception, cancellationToken).ConfigureAwait(false);
+ReportAsync                  src/EFCore.Relational/Storage/RelationalDataReader.cs:223: ? _commandErrorReporter!.Value.ReportAsync(exception, cancellationToken)
+TryGetProperty               test/EFCore.Cosmos.FunctionalTests/TestUtilities/CosmosTestStore.cs:421: if (!document.TryGetProperty(partitionKeyStoreName, out var value))
+TryWithExplicit              src/EFCore/Infrastructure/CoreOptionsExtension.cs:51: .TryWithExplicit(CoreEventId.ManyServiceProvidersCreatedWarning, WarningBehavior.Throw)
+shown 24
+######## FluentValidation
+AddComponent                 src/FluentValidation/DefaultValidatorExtensions.cs:48: rb.AddComponent(component);
+AddDependentRules            src/FluentValidation/Internal/CollectionPropertyRule.cs:203: void IValidationRuleInternal<T>.AddDependentRules(IEnumerable<IValidationRuleInternal<T>> rules) {
+AddDependentRules            src/FluentValidation/Internal/PropertyRule.cs:145: void IValidationRuleInternal<T>.AddDependentRules(IEnumerable<IValidationRuleInternal<T>> rules) {
+AddIndexer                   src/FluentValidation/Internal/CollectionPropertyRule.cs:162: context.PropertyChain.AddIndexer(indexer, useDefaultIndexFormat);
+AsyncCondition               src/FluentValidation/Internal/CollectionPropertyRule.cs:101: if (!await AsyncCondition(context, cancellation)) {
+CalculateSalary              src/FluentValidation.Tests/RuleBuilderTests.cs:156: var builder = _validator.RuleFor(x => x.CalculateSalary());
+ChildRules                   src/FluentValidation.Tests/ConditionTests.cs:309: .ChildRules(children => {
+CreateWithOptions            src/FluentValidation/DefaultValidatorExtensions_Validate.cs:38: => validator.Validate(ValidationContext<T>.CreateWithOptions(instance, options));
+CreateWithOptions            src/FluentValidation/TestHelper/ValidatorTestExtensions.cs:88: return TestValidate(validator, ValidationContext<T>.CreateWithOptions(objectToTest, options));
+DefaultValidatorSelectorFactory src/FluentValidation/IValidationContext.cs:98: : this(instanceToValidate, null, ValidatorOptions.Global.ValidatorSelectors.DefaultValidatorSelectorFactory()) {
+GetFromNonGenericContext     src/FluentValidation/AbstractValidator.cs:85: return Validate(ValidationContext<T>.GetFromNonGenericContext(context));
+GetFromNonGenericContext     src/FluentValidation/DefaultValidatorOptions.cs:202: Configurable(rule).ApplyCondition(ctx => predicate(ctx.InstanceToValidate, ValidationContext<T>.GetFromNonGenericContext
+GetFromNonGenericContext     src/FluentValidation/Internal/ConditionBuilder.cs:50: var actualContext = ValidationContext<T>.GetFromNonGenericContext(context);
+GetFromNonGenericContext     src/FluentValidation/Internal/RuleBase.cs:204: GetDisplayName(context != null ? ValidationContext<T>.GetFromNonGenericContext(context) : null);
+GetPropertyValue             src/FluentValidation.Tests/ConditionTests.cs:190: cfg.ApplyCondition(context => cfg.GetPropertyValue(context.InstanceToValidate) != null);
+GetPropertyValue             src/FluentValidation/Internal/RuleBase.cs:278: object IValidationRule<T>.GetPropertyValue(T instance) => PropertyFunc(instance);
+GetValidatorsToExecuteAsync  src/FluentValidation/Internal/CollectionPropertyRule.cs:110: var filteredValidators = await GetValidatorsToExecuteAsync(context, cancellation);
+InitializeForPropertyValidator src/FluentValidation/Internal/CollectionPropertyRule.cs:86: context.InitializeForPropertyValidator(propertyName, _displayNameFunc, PropertyName);
+IsParameterExpression        src/FluentValidation/Internal/AccessorCache.cs:34: if (expression.IsParameterExpression() && typeof(T) == typeof(TProperty)) {
+MaximumLength                src/FluentValidation.Tests/LengthValidatorTests.cs:149: var validator = new TestValidator(v => v.RuleFor(x => x.Surname).MaximumLength(4));
+NotEmpty                     src/FluentValidation.Tests/ConditionTests.cs:259: v => v.RuleFor(x => x.Forename).NotEmpty().When((_, c) => {
+NotEmpty                     src/FluentValidation.Tests/LocalisedMessagesTester.cs:46: var validator = new TestValidator(v => v.RuleFor(x => x.Surname).NotEmpty());
+Number                       src/FluentValidation.Tests.Benchmarks/DataSet.cs:36: .RuleFor(m => m.SuperNumber1, m => m.Random.Number(0, 20).OrNull(m, 0.20f))
+PrepareMessageFormatterForValidationError src/FluentValidation/Internal/CollectionPropertyRule.cs:176: PrepareMessageFormatterForValidationError(context, valueToValidate);
+RestoreState                 src/FluentValidation/Internal/CollectionPropertyRule.cs:184: context.RestoreState();
+ShouldEqual                  src/FluentValidation.Tests/OnFailureHookTester.cs:36: result.Errors[0].PropertyName.ShouldEqual("Foo");
+ShouldEqual                  src/FluentValidation.Tests/PrecisionScaleValidatorTests.cs:74: result.Errors[0].ErrorMessage.ShouldEqual("'Discount' must not be more than 4 digits in total, with allowance for 2 deci
+TryGetPropertyValue          src/FluentValidation.Tests/ConditionTests.cs:222: cfg.TryGetPropertyValue<string>(context.InstanceToValidate, out var value);
+TryGetPropertyValue          src/FluentValidation/Internal/RuleBase.cs:280: bool IValidationRule<T>.TryGetPropertyValue<TProp>(T instance, out TProp value) {
+WhereAsync                   src/FluentValidation.Tests/ForEachRuleTests.cs:503: .WhereAsync(x => Task.FromResult(x.ProductName != null))
+shown 30
+
+[exited with code 0]

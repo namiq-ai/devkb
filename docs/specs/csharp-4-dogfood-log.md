@@ -17,6 +17,9 @@ Graph: `devkb build --project .` on `main` at `4ef4766` (2,750 nodes, 7,326 edge
 | D4 | `uses extension` | 31 of 77 hits shown, mostly lines of benchmark transcripts (`bench/exercises/**/*.jsonl`) | | **noisy** | `uses` searches every tracked file, data included; the budget went to JSON transcripts | yes: `.jsonl`, `.ndjson`, `.tsv`, `.log` join `NOT_CODE` (back with `--docs`) |
 | Q3 | Body of `_typed_calls`, `_annotation_class`, `_class_ref` | `symbol --source` | the file | right; `symbol` without `--source` prints only the header (by design, said in `--help`) | | |
 | D5 | `docs "registry pack check"` | 11 documents, each matching one of the words | | **noisy** | `docs` ranks by any word; a phrase is not kept together | not in this round (noted) |
+| Q4 | Where `_calls_in` reads a chained receiver | `uses "re:chained = (None\|True\|False)" --under devkb` | the file | right (lines 1309, 1317, 1321); `symbol _calls_in` warned the graph was one commit stale, which was true | | |
+| D6 | (same `uses`) | "showing 3 of 4 hits … Narrow with under=PATH" though `under` was given | 4 hits, one file | **misleading hint** | the per-file cap (3) hid the fourth hit; the hint names `under` even when it is set | not in this round (noted) |
+| Q5 | Body of `_calls_in` (330 lines) | `symbol --source` prints at most 200 lines (by design) | | partly: the rest was read with the editor | | |
 
 Regression tests for D1–D4: `tests/test_dogfood_round4.py` (each fails on `4ef4766`). The Python change (D1) alters
 Python graphs; CI's registry `prepare` jobs (`bench/truth_check.py` on the seven Python repositories) gate it.

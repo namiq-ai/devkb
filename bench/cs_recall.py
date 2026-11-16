@@ -47,7 +47,8 @@ def common_names() -> set[str]:
     try:
         from devkb import csharp_dotnet
         return set().union(*csharp_dotnet.MEMBERS.values()) | set(getattr(csharp_dotnet, "DOTNET_EXTENSIONS", ())) \
-            | set(getattr(csharp_dotnet, "LINQ_LAMBDA", ())) | set(getattr(csharp_dotnet, "LINQ_TO", ()))
+            | set(getattr(csharp_dotnet, "LINQ_LAMBDA", ())) | set(getattr(csharp_dotnet, "LINQ_TO", ())) \
+            | set().union(*getattr(csharp_dotnet, "STATIC_MEMBERS", {}).values())
     except ImportError:                                   # before round 3 there is no table: a small fixed list
         return set("Add Remove Contains Get Set Create Find Execute ExecuteAsync Run Dispose ToString Equals "
                    "GetHashCode Clear Update Delete Load Save Parse TryParse Count Any First Where Select".split())
@@ -72,9 +73,18 @@ def _score(name: str, s: dict, calls_by_callee: dict, masked: dict) -> tuple[set
             line = text.count("\n", 0, m.start()) + 1
             if rel == s["rel"] and s["line_start"] <= line <= s["line_end"]:
                 continue                                          # the definition, or recursion (no edge by design)
+            row = text[text.rfind("\n", 0, m.start()) + 1: m.end()]
+            if _EXPLICIT_IMPL.search(row):
+                continue                                          # `void IFoo<T>.Name(...)`: a declaration, not a call
             truth.add(rel)
             break
     return truth, calls_by_callee.get(s["key"], set())
+
+
+# an explicit interface implementation's declaration: a type, then `IName<...>.Method(` (round 4, B1)
+_EXPLICIT_IMPL = re.compile(r"^\s*(?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|async|unsafe|"
+                            r"override|virtual|abstract|sealed|new|extern)\s+)*[\w.<>\[\],?() ]+?\s+"
+                            r"I[A-Z]\w*(?:<[^()]*>)?\.\w+\s*(?:<[^()]*>)?\s*\($")
 
 
 def _arm(cs, repo: Path):

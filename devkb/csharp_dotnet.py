@@ -315,3 +315,110 @@ LINQ_ALL = LINQ_LAMBDA | LINQ_SAME | LINQ_ELEMENT | set(LINQ_TO) | {"ToList", "T
                                                                     "Cast", "OfType", "ToDictionary", "ToLookup",
                                                                     "Contains", "SequenceEqual", "DefaultIfEmpty",
                                                                     "Append", "Prepend", "Chunk", "Zip", "Join"}
+
+# ── static members of common .NET types (round 4) ───────────────────────────────────────────────────────────────────
+# `Path.GetExtension(p)`, `Expression.Call(...)`: a static call on a .NET type is never a call into the repository, and
+# a repository method of the same name is not what it calls (found as noise in the benchmark's truth on EF Core).
+STATIC_MEMBERS: dict[str, set[str]] = {
+    "Path": {"Combine", "GetExtension", "GetFileName", "GetFileNameWithoutExtension", "GetDirectoryName", "GetFullPath",
+             "GetTempPath", "GetTempFileName", "GetRandomFileName", "ChangeExtension", "HasExtension", "IsPathRooted",
+             "GetRelativePath", "Join", "GetInvalidFileNameChars", "GetInvalidPathChars", "EndsInDirectorySeparator",
+             "TrimEndingDirectorySeparator", "GetPathRoot"},
+    "File": {"Exists", "ReadAllText", "ReadAllTextAsync", "ReadAllBytes", "ReadAllBytesAsync", "ReadAllLines",
+             "ReadAllLinesAsync", "WriteAllText", "WriteAllTextAsync", "WriteAllBytes", "WriteAllBytesAsync",
+             "WriteAllLines", "AppendAllText", "Delete", "Copy", "Move", "Open", "OpenRead", "OpenWrite", "OpenText",
+             "Create", "CreateText", "GetLastWriteTimeUtc", "GetAttributes", "SetAttributes", "ReadLines"},
+    "Directory": {"Exists", "CreateDirectory", "Delete", "GetFiles", "GetDirectories", "EnumerateFiles",
+                  "EnumerateDirectories", "EnumerateFileSystemEntries", "GetCurrentDirectory", "Move", "GetParent"},
+    "Expression": {"Call", "Constant", "Convert", "Lambda", "Parameter", "Property", "Field", "MakeMemberAccess",
+                   "MakeBinary", "MakeUnary", "Equal", "NotEqual", "AndAlso", "OrElse", "Not", "Condition", "New",
+                   "NewArrayInit", "Block", "Assign", "Variable", "Default", "Invoke", "TypeAs", "TypeIs", "Quote",
+                   "Bind", "MemberInit", "ListInit", "ElementInit", "Coalesce", "ArrayIndex", "ArrayAccess", "Throw",
+                   "Return", "Label", "Loop", "Break", "Continue", "IfThen", "IfThenElse", "Switch", "SwitchCase",
+                   "TryCatch", "TryFinally", "Catch", "Add", "Subtract", "Multiply", "Divide", "GreaterThan",
+                   "LessThan", "GreaterThanOrEqual", "LessThanOrEqual", "PropertyOrField", "Empty", "Unbox",
+                   "MakeIndex", "MakeCatchBlock", "MakeGoto", "Dynamic", "GetFuncType", "GetActionType",
+                   "GetDelegateType", "ReferenceEqual", "ReferenceNotEqual", "IsTrue", "IsFalse", "Negate"},
+    "Math": {"Abs", "Max", "Min", "Round", "Floor", "Ceiling", "Pow", "Sqrt", "Clamp", "Log", "Sign", "Truncate"},
+    "Task": {"Run", "FromResult", "WhenAll", "WhenAny", "Delay", "FromException", "FromCanceled", "Yield",
+             "CompletedTask"},
+    "string": {"Join", "Concat", "Format", "IsNullOrEmpty", "IsNullOrWhiteSpace", "Equals", "Compare",
+               "CompareOrdinal", "Create"},
+    "String": {"Join", "Concat", "Format", "IsNullOrEmpty", "IsNullOrWhiteSpace", "Equals", "Compare"},
+    "Enumerable": {"Range", "Repeat", "Empty"},
+    "Array": {"Empty", "Resize", "Copy", "IndexOf", "Sort", "Reverse", "Fill", "Exists", "Find", "FindIndex",
+              "ConvertAll", "TrueForAll", "BinarySearch", "Clear", "LastIndexOf", "AsReadOnly"},
+    "Convert": {"ToInt32", "ToInt64", "ToString", "ToBoolean", "ToDouble", "ToDecimal", "ToBase64String",
+                "FromBase64String", "ChangeType", "ToByte", "ToChar", "ToDateTime", "ToHexString", "FromHexString"},
+    "Guid": {"NewGuid", "Parse", "TryParse", "ParseExact", "TryParseExact"},
+    "Activator": {"CreateInstance"},
+    "Enum": {"Parse", "TryParse", "GetValues", "GetNames", "GetName", "IsDefined", "ToObject"},
+    "Environment": {"GetEnvironmentVariable", "SetEnvironmentVariable", "GetFolderPath", "Exit",
+                    "GetCommandLineArgs", "ExpandEnvironmentVariables"},
+    "Console": {"WriteLine", "Write", "ReadLine", "ReadKey"},
+    "Debug": {"Assert", "WriteLine", "Fail"},
+    "Interlocked": {"Increment", "Decrement", "Exchange", "CompareExchange", "Add"},
+    "Volatile": {"Read", "Write"},
+    "BitConverter": {"GetBytes", "ToInt32", "ToString", "ToUInt32", "ToInt64"},
+    "Encoding": {"GetEncoding"},
+    "JsonSerializer": {"Serialize", "Deserialize", "SerializeAsync", "DeserializeAsync", "SerializeToElement"},
+    "Regex": {"IsMatch", "Match", "Matches", "Replace", "Split", "Escape", "Unescape"},
+    "Uri": {"TryCreate", "EscapeDataString", "UnescapeDataString", "IsWellFormedUriString"},
+    "DateTime": {"Parse", "TryParse", "ParseExact", "TryParseExact", "SpecifyKind", "FromFileTimeUtc"},
+    "TimeSpan": {"FromSeconds", "FromMilliseconds", "FromMinutes", "FromHours", "FromDays", "FromTicks", "Parse",
+                 "TryParse"},
+}
+# Instance members of .NET value types and readers the C# code bases call often (JSON, spans).
+MEMBERS.update({
+    "Utf8JsonReader": {"Read", "GetString", "GetInt32", "GetInt64", "GetUInt32", "GetUInt64", "GetDouble",
+                       "GetDecimal", "GetBoolean", "GetGuid", "GetDateTime", "GetBytesFromBase64", "TrySkip", "Skip",
+                       "GetInt16", "GetByte", "GetSingle", "ValueTextEquals", "CopyString", "TryGetInt32"},
+    "Utf8JsonWriter": {"WriteStartObject", "WriteEndObject", "WriteStartArray", "WriteEndArray", "WriteString",
+                       "WriteNumber", "WriteBoolean", "WriteNull", "WritePropertyName", "WriteStringValue",
+                       "WriteNumberValue", "WriteBooleanValue", "WriteNullValue", "Flush", "FlushAsync", "WriteRawValue"},
+    "JsonElement": {"GetProperty", "TryGetProperty", "GetString", "GetInt32", "GetInt64", "GetDouble", "GetBoolean",
+                    "GetDecimal", "GetGuid", "GetDateTime", "EnumerateArray", "EnumerateObject", "GetArrayLength",
+                    "GetRawText", "Clone", "WriteTo", "ValueEquals", "TryGetInt32", "TryGetInt64"},
+    "JsonDocument": {"Dispose", "WriteTo"},
+})
+BASES.update({"Utf8JsonReader": set(), "Utf8JsonWriter": {"IDisposable"}, "JsonElement": set(),
+              "JsonDocument": {"IDisposable"}})
+
+
+def static_member(type_name: str, name: str) -> bool:
+    """Whether `type_name.name(...)` is a static method .NET itself defines (never a repository call)."""
+    return name in STATIC_MEMBERS.get(type_name, ())
+
+# Members of .NET generic types that return one of the type's arguments (F1): `lazy.Value` of a `Lazy<T>` is a `T`.
+GENERIC_MEMBERS: dict[str, dict[str, int]] = {
+    "Lazy": {"Value": 0}, "Nullable": {"Value": 0, "GetValueOrDefault": 0}, "Task": {"Result": 0},
+    "ValueTask": {"Result": 0}, "KeyValuePair": {"Key": 0, "Value": 1}, "IEnumerator": {"Current": 0},
+    "IAsyncEnumerator": {"Current": 0}, "IOptions": {"Value": 0}, "IOptionsMonitor": {"CurrentValue": 0},
+    "IOptionsSnapshot": {"Value": 0}, "IGrouping": {"Key": 0}, "Tuple": {"Item1": 0, "Item2": 1, "Item3": 2},
+    "ValueTuple": {"Item1": 0, "Item2": 1, "Item3": 2}, "StrongBox": {"Value": 0}, "WeakReference": {},
+    "ThreadLocal": {"Value": 0}, "AsyncLocal": {"Value": 0}, "Mock": {"Object": 0},
+}
+
+# ── third-party types repositories call most (F5): each line from the library's public API ────────────────────────
+_MVC_RESULTS = {"Ok", "BadRequest", "NotFound", "NoContent", "Created", "CreatedAtAction", "CreatedAtRoute",
+                "Accepted", "AcceptedAtAction", "AcceptedAtRoute", "Conflict", "Forbid", "Unauthorized", "StatusCode",
+                "File", "PhysicalFile", "Redirect", "RedirectToAction", "RedirectToRoute", "LocalRedirect", "Content",
+                "Problem", "ValidationProblem", "UnprocessableEntity", "Challenge", "SignIn", "SignOut",
+                "TryValidateModel", "TryUpdateModelAsync", "NotFoundObjectResult"}
+BASES.update({
+    "ControllerBase": set(), "Controller": {"ControllerBase", "IDisposable"},                     # ASP.NET Core MVC
+    "ILogger": set(), "BackgroundService": {"IHostedService", "IDisposable"}, "IHostedService": set(),
+    "IOptions": set(), "IOptionsMonitor": set(), "IOptionsSnapshot": {"IOptions"},
+    "Mock": set(), "ISetup": set(), "IReturnsResult": set(),                                         # Moq
+})
+MEMBERS.update({
+    "ControllerBase": _MVC_RESULTS,
+    "Controller": {"View", "PartialView", "Json", "ViewComponent", "OnActionExecuting", "OnActionExecuted",
+                   "Dispose"},
+    "BackgroundService": {"StartAsync", "StopAsync", "ExecuteAsync", "Dispose"},
+    "IHostedService": {"StartAsync", "StopAsync"},
+    "Mock": {"Setup", "SetupGet", "SetupSet", "SetupSequence", "SetupProperty", "SetupAllProperties", "Verify",
+             "VerifyAll", "VerifyGet", "VerifySet", "VerifyNoOtherCalls", "As", "Reset", "Raise", "Verifiable"},
+    "ISetup": {"Returns", "ReturnsAsync", "Throws", "ThrowsAsync", "Callback", "CallBase", "Verifiable", "Raises"},
+    "IReturnsResult": {"Callback", "Verifiable", "Raises"},
+})
