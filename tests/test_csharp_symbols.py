@@ -240,3 +240,169 @@ def test_a_chained_call_split_over_lines_carries_the_line_of_its_name(tmp_path):
     _, calls = csharp_symbols.extract(_repo(tmp_path))
     hit = [c for c in calls if c["callee"].endswith("N.P.Handle")]
     assert hit and hit[0]["line"] == 6
+
+
+# ── round 2 (SPEC-DEVKB-CSHARP-2): a call goes only to a method that can accept it ─────────────────────────────
+
+ROUND2 = '''namespace R2;
+
+using System;
+using System.Collections.Generic;
+
+public interface IProp { Type ClrType { get; } }
+public interface IEntity { void FindProperty(int id); }
+public class TypeBase { public virtual void FindProperty(string name) { } }
+public class Entity : TypeBase, IEntity { }                        // class base first: TypeBase.FindProperty wins
+
+public static class PropExtensions
+{
+    public static object Default(this IProp property) => null;
+}
+
+public static class TypeExtensions
+{
+    public static object Default(
+        [Marker(typeof(int))]
+        this Type type) => null;                                   // an attribute before `this`: still an extension
+}
+
+public static class ListExtensions
+{
+    public static T First<T>(this IReadOnlyList<T> source) => default;   // no predicate
+}
+
+public class Store
+{
+    public void Put(int a, int b) { }
+}
+
+public class Use
+{
+    public void Run(IProp prop, Entity entity, IReadOnlyList<int> list, Store store, Type t)
+    {
+        prop.Default();                                            // -> PropExtensions.Default (this IProp)
+        t.Default();                                               // -> TypeExtensions.Default (this Type)
+        entity.FindProperty("x");                                  // -> TypeBase.FindProperty
+        list.First();                                              // -> ListExtensions.First
+        list.First(x => x > 1);                                    // LINQ's First(predicate): no edge
+        store.Put(1);                                              // no overload takes one argument: no edge
+        store.Put(1, 2);                                           // -> Store.Put
+    }
+}
+'''
+
+
+def _round2(tmp_path):
+    (tmp_path / "R2.cs").write_text(ROUND2)
+    syms, calls = csharp_symbols.extract(_repo(tmp_path))
+    lines = ROUND2.splitlines()
+    by_line = {}
+    for c in calls:
+        if c["rel"] == "R2.cs":
+            by_line.setdefault(lines[c["line"] - 1].strip().split(";")[0], set()).add(_short(c["callee"]))
+    return syms, by_line
+
+
+def test_an_attribute_before_this_does_not_hide_an_extension(tmp_path):
+    syms, _ = _round2(tmp_path)
+    td = [s for s in syms if s["key"].endswith("R2.TypeExtensions.Default")]
+    assert td and td[0]["ext"] and td[0]["this_type"] == "Type"
+
+
+def test_extensions_are_chosen_by_receiver_type(tmp_path):
+    _, by_line = _round2(tmp_path)
+    assert by_line["prop.Default()"] == {"R2.PropExtensions.Default"}
+    assert by_line["t.Default()"] == {"R2.TypeExtensions.Default"}
+
+
+def test_the_class_base_is_searched_before_an_interface(tmp_path):
+    _, by_line = _round2(tmp_path)
+    assert by_line['entity.FindProperty("x")'] == {"R2.TypeBase.FindProperty"}
+
+
+def test_a_call_no_overload_accepts_gets_no_edge(tmp_path):
+    _, by_line = _round2(tmp_path)
+    assert by_line["list.First()"] == {"R2.ListExtensions.First"}
+    assert "list.First(x => x > 1)" not in by_line, "a predicate means LINQ, not the parameterless extension"
+    assert "store.Put(1)" not in by_line and by_line["store.Put(1, 2)"] == {"R2.Store.Put"}
+
+
+def test_argument_counting():
+    cases = {"f()": 0, "f(a)": 1, "f((a))": 1, 'f("x")': 1, 'f(a, "x,y")': 2, "f(x => { g(1, 2); })": 1,
+             "f(new[] { a, b }, c)": 2, "f(a < b, c)": None, "f(new List<int>(), 1)": None, "f(/*c*/)": 0}
+    for text, n in cases.items():
+        assert csharp_symbols._arg_count(csharp_symbols.mask(text), text, 1) == n, text
+    assert csharp_symbols._arity("int a, int b = 2, params object[] rest", False) == (1, None)
+    assert csharp_symbols._arity("this IFoo x, int a", True) == (1, 1)
+
+
+ROUND2B = '''namespace R2b;
+
+public interface IHasIds { }
+public class A0 : IHasIds { }
+''' + "".join(f"public class A{i} : A{i - 1}, IX{i} {{ }}\npublic interface IX{i} {{ }}\n" for i in range(1, 40)) + '''
+public static class IdExtensions
+{
+    public static void SetId(this IHasIds item, string v) { }
+    public static string Twice(this string s) => s + s;
+    public static string Twice(this string s, int times) => s;
+}
+
+public static class Paths
+{
+    public static string Attr(this string s, string a) => s;
+    public static string Use(string p) => Attr(p, "x");          // an extension called by name: `this` passed
+}
+
+public class Painter
+{
+    public void Paint(A39 deep, string p)
+    {
+        deep.SetId("x");                                          // 40 levels up to IHasIds
+        Paths.Attr(p, "y");                                       // an extension called statically
+        using var w = new Painter();
+        w.Paint(deep, p);
+    }
+    public void Dispose() { }
+}
+'''
+
+
+def test_wide_hierarchies_static_extension_calls_and_using_var(tmp_path):
+    (tmp_path / "R2b.cs").write_text(ROUND2B)
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    pairs = {(_short(c["caller"]), _short(c["callee"])) for c in calls}
+    assert ("R2b.Painter.Paint", "R2b.IdExtensions.SetId") in pairs
+    assert ("R2b.Painter.Paint", "R2b.Paths.Attr") in pairs
+    assert ("R2b.Paths.Use", "R2b.Paths.Attr") in pairs
+    assert csharp_symbols._locals("using var w = new Painter();") == {"w": "Painter"}
+
+
+def test_this_object_extensions_and_this_dot_field(tmp_path):
+    (tmp_path / "R2c.cs").write_text('''namespace R2c;
+public static class Should { public static void ShouldEqual(this object actual, object expected) { } }
+public class V { public void Check(int x) { } }
+public class T
+{
+    private V v;
+    public void Run(string s, V w) { w.ShouldEqual("a"); this.v.Check(1); }
+    public void Outside(string s) { s.ShouldEqual("a"); }
+}
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    pairs = {(_short(c["caller"]), _short(c["callee"])) for c in calls}
+    assert ("R2c.T.Run", "R2c.Should.ShouldEqual") in pairs, "a repository receiver without that member: the extension"
+    assert ("R2c.T.Outside", "R2c.Should.ShouldEqual") in pairs, "no repository method is named ShouldEqual"
+    assert ("R2c.T.Run", "R2c.V.Check") in pairs
+
+
+def test_a_member_that_fits_ambiguously_is_not_replaced_by_an_extension(tmp_path):
+    (tmp_path / "P1.cs").write_text("namespace P;\npublic partial class Pol { public void Run(int a) { } }\n")
+    (tmp_path / "P2.cs").write_text("namespace P;\npublic partial class Pol { public void Run(string a) { } }\n")
+    (tmp_path / "H.cs").write_text('''namespace P;
+public static class Helper { public static void Run(this object o, int v) { } }
+public class Bench { public static Pol Pol { get; } = new Pol(); public void Go(System.Net.Http.HttpClient c) { Pol.Run(1); c.Run(2); } }
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    assert not [c for c in calls if c["callee"].endswith("P.Helper.Run")], (
+        "Pol.Run fits a member: never the extension; c.Run on an outside type: `Run` is also a repository method")

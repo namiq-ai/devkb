@@ -1,0 +1,60 @@
+ 1. Emby.Server.Implementations.Library.LibraryManager.GetItemIds -> Emby.Server.Implementations/Library/LibraryManager.cs::Emby.Server.Implementations.Library.LibraryManager.AddUserToQuery
+    call Emby.Server.Implementations/Library/LibraryManager.cs:1914: AddUserToQuery(query, query.User);
+    def  2090: private void AddUserToQuery(InternalItemsQuery query, User user, bool allowExternalContent = true)
+ 2. Emby.Server.Implementations.Library.LibraryManager.CreateItems -> Emby.Server.Implementations/Library/LibraryManager.cs::Emby.Server.Implementations.Library.LibraryManager.SetAdditionalPartsFromStack
+    call Emby.Server.Implementations/Library/LibraryManager.cs:2483: SetAdditionalPartsFromStack(altVideo, path);
+    def  828: private void SetAdditionalPartsFromStack(Video altVideo, string path)
+ 3. Emby.Server.Implementations.SyncPlay.Group.NextItemInQueue -> MediaBrowser.Controller/Library/ILibraryManager.cs::MediaBrowser.Controller.Library.ILibraryManager.GetItemById
+    call Emby.Server.Implementations/SyncPlay/Group.cs:667: var item = _libraryManager.GetItemById(PlayQueue.GetPlayingItemId());
+    def  201: BaseItem? GetItemById(Guid id);
+ 4. Jellyfin.Api.Controllers.LibraryController.DeleteItems -> Jellyfin.Api/Extensions/ClaimsPrincipalExtensions.cs::Jellyfin.Api.Extensions.ClaimsPrincipalExtensions.GetIsApiKey
+    call Jellyfin.Api/Controllers/LibraryController.cs:413: var isApiKey = User.GetIsApiKey();
+    def  71: public static bool GetIsApiKey(this ClaimsPrincipal user)
+ 5. Jellyfin.Api.Controllers.MusicGenresController.GetMusicGenre -> Jellyfin.Api/Helpers/RequestHelpers.cs::Jellyfin.Api.Helpers.RequestHelpers.GetUserId
+    call Jellyfin.Api/Controllers/MusicGenresController.cs:157: userId = RequestHelpers.GetUserId(User, userId);
+    def  67: internal static Guid GetUserId(ClaimsPrincipal claimsPrincipal, Guid? userId)
+ 6. Jellyfin.Api.Controllers.UserController.UpdateUserConfiguration -> Jellyfin.Api/Extensions/ClaimsPrincipalExtensions.cs::Jellyfin.Api.Extensions.ClaimsPrincipalExtensions.GetUserId
+    call Jellyfin.Api/Controllers/UserController.cs:475: var requestUserId = userId ?? User.GetUserId();
+    def  18: public static Guid GetUserId(this ClaimsPrincipal user)
+ 7. Jellyfin.Data.UserEntityExtensions.HasPermission -> src/Jellyfin.Extensions/ReadOnlyListExtension.cs::Jellyfin.Extensions.ReadOnlyListExtension.FirstOrDefault
+    call Jellyfin.Data/UserEntityExtensions.cs:28: return entity.Permissions.FirstOrDefault(p => p.Kind == kind)?.Value ?? false;
+    def  67: public static T? FirstOrDefault<T>(this IReadOnlyList<T>? source)
+ 8. MediaBrowser.Controller.MediaEncoding.EncodingHelper.GetRkmppVidDecoder -> MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs::MediaBrowser.Controller.MediaEncoding.EncodingHelper.IsScaleRatioSupported
+    call MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7181: if (!IsScaleRatioSupported(inW, inH, reqW, reqH, reqMaxW, reqMaxH, 16.0f))
+    def  3339: public static bool IsScaleRatioSupported(
+ 9. MediaBrowser.Providers.Plugins.Omdb.OmdbItemProvider.ResultToMetadataResult -> MediaBrowser.Providers/Plugins/Omdb/OmdbProvider.cs::MediaBrowser.Providers.Plugins.Omdb.OmdbProvider.TryParseYear
+    call MediaBrowser.Providers/Plugins/Omdb/OmdbItemProvider.cs:193: if (OmdbProvider.TryParseYear(result.Year, out var parsedYear))
+    def  285: public static bool TryParseYear(string input, [NotNullWhen(true)] out int? year)
+10. MediaBrowser.Providers.Plugins.Omdb.OmdbProvider.FetchEpisodeData -> MediaBrowser.Providers/Plugins/Omdb/OmdbProvider.cs::MediaBrowser.Providers.Plugins.Omdb.OmdbProvider.GetSeasonRootObject
+    call MediaBrowser.Providers/Plugins/Omdb/OmdbProvider.cs:156: var seasonResult = await GetSeasonRootObject(seriesImdbId, seasonNumber, cancellationToken).ConfigureAwait(false);
+    def  254: internal async Task<SeasonRootObject> GetSeasonRootObject(string imdbId, int seasonId, CancellationToken cancellationToken)
+11. Jellyfin.Api.Tests.Controllers.PluginsControllerTests.GetPluginImage_TraversalOutsidePluginPath_ReturnsNotFound -> tests/Jellyfin.Api.Tests/Controllers/PluginsControllerTests.cs::Jellyfin.Api.Tests.Controllers.PluginsControllerTests.SetupPlugin
+    call tests/Jellyfin.Api.Tests/Controllers/PluginsControllerTests.cs:79: SetupPlugin(id, version, imagePath);
+    def  32: private void SetupPlugin(Guid id, Version version, string? imagePath)
+12. Jellyfin.Controller.Tests.MediaEncoding.EncodingHelperTests.GetMapArgs_MksSecondTrack_MapsInFileIndex1 -> tests/Jellyfin.Controller.Tests/MediaEncoding/EncodingHelperTests.cs::Jellyfin.Controller.Tests.MediaEncoding.EncodingHelperTests.BuildState
+    call tests/Jellyfin.Controller.Tests/MediaEncoding/EncodingHelperTests.cs:160: var state = BuildState(mks1, SubtitleDeliveryMethod.Embed, additionalStreams: [mks0, mks1, mks2]);
+    def  350: private static EncodingJobInfo BuildState(
+13. Jellyfin.Extensions.Tests.StreamExtensionsTests.IsStreamIdenticalAsync_NonSeekableShortReads_Identical_ReturnsTrue -> src/Jellyfin.Extensions/StreamExtensions.cs::Jellyfin.Extensions.StreamExtensions.IsStreamIdenticalAsync
+    call tests/Jellyfin.Extensions.Tests/StreamExtensionsTests.cs:188: var result = await a.IsStreamIdenticalAsync(b, cancellationToken);
+    def  126: public static async Task<bool> IsStreamIdenticalAsync(this Stream a, Stream b, CancellationToken cancellationToken = default)
+14. Jellyfin.Providers.Tests.Tmdb.TmdbMissingEpisodeProviderTests.UpdateVirtualEpisode_EmptyTmdbValues_DoNotOverwrite -> MediaBrowser.Providers/Plugins/Tmdb/TV/TmdbMissingEpisodeProvider.cs::MediaBrowser.Providers.Plugins.Tmdb.TV.TmdbMissingEpisodeProvider.UpdateVirtualEpisode
+    call tests/Jellyfin.Providers.Tests/Tmdb/TmdbMissingEpisodeProviderTests.cs:165: Assert.False(TmdbMissingEpisodeProvider.UpdateVirtualEpisode(episode, tmdbEpisode, null));
+    def  575: internal static bool UpdateVirtualEpisode(Episode episode, TvSeasonEpisode tmdbEpisode, DateTime? premiereDate)
+15. Jellyfin.Server.Implementations.Tests.Data.ItemTypeLookupTests.BaseItemKindNames_Kind_NamesAnItemType -> Emby.Server.Implementations/Data/ItemTypeLookup.cs::Emby.Server.Implementations.Data.ItemTypeLookup
+    call tests/Jellyfin.Server.Implementations.Tests/Data/ItemTypeLookupTests.cs:19: var name = new ItemTypeLookup().BaseItemKindNames[kind];
+    def  17: public class ItemTypeLookup : IItemTypeLookup
+16. Jellyfin.Server.Implementations.Tests.Data.SearchPunctuationTests.CleanName_keeps_punctuation_and_search_without_punctuation_passes -> Jellyfin.Server.Implementations/Item/BaseItemRepository.cs::Jellyfin.Server.Implementations.Item.BaseItemRepository.Map
+    call tests/Jellyfin.Server.Implementations.Tests/Data/SearchPunctuationTests.cs:52: var entity = _repo.Map(series);
+    def  104: public static BaseItemDto Map(BaseItemEntity entity, BaseItemDto dto, IServerApplicationHost? appHost, ILogger logger)
+17. Jellyfin.Server.Implementations.Tests.HttpServer.WebSocketConnectionTests.DeserializeWebSocketMessage_ValidPartial_Success -> Emby.Server.Implementations/HttpServer/WebSocketConnection.cs::Emby.Server.Implementations.HttpServer.WebSocketConnection.DeserializeWebSocketMessage
+    call tests/Jellyfin.Server.Implementations.Tests/HttpServer/WebSocketConnectionTests.cs:43: con.DeserializeWebSocketMessage(new ReadOnlySequence<byte>(bytes), out var bytesConsumed);
+    def  259: internal InboundWebSocketMessage<object>? DeserializeWebSocketMessage(ReadOnlySequence<byte> bytes, out long bytesConsumed)
+18. Jellyfin.Server.Implementations.Tests.Item.BaseItemRepositoryByNameTotalCountTests.GetArtists_WithoutLimit_DoesNotMutateCallerQuery -> tests/Jellyfin.Server.Implementations.Tests/Item/BaseItemRepositoryByNameTotalCountTests.cs::Jellyfin.Server.Implementations.Tests.Item.BaseItemRepositoryByNameTotalCountTests.SeedArtists
+    call tests/Jellyfin.Server.Implementations.Tests/Item/BaseItemRepositoryByNameTotalCountTests.cs:69: SeedArtists(1);
+    def  93: private void SeedArtists(int count)
+19. Jellyfin.Server.Implementations.Tests.Plugins.PluginManagerTests.PopulateManifest_ExistingMetafileMismatchedIds_Status_Malfunctioned -> Emby.Server.Implementations/Plugins/PluginManager.cs::Emby.Server.Implementations.Plugins.PluginManager.ctor
+    call tests/Jellyfin.Server.Implementations.Tests/Plugins/PluginManagerTests.cs:279: var pluginManager = new PluginManager(new NullLogger<PluginManager>(), null!, null!, _tempPath, new Version(1, 0));
+    def  56: public PluginManager(
+20. Jellyfin.Server.Implementations.Tests.Users.DisplayPreferencesManagerFailedWriteTests.StatementInterceptor.NonQueryExecuting -> tests/Jellyfin.Server.Implementations.Tests/Users/DisplayPreferencesManagerFailedWriteTests.cs::Jellyfin.Server.Implementations.Tests.Users.DisplayPreferencesManagerFailedWriteTests.StatementInterceptor.FailInsert
+    call tests/Jellyfin.Server.Implementations.Tests/Users/DisplayPreferencesManagerFailedWriteTests.cs:87: FailInsert(command);
+    def  91: private void FailInsert(DbCommand command)

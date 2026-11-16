@@ -1,0 +1,11 @@
+MediatR: 666 edges before, 666 after; removed 1, added 1
+
+## REMOVED (sample 1 of 1)
+ 1. MediatR.Tests.NotificationHandlerTests.Should_call_abstract_handle_method -> MediatR.Tests.NotificationHandlerTests.PongChildHandler.Handle
+    call test/MediatR.Tests/NotificationHandlerTests.cs:39: await handler.Handle(
+    def  test/MediatR.Tests/NotificationHandlerTests.cs:25: protected override void Handle(Ping notification)
+
+## ADDED (sample 1 of 1)
+ 1. MediatR.Tests.NotificationHandlerTests.Should_call_abstract_handle_method -> MediatR.INotificationHandler.Handle
+    call test/MediatR.Tests/NotificationHandlerTests.cs:39: await handler.Handle(
+    def  src/MediatR/INotificationHandler.cs:18: Task Handle(TNotification notification, CancellationToken cancellationToken);

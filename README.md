@@ -29,7 +29,7 @@ Everything runs locally: devkb reads files and runs `git`, never your code (unle
 | Python | ✅ Supported | functions, classes, calls (through imports, re-exports, typed objects, base classes), tests, FastAPI/Flask routes, raised and logged errors, environment variables; every pack |
 | TypeScript, TSX | 🟡 Partial | functions, components, classes, and the HTTP calls they make to backend routes; not calls between them |
 | JavaScript (`.js`, `.mjs`) | 🟡 Partial | as TypeScript |
-| C# | ✅ Supported | classes, structs, interfaces, records, methods, constructors, properties, local and extension methods, calls (same type, `this`/`base`, typed receivers, static `Type.M()`, `new T()`), xUnit/NUnit/MSTest tests; every pack. Not: calls on an expression's result, overloads by argument type |
+| C# | ✅ Supported | classes, structs, interfaces, records, methods, constructors, properties, local and extension methods, calls (same type and bases, `this`/`base`, typed receivers, static `Type.M()`, `new T()`, extension methods chosen by receiver type and argument count), xUnit/NUnit/MSTest tests; every pack. Checked on MediatR, FluentValidation, Polly, Jellyfin and EF Core (1.8M lines in ~2 min). Not: calls on a call's result (`a.B().C()`), overloads by argument *type*, outside types' hierarchies (`StreamReader` → `TextReader`) |
 | Odoo XML | 🟡 Partial | templates and menus |
 | Bash / shell | ⬜ Not yet | files and history only |
 | C, C++, Java, Rust, Go, others | ⬜ Not yet | files and history only |

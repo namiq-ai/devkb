@@ -1,0 +1,125 @@
+Polly: 5295 edges before, 5381 after; removed 352, added 438
+
+## REMOVED (sample 20 of 352)
+ 1. Polly.Core.Tests.Hedging.HedgingResiliencePipelineBuilderExtensionsTests.AddHedging_IntegrationTestWithRealDelay -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Core.Tests/Hedging/HedgingResiliencePipelineBuilderExtensionsTests.cs:91: var result = await strategy.ExecuteAsync(token => new ValueTask<string>("error"), TestCancellation.Token);
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 2. Polly.Core.Tests.Hedging.HedgingResiliencePipelineBuilderExtensionsTests.AddHedging_ActionGeneratorUsesCallback_InvokesPrimaryCallback -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Core.Tests/Hedging/HedgingResiliencePipelineBuilderExtensionsTests.cs:150: var result = await strategy.ExecuteAsync(
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 3. Polly.Core.Tests.Simmy.Behavior.ChaosBehaviorStrategyTests.Given_enabled_and_randomly_within_threshold_should_inject_behavior -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Core.Tests/Simmy/Behavior/ChaosBehaviorStrategyTests.cs:47: await sut.ExecuteAsync((_) => { _userDelegateExecuted = true; return default; }, TestCancellation.Token);
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 4. Polly.Core.Tests.Timeout.TimeoutResilienceStrategyTests.Execute_CallerCancellation_EnsureExceptionCarriesCallerToken -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Core.Tests/Timeout/TimeoutResilienceStrategyTests.cs:239: () => sut.ExecuteAsync(async token =>
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 5. Polly.Core.Tests.Timeout.TimeoutResilienceStrategyTests.Execute_NoTimeoutOrCancellation_EnsureCancellationTokenRestored -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Core.Tests/Timeout/TimeoutResilienceStrategyTests.cs:263: await sut.ExecuteAsync(
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 6. Polly.Extensions.Tests.Issues.IssuesTests.OnCircuitBreakWithServiceProvider_796 -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Extensions.Tests/Issues/IssuesTests.OnCircuitBreakWithServiceProvider_796.cs:48: await pipeline.ExecuteAsync(_ => new ValueTask<string>("error"), TestCancellation.Token);
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 7. Polly.Specs.Caching.CacheAsyncSpecs.Should_return_value_from_cache_and_not_execute_delegate_if_cache_holds_value -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/Caching/CacheAsyncSpecs.cs:339: (await cache.ExecuteAsync(async _ =>
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 8. Polly.Specs.Caching.CacheAsyncSpecs.Should_call_onError_delegate_if_cache_put_errors -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/Caching/CacheAsyncSpecs.cs:849: (await cache.ExecuteAsync(async _ => { await TaskHelper.EmptyTask; return ValueToReturn; }, [with(OperationKey)])).ShouldBe(ValueToReturn);
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 9. Polly.Specs.CircuitBreaker.AdvancedCircuitBreakerAsyncSpecs.Should_reset_circuit_after_the_specified_duration_has_passed_if_the_next_call_does_not_raise_an_exception -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/CircuitBreaker/AdvancedCircuitBreakerAsyncSpecs.cs:1246: await breaker.ExecuteAsync(() => TaskHelper.EmptyTask);
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+10. Polly.Specs.NoOp.NoOpAsyncSpecs.Should_execute_user_delegate -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/NoOp/NoOpAsyncSpecs.cs:30: await Should.NotThrowAsync(() => policy.ExecuteAsync(() => { executed = true; return TaskHelper.EmptyTask; }));
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+11. Polly.Specs.NoOp.NoOpAsyncSpecs.Should_execute_user_delegate_without_adding_extra_cancellation_behaviour -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/NoOp/NoOpAsyncSpecs.cs:46: await Should.NotThrowAsync(() => policy.ExecuteAsync(
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+12. Polly.Specs.NoOp.NoOpTResultAsyncSpecs.Should_execute_user_delegate -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/NoOp/NoOpTResultAsyncSpecs.cs:30: await Should.NotThrowAsync(async () => result = await policy.ExecuteAsync(() => Task.FromResult((int?)10)));
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+13. Polly.Specs.Timeout.TimeoutAsyncSpecs.Should_not_throw_when_timeout_is_greater_than_execution_duration__optimistic -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/Timeout/TimeoutAsyncSpecs.cs:499: result = await policy.ExecuteAsync(async ct =>
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+14. Polly.Specs.Timeout.TimeoutTResultAsyncSpecs.Should_call_ontimeout_with_passed_context__optimistic -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/Timeout/TimeoutTResultAsyncSpecs.cs:850: await Should.ThrowAsync<TimeoutRejectedException>(() => policy.ExecuteAsync(async (_, ct) =>
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+15. Polly.Specs.Timeout.TimeoutTResultAsyncSpecs.Should_call_ontimeout_but_not_with_task_wrapping_abandoned_action__optimistic -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/Timeout/TimeoutTResultAsyncSpecs.cs:935: await Should.ThrowAsync<TimeoutRejectedException>(() => policy.ExecuteAsync(async ct =>
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+16. Polly.Specs.Wrap.PolicyWrapAsyncSpecs.Wrapping_two_generic_policies_by_instance_syntax_and_executing_should_wrap_outer_then_inner_around_delegate -> Polly.IAsyncPolicyPolicyWrapExtensions.WrapAsync
+    call test/Polly.Specs/Wrap/PolicyWrapAsyncSpecs.cs:380: var retryWrappingBreaker = retry.WrapAsync(breaker);
+    def  src/Polly/Wrap/IAsyncPolicyPolicyWrapExtensions.cs:71: public static AsyncPolicyWrap<TResult> WrapAsync<TResult>(this IAsyncPolicy<TResult> outerPolicy, IAsyncPolicy<TResult> innerPolicy)
+17. Polly.Specs.Wrap.PolicyWrapContextAndKeyAsyncSpecs.Should_pass_PolicyKey_to_execution_context_of_outer_policy_as_PolicyWrapKey -> Polly.IAsyncPolicyPolicyWrapExtensions.WrapAsync
+    call test/Polly.Specs/Wrap/PolicyWrapContextAndKeyAsyncSpecs.cs:20: var wrap = retry.WrapAsync(breaker).WithPolicyKey(wrapKey);
+    def  src/Polly/Wrap/IAsyncPolicyPolicyWrapExtensions.cs:71: public static AsyncPolicyWrap<TResult> WrapAsync<TResult>(this IAsyncPolicy<TResult> outerPolicy, IAsyncPolicy<TResult> innerPolicy)
+18. Polly.Specs.Wrap.PolicyWrapContextAndKeyAsyncSpecs.Should_restore_PolicyKey_of_outer_policy_to_execution_context_as_move_outwards_through_PolicyWrap_with_deeper_async_execution -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/Wrap/PolicyWrapContextAndKeyAsyncSpecs.cs:106: await policyWrap.ExecuteAsync(async () => await Task.Run(() => throw new Exception())); // Regression test for issue 510
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+19. Polly.Specs.Wrap.PolicyWrapContextAndKeyAsyncSpecs.Should_pass_outmost_PolicyWrap_Key_as_PolicyWrapKey_to_innermost_Policy_when_execute_method_generic -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/Wrap/PolicyWrapContextAndKeyAsyncSpecs.cs:159: await outerWrap.ExecuteAsync(() =>
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+20. Polly.Specs.Wrap.PolicyWrapTResultContextAndKeyAsyncSpecs.Should_restore_PolicyKey_of_outer_policy_to_execution_context_as_move_outwards_through_PolicyWrap -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Specs/Wrap/PolicyWrapContextAndKeyAsyncSpecs.cs:255: await policyWrap.ExecuteAsync(() => throw new Exception());
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+
+## ADDED (sample 20 of 438)
+ 1. Polly.Core.Tests.CircuitBreaker.BrokenCircuitExceptionTests.Ctor_Default_Ok -> Polly.CircuitBreaker.BrokenCircuitException.ctor
+    call test/Polly.Core.Tests/CircuitBreaker/BrokenCircuitExceptionTests.cs:10: var exception = new BrokenCircuitException();
+    def  src/Polly.Core/CircuitBreaker/BrokenCircuitException.cs:76: protected BrokenCircuitException(SerializationInfo info, StreamingContext context)
+ 2. Polly.Core.Tests.ResiliencePipelineTests.ExecuteAsyncT_Ok -> Polly.TestUtils.ResilienceStrategyExtensions.AsPipeline
+    call test/Polly.Core.Tests/ResiliencePipelineTests.AsyncT.cs:85: var result = await parameters.Execute(strategy.AsPipeline());
+    def  test/Polly.TestUtils/ResilienceStrategyExtensions.cs:8: public static ResiliencePipeline<T> AsPipeline<T>(this ResilienceStrategy<T> strategy)
+ 3. Polly.RateLimiting.Tests.RateLimiterResilienceStrategyTests.Dispose_NoDisposableResources_ShouldNotThrow -> Polly.RateLimiting.RateLimiterResilienceStrategy.DisposeAsync
+    call test/Polly.RateLimiting.Tests/RateLimiterResilienceStrategyTests.cs:122: await Should.NotThrowAsync(() => strategy.DisposeAsync().AsTask());
+    def  src/Polly.RateLimiting/RateLimiterResilienceStrategy.cs:31: public ValueTask DisposeAsync()
+ 4. Polly.Specs.Caching.AsyncSerializingCacheProviderSpecs.Single_generic_SerializingCacheProvider_should_serialize_on_put -> Polly.Caching.CacheProviderExtensions.AsyncFor
+    call test/Polly.Specs/Caching/AsyncSerializingCacheProviderSpecs.cs:52: AsyncSerializingCacheProvider<StubSerialized> serializingCacheProvider = new AsyncSerializingCacheProvider<StubSerialized>(stubCacheProvider
+    def  src/Polly/Caching/CacheProviderExtensions.cs:24: public static IAsyncCacheProvider<TCacheFormat> AsyncFor<TCacheFormat>(this IAsyncCacheProvider nonGenericCacheProvider) =>
+ 5. Polly.Specs.Caching.CacheTResultAsyncSpecs.Should_allow_custom_ICacheKeyStrategy -> Polly.Context.ctor
+    call test/Polly.Specs/Caching/CacheTResultAsyncSpecs.cs:569: (await cache.ExecuteAsync(func, new Context("person", CreateDictionary("id", "1")))).ShouldBeSameAs(person1);
+    def  src/Polly/Context.Dictionary.cs:31: internal Context(IDictionary<string, object> contextData)
+ 6. Polly.Specs.Caching.CacheTResultSpecs.Should_allow_custom_ICacheKeyStrategy -> Polly.Specs.Helpers.ResultClass
+    call test/Polly.Specs/Caching/CacheTResultSpecs.cs:1292: object person1 = new ResultClass(ResultPrimitive.Good, "person1");
+    def  test/Polly.Specs/Helpers/ResultClass.cs:6: internal class ResultClass(ResultPrimitive resultCode, string? someString)
+ 7. Polly.Specs.CircuitBreaker.AdvancedCircuitBreakerSpecs.Should_only_allow_single_execution_on_first_entering_halfopen_state__integration_test -> Polly.Specs.Helpers.PolicyExtensions.RaiseException
+    call test/Polly.Specs/CircuitBreaker/AdvancedCircuitBreakerSpecs.cs:1346: Should.Throw<DivideByZeroException>(() => breaker.RaiseException<DivideByZeroException>());
+    def  test/Polly.Specs/Helpers/PolicyExtensions.cs:31: public static void RaiseException<TException>(this Policy policy, int numberOfTimesToRaiseException, Action<TException, int>? configureExcep
+ 8. Polly.Specs.CircuitBreaker.CircuitBreakerSpecs.Should_set_LastException_on_handling_exception_even_when_not_breaking -> Polly.Specs.Helpers.PolicyExtensions.RaiseException
+    call test/Polly.Specs/CircuitBreaker/CircuitBreakerSpecs.cs:1294: Should.Throw<DivideByZeroException>(() => breaker.RaiseException<DivideByZeroException>());
+    def  test/Polly.Specs/Helpers/PolicyExtensions.cs:31: public static void RaiseException<TException>(this Policy policy, int numberOfTimesToRaiseException, Action<TException, int>? configureExcep
+ 9. Polly.Specs.CircuitBreaker.CircuitBreakerTResultMixedResultExceptionSpecs.Should_set_LastHandledResult_and_LastException_to_default_on_circuit_reset -> Polly.Specs.Helpers.PolicyTResultExtensions.RaiseResultAndOrExceptionSequence
+    call test/Polly.Specs/CircuitBreaker/CircuitBreakerTResultMixedResultExceptionSpecs.cs:529: Should.Throw<DivideByZeroException>(() => breaker.RaiseResultAndOrExceptionSequence(new DivideByZeroException()));
+    def  test/Polly.Specs/Helpers/PolicyTResultExtensions.cs:27: public static TResult RaiseResultAndOrExceptionSequence<TResult>(this Policy<TResult> policy, IEnumerable<object> resultsOrExceptionsToRaise
+10. Polly.Specs.Fallback.FallbackSpecs.Should_execute_action_when_non_faulting_and_cancellationToken_not_cancelled -> Polly.Specs.Helpers.PolicyExtensions.RaiseExceptionAndOrCancellation
+    call test/Polly.Specs/Fallback/FallbackSpecs.cs:1028: Should.NotThrow(() => policy.RaiseExceptionAndOrCancellation<DivideByZeroException>(scenario, cancellationTokenSource, onExecute));
+    def  test/Polly.Specs/Helpers/PolicyExtensions.cs:94: public static TResult RaiseExceptionAndOrCancellation<TException, TResult>(this Policy policy, ExceptionAndOrCancellationScenario scenario, 
+11. Polly.Specs.Fallback.FallbackTResultSpecs.Should_not_handle_result_raised_by_fallback_delegate_even_if_is_result_handled_by_policy -> Polly.Specs.Helpers.ResultClass
+    call test/Polly.Specs/Fallback/FallbackTResultSpecs.cs:338: return new ResultClass(ResultPrimitive.Fault, "FromFallbackAction");
+    def  test/Polly.Specs/Helpers/ResultClass.cs:6: internal class ResultClass(ResultPrimitive resultCode, string? someString)
+12. Polly.Specs.Helpers.RateLimit.IRateLimiterExtensions.ShouldPermitNExecutions -> Polly.Specs.Helpers.RateLimit.IRateLimiterExtensions.ShouldPermitAnExecution
+    call test/Polly.Specs/Helpers/RateLimit/IRateLimiterExtensions.cs:17: rateLimiter.ShouldPermitAnExecution();
+    def  test/Polly.Specs/Helpers/RateLimit/IRateLimiterExtensions.cs:5: public static void ShouldPermitAnExecution(this IRateLimiter rateLimiter)
+13. Polly.Specs.RateLimit.AsyncRateLimitPolicyTResultSpecs.Should_throw_when_action_is_null -> Polly.Context.ctor
+    call test/Polly.Specs/RateLimit/AsyncRateLimitPolicyTResultSpecs.cs:69: var func = () => methodInfo.Invoke(instance, [action, new Context(), CancellationToken, false]);
+    def  src/Polly/Context.cs:26: public Context()
+14. Polly.Specs.Retry.RetryTResultMixedResultExceptionSpecs.Should_handle_exception_when_TResult_policy_handling_exceptions_only -> Polly.Specs.Helpers.PolicyTResultExtensions.RaiseResultAndOrExceptionSequence
+    call test/Polly.Specs/Retry/RetryTResultMixedResultExceptionSpecs.cs:11: ResultPrimitive result = policy.RaiseResultAndOrExceptionSequence(new DivideByZeroException(), ResultPrimitive.Good);
+    def  test/Polly.Specs/Helpers/PolicyTResultExtensions.cs:27: public static TResult RaiseResultAndOrExceptionSequence<TResult>(this Policy<TResult> policy, IEnumerable<object> resultsOrExceptionsToRaise
+15. Polly.Specs.Retry.RetryTResultMixedResultExceptionSpecs.Should_handle_both_exceptions_and_specified_results_with_predicates -> Polly.Specs.Helpers.PolicyTResultExtensions.RaiseResultAndOrExceptionSequence
+    call test/Polly.Specs/Retry/RetryTResultMixedResultExceptionSpecs.cs:172: ResultClass result = policy.RaiseResultAndOrExceptionSequence(new ResultClass(ResultPrimitive.Fault), new ArgumentException("message", "key"
+    def  test/Polly.Specs/Helpers/PolicyTResultExtensions.cs:27: public static TResult RaiseResultAndOrExceptionSequence<TResult>(this Policy<TResult> policy, IEnumerable<object> resultsOrExceptionsToRaise
+16. Polly.Specs.Retry.RetryTResultSpecs.Should_throw_when_action_is_null -> Polly.Context.ctor
+    call test/Polly.Specs/Retry/RetryTResultSpecs.cs:28: var func = () => methodInfo.Invoke(instance, [action, new Context(), TestCancellation.Token]);
+    def  src/Polly/Context.cs:26: public Context()
+17. Polly.Specs.Retry.RetryTResultSpecs.Should_report_cancellation_during_faulting_initial_action_execution_and_cancel_further_retries_when_user_delegate_observes_cancellationToken -> Polly.Specs.Helpers.PolicyTResultExtensions.RaiseResultSequenceAndOrCancellation
+    call test/Polly.Specs/Retry/RetryTResultSpecs.cs:575: policy.RaiseResultSequenceAndOrCancellation(
+    def  test/Polly.Specs/Helpers/PolicyTResultExtensions.cs:72: public static TResult RaiseResultSequenceAndOrCancellation<TResult>(
+18. Polly.Specs.Retry.RetryTResultSpecs.Should_report_cancellation_during_faulting_retried_action_execution_and_cancel_further_retries_when_user_delegate_does_not_observe_cancellationToken -> Polly.Specs.Helpers.PolicyTResultExtensions.RaiseResultSequenceAndOrCancellation
+    call test/Polly.Specs/Retry/RetryTResultSpecs.cs:683: policy.RaiseResultSequenceAndOrCancellation(
+    def  test/Polly.Specs/Helpers/PolicyTResultExtensions.cs:72: public static TResult RaiseResultSequenceAndOrCancellation<TResult>(
+19. Polly.Specs.Retry.RetryTResultSpecs.Should_report_cancellation_after_faulting_action_execution_and_cancel_further_retries_if_onRetry_invokes_cancellation -> Polly.Specs.Helpers.PolicyTResultExtensions.RaiseResultSequenceAndOrCancellation
+    call test/Polly.Specs/Retry/RetryTResultSpecs.cs:794: policy.RaiseResultSequenceAndOrCancellation(
+    def  test/Polly.Specs/Helpers/PolicyTResultExtensions.cs:72: public static TResult RaiseResultSequenceAndOrCancellation<TResult>(
+20. Polly.Specs.Wrap.PolicyWrapAsyncSpecs.Nongeneric_interface_wraps_nongeneric_instance_syntax_wrapping_null_should_throw -> Polly.IAsyncPolicyPolicyWrapExtensions.WrapAsync
+    call test/Polly.Specs/Wrap/PolicyWrapAsyncSpecs.cs:131: Action config = () => retry.WrapAsync(null!);
+    def  src/Polly/Wrap/IAsyncPolicyPolicyWrapExtensions.cs:71: public static AsyncPolicyWrap<TResult> WrapAsync<TResult>(this IAsyncPolicy<TResult> outerPolicy, IAsyncPolicy<TResult> innerPolicy)

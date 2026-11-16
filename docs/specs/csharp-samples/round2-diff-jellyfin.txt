@@ -1,0 +1,125 @@
+jellyfin: 12584 edges before, 12621 after; removed 356, added 393
+
+## REMOVED (sample 20 of 356)
+ 1. Emby.Server.Implementations.Library.MediaSourceManager.GetProvider -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call Emby.Server.Implementations/Library/MediaSourceManager.cs:1036: var keys = key.Split(LiveStreamIdDelimiter, 2);
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+ 2. Emby.Server.Implementations.Library.MediaStreamSelector.GetDefaultSubtitleStreamIndex -> Jellyfin.Extensions.ReadOnlyListExtension.FirstOrDefault
+    call Emby.Server.Implementations/Library/MediaStreamSelector.cs:58: stream = sortedStreams.FirstOrDefault(x => x.IsExternal || x.IsDefault || x.IsForced);
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:67: public static T? FirstOrDefault<T>(this IReadOnlyList<T>? source)
+ 3. Jellyfin.Api.Controllers.PlaystateController.OnPlaybackStopped -> Jellyfin.Api.Extensions.ClaimsPrincipalExtensions.GetDeviceId
+    call Jellyfin.Api/Controllers/PlaystateController.cs:470: await _transcodeManager.KillTranscodingJobs(User.GetDeviceId()!, playbackStopInfo.PlaySessionId, s => true).ConfigureAwait(false);
+    def  Jellyfin.Api/Extensions/ClaimsPrincipalExtensions.cs:31: public static string? GetDeviceId(this ClaimsPrincipal user)
+ 4. Jellyfin.Api.Helpers.MediaInfoHelper.OpenMediaSource -> Jellyfin.Api.Extensions.ClaimsPrincipalExtensions.GetDeviceId
+    call Jellyfin.Api/Helpers/MediaInfoHelper.cs:435: var clientCapabilities = _deviceManager.GetCapabilities(httpContext.User.GetDeviceId());
+    def  Jellyfin.Api/Extensions/ClaimsPrincipalExtensions.cs:31: public static string? GetDeviceId(this ClaimsPrincipal user)
+ 5. Jellyfin.Api.ModelBinders.CommaDelimitedCollectionModelBinder.BindModelAsync -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call Jellyfin.Api/ModelBinders/CommaDelimitedCollectionModelBinder.cs:45: var splitValues = value.Split(',', StringSplitOptions.RemoveEmptyEntries);
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+ 6. Jellyfin.Server.Implementations.Item.BaseItemRepository.BuildEpisodeCountsByCleanName -> Jellyfin.Extensions.StringExtensions.Count
+    call Jellyfin.Server.Implementations/Item/BaseItemRepository.ByName.cs:435: .Select(g => new { SeriesId = g.Key, Count = g.Count() })
+    def  src/Jellyfin.Extensions/StringExtensions.cs:61: public static int Count(this ReadOnlySpan<char> value, char needle)
+ 7. Jellyfin.Server.Implementations.Users.DisplayPreferencesManager.GetItemDisplayPreferences -> Jellyfin.Extensions.ReadOnlyListExtension.FirstOrDefault
+    call Jellyfin.Server.Implementations/Users/DisplayPreferencesManager.cs:67: .FirstOrDefault(pref => pref.UserId.Equals(userId) && pref.ItemId.Equals(itemId) && pref.Client == client);
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:67: public static T? FirstOrDefault<T>(this IReadOnlyList<T>? source)
+ 8. Jellyfin.Server.Migrations.Routines.FixIncorrectOwnerIdRelationships.RemoveDuplicateItemsAsync -> Jellyfin.Extensions.StringExtensions.Count
+    call Jellyfin.Server/Migrations/Routines/20260115120000_FixIncorrectOwnerIdRelationships.cs:75: .Where(g => g.Count() > 1)
+    def  src/Jellyfin.Extensions/StringExtensions.cs:61: public static int Count(this ReadOnlySpan<char> value, char needle)
+ 9. MediaBrowser.Providers.Manager.ProviderManager.GetRemoteSearchResults -> Jellyfin.Extensions.ReadOnlyListExtension.FirstOrDefault
+    call MediaBrowser.Providers/Manager/ProviderManager.cs:991: var existingMatch = resultList.FirstOrDefault(i => i.ProviderIds.Any(p => string.Equals(result.GetProviderId(p.Key), p.Value, StringComparis
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:67: public static T? FirstOrDefault<T>(this IReadOnlyList<T>? source)
+10. Jellyfin.LiveTv.LiveTvManager.GetPrograms -> Jellyfin.Extensions.ReadOnlyListExtension.FirstOrDefault
+    call src/Jellyfin.LiveTv/LiveTvManager.cs:244: var seriesTimer = seriesTimers.Items.FirstOrDefault(i => string.Equals(_tvDtoService.GetInternalSeriesTimerId(i.Id).ToString("N", CultureInf
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:67: public static T? FirstOrDefault<T>(this IReadOnlyList<T>? source)
+11. Jellyfin.LiveTv.LiveTvManager.AddRecordingInfo -> Jellyfin.Extensions.ReadOnlyListExtension.FirstOrDefault
+    call src/Jellyfin.LiveTv/LiveTvManager.cs:395: var timer = timerList.FirstOrDefault(i => string.Equals(i.ProgramId, externalProgramId, StringComparison.OrdinalIgnoreCase));
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:67: public static T? FirstOrDefault<T>(this IReadOnlyList<T>? source)
+12. Jellyfin.LiveTv.LiveTvManager.AddChannelInfo -> Jellyfin.Extensions.ReadOnlyListExtension.FirstOrDefault
+    call src/Jellyfin.LiveTv/LiveTvManager.cs:994: var currentProgram = programs.FirstOrDefault(i => channel.Id.Equals(i.ChannelId));
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:67: public static T? FirstOrDefault<T>(this IReadOnlyList<T>? source)
+13. Jellyfin.Providers.Tests.ExternalId.TmdbExternalUrlProviderTests.GetExternalUrls_EpisodeWithNoSeriesTmdbId_ReturnsNoUrl -> MediaBrowser.Controller.Library.LibraryManagerExtensions.GetItemById
+    call tests/Jellyfin.Providers.Tests/ExternalId/TmdbExternalUrlProviderTests.cs:122: _libraryManagerMock.Setup(m => m.GetItemById(series.Id)).Returns(series);
+    def  MediaBrowser.Controller/Library/LibraryManagerExtensions.cs:10: public static BaseItem? GetItemById(this ILibraryManager manager, string id)
+14. Jellyfin.Providers.Tests.Manager.ProviderManagerTests.GetImageProviders_ProviderOrder_MatchesExpected -> Jellyfin.Extensions.ReadOnlyListExtension.IndexOf
+    call tests/Jellyfin.Providers.Tests/Manager/ProviderManagerTests.cs:168: var actualOrder = actualProviders.Select(i => providerList.IndexOf(i)).ToArray();
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:18: public static int IndexOf<T>(this IReadOnlyList<T> source, T value)
+15. Jellyfin.Providers.Tests.Manager.ProviderManagerTests.QueueRefresh_RefreshCancelsForItsOwnReasons_KeepsDrainingTheQueue -> MediaBrowser.Controller.Library.LibraryManagerExtensions.GetItemById
+    call tests/Jellyfin.Providers.Tests/Manager/ProviderManagerTests.cs:445: libraryManager.Setup(i => i.GetItemById(It.IsAny<Guid>()))
+    def  MediaBrowser.Controller/Library/LibraryManagerExtensions.cs:10: public static BaseItem? GetItemById(this ILibraryManager manager, string id)
+16. Jellyfin.Server.Implementations.Tests.SyncPlay.GroupTests.HasAccessToPlayQueue_ReturnsFalse_WhenLibraryReturnsNullForItem -> MediaBrowser.Controller.Library.LibraryManagerExtensions.GetItemById
+    call tests/Jellyfin.Server.Implementations.Tests/SyncPlay/GroupTests.cs:62: MockLibraryManager.Setup(m => m.GetItemById(It.IsAny<Guid>())).Returns((BaseItem?)null);
+    def  MediaBrowser.Controller/Library/LibraryManagerExtensions.cs:10: public static BaseItem? GetItemById(this ILibraryManager manager, string id)
+17. Jellyfin.Server.Implementations.Tests.SyncPlay.WaitingGroupStateTests.GroupHarness.ctor -> MediaBrowser.Controller.Library.LibraryManagerExtensions.GetItemById
+    call tests/Jellyfin.Server.Implementations.Tests/SyncPlay/WaitingGroupStateTests.cs:343: libraryManager.Setup(m => m.GetItemById(It.IsAny<Guid>())).Returns(item.Object);
+    def  MediaBrowser.Controller/Library/LibraryManagerExtensions.cs:10: public static BaseItem? GetItemById(this ILibraryManager manager, string id)
+18. Jellyfin.Server.Tests.ParseNetworkTests.GetMockConfig -> MediaBrowser.Common.Configuration.ConfigurationManagerExtensions.GetConfiguration
+    call tests/Jellyfin.Server.Tests/ParseNetworkTests.cs:112: configManager.Setup(x => x.GetConfiguration(It.IsAny<string>())).Returns(conf);
+    def  MediaBrowser.Common/Configuration/IConfigurationManager.cs:92: public static T GetConfiguration<T>(this IConfigurationManager manager, string key)
+19. Jellyfin.XbmcMetadata.Tests.Parsers.EpisodeNfoProviderTests.Fetch_Valid_Success -> Jellyfin.Extensions.ReadOnlyListExtension.FirstOrDefault
+    call tests/Jellyfin.XbmcMetadata.Tests/Parsers/EpisodeNfoProviderTests.cs:97: var shadow = actors.FirstOrDefault(x => x.Role.Equals("Shadow Moon", StringComparison.Ordinal));
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:67: public static T? FirstOrDefault<T>(this IReadOnlyList<T>? source)
+20. Jellyfin.XbmcMetadata.Tests.Parsers.EpisodeNfoProviderTests.Fetch_Valid_MultiEpisode_Success -> MediaBrowser.XbmcMetadata.Parsers.EpisodeNfoParser.Fetch
+    call tests/Jellyfin.XbmcMetadata.Tests/Parsers/EpisodeNfoProviderTests.cs:114: _parser.Fetch(result, "Test Data/Rising.nfo", CancellationToken.None);
+    def  MediaBrowser.XbmcMetadata/Parsers/EpisodeNfoParser.cs:43: protected override void Fetch(MetadataResult<Episode> item, string metadataFile, XmlReaderSettings settings, CancellationToken cancellationT
+
+## ADDED (sample 20 of 393)
+ 1. Jellyfin.Api.Controllers.InstantMixController.GetInstantMixFromMusicGenreByName -> Jellyfin.Extensions.GuidExtensions.IsNullOrEmpty
+    call Jellyfin.Api/Controllers/InstantMixController.cs:211: var user = userId.IsNullOrEmpty()
+    def  src/Jellyfin.Extensions/GuidExtensions.cs:24: public static bool IsNullOrEmpty([NotNullWhen(false)] this Guid? guid)
+ 2. Jellyfin.Api.Controllers.LiveTvController.GetProgram -> Jellyfin.Extensions.GuidExtensions.IsNullOrEmpty
+    call Jellyfin.Api/Controllers/LiveTvController.cs:758: var user = userId.IsNullOrEmpty()
+    def  src/Jellyfin.Extensions/GuidExtensions.cs:24: public static bool IsNullOrEmpty([NotNullWhen(false)] this Guid? guid)
+ 3. Jellyfin.Api.Controllers.MusicGenresController.GetMusicGenres -> Jellyfin.Extensions.GuidExtensions.IsNullOrEmpty
+    call Jellyfin.Api/Controllers/MusicGenresController.cs:107: User? user = userId.IsNullOrEmpty()
+    def  src/Jellyfin.Extensions/GuidExtensions.cs:24: public static bool IsNullOrEmpty([NotNullWhen(false)] this Guid? guid)
+ 4. Jellyfin.Server.Implementations.Devices.DeviceManager.CanAccessDevice -> Jellyfin.Data.UserEntityExtensions.GetPreference
+    call Jellyfin.Server.Implementations/Devices/DeviceManager.cs:247: return user.GetPreference(PreferenceKind.EnabledDevices).Contains(deviceId, StringComparison.OrdinalIgnoreCase)
+    def  Jellyfin.Data/UserEntityExtensions.cs:56: public static string[] GetPreference(this User entity, PreferenceKind preference)
+ 5. Jellyfin.Server.Implementations.Item.BaseItemRepository.ApplyAdjacencyFilter -> Jellyfin.Extensions.GuidExtensions.IsNullOrEmpty
+    call Jellyfin.Server.Implementations/Item/BaseItemRepository.QueryBuilding.cs:50: if (filter.AdjacentTo.IsNullOrEmpty())
+    def  src/Jellyfin.Extensions/GuidExtensions.cs:24: public static bool IsNullOrEmpty([NotNullWhen(false)] this Guid? guid)
+ 6. Jellyfin.Server.Migrations.Routines.MigrateLibraryDb.ReadDateTimeFromColumn -> Emby.Server.Implementations.Data.SqliteExtensions.TryReadDateTime
+    call Jellyfin.Server/Migrations/Routines/20250420200000_MigrateLibraryDb.cs:539: if (reader.TryReadDateTime(index, out var dateTimeResult))
+    def  Emby.Server.Implementations/Data/SqliteExtensions.cs:95: public static bool TryReadDateTime(this SqliteDataReader reader, int index, out DateTime result)
+ 7. MediaBrowser.Controller.Entities.Audio.MusicAlbum.RefreshArtists -> MediaBrowser.Controller.Entities.Audio.Extensions.GetAllArtists
+    call MediaBrowser.Controller/Entities/Audio/MusicAlbum.cs:220: foreach (var i in this.GetAllArtists())
+    def  MediaBrowser.Controller/Entities/Audio/IHasAlbumArtist.cs:27: public static IEnumerable<string> GetAllArtists<T>(this T item)
+ 8. MediaBrowser.Controller.Entities.BaseItem.IsAuthorizedToDelete -> Jellyfin.Data.UserEntityExtensions.HasPermission
+    call MediaBrowser.Controller/Entities/BaseItem.cs:880: if (user.HasPermission(PermissionKind.EnableContentDeletion))
+    def  Jellyfin.Data/UserEntityExtensions.cs:26: public static bool HasPermission(this IHasPermissions entity, PermissionKind kind)
+ 9. MediaBrowser.Controller.Entities.Folder.ValidateChildrenInternal2 -> MediaBrowser.Controller.Entities.BaseItem.UpdateToRepositoryAsync
+    call MediaBrowser.Controller/Entities/Folder.cs:502: await currentChild.UpdateToRepositoryAsync(ItemUpdateType.MetadataImport, cancellationToken).ConfigureAwait(false);
+    def  MediaBrowser.Controller/Entities/BaseItem.cs:2439: public virtual async Task UpdateToRepositoryAsync(ItemUpdateType updateReason, CancellationToken cancellationToken)
+10. MediaBrowser.MediaEncoding.Transcoding.TranscodeManager.DeleteEncodedMediaCache -> MediaBrowser.Common.Configuration.EncodingConfigurationExtensions.GetTranscodePath
+    call MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:720: var path = _serverConfigurationManager.GetTranscodePath();
+    def  MediaBrowser.Common/Configuration/EncodingConfigurationExtensions.cs:29: public static string GetTranscodePath(this IConfigurationManager configurationManager)
+11. MediaBrowser.Providers.Plugins.AudioDb.AudioDbArtistProvider.ToRemoteSearchResult -> MediaBrowser.Model.Entities.ProviderIdsExtensions.SetProviderId
+    call MediaBrowser.Providers/Plugins/AudioDb/AudioDbArtistProvider.cs:122: result.SetProviderId(MetadataProvider.AudioDbArtist, artist.idArtist);
+    def  MediaBrowser.Model/Entities/ProviderIdsExtensions.cs:249: public static void SetProviderId(this IHasProviderIds instance, MetadataProvider provider, string value)
+12. Jellyfin.LiveTv.Listings.ListingsManager.GetLineups -> Jellyfin.LiveTv.Configuration.LiveTvConfigurationExtensions.GetLiveTvConfiguration
+    call src/Jellyfin.LiveTv/Listings/ListingsManager.cs:111: var info = _config.GetLiveTvConfiguration().ListingProviders
+    def  src/Jellyfin.LiveTv/Configuration/LiveTvConfigurationExtensions.cs:17: public static LiveTvOptions GetLiveTvConfiguration(this IConfigurationManager configurationManager)
+13. Jellyfin.Networking.AutoDiscoveryHost.ExecuteAsync -> MediaBrowser.Common.Net.NetworkConfigurationExtensions.GetNetworkConfiguration
+    call src/Jellyfin.Networking/AutoDiscoveryHost.cs:54: var networkConfig = _configurationManager.GetNetworkConfiguration();
+    def  MediaBrowser.Common/Net/NetworkConfigurationExtensions.cs:15: public static NetworkConfiguration GetNetworkConfiguration(this IConfigurationManager config)
+14. Jellyfin.Model.Tests.Entities.ProviderIdsExtensionsTests.GetProviderId_FoundName_Id -> MediaBrowser.Model.Entities.ProviderIdsExtensions.GetProviderId
+    call tests/Jellyfin.Model.Tests/Entities/ProviderIdsExtensionsTests.cs:111: Assert.Equal(ExampleImdbId, provider.GetProviderId(MetadataProvider.Imdb));
+    def  MediaBrowser.Model/Entities/ProviderIdsExtensions.cs:122: public static string? GetProviderId(this IHasProviderIds instance, MetadataProvider provider)
+15. Jellyfin.Model.Tests.Entities.ProviderIdsExtensionsTests.TrySetProviderId_ForeignId_KeepsExisting -> MediaBrowser.Model.Entities.ProviderIdsExtensions.TrySetProviderId
+    call tests/Jellyfin.Model.Tests/Entities/ProviderIdsExtensionsTests.cs:228: Assert.False(provider.TrySetProviderId(MetadataProvider.Tmdb, "nm0000123"));
+    def  MediaBrowser.Model/Entities/ProviderIdsExtensions.cs:198: public static bool TrySetProviderId(this IHasProviderIds instance, MetadataProvider provider, string? value)
+16. Jellyfin.Model.Tests.Entities.ProviderIdsExtensionsTests.SetProviderIds_ForeignId_Dropped -> MediaBrowser.Model.Entities.ProviderIdsExtensions.HasProviderId
+    call tests/Jellyfin.Model.Tests/Entities/ProviderIdsExtensionsTests.cs:270: Assert.False(provider.HasProviderId(MetadataProvider.Tmdb));
+    def  MediaBrowser.Model/Entities/ProviderIdsExtensions.cs:61: public static bool HasProviderId(this IHasProviderIds instance, MetadataProvider provider)
+17. Jellyfin.Networking.Tests.NetworkParseTests.HasRemoteAccess_GivenBlacklist_BlacklistTheIPs -> Jellyfin.Networking.Manager.NetworkManager.ShouldAllowServerAccess
+    call tests/Jellyfin.Networking.Tests/NetworkParseTests.cs:445: Assert.Equal(expectedResult, nm.ShouldAllowServerAccess(IPAddress.Parse(remoteIP)));
+    def  src/Jellyfin.Networking/Manager/NetworkManager.cs:731: public RemoteAccessPolicyResult ShouldAllowServerAccess(IPAddress remoteIP)
+18. Jellyfin.Providers.Tests.ExternalId.MusicBrainzExternalUrlProviderTests.GetExternalUrls_NonAlbumWithMusicBrainzAlbumId_ReturnsNoUrl -> MediaBrowser.Model.Entities.ProviderIdsExtensions.SetProviderId
+    call tests/Jellyfin.Providers.Tests/ExternalId/MusicBrainzExternalUrlProviderTests.cs:78: artist.SetProviderId(MetadataProvider.MusicBrainzAlbum, "a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+    def  MediaBrowser.Model/Entities/ProviderIdsExtensions.cs:249: public static void SetProviderId(this IHasProviderIds instance, MetadataProvider provider, string value)
+19. Jellyfin.Server.Implementations.Tests.SessionManager.SessionManagerTests.SendMessageCommand_Should_Succeed_WhenAllowedToControlOtherUsers -> Jellyfin.Data.UserEntityExtensions.SetPermission
+    call tests/Jellyfin.Server.Implementations.Tests/SessionManager/SessionManagerTests.cs:139: attacker.SetPermission(PermissionKind.EnableRemoteControlOfOtherUsers, true);
+    def  Jellyfin.Data/UserEntityExtensions.cs:37: public static void SetPermission(this IHasPermissions entity, PermissionKind kind, bool value)
+20. Jellyfin.Server.Implementations.Tests.Users.UserManagerLockHelperTests.Dispose_WhenCalledMultipleTimes_DoesNotThrow -> Jellyfin.Server.Implementations.Users.UserManager.LockHelper.Dispose
+    call tests/Jellyfin.Server.Implementations.Tests/Users/UserManagerLockHelperTests.cs:87: helper.Dispose();
+    def  Jellyfin.Server.Implementations/Users/UserManager.cs:1150: public void Dispose()
