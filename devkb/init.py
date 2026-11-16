@@ -31,32 +31,34 @@ HOOKS = ("post-commit", "post-merge", "post-checkout")
 
 AGENTS_BLOCK = """## devkb: before you change code
 
-This repository has a graph of its code (calls, tests, raised errors, commits, configuration) in `.devkb/`. Use it at
-these steps, through the MCP server's `pack` tool or the `devkb pack` command (the same answer); each prints the answer
-with the line of code that proves every item and says what it could not see:
+This repository has a graph of its code (calls, tests, raised errors, commits, configuration) in `.devkb/`. Ask it
+for a whole answer when the question follows a chain; for a one-hop lookup, search as usual. Each answer lists every
+item with the line of code that proves it, and says what it could not see. Use the MCP server's `pack` tool, or the
+same answer from the `devkb pack` command:
 
-1. **Before you edit an existing file**, run `devkb pack --project . file PATH`: which of its functions other files
-   call (your change must keep them working), the files that depend on it, and the tests that exercise it.
-2. **Before you change a function's signature or behaviour**, run `devkb pack --project . refactor NAME` (every
-   caller, tests among them) or `devkb pack --project . change NAME --path PATH` (callers at any depth, tests to run).
-3. **When you start from an error message**, run `devkb pack --project . error "MESSAGE"`.
-4. **After editing**, run the tests the pack named first, then the full suite.
-5. If you edited many files, rebuild first: `devkb build --project .` (a few seconds on most repositories).
+1. **Before you edit an existing file**: `pack(kind="file", subject=PATH)` (`devkb pack --project . file PATH`): the
+   functions other files call (your change must keep them working), the files that depend on it, the tests to run.
+2. **Before you change a function's behaviour**: `pack(kind="change", subject=NAME, path=PATH)`: callers at any depth
+   and the tests to run.
+3. **When you start from an error message**: `pack(kind="error", subject=MESSAGE)`: what raises it and the route
+   handlers that reach it.
+4. **Who calls one function directly** (for a signature change): search with grep. It is one hop, and the graph only
+   adds a step (measured: packs saved 66-77% on chains, nothing on one-hop lookups).
+5. **After editing**, run the tests the pack named first, then the full suite. If you edited many files, rebuild
+   first: `devkb build --project .`.
 
-The same graph is served by the `devkb` MCP server for questions in between:
+For questions in between:
 
 | Question | Use |
 |---|---|
-| An area you have not read: its files, key functions, tests, docs | `explain_area` with the folder |
-| Where a new feature or change belongs: related code, docs, tests | `feature_brief` with the goal |
-| Code that does something, found by what it does | `find_code` |
-| Who calls a function / the impact of a change | `callers` / `impact` |
+| The impact of a change / who calls a function, at any depth | `impact` / `callers` |
+| An error message to its cause | `rca_trace` |
 | Which tests to run | `tests_to_run`, or `tests_for` a file or function |
 | A commit or a diff to review | `review_pack` |
 | A setting or a service | `config` |
 
-Rules: a pack or answer marked **Complete** is the whole answer: do not search again. If it is incomplete, search only
-the files it names. If it says files changed since the graph was built, re-read those files."""
+Rules: an answer marked **Complete** is the whole answer: do not search again or call another tool to check it. If it
+is incomplete, search only the files it names. If it says files changed since the graph was built, re-read those."""
 
 
 def _between(text: str, begin: str, end: str) -> re.Pattern:
@@ -155,7 +157,7 @@ def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool) -> list[str
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="devkb init", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", default=".")
-    ap.add_argument("--toolset", default="dev", help="the MCP toolset agents get (dev, lean, core, workflow, all)")
+    ap.add_argument("--toolset", default="lean-pack", help="the MCP toolset agents get (lean-pack, lean, dev, core, workflow, all)")
     ap.add_argument("--hooks", action="store_true", help="rebuild the graph after commits, merges and checkouts")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--remove", action="store_true", help="take devkb out of the repository again")

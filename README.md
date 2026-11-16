@@ -97,7 +97,7 @@ instructions. Start `claude` in the repository, approve the `devkb` server when 
 **Cursor**: add `.cursor/mcp.json` to the repository, then enable `devkb` under Settings → MCP:
 
 ```json
-{"mcpServers": {"devkb": {"command": "devkb", "args": ["mcp", "--project", ".", "--toolset", "dev"]}}}
+{"mcpServers": {"devkb": {"command": "devkb", "args": ["mcp", "--project", ".", "--toolset", "lean-pack"]}}}
 ```
 
 **Codex**: add to `~/.codex/config.toml`:
@@ -105,10 +105,15 @@ instructions. Start `claude` in the repository, approve the `devkb` server when 
 ```toml
 [mcp_servers.devkb]
 command = "devkb"
-args = ["mcp", "--project", ".", "--toolset", "dev"]
+args = ["mcp", "--project", ".", "--toolset", "lean-pack"]
 ```
 
 Codex and Cursor read the instructions in `AGENTS.md`; Claude Code reads them through `CLAUDE.md`.
+
+What agents get by default (`--toolset lean-pack`): a `pack` tool that returns a whole answer in one call, and the
+seven single-question tools. The instructions tell them to ask for a pack when a question follows a chain (a file
+before editing, a change, an error) and to search as usual for a one-hop lookup, which is where the benchmark found
+the saving and where it did not.
 
 ## 4. Licence and citation
 

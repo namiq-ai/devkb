@@ -61,13 +61,16 @@ def test_dry_run_writes_nothing(tmp_path):
     assert all((root / rel).read_text() == text for rel, text in ORIGINAL.items())
 
 
-def test_the_default_gives_agents_the_dev_toolset_with_orientation_tools(tmp_path):
+def test_the_default_gives_agents_lean_pack_and_instructions_naming_only_its_tools(tmp_path):
+    import re as _re
     from devkb.mcp_server import TOOLSETS
     root = _repo(tmp_path, {})
     assert init.main(["--project", str(root), "--no-build"]) == 0
-    assert json.loads((root / ".mcp.json").read_text())["mcpServers"]["devkb"]["args"][-1] == "dev"
-    assert {"explain_area", "feature_brief", "find_code"} <= set(TOOLSETS["dev"]) and set(TOOLSETS["lean"]) < set(TOOLSETS["dev"])
-    assert "`explain_area`" in (root / "AGENTS.md").read_text()
+    assert json.loads((root / ".mcp.json").read_text())["mcpServers"]["devkb"]["args"][-1] == "lean-pack"
+    agents = (root / "AGENTS.md").read_text()
+    named = set(_re.findall(r"`([a-z_]+)`", agents)) & set(TOOLSETS["all"])
+    assert named and named <= set(TOOLSETS["lean-pack"]), named - set(TOOLSETS["lean-pack"])
+    assert 'pack(kind="change"' in agents and "search with grep" in agents, "the measured rule: packs for chains, grep for one hop"
 
 
 def test_the_file_pack_lists_what_depends_on_a_file_and_the_tests_reaching_it(tmp_path, monkeypatch):
