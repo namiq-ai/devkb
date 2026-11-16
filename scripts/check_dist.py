@@ -1,8 +1,7 @@
-"""Refuse to publish a distribution that carries internal names or local paths.
+"""Refuse to publish a distribution that carries local paths, email addresses or credentials.
 
-devkb grew inside a private factory; its comments still name the factory's projects. PyPI is public and permanent, so
-the PyPI job runs this on the built wheel and sdist and stops on any match. Patterns are in .release-denylist (one
-regular expression per line, `#` comments).
+PyPI is public and permanent, so the PyPI job runs this on the built wheel and sdist and stops on any match. Patterns
+are in .release-denylist (one regular expression per line, `#` comments).
 
   python3 scripts/check_dist.py dist/*
 """
@@ -42,7 +41,7 @@ def main() -> int:
     if hits:
         print(f"{sum(hits.values())} matches in {len(hits)} files: not publishable", file=sys.stderr)
         return 1
-    print("no internal names or local paths")
+    print("no local paths, email addresses or credentials")
     return 0
 
 
