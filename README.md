@@ -1,5 +1,7 @@
 # devkb
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24267143.svg)](https://doi.org/10.5281/zenodo.24267143)
+
 **A knowledge graph of your repository for software development agents.** Agents answer "what calls this, what breaks, which tests"
 in one step instead of searching file by file: 56% cheaper, with better answers, in our benchmark.
 
