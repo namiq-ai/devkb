@@ -132,7 +132,12 @@ wrong key and the router refused); re-run the analysis with the graph. The ODSF 
    feature build where reading code dominates.
 4. **Fix ODSF:** gate-0 for projects with their own Makefile (A6), an `mcp__*` allowance or a hook-based devkb path for
    orchestrated builds (A11), and BA stories that pass the ticket standard first time (A7, A8).
-5. Keep the compiler truth in the benchmark: it found that the earlier "300/300" check was measuring the wrong thing.
+5. **Use BMAD alone for a repository this size.** Registering the project with the ODSF factory added a registry entry, a
+   ticket store, a readiness gate and a landing tool; they cost more steps than they saved (items A6-A8 and the landing
+   refusals: one branch for six tickets, a per-worktree BMAD install, a policy check on an unfilled result section). The
+   BMAD personas produced the requirement analysis, specification and ADR on their own; the ODSF layer was removed
+   afterwards and BMAD kept as a standalone install.
+6. Keep the compiler truth in the benchmark: it found that the earlier "300/300" check was measuring the wrong thing.
 
 ## Files
 
