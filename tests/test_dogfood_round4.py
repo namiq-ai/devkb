@@ -85,3 +85,18 @@ def test_d4_uses_skips_data_files(tmp_path, monkeypatch):
     root = _repo(tmp_path, {"a.py": "def needle():\n    return 1\n", "runs/t.jsonl": '{"x": "needle"}\n' * 5})
     out = json.dumps(read_tools.ReadTools(_api(root, monkeypatch)).uses("needle"))
     assert "t.jsonl" not in out and "a.py" in out
+
+
+def test_d7_a_nested_function_sees_the_enclosing_functions_typed_names(tmp_path):
+    pairs = _pairs(build_symbols.extract(_repo(tmp_path, {"n.py": '''
+class _Index:
+    def binding_for(self, x):
+        return x
+
+
+def calls_in(index: _Index):
+    def bound(o):
+        return index.binding_for(o)
+    return bound(1)
+'''})))
+    assert ("n.py::calls_in.bound", "n.py::_Index.binding_for") in pairs

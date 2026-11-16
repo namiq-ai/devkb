@@ -20,6 +20,8 @@ Graph: `devkb build --project .` on `main` at `4ef4766` (2,750 nodes, 7,326 edge
 | Q4 | Where `_calls_in` reads a chained receiver | `uses "re:chained = (None\|True\|False)" --under devkb` | the file | right (lines 1309, 1317, 1321); `symbol _calls_in` warned the graph was one commit stale, which was true | | |
 | D6 | (same `uses`) | "showing 3 of 4 hits … Narrow with under=PATH" though `under` was given | 4 hits, one file | **misleading hint** | the per-file cap (3) hid the fourth hit; the hint names `under` even when it is set | not in this round (noted) |
 | Q5 | Body of `_calls_in` (330 lines) | `symbol --source` prints at most 200 lines (by design) | | partly: the rest was read with the editor | | |
+| Q6 | Callers of the new `_subst`, `better` (after implementing F1/F2) | `pack refactor`: lines 1217 and 1159 (+ more), Complete | grep | right | | |
+| D7 | Callers of the new `binding_for`, `field_bound` | `pack refactor`: **none**, "Incomplete … search `csharp_symbols.py`" | grep: one call each, at 1653 and 1476 | **missed** (honestly marked incomplete) | both are called through `index` from functions nested inside `_calls_in`; the Python extractor typed a nested function's own parameters only, not the names it closes over | yes: nested functions inherit the enclosing function's typed names (own parameters shadow); after: both Complete with their lines |
 
-Regression tests for D1–D4: `tests/test_dogfood_round4.py` (each fails on `4ef4766`). The Python change (D1) alters
+Regression tests for D1–D4 and D7: `tests/test_dogfood_round4.py` (each fails on `4ef4766`). The Python change (D1) alters
 Python graphs; CI's registry `prepare` jobs (`bench/truth_check.py` on the seven Python repositories) gate it.

@@ -555,8 +555,11 @@ def _typed_calls(tree: ast.Module) -> list[tuple[str, str, str]]:
                             types.setdefault(t.attr, cls)
         return types
 
-    def visit_function(fn, qual: str, self_types: dict[str, str], enclosing: str = "") -> None:
-        env = params(fn)
+    def visit_function(fn, qual: str, self_types: dict[str, str], enclosing: str = "",
+                       outer: dict[str, str] | None = None) -> dict[str, str]:
+        # a nested function sees the names of the function around it (dogfood D7, #40: `index: _Index` used from a
+        # helper defined inside the function), its own parameters shadowing them
+        env = {**(outer or {}), **params(fn)}
         for n in _own_body(fn):
             if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
                 cls = _constructed(n.value)
@@ -586,17 +589,19 @@ def _typed_calls(tree: ast.Module) -> list[tuple[str, str, str]]:
                 cls = _constructed(recv)  # `RuntimeStore().add_edge(...)`, built and called in one expression
             if cls:
                 out.append((qual, cls, method))
+        return env
 
-    def walk(node, stack: list[str], self_types: dict[str, str], cls_qual: str = "") -> None:
+    def walk(node, stack: list[str], self_types: dict[str, str], cls_qual: str = "",
+             outer: dict[str, str] | None = None) -> None:
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.ClassDef):
                 walk(child, stack + [child.name], attr_types(child), ".".join(stack + [child.name]))
             elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 qual = ".".join(stack + [child.name])
-                visit_function(child, qual, self_types, cls_qual)
-                walk(child, stack + [child.name], {}, "")
+                env = visit_function(child, qual, self_types, cls_qual, outer)
+                walk(child, stack + [child.name], {}, "", env)
             else:
-                walk(child, stack, self_types, cls_qual)
+                walk(child, stack, self_types, cls_qual, outer)
 
     walk(tree, [], {})
     return out
