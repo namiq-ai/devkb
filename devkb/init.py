@@ -47,6 +47,17 @@ same answer from the `devkb pack` command:
 5. **After editing**, run the tests the pack named first, then the full suite. If you edited many files, rebuild
    first: `devkb build --project .`.
 
+**Instead of grep, to read code**: the graph holds every definition with its exact lines, so ask it rather than guess
+`grep -A25`:
+- `symbol(query)` (shell: `devkb symbol QUERY --source`): where a name is defined, with exact lines and the signature;
+  `source=True` prints the body. A query can be a name, `Class.method`, `path::name`, a glob `parse_*`, `re:regex`, a
+  prefix or a few words; a typo is tolerated, and below the confidence floor it says there is no match and suggests names.
+- `outline(path)` (shell: `devkb outline PATH`): a file's symbols in order with line ranges, and its imports: look before you read.
+- `uses(name)` (shell: `devkb uses NAME`): where a name, constant, module or key appears, grouped by the symbol that
+  contains each use. Text matches, not resolved references.
+- `search_docs(query)` (shell: `devkb docs QUERY`): what the documentation says, with the heading of each hit.
+A symbol in a language that stores no end line (TypeScript, JavaScript) is reported as "end unknown": read from its start.
+
 For questions in between:
 
 | Question | Use |
