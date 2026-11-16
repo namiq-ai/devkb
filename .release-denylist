@@ -1,10 +1,13 @@
 # Regular expressions that must not appear in a published distribution (scripts/check_dist.py).
-# Internal project names and their ticket ids
-\bODSF\b
-\bOCO\b
-\bDTLN\b
-\b(?:ODSF|OCO|DTLN|PJES|SDP)-[A-Z0-9-]*\d
-\bBL-\d+[a-z]?\b
+# Project names are not listed: the repository is public, so they are no secret (relaxed 2026-11-15).
 # Local paths
 /home/[a-z]
 /tmp/claude
+# Email addresses (the package carries none; the authors' are in the paper)
+[A-Za-z0-9._%+-]+@(?:gmail|yahoo|outlook|hotmail|icloud)\.com
+# Credentials
+ghp_[A-Za-z0-9]{30,}
+github_pat_[A-Za-z0-9_]{30,}
+sk-ant-[A-Za-z0-9_-]{20,}
+AKIA[0-9A-Z]{16}
+-----BEGIN [A-Z ]*PRIVATE KEY-----

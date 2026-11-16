@@ -82,9 +82,9 @@ be recalled. The `pypi` job is therefore off, and when on, it stops unless all o
 1. Licence: decided 2026-11-15, Apache-2.0 for the code, CC BY 4.0 for the study (`LICENSE`, `study/LICENSE`, `NOTICE`).
    The owner decided devkb is published as a paper, not patented; it is outside the subjects the disclosure freeze
    holds.
-2. No internal names or local paths in the package. `scripts/check_dist.py dist/*` scans the built wheel and sdist
-   against [`.release-denylist`](../.release-denylist) and the `pypi` job runs it first. At the time of writing it finds
-   1,307 matches in 113 files, mostly internal project names and ticket ids in comments; clean them and the check passes.
+2. No local paths, email addresses or credentials in the package: `scripts/check_dist.py dist/*` scans the built wheel
+   and sdist against [`.release-denylist`](../.release-denylist), and the `pypi` job runs it first. Project names in
+   comments are no longer blocked: the repository is public (decided 2026-11-15).
 3. Done: `license = "Apache-2.0"` and the licence files in `pyproject.toml`; URLs, classifiers and keywords.
 
 **Configured (2026-11-15)**

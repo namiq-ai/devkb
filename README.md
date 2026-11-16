@@ -72,7 +72,7 @@ add a repository: [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
 ## 3. Set up
 
 ```bash
-pip install "devkb[mcp] @ git+https://github.com/namiq-ai/devkb"
+pip install "devkb[mcp]"
 cd your-repo
 devkb init --hooks
 ```
