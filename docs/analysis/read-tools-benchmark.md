@@ -95,6 +95,9 @@ Turning tool search off reloads Claude Code's own deferred built-ins too (+18k t
 Turns and model calls fall 21-22% (symbol 1.9 calls per run, grep 2.1 to 0.1, reads 1.1 to 0.25). Cost is 19% higher in these one-shot runs, because every run writes its cache prefix cold (nav writes 3.2k tokens of prefix against 0.8k) and its `symbol` replies are larger than grep output (475 tokens on average, source requested in half the calls). Score is within noise (0.747 and 0.765).
 Restricting the built-in tool set alone, with no devkb, cut cost 47%.
 
+**Cache warmth, and a 40-line source default (16 runs each).** Nav's higher cost came from three runs that began with a fully cold cache (9.3k tokens written at call 1; plain's prompt was already warm). Re-priced as if the first-call prefix were cached, as in a running session: plain $0.0150 mean ($0.0143 median), nav $0.0140 ($0.0118), 7% and 17% lower. Capping `symbol` source at 40 lines by default did not help (turns 3.44, calls 3.25, steady-state $0.0145 mean, $0.0131 median, score 0.766): agents read more files to finish, so the default stays 80.
+The saving is therefore small and within the noise of 16 runs per arm; the turn reduction (21%) is the robust effect.
+
 ## 5. What it says
 
 - **Adoption follows the question.** Where the question is "exact lines of X", "a misspelled name" or "the methods of this class", the agent used `symbol` or `outline` in 7 of 8 runs
