@@ -26,8 +26,9 @@ class GraphNotBuilt(FileNotFoundError):
     """The project has no graph yet; the message says which command builds it."""
 
 
-CACHE_VERSION = 11  # re-exports followed; module_callers, unresolved_file_count kept
+CACHE_VERSION = 12  # language/linkage/abi_exported/boundary_kind kept (ADR-DEVKB-009)
 CACHE_NAME = ".process-index.pkl"
+BOUNDARY_MECHANISMS = ("extern-c", "ctypes", "cffi", "pyc-api", "pybind11")
 TELEMETRY_NAME = "process-api-telemetry.jsonl"
 
 # Only the properties the process API reads, so a reply is short and the cache is small.
@@ -41,7 +42,8 @@ KEEP_PROPS = {
                "unresolved_calls", "unresolved_files", "unresolved_file_count",  # ODSF-313: what a list answer cannot see
                "module_callers",   # calls made outside any function (import time, class bodies)
                "incomplete_reasons", "unattributed_errors",  # ADR-DEVKB-008 §2: C/C++ coverage beyond unresolved calls
-               "framework", "namespace", "overload_count"),
+               "framework", "namespace", "overload_count",
+               "language", "linkage", "abi_exported", "boundary_kind"),   # ADR-DEVKB-009 §2-3
     "ErrorSignature": ("kind", "label", "message_template", "status_code"),
     "TestCase": ("function", "file", "line", "framework"),
     "Commit": ("short_hash", "subject", "date"),
@@ -49,6 +51,7 @@ KEEP_PROPS = {
     "Flow": ("touch_point_kind", "step_count"),
     "Warning": ("rule", "severity", "detail"),
     "WorkPackage": ("title", "status"),
+    "File": ("language", "consumed_by_cpp"),                  # ADR-DEVKB-009 §2
     "ConfigKey": ("kind",),                                   # ADR-SDP-DEVKB-005 (ODSF-312)
     "Component": ("kind", "label", "file", "image", "ports", "exec", "path"),
     "Repository": ("role",),
@@ -102,6 +105,8 @@ class CompactIndex:
     # whether its target is unverified, which the integer adjacency above does not keep.
     github: dict = field(default_factory=dict)
     link_meta: dict[tuple[str, int, int], tuple[float, bool]] = field(default_factory=dict)
+    # ADR-DEVKB-009: a CALLS edge that crosses a language, (caller, callee) -> its mechanism (`extern-c`, `ctypes`, ...)
+    boundary: dict[tuple[int, int], str] = field(default_factory=dict)
 
     # ── lookups ────────────────────────────────────────────────────────────
     def node(self, node_type: str, key: str) -> int | None:
@@ -170,6 +175,8 @@ def _build(code: str, repo_root: Path, devkb_dir: Path) -> CompactIndex:
         idx.out[verb][a].append(b)
         idx.inn[verb][b].append(a)
         idx.n_edges += 1
+        if verb == "CALLS" and e["properties"].get("source") in BOUNDARY_MECHANISMS:
+            idx.boundary[(a, b)] = e["properties"]["source"]
         if verb in ("MERGES", "CLOSES"):
             props = e["properties"]
             idx.link_meta[(verb, a, b)] = (float(props.get("confidence") or 0.0), bool(props.get("unverified")))

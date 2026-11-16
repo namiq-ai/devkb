@@ -12,3 +12,7 @@ study/paper/*.bbl
 study/paper/*.blg
 study/paper/*.out
 bench-work/
+
+# devkb:begin (managed by `devkb init`)
+.devkb/
+# devkb:end

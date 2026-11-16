@@ -76,7 +76,7 @@ def test_unique_free_function_links_across_files_and_qualified_calls_resolve(tmp
     }
     g = S.build(tmp_path, files)
     got = {(e.dst, e.source) for e in g.edges("CALLS") if e.src == "main.cc::run"}
-    assert got == {("core.c::core_init", "cpp-unique-free"), ("ns.cc::twice", "cpp-qualified"), ("ns.cc::Box.make", "cpp-qualified")}
+    assert got == {("core.c::core_init", "extern-c"), ("ns.cc::twice", "cpp-qualified"), ("ns.cc::Box.make", "cpp-qualified")}
 
 
 def test_this_and_same_class_and_base_calls_resolve(tmp_path):
@@ -120,7 +120,8 @@ def test_indirect_reference_makes_the_function_incomplete(tmp_path, monkeypatch)
     api, packer = S.api(tmp_path, files, monkeypatch)
     assert api.callers("on_event")["coverage"]["complete"] is False
     assert api.callers("plain")["coverage"]["complete"] is True
-    assert "Complete." in packer.refactor("plain")
+    # `plain` is a non-static C function: ADR-DEVKB-009 turns its strong Complete into the qualified one
+    assert "Complete for the languages read" in packer.refactor("plain")
     assert "Incomplete" in packer.refactor("on_event")
 
 

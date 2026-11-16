@@ -11,6 +11,14 @@ order, and the first rule that proves a target wins; no later rule may guess:
   5. unique free bare `N()`: the only free function `N` in the repository, not a C library name       -> cpp-unique-free
   6. otherwise   a call to a name some repository symbol bears is *unresolved*; any other call is ignored.
 
+The C profile (ADR-DEVKB-009 §2) is its own, shorter order: no class, receiver or qualified rule exists in C.
+  C1. same file  bare `N()`: the function `N` this file defines                                        -> cpp-same-file
+  C2. linkage    bare `N()`: the only non-`static` function `N` in the repository, in a C file, not a
+                 C library name                                                                       -> cpp-unique-free
+  C3. otherwise  unresolved. A `p->read()` call is never linked: `read` is a field, not a method.
+A call between C and C++ is never linked here: it is handed to the boundary resolver (`cross` records), which links
+it only through `extern "C"` linkage and a unique name (`boundaries.py`).
+
 Never: a bare call to another class's method, a C library name linked across files, a link made because a method
 name is unique, or an edge for a name `#define`d as a macro.
 """
@@ -38,6 +46,16 @@ class Unit:
     rec: FileRecords
     syms: dict[str, Symbolic]
     qn_of_def: list[str | None]     # final qualified name of each def index (None: no symbol, e.g. a non-test macro)
+
+
+@dataclass
+class Cross:
+    """A bare call that may cross the C/C++ line: the extern-c import record, before the resolver judges it."""
+    path: str
+    caller_qn: str
+    name: str
+    line: int
+    language: str          # the caller file's language
 
 
 @dataclass
@@ -69,6 +87,8 @@ class Repo:
         self.namespaces: set[str] = set()
         self.macros: set[str] = set()
         self.function_names: set[str] = set()
+        self.language: dict[str, str] = {u.path: u.rec.language for u in units}
+        self.c_linkage: dict[str, list[tuple[str, Symbolic]]] = {}     # non-static functions with C linkage, by short name
         for u in units:
             self.namespaces |= u.rec.namespaces
             self.macros |= u.rec.define_names
@@ -81,6 +101,8 @@ class Repo:
                     self.short_names.add(s.short)
                 if s.kind == "function":
                     self.free.setdefault(s.short, []).append((u.path, s))
+                    if s.linkage == "c":
+                        self.c_linkage.setdefault(s.short, []).append((u.path, s))
                 if s.kind in ("function", "method"):
                     self.function_names.add(s.short)
             for c in u.rec.classes:
@@ -148,11 +170,14 @@ class Repo:
         return out
 
 
-def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]]]:
+def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], list[Cross]]:
     repo = Repo(units)
     edges: list[Edge] = []
     unresolved: set[tuple[str, str, str]] = set()
+    cross: list[Cross] = []
     for u in units:
+        is_c = not u.rec.cpp
+        lang = u.rec.language
         by_def_free = {s.short: s for s in u.syms.values() if s.kind == "function"}
         free_count: dict[str, int] = {}
         for s in u.syms.values():
@@ -177,6 +202,32 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]]]:
 
             def link(callee: str, source: str, detail: str) -> None:
                 edges.append(Edge(ckey, callee, source, _SOURCES[source], f"{u.path}::{caller_qn} calls {detail}"))
+
+            def hand_over() -> bool:
+                """A bare call to a name defined with C linkage in the other language: the boundary resolver decides."""
+                if n in C_LIBRARY:
+                    return False
+                other = "cpp" if is_c else "c"
+                if any(repo.language[p] == other for p, _s in repo.c_linkage.get(n, [])):
+                    cross.append(Cross(u.path, caller_qn, n, call.line, lang))
+                    return True
+                return False
+
+            if is_c:                                  # the C profile: linkage only (ADR-DEVKB-009 §2)
+                if call.form == "bare":
+                    if free_count.get(n) == 1:
+                        link(f"{u.path}::{by_def_free[n].qn}", "cpp-same-file", n)
+                        continue
+                    if not free_count.get(n):
+                        own = [(p, x) for p, x in repo.c_linkage.get(n, []) if repo.language[p] == "c"]
+                        if len(own) == 1 and n not in C_LIBRARY:
+                            link(f"{own[0][0]}::{own[0][1].qn}", "cpp-unique-free", n)
+                            continue
+                        if hand_over():
+                            continue
+                if n in repo.short_names:
+                    unresolved.add((u.path, caller_qn, n))
+                continue
 
             if call.form == "qualified":
                 parts = [p for p in call.qualifier.split("::") if p]
@@ -214,8 +265,10 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]]]:
                         continue
                     if not free_count.get(n):
                         cands2 = repo.free.get(n, [])
-                        if len(cands2) == 1 and n not in C_LIBRARY and cands2[0][1].is_public:
+                        if len(cands2) == 1 and n not in C_LIBRARY and cands2[0][1].is_public and repo.language[cands2[0][0]] == "cpp":
                             link(f"{cands2[0][0]}::{cands2[0][1].qn}", "cpp-unique-free", n)
+                            continue
+                        if hand_over():
                             continue
             else:  # member
                 cls = repo.caller_class(u.path, chain) if chain else None
@@ -245,7 +298,7 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]]]:
                 continue
             who = u.qn_of_def[owner] if owner >= 0 and u.qn_of_def[owner] else "<file>"
             unresolved.add((u.path, f"{who}@indirect:{line}", name))
-    return edges, unresolved
+    return edges, unresolved, cross
 
 
 def incomplete_reasons(units: list[Unit]) -> dict[tuple[str, str], set[str]]:

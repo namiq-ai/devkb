@@ -1,0 +1,10 @@
+{
+  "comment": "Labelled truth for tests/fixtures/profiles/c_linkage: the only calls a C reader can prove. c.c calls helper() which is static in a.c and b.c (not visible from c.c); main.c calls dup(), non-static in two files (ambiguous).",
+  "edges": [
+    ["a.c::init", "a.c::helper"],
+    ["a.c::run_a", "a.c::helper"],
+    ["b.c::run_b", "b.c::helper"],
+    ["main.c::main", "a.c::init"]
+  ],
+  "forbidden_callers": ["c.c::run_c", "recv.c::use"]
+}
