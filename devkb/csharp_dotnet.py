@@ -308,3 +308,10 @@ DOTNET_EXTENSIONS = {"CreateLogger", "GetRequiredService", "GetService", "GetSer
                      "LogInformation", "LogWarning", "LogError", "LogDebug", "LogTrace", "LogCritical",
                      "GetValue", "GetConnectionString", "AddSingleton", "AddScoped", "AddTransient", "AddLogging",
                      "AddOptions", "Configure", "AddHttpClient"}
+
+# Every LINQ (System.Linq.Enumerable / Queryable) method name: on a generic sequence, LINQ's `this IEnumerable<T>`
+# is a better conversion than a repository extension on the non-generic `IEnumerable`, so LINQ wins those.
+LINQ_ALL = LINQ_LAMBDA | LINQ_SAME | LINQ_ELEMENT | set(LINQ_TO) | {"ToList", "ToArray", "Count", "LongCount", "Any",
+                                                                    "Cast", "OfType", "ToDictionary", "ToLookup",
+                                                                    "Contains", "SequenceEqual", "DefaultIfEmpty",
+                                                                    "Append", "Prepend", "Chunk", "Zip", "Join"}

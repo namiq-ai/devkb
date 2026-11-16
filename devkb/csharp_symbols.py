@@ -498,11 +498,25 @@ _MODIFIER_WORDS = frozenset("public private protected internal static readonly s
                             "async unsafe extern new partial volatile required file const".split())
 
 
+_WHERE = re.compile(r"\bwhere\s+@?([A-Za-z_]\w*)\s*:\s*([A-Za-z_][\w.]*)")
+
+
+def _constraints(h: str) -> dict[str, str]:
+    """{T: its first constraint's simple name} from `where T : Base, new()` clauses (class/struct/new() skipped)."""
+    out = {}
+    for t, c in _WHERE.findall(h):
+        c = c.split(".")[-1]
+        if c not in ("class", "struct", "new", "unmanaged", "notnull", "default", "allows"):
+            out.setdefault(t, c)
+    return out
+
+
 def _member_head(h: str) -> dict | None:
     """Name, kind and parameter text of a member header (method, constructor, operator, property), or None."""
     h = re.sub(r"\s+", " ", h).strip()
     if not h or h.endswith("=>"):
         return None
+    gcons = _constraints(h)
     h = re.split(r"\bwhere\s+\w+\s*:", h)[0].strip()                 # generic constraints
     opens = [k for k in _depth0(h, "(")]
     # A tuple return type, `(int A, string B) Name(...)`, opens a parenthesis right after the modifiers: skip it.
@@ -528,7 +542,7 @@ def _member_head(h: str) -> dict | None:
         gm = re.search(r"<([^<>]*)>\s*$", h[:k].rstrip())
         ret_text = re.sub(r"@?[A-Za-z_]\w*$", "", _strip_end_generics(h[:k]))
         return {"name": m.group(1), "kind": "method", "params": params, "static_ext": ext, "ret": _ret_type(rest),
-                "ret_full": _last_type_token(ret_text) if rest else None, "pfull": _pfull(params),
+                "ret_full": _last_type_token(ret_text) if rest else None, "pfull": _pfull(params), "gcons": gcons,
                 "static": bool(re.search(r"\bstatic\b", h[:k])),
                 "arity": _arity(bare, ext), "this_type": _this_type(bare) if ext else None,
                 "gparams": {g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set()}
@@ -766,7 +780,8 @@ def _type_frame(tm, header: str, q: tuple[str, ...], start: int, brace: int, add
     sym = add(kind, name, tq, start, brace, bases=_base_names(after), fields=_params(params), type_q=tq,
               body=[], attrs=set(), is_interface=tm.group(1) == "interface",
               ffull={p["name"]: p["t"] for p in _pfull(params) if p["t"]},
-              tgparams={g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set())
+              tgparams={g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set(),
+              tgcons=_constraints(after))
     return {"kind": "type", "q": tq, "sym": sym, "enum": kind == "enum", "start": brace}
 
 
@@ -779,6 +794,7 @@ def _member_frame(mh: dict, attrs: set[str], header: str, top: dict, start: int,
             type_q=top["q"], attrs=attrs, ext=mh.get("static_ext", False), ret=mh.get("ret"),
             arity=mh.get("arity"), this_type=mh.get("this_type"), gparams=mh.get("gparams", set()),
             static=mh.get("static", False), ret_full=mh.get("ret_full"), pfull=mh.get("pfull"),
+            gcons=mh.get("gcons") or {},
             is_test=bool(attrs & TEST_ATTRS))
     if mh["kind"] == "property" and mh.get("ret"):
         tsym["fields"][mh["name"]] = mh["ret"]
@@ -808,12 +824,14 @@ class _Index:
         self.instance_methods: dict[str, list[dict]] = {}
         self.by_key: dict[str, list[dict]] = {}        # overloads share a key
         self.type_gparams: dict[tuple, set[str]] = {}
+        self.type_cons: dict[tuple, dict[str, str]] = {}    # a type's generic parameters' constraints
         self.implicit: set[str] = set()                 # types declaring a conversion operator (any argument may fit)
         self.enums: set[str] = set()
         for s in symbols:
             self.by_key.setdefault(s["key"], []).append(s)
             if s["kind"] in ("class", "enum"):
                 self.type_gparams.setdefault(s["qparts"], set()).update(s.get("tgparams") or ())
+                self.type_cons.setdefault(s["qparts"], {}).update(s.get("tgcons") or {})
                 if s["kind"] == "enum":
                     self.enums.add(s["name"])
             if s["name"] == "operator" and s.get("type_q"):
@@ -999,6 +1017,11 @@ class _Index:
         The argument count only ever rules candidates out; it never makes a choice. Narrowing several `Contains`
         extensions to the one taking one argument would send every `list.Contains(x)` to it (found on Jellyfin)."""
         every = self.ext.get(name, [])
+        if name in dotnet.LINQ_ALL:
+            # C#: on a generic sequence LINQ's `this IEnumerable<T>` beats an extension on the non-generic IEnumerable
+            # (EF Core: `query.ToList()` on an IQueryable<Blog> is LINQ's, not EF's `ToList(this IEnumerable)`)
+            every = [c for c in every if not (c.get("this_type") == "IEnumerable" and not any(
+                p.get("this") and p["t"] and p["t"][1] for p in c.get("pfull") or []))]
         cands = [c for c in every if self.fits(c, n)]
         # `this T` (a generic parameter) and `this object` accept any receiver
         generic = [c for c in cands if c.get("this_type") in generic_names(c)]
@@ -1074,10 +1097,34 @@ _LOCAL = re.compile(r"(?:^|[;{(\s,])(?!(?:using|await|return|yield|throw|new|els
                     r"\s*(?:=\s*new\s+(?P<nt>[A-Za-z_][\w.]*(?:<[^;=(){}]*?>)?)\s*[({])?")
 
 
+def _new_ends_statement(body: str, k: int) -> bool:
+    """Whether the `new T(...)` / `new T { ... }` whose `(` or `{` is at body[k] is the whole value: after its
+    argument list and initializer comes `;` (or `,`/`)` in a `using` or `for` header), not `.Member`."""
+    j = k
+    for _ in range(2):                                   # `(...)`, then an optional `{...}` initializer
+        if j >= len(body) or body[j] not in "({":
+            break
+        depth, start = 0, j
+        while j < len(body) and j - start < _ARG_SCAN:
+            if body[j] in "([{":
+                depth += 1
+            elif body[j] in ")]}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        j += 1
+        while j < len(body) and body[j].isspace():
+            j += 1
+    return j < len(body) and body[j] in ";,)"
+
+
 def _locals_full(body: str) -> dict[str, tuple]:
     """{local or parameter name: parsed type} for declarations in `body` (`T x`, `var x = new T(...)`)."""
     out: dict[str, tuple] = {}
     for m in _LOCAL.finditer(body):
+        if m.group("nt") and not _new_ends_statement(body, m.end() - 1):
+            continue                    # `var s = new B { ... }.ToString();`: the value is not a B (EF Core)
         text = m.group("nt") or (m.group("t") + (m.group("arr") or "") if m.group("t") else None)
         t = _pt(text) if text else None
         if t and t[0] not in _NOT_CALL and m.group("n") not in _NOT_CALL:
@@ -1162,27 +1209,67 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
         types: dict[str, tuple] = {k: (v, ()) for k, v in s.get("params", {}).items()}
         types.update({p["name"]: p["t"] for p in s.get("pfull") or [] if p.get("t")})
         types.update({k: _dealias(v, aliases) for k, v in _locals_full(body).items()})
+        inferred: set[str] = set()                                # locals typed from a call's result (var, foreach)
         for fm in _FOREACH_LOCAL.finditer(body):                  # foreach (var x in items)
             el = _elem(types.get(fm.group("src")) or (index.field_full(tq, fm.group("src")) if tq else None))
             if el:
                 types.setdefault(fm.group("n"), el)
+                inferred.add(fm.group("n"))
         results: dict[int, tuple] = {}                            # close paren -> (result type, expression start)
-        scoped: list[tuple] = []                                  # (from, to, name, type): lambda parameters
+        scoped: list[tuple] = []                                  # (from, to, name, type, declared): lambda parameters
 
-        def type_of(nm: str, pos: int):
-            for a0, b0, x, t in reversed(scoped):
+        cons = {}
+        for k in range(1, len(tq) + 1):                           # enclosing types' constraints, then the method's
+            cons.update(index.type_cons.get(tq[:k], {}))
+        cons.update(s.get("gcons") or {})
+
+        def constrained(t):
+            """A generic parameter is, as far as calls go, its constraint (`TContext : DbContext`)."""
+            return (cons[t[0]], ()) if t and t[0] in cons else t
+
+        def type_of(nm: str, pos: int, declared_only: bool = False):
+            """`nm`'s type at `pos`. With `declared_only` (to rule an argument out), only a type the source writes:
+            an inferred one (a call's result, a delegate's parameter) may be off, and a wrong ruling-out loses a
+            correct edge (found on EF Core)."""
+            for a0, b0, x, t, declared in reversed(scoped):
                 if x == nm and a0 <= pos < b0:
-                    return t                                      # a lambda parameter (None: untyped, still shadows)
+                    return t if (declared or not declared_only) else None   # (None: untyped, still shadows)
             if nm in types:
-                return types[nm]
-            return index.field_full(tq, nm) if tq else None
+                return None if declared_only and nm in inferred else constrained(types[nm])
+            return constrained(index.field_full(tq, nm)) if tq else None
+
+        guessed = [False]
+
+        def brace_close(k: int) -> int | None:
+            depth = 0
+            for j in range(k, min(len(body), k + _ARG_SCAN)):
+                if body[j] == "{":
+                    depth += 1
+                elif body[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return j
+            return None
+
+        # `new T { ... }` (no argument list): its value, recorded where the initializer closes, so a chained
+        # `.M()` after it is typed (Jellyfin: `var o = new DtoOptions { Fields = f }.AddClientFields(User);`)
+        for nm_ in re.finditer(r"\bnew\s+([A-Za-z_][\w.]*(?:<[^<>(){};]*>)?)\s*\{", body):
+            close = brace_close(nm_.end() - 1)
+            if close is not None:
+                results[close] = (_dealias(_pt(nm_.group(1)), aliases), nm_.start())
 
         def walk(t, props):
+            guessed[0] = False
             for prop in props:
                 if t is None:
                     return None
+                t = constrained(t)
                 q = index.type_named(t[0], tq)
-                t = index.field_full(q, prop) if q else None
+                nt = constrained(index.field_full(q, prop)) if q else None
+                if nt is None and prop in index.types:
+                    nt = (prop, ())          # "Color Color": a property named like a type is of that type (EF Core:
+                    guessed[0] = True        # `Fixture.TestSqlLoggerFactory`); only when the lookup itself failed
+                t = nt
             return t
 
         for m in _CALL.finditer(body):
@@ -1205,9 +1292,10 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             line = bisect_left(nl, start + m.end("chain") - 1) + 1     # the name's line, not the chain's first
             found, rt, rtype, static, dotnet_bound, explicit = None, None, None, False, False, False
             index.ambiguous = False
+            guessed[0] = False
             a_ = _args(body, rbody, m.end() - 1)
             if a_.items is not None:
-                a_.types = [_dealias(_arg_type(mi, ri, lambda nm, pos=ai: type_of(nm, pos)), aliases)
+                a_.types = [_dealias(_arg_type(mi, ri, lambda nm, pos=ai: type_of(nm, pos, True)), aliases)
                             for mi, ri, ai, _bi in a_.items]
             if a_.items:                                          # untyped first; typed entries added later win
                 for mi, _ri, ai, bi in a_.items:
@@ -1216,13 +1304,13 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                         for part in (_split_top(lm.group("ps")) if lm.group("ps") is not None else [lm.group("p")]):
                             toks = _split_top(part.strip(), " ")
                             declared = _dealias(_pt("".join(toks[:-1])), aliases) if len(toks) > 1 else None
-                            scoped.append((ai, bi, toks[-1].lstrip("@"), declared))
+                            scoped.append((ai, bi, toks[-1].lstrip("@"), declared, declared is not None))
             expr_start = m.start()
             chained = False
             if not m.group("new") and before.endswith("."):
                 left = before[:-1].rstrip()
                 left = left[:-1].rstrip() if left.endswith(("?", "!")) else left
-                if left.endswith(")"):
+                if left.endswith((")", "}")):
                     q = off + len(left) - 1
                     r = results.get(q) or _awaited(body, q, results)
                     if r and r[0]:
@@ -1287,6 +1375,8 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                 # `x.Ext()`: chosen by arguments and receiver; a failed `Type.M()` may be a property sharing a type's
                 # name (`User.GetUserId()`)
                 ext = index.extension(name, a_, None if static else rtype, tq)
+                if ext is None and rtype and guessed[0]:
+                    ext = index.extension(name, a_, None, tq)    # the guessed type was wrong: as an unknown receiver
                 found = (ext, 0.6 if rtype else 0.5) if ext else None
             callee = found[0] if found else None
             if callee is not None and callee["key"] == s["key"]:
@@ -1329,7 +1419,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                         if len(cand) == 1 and (lt := cand.pop()):
                             for nm, t in zip(names, lt):
                                 if t:
-                                    scoped.append((ai, bi, nm.lstrip("@"), t))
+                                    scoped.append((ai, bi, nm.lstrip("@"), t, False))
             if callee is None and rt is not None and not m.group("new"):
                 # an outside method on a typed receiver: LINQ over a known element type, or a fluent builder
                 el = _elem(rt)
@@ -1337,7 +1427,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                     for mi, _ri, ai, bi in a_.items:
                         lm = _LAMBDA.match(mi)
                         if lm and lm.group("p"):
-                            scoped.append((ai, bi, lm.group("p").lstrip("@"), el))
+                            scoped.append((ai, bi, lm.group("p").lstrip("@"), el, False))
                 if el is not None and name in dotnet.LINQ_SAME:
                     res = ("IEnumerable", (el,))
                 elif el is not None and name in dotnet.LINQ_ELEMENT:
@@ -1346,6 +1436,12 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                     res = (dotnet.LINQ_TO[name], (el,))
                 elif rt[0] in dotnet.FLUENT_SELF:
                     res = rt
+            if res is not None and a_.close is not None and m.group("new"):
+                after = a_.close + 1                              # `new T(...) { ... }`: the value ends at `}`
+                while after < len(body) and body[after].isspace():
+                    after += 1
+                if after < len(body) and body[after] == "{" and (bc := brace_close(after)) is not None:
+                    results[bc] = (res, expr_start)
             if res is not None and a_.close is not None:
                 results[a_.close] = (res, expr_start)
                 head = body[max(0, expr_start - _LOOKBACK): expr_start]
@@ -1355,11 +1451,13 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                     t = _unwrap(res) if vm.group("aw") else res
                     if t:
                         types[vm.group("n")] = t
+                        inferred.add(vm.group("n"))
                 fe = _FOREACH_BEFORE.search(head)
                 if fe and _AFTER_FOREACH.match(tail):
                     t = _elem(_unwrap(res) if fe.group("aw") else res)
                     if t:
                         types[fe.group("n")] = t
+                        inferred.add(fe.group("n"))
             if recursion:
                 continue                                          # recursion: not an edge, not unresolved
             if found:

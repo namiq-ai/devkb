@@ -1,6 +1,6 @@
 """Edges a resolver change added and removed, sampled for checking by hand.
 
-  python bench/cs_diff_sample.py REPO OLD_REF N   (OLD_REF: a git ref of devkb whose csharp_symbols.py is the baseline)
+  python bench/cs_diff_sample.py REPO OLD_REF N   (OLD_REF: a git ref of devkb whose csharp_symbols.py is the baseline, or a file)
 """
 import importlib.util
 import random
@@ -13,8 +13,11 @@ sys.path.insert(0, str(ROOT))
 from devkb import csharp_symbols as new  # noqa: E402
 
 repo, ref, n = Path(sys.argv[1]), sys.argv[2], int(sys.argv[3])
-src = subprocess.run(["git", "show", f"{ref}:devkb/csharp_symbols.py"], cwd=ROOT, capture_output=True, text=True,
-                     check=True).stdout
+if Path(ref).is_file():                    # a file, e.g. an earlier freeze of the resolver
+    src = Path(ref).read_text()
+else:
+    src = subprocess.run(["git", "show", f"{ref}:devkb/csharp_symbols.py"], cwd=ROOT, capture_output=True,
+                         text=True, check=True).stdout
 old = importlib.util.module_from_spec(importlib.util.spec_from_loader("old", loader=None))
 exec(src, old.__dict__)
 osyms, a = old.extract(repo)

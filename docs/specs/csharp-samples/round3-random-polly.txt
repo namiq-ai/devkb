@@ -1,0 +1,60 @@
+ 1. Polly.Hedging.Utils.HedgingController.ctor -> src/Polly.Core/Hedging/Controller/HedgingExecutionContext.cs::Polly.Hedging.Utils.HedgingExecutionContext.ctor
+    call src/Polly.Core/Hedging/Controller/HedgingController.cs:40: return new HedgingExecutionContext<T>(_executionPool, provider, maxAttempts, onReset);
+    def  20: public HedgingExecutionContext(
+ 2. Polly.Outcome.FromValueTask -> src/Polly.Core/Outcome.cs::Polly.Outcome.FromValueTaskAsync
+    call src/Polly.Core/Outcome.cs:59: return FromValueTaskAsync(valueTask, continueOnCapturedContext);
+    def  81: private static async ValueTask<Outcome<TResult>> FromValueTaskAsync<TResult>(ValueTask<TResult> valueTask, bool continueOnCap
+ 3. Snippets.Docs.Chaos.LatencyUsage -> src/Polly.Core/Simmy/Latency/ChaosLatencyPipelineBuilderExtensions.cs::Polly.Simmy.ChaosLatencyPipelineBuilderExtensions.AddChaosLatency
+    call src/Snippets/Docs/Chaos.Latency.cs:57: new ResiliencePipelineBuilder().AddChaosLatency(optionsDefault);
+    def  22: public static TBuilder AddChaosLatency<TBuilder>(this TBuilder builder, double injectionRate, TimeSpan latency)
+ 4. Snippets.Docs.ResiliencePipelines.ExecuteOutcomeAsync -> src/Polly.Core/Outcome.cs::Polly.Outcome.FromResult
+    call src/Snippets/Docs/ResiliencePipelines.cs:143: return Outcome.FromResult(true);
+    def  14: public static Outcome<TResult> FromResult<TResult>(TResult? value) => new(value);
+ 5. Polly.Core.Tests.CircuitBreaker.CircuitBreakerManualControlTests.IsolateAsync_NotInitialized_Ok -> src/Polly.Core/CircuitBreaker/CircuitBreakerManualControl.cs::Polly.CircuitBreaker.CircuitBreakerManualControl.Initialize
+    call test/Polly.Core.Tests/CircuitBreaker/CircuitBreakerManualControlTests.cs:42: using var reg = control.Initialize(
+    def  31: internal IDisposable Initialize(Func<ResilienceContext, Task> onIsolate, Func<ResilienceContext, Task> onReset)
+ 6. Polly.Core.Tests.CircuitBreaker.Health.RollingHealthMetricsTests.Reset_Ok -> test/Polly.Core.Tests/CircuitBreaker/Health/RollingHealthMetricsTests.cs::Polly.Core.Tests.CircuitBreaker.Health.RollingHealthMetricsTests.Create
+    call test/Polly.Core.Tests/CircuitBreaker/Health/RollingHealthMetricsTests.cs:92: var metrics = Create();
+    def  115: private RollingHealthMetrics Create() => new(_samplingDuration, _windows, _timeProvider);
+ 7. Polly.Core.Tests.Hedging.Controller.TaskExecutionTests.Cancel_Accepted_NoEffect -> test/Polly.Core.Tests/Hedging/Controller/TaskExecutionTests.cs::Polly.Core.Tests.Hedging.Controller.TaskExecutionTests.Create
+    call test/Polly.Core.Tests/Hedging/Controller/TaskExecutionTests.cs:146: var execution = Create();
+    def  310: private TaskExecution<DisposableResult> Create() => new(_hedgingHandler, CancellationTokenSourcePool.Create(TimeProvider.Syst
+ 8. Polly.Core.Tests.Utils.ObjectPoolTests.CreatedByPolicy -> src/Polly.Core/Utils/ObjectPool.cs::Polly.Utils.ObjectPool.Get
+    call test/Polly.Core.Tests/Utils/ObjectPoolTests.cs:64: var list = pool.Get();
+    def  24: public T Get()
+ 9. Polly.Specs.Caching.CacheSpecs.Should_throw_when_policies_is_null -> src/Polly/Wrap/ISyncPolicyPolicyWrapExtensions.cs::Polly.Policy.Wrap
+    call test/Polly.Specs/Caching/CacheSpecs.cs:360: Action action = () => Policy.Wrap(policies);
+    def  91: public PolicyWrap Wrap(ISyncPolicy innerPolicy)
+10. Polly.Specs.Caching.CacheTResultAsyncSpecs.Should_allow_custom_ICacheKeyStrategy -> src/Polly/Caching/Ttl.cs::Polly.Caching.Ttl.ctor
+    call test/Polly.Specs/Caching/CacheTResultAsyncSpecs.cs:562: await stubCacheProvider.PutAsync("person1", person1, new Ttl(TimeSpan.MaxValue), CancellationToken, false);
+    def  30: public Ttl(TimeSpan timeSpan)
+11. Polly.Specs.CircuitBreaker.CircuitBreakerTResultAsyncSpecs.Should_not_call_onreset_on_initialise -> src/Polly/Policy.HandleSyntax.cs::Polly.Policy.HandleResult
+    call test/Polly.Specs/CircuitBreaker/CircuitBreakerTResultAsyncSpecs.cs:816: .HandleResult(ResultPrimitive.Fault)
+    def  53: public static PolicyBuilder<TResult> HandleResult<TResult>(Func<TResult, bool> resultPredicate) =>
+12. Polly.Specs.CircuitBreaker.CircuitBreakerTResultSpecs.Should_open_circuit_with_the_last_handled_result_after_specified_number_of_one_of_the_specified_handled_results_have_been_raised -> src/Polly/PolicyBuilder.OrSyntax.cs::Polly.PolicyBuilder.OrResult
+    call test/Polly.Specs/CircuitBreaker/CircuitBreakerTResultSpecs.cs:152: .OrResult(ResultPrimitive.FaultAgain)
+    def  101: public PolicyBuilder<TResult> OrResult<TResult>(Func<TResult, bool> resultPredicate) =>
+13. Polly.Specs.ContextDictionarySpecs.Nongeneric_dictionary_members_should_delegate_to_the_wrapped_dictionary -> src/Polly/Context.Dictionary.cs::Polly.Context.Remove
+    call test/Polly.Specs/ContextDictionarySpecs.cs:71: dictionary.Remove("one");
+    def  72: public bool Remove(string key) =>
+14. Polly.Specs.RateLimit.TokenBucketRateLimiterTestsBase.Given_immediate_parallel_contention_ratelimiter_still_only_permits_one -> src/Polly/RateLimit/IRateLimiter.cs::Polly.RateLimit.IRateLimiter.PermitExecution
+    call test/Polly.Specs/RateLimit/TokenBucketRateLimiterTestsBase.cs:190: return rateLimiter.PermitExecution();
+    def  17: (bool PermitExecution, TimeSpan RetryAfter) PermitExecution();
+15. Polly.Specs.Registry.ConcurrentPolicyRegistrySpecs.Should_return_existing_with_GetOrAdd_with_value_when_existing_policy -> src/Polly/Registry/PolicyRegistry.cs::Polly.Registry.PolicyRegistry.Add
+    call test/Polly.Specs/Registry/ConcurrentPolicyRegistrySpecs.cs:158: _registry.Add(key, existingPolicy);
+    def  46: public void Add<TPolicy>(string key, TPolicy policy)
+16. Polly.Specs.Registry.ConcurrentPolicyRegistrySpecs.Should_return_existing_with_GetOrAdd_with_value_when_existing_policy -> src/Polly/Registry/PolicyRegistry.cs::Polly.Registry.PolicyRegistry.GetOrAdd
+    call test/Polly.Specs/Registry/ConcurrentPolicyRegistrySpecs.cs:162: var returnedPolicy = _registry.GetOrAdd(key, newPolicy);
+    def  191: public TPolicy GetOrAdd<TPolicy>(string key, Func<string, TPolicy> policyFactory)
+17. Polly.Specs.Registry.PolicyRegistrySpecs.Should_throw_while_retrieving_using_Get_when_key_does_not_exist -> src/Polly/Registry/PolicyRegistry.cs::Polly.Registry.PolicyRegistry.Get
+    call test/Polly.Specs/Registry/PolicyRegistrySpecs.cs:308: Should.Throw<KeyNotFoundException>(() => policy = _registry.Get<Policy>(key));
+    def  86: public TPolicy Get<TPolicy>(string key)
+18. Polly.Specs.Retry.RetryAsyncSpecs.Should_call_onretry_with_the_passed_context -> src/Polly/Policy.HandleSyntax.cs::Polly.Policy.Handle
+    call test/Polly.Specs/Retry/RetryAsyncSpecs.cs:282: .Handle<DivideByZeroException>()
+    def  10: public static PolicyBuilder Handle<TException>()
+19. Polly.Specs.Retry.WaitAndRetryAsyncSpecs.Should_throw_when_onretry_action_is_null_without_context -> src/Polly/Policy.HandleSyntax.cs::Polly.Policy.Handle
+    call test/Polly.Specs/Retry/WaitAndRetryAsyncSpecs.cs:29: .Handle<DivideByZeroException>()
+    def  10: public static PolicyBuilder Handle<TException>()
+20. Polly.Specs.Retry.WaitAndRetrySpecs.Should_not_call_onretry_when_retry_count_is_zero_with_context -> test/Polly.Specs/Helpers/PolicyExtensions.cs::Polly.Specs.Helpers.PolicyExtensions.RaiseException
+    call test/Polly.Specs/Retry/WaitAndRetrySpecs.cs:822: Should.Throw<DivideByZeroException>(() => policy.RaiseException<DivideByZeroException>());
+    def  12: public static void RaiseException<TException>(this Policy policy, TException instance)

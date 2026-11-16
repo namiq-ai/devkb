@@ -1,0 +1,125 @@
+efcore: 97754 edges before, 134897 after; removed 720, added 37863
+
+## REMOVED (sample 20 of 720)
+ 1. Microsoft.EntityFrameworkCore.Cosmos.Query.Internal.ObjectArrayAccessExpression.VisitChildren -> System.Linq.Expressions.ExpressionVisitorExtensions.Visit
+    call src/EFCore.Cosmos/Query/Internal/Expressions/ObjectArrayAccessExpression.cs:117: var accessExpression = visitor.Visit(Object);
+    def  src/Shared/ExpressionVisitorExtensions.cs:104: public static IReadOnlyList<T> Visit<T>(this ExpressionVisitor visitor, IReadOnlyList<T> nodes, Func<T, T> elementVisitor)
+ 2. Microsoft.EntityFrameworkCore.Cosmos.Query.Internal.ScalarAccessExpression.VisitChildren -> System.Linq.Expressions.ExpressionVisitorExtensions.Visit
+    call src/EFCore.Cosmos/Query/Internal/Expressions/ScalarAccessExpression.cs:44: => Update(visitor.Visit(Object));
+    def  src/Shared/ExpressionVisitorExtensions.cs:104: public static IReadOnlyList<T> Visit<T>(this ExpressionVisitor visitor, IReadOnlyList<T> nodes, Func<T, T> elementVisitor)
+ 3. Microsoft.EntityFrameworkCore.Infrastructure.RelationalModelValidator.ValidateSharedViewCompatibility -> Microsoft.EntityFrameworkCore.TestUtilities.CollectionExtensions.Enqueue
+    call src/EFCore.Relational/Infrastructure/RelationalModelValidator.cs:1533: typesToValidate.Enqueue(root);
+    def  test/EFCore.SqlServer.FunctionalTests/TestUtilities/CollectionExtensions.cs:8: public static Queue<T> Enqueue<T>(this Queue<T> queue, IEnumerable<T> items)
+ 4. Microsoft.EntityFrameworkCore.Migrations.HistoryRepository.GetAppliedMigrationsAsync -> Microsoft.EntityFrameworkCore.Storage.Internal.RawSqlCommandBuilder.Build
+    call src/EFCore.Relational/Migrations/HistoryRepository.cs:303: var command = Dependencies.RawSqlCommandBuilder.Build(GetAppliedMigrationsSql);
+    def  src/EFCore.Relational/Storage/Internal/RawSqlCommandBuilder.cs:64: public virtual RawSqlCommand Build(string sql, IEnumerable<object?> parameters, IModel? model)
+ 5. Microsoft.EntityFrameworkCore.Query.Internal.FromSqlQueryingEnumerable.AsyncEnumerator.MoveNextAsync -> Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteAsync
+    call src/EFCore.Relational/Query/Internal/FromSqlQueryingEnumerable.cs:349: await _relationalQueryContext.ExecutionStrategy.ExecuteAsync(
+    def  src/EFCore/Storage/ExecutionStrategy.cs:290: public virtual async Task<TResult> ExecuteAsync<TState, TResult>(
+ 6. Microsoft.EntityFrameworkCore.Query.Internal.TpcTablesExpression.VisitChildren -> System.Linq.Expressions.ExpressionVisitorExtensions.Visit
+    call src/EFCore.Relational/Query/Internal/TpcTablesExpression.cs:121: var visitedColumn = (ColumnExpression)visitor.Visit(DiscriminatorColumn);
+    def  src/Shared/ExpressionVisitorExtensions.cs:104: public static IReadOnlyList<T> Visit<T>(this ExpressionVisitor visitor, IReadOnlyList<T> nodes, Func<T, T> elementVisitor)
+ 7. Microsoft.EntityFrameworkCore.Query.RelationalCollectionShaperExpression.VisitChildren -> System.Linq.Expressions.ExpressionVisitorExtensions.Visit
+    call src/EFCore.Relational/Query/RelationalCollectionShaperExpression.cs:108: var parentIdentifier = visitor.Visit(ParentIdentifier);
+    def  src/Shared/ExpressionVisitorExtensions.cs:104: public static IReadOnlyList<T> Visit<T>(this ExpressionVisitor visitor, IReadOnlyList<T> nodes, Func<T, T> elementVisitor)
+ 8. Microsoft.EntityFrameworkCore.Query.RelationalShapedQueryCompilingExpressionVisitor.VisitShapedQuery -> Microsoft.EntityFrameworkCore.Query.LiftableConstantFactory.CreateLiftableConstant
+    call src/EFCore.Relational/Query/RelationalShapedQueryCompilingExpressionVisitor.cs:335: var keyIdentifierValueComparersExpression = Dependencies.LiftableConstantFactory.CreateLiftableConstant(
+    def  src/EFCore/Query/LiftableConstantFactory.cs:29: public virtual Expression CreateLiftableConstant(
+ 9. Microsoft.EntityFrameworkCore.Query.SqlExpressionFactory.Like -> Microsoft.EntityFrameworkCore.Query.ISqlExpressionFactory.ApplyDefaultTypeMapping
+    call src/EFCore.Relational/Query/SqlExpressionFactory.cs:1037: => ApplyDefaultTypeMapping(new LikeExpression(match, pattern, escapeChar, null));
+    def  src/EFCore.Relational/Query/ISqlExpressionFactory.cs:34: [return: NotNullIfNotNull(nameof(sqlExpression))]
+10. Microsoft.EntityFrameworkCore.ChangeTracking.CollectionEntry.IsModified -> Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.TryGetEntry
+    call src/EFCore/ChangeTracking/CollectionEntry.cs:183: var relatedEntry = InternalEntry.StateManager.TryGetEntry(relatedEntity, Metadata.TargetEntityType);
+    def  src/EFCore/ChangeTracking/Internal/StateManager.cs:411: public virtual InternalEntityEntry? TryGetEntry(object entity, IEntityType entityType, bool throwOnTypeMismatch = true)
+11. Microsoft.EntityFrameworkCore.Metadata.Internal.InternalComplexTypeBuilder.HasBaseType -> Microsoft.EntityFrameworkCore.Metadata.IMutableTypeBase.GetDerivedTypesInclusive
+    call src/EFCore/Metadata/Internal/InternalComplexTypeBuilder.cs:268: Metadata.GetDerivedTypesInclusive().SelectMany(et => et.GetDeclaredProperties()),
+    def  src/EFCore/Metadata/IMutableTypeBase.cs:60: new IEnumerable<IMutableTypeBase> GetDerivedTypesInclusive()
+12. Microsoft.EntityFrameworkCore.Metadata.Internal.InternalComplexTypeBuilder.CanSetBaseType -> Microsoft.EntityFrameworkCore.Metadata.IMutableTypeBase.GetDerivedTypesInclusive
+    call src/EFCore/Metadata/Internal/InternalComplexTypeBuilder.cs:409: foreach (var derivedMember in Metadata.GetDerivedTypesInclusive().SelectMany(et => et.GetDeclaredMembers()))
+    def  src/EFCore/Metadata/IMutableTypeBase.cs:60: new IEnumerable<IMutableTypeBase> GetDerivedTypesInclusive()
+13. Microsoft.EntityFrameworkCore.Metadata.Internal.InternalEntityTypeBuilder.HasBaseType -> Microsoft.EntityFrameworkCore.Metadata.IMutableTypeBase.GetDerivedTypesInclusive
+    call src/EFCore/Metadata/Internal/InternalEntityTypeBuilder.cs:1416: Metadata.GetDerivedTypesInclusive().Cast<EntityType>().SelectMany(et => et.GetDeclaredNavigations()),
+    def  src/EFCore/Metadata/IMutableTypeBase.cs:60: new IEnumerable<IMutableTypeBase> GetDerivedTypesInclusive()
+14. Microsoft.EntityFrameworkCore.TestUtilities.RelationalModelAsserter.AssertEqual -> Microsoft.EntityFrameworkCore.Metadata.Internal.View.FindColumn
+    call test/EFCore.Relational.Specification.Tests/TestUtilities/RelationalModelAsserter.cs:1792: () => Assert.Same(actual, actual.View.FindColumn(actual.Name)),
+    def  src/EFCore.Relational/Metadata/Internal/View.cs:43: public new virtual ViewColumn? FindColumn(string name)
+15. Microsoft.EntityFrameworkCore.Query.NorthwindGroupByQueryTestBase.OrderBy_Skip_Take_GroupBy_Aggregate -> Microsoft.EntityFrameworkCore.Metadata.ConfigurationSourceExtensions.Max
+    call test/EFCore.Specification.Tests/Query/NorthwindGroupByQueryTestBase.cs:1416: .Select(g => g.Max(o => o.OrderID)));
+    def  src/EFCore/Metadata/ConfigurationSourceExtensions.cs:93: public static ConfigurationSource Max(this ConfigurationSource left, ConfigurationSource? right)
+16. Microsoft.EntityFrameworkCore.TestUtilities.QueryTestGeneration.InjectIncludeExpressionMutator.IsValid -> System.Linq.Expressions.ExpressionVisitorExtensions.Visit
+    call test/EFCore.Specification.Tests/TestUtilities/QueryTestGeneration/InjectIncludeExpressionMutator.cs:18: _expressionFinder.Visit(expression);
+    def  src/Shared/ExpressionVisitorExtensions.cs:104: public static IReadOnlyList<T> Visit<T>(this ExpressionVisitor visitor, IReadOnlyList<T> nodes, Func<T, T> elementVisitor)
+17. Microsoft.EntityFrameworkCore.Metadata.Conventions.NavigationAttributeConventionTest.NotMappedAttribute_overrides_configuration_from_convention_source -> Microsoft.EntityFrameworkCore.ModelBuilder.Entity
+    call test/EFCore.Tests/Metadata/Conventions/NavigationAttributeConventionTest.cs:26: var principalEntityTypeBuilder = dependentEntityTypeBuilder.ModelBuilder.Entity(typeof(Blog), ConfigurationSource.Convention)!;
+    def  src/EFCore/ModelBuilder.cs:361: public virtual ModelBuilder Entity(string name, Action<EntityTypeBuilder> buildAction)
+18. Microsoft.EntityFrameworkCore.Metadata.Conventions.NavigationAttributeConventionTest.InversePropertyAttribute_does_not_override_configuration_from_explicit_source -> Microsoft.EntityFrameworkCore.ModelBuilder.Entity
+    call test/EFCore.Tests/Metadata/Conventions/NavigationAttributeConventionTest.cs:270: dependentEntityTypeBuilder.ModelBuilder.Entity(typeof(Principal), ConfigurationSource.Convention)!;
+    def  src/EFCore/ModelBuilder.cs:361: public virtual ModelBuilder Entity(string name, Action<EntityTypeBuilder> buildAction)
+19. Microsoft.EntityFrameworkCore.Metadata.Conventions.NonNullableNavigationConventionTest.Non_nullability_does_not_override_configuration_from_data_annotation -> Microsoft.EntityFrameworkCore.ModelBuilder.Entity
+    call test/EFCore.Tests/Metadata/Conventions/NonNullableNavigationConventionTest.cs:42: var principalEntityTypeBuilder = dependentEntityTypeBuilder.ModelBuilder.Entity(typeof(Blog), ConfigurationSource.Convention)!;
+    def  src/EFCore/ModelBuilder.cs:361: public virtual ModelBuilder Entity(string name, Action<EntityTypeBuilder> buildAction)
+20. Microsoft.EntityFrameworkCore.Metadata.Conventions.RelationshipDiscoveryConventionTest.Existing_relationship_is_removed_if_ambiguous_inverse -> Microsoft.EntityFrameworkCore.ModelBuilder.Entity
+    call test/EFCore.Tests/Metadata/Conventions/RelationshipDiscoveryConventionTest.cs:359: var entityBuilderSecond = entityBuilderFirst.ModelBuilder.Entity(
+    def  src/EFCore/ModelBuilder.cs:361: public virtual ModelBuilder Entity(string name, Action<EntityTypeBuilder> buildAction)
+
+## ADDED (sample 20 of 37863)
+ 1. Microsoft.EntityFrameworkCore.SqlServer.Query.Internal.SearchConditionConverter.Visit -> Microsoft.EntityFrameworkCore.SqlServer.Query.Internal.SearchConditionConverter.VisitCase
+    call src/EFCore.SqlServer/Query/Internal/SearchConditionConverter.cs:47: CaseExpression e => VisitCase(e, inSearchConditionContext, allowNullFalseEquivalence),
+    def  src/EFCore.SqlServer/Query/Internal/SearchConditionConverter.cs:139: protected virtual Expression VisitCase(CaseExpression caseExpression, bool inSearchConditionContext, bool allowNullFalseEquivalence)
+ 2. Microsoft.EntityFrameworkCore.Query.NorthwindMiscellaneousQueryCosmosTest.ToList_over_string -> Microsoft.EntityFrameworkCore.Query.NorthwindMiscellaneousQueryTestBase.ToList_over_string
+    call test/EFCore.Cosmos.FunctionalTests/Query/NorthwindMiscellaneousQueryCosmosTest.cs:4128: await base.ToList_over_string(a);
+    def  test/EFCore.Specification.Tests/Query/NorthwindMiscellaneousQueryTestBase.cs:4644: [Theory, MemberData(nameof(IsAsyncData))]
+ 3. Microsoft.EntityFrameworkCore.Migrations.Internal.SnapshotModelProcessorTest.Does_not_warn_for_duplicate_non_conflicting_annotations -> Microsoft.EntityFrameworkCore.Metadata.Internal.ModelExtensions.SetProductVersion
+    call test/EFCore.Design.Tests/Migrations/Design/SnapshotModelProcessorTest.cs:125: model.SetProductVersion("1.1.2");
+    def  src/EFCore/Metadata/Internal/ModelExtensions.cs:20: public static void SetProductVersion(this IMutableModel model, string value)
+ 4. Microsoft.EntityFrameworkCore.GraphUpdatesIdentityResolutionInMemoryTest.Can_attach_full_required_AK_graph_of_duplicates -> Microsoft.EntityFrameworkCore.GraphUpdatesTestBase.QueryRequiredAkGraph
+    call test/EFCore.InMemory.FunctionalTests/GraphUpdates/GraphUpdatesIdentityResolutionInMemoryTest.cs:62: context.Attach(await QueryRequiredAkGraph(context).AsNoTracking().SingleAsync(IsTheRoot));
+    def  test/EFCore.Specification.Tests/GraphUpdates/GraphUpdatesTestBase.cs:945: protected IOrderedQueryable<Root> QueryRequiredAkGraph(DbContext context)
+ 5. TestNamespace.MyEntityEntityType.CreateAnnotations -> Microsoft.EntityFrameworkCore.Metadata.RuntimeKey.SetPrincipalKeyValueFactory
+    call test/EFCore.InMemory.FunctionalTests/Scaffolding/Baselines/Custom_type_mapping/MyEntityEntityType.cs:104: key.SetPrincipalKeyValueFactory(KeyValueFactoryFactory.CreateSimpleNonNullableFactory<int>(key));
+    def  src/EFCore/Metadata/RuntimeKey.cs:63: [EntityFrameworkInternal]
+ 6. TestNamespace.PrincipalBaseEntityType.Create -> Microsoft.EntityFrameworkCore.Metadata.RuntimeProperty.SetComparer
+    call test/EFCore.InMemory.FunctionalTests/Scaffolding/Baselines/RelationshipCycles/PrincipalBaseEntityType.cs:75: id.SetComparer(new NullableValueComparer<long>(id.TypeMapping.Comparer));
+    def  src/EFCore/Metadata/RuntimeProperty.cs:297: [EntityFrameworkInternal]
+ 7. Microsoft.EntityFrameworkCore.Migrations.Internal.MigrationsModelDifferTest.Rename_foreign_key -> Microsoft.EntityFrameworkCore.ModelBuilder.Entity
+    call test/EFCore.Relational.Tests/Migrations/Internal/MigrationsModelDifferTest.cs:4403: source => source.Entity(
+    def  src/EFCore/ModelBuilder.cs:361: public virtual ModelBuilder Entity(string name, Action<EntityTypeBuilder> buildAction)
+ 8. Microsoft.EntityFrameworkCore.Migrations.Internal.MigrationsModelDifferTest.Alter_foreign_key_cascade_delete -> Microsoft.EntityFrameworkCore.Migrations.Internal.MigrationsModelDifferTestBase.Execute
+    call test/EFCore.Relational.Tests/Migrations/Internal/MigrationsModelDifferTest.cs:4495: => Execute(
+    def  test/EFCore.Relational.Tests/Migrations/Internal/MigrationsModelDifferTestBase.cs:35: protected void Execute(
+ 9. Microsoft.EntityFrameworkCore.Update.CommandBatchPreparerTest.CreateCompositeKeyModelWithGeneratedUniqueIndex -> Microsoft.EntityFrameworkCore.TestUtilities.TestHelpers.CreateConventionBuilder
+    call test/EFCore.Relational.Tests/Update/CommandBatchPreparerTest.cs:1292: var modelBuilder = FakeRelationalTestHelpers.Instance.CreateConventionBuilder();
+    def  test/EFCore.Specification.Tests/TestUtilities/TestHelpers.cs:212: public TestModelBuilder CreateConventionBuilder(
+10. Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.ComplexTypeTestBase.Primitive_collections_are_required_by_default_only_if_CLR_type_is_nullable -> Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.TestModelBuilder.Ignore
+    call test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.ComplexType.cs:1738: .Ignore<Order>()
+    def  test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.cs:121: public abstract TestModelBuilder Ignore<TEntity>()
+11. Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.NonRelationshipTestBase.Throws_for_bad_value_generator_type -> Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.TestPropertyBuilder.HasValueGenerator
+    call test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.NonRelationship.cs:1574: Assert.Throws<ArgumentException>(() => b.Property(e => e.Down).HasValueGenerator(typeof(Random))).Message));
+    def  test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.cs:645: public abstract TestPropertyBuilder<TProperty> HasValueGenerator(
+12. Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.OneToOneTestBase.Can_have_both_keys_specified_explicitly -> Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.TestModelBuilder.Ignore
+    call test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.OneToOne.cs:1349: modelBuilder.Ignore<Product>();
+    def  test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.cs:121: public abstract TestModelBuilder Ignore<TEntity>()
+13. Microsoft.EntityFrameworkCore.ModelBuilding101TestBase.ManyToManyWithNavsToAndFromJoinClass.Context2.OnModelCreating -> Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder.HasMany
+    call test/EFCore.Specification.Tests/ModelBuilding101ManyToManyTestBase.cs:388: .HasMany(e => e.Tags)
+    def  src/EFCore/Metadata/Builders/EntityTypeBuilder`.cs:1919: public virtual CollectionNavigationBuilder<TEntity, TRelatedEntity> HasMany
+14. Microsoft.EntityFrameworkCore.Query.GearsOfWarQueryTestBase.Where_compare_anonymous_types -> Microsoft.EntityFrameworkCore.Query.QueryTestBase.AssertQuery
+    call test/EFCore.Specification.Tests/Query/GearsOfWarQueryTestBase.cs:744: => AssertQuery(
+    def  test/EFCore.Specification.Tests/Query/QueryTestBase.cs:81: public Task AssertQuery<TResult>(
+15. Microsoft.EntityFrameworkCore.Query.NorthwindAggregateOperatorsQueryTestBase.Sum_on_float_column_in_subquery -> Microsoft.EntityFrameworkCore.Query.QueryTestBase.AssertQuery
+    call test/EFCore.Specification.Tests/Query/NorthwindAggregateOperatorsQueryTestBase.cs:176: => AssertQuery(
+    def  test/EFCore.Specification.Tests/Query/QueryTestBase.cs:81: public Task AssertQuery<TResult>(
+16. Microsoft.EntityFrameworkCore.Query.NorthwindSelectQueryTestBase.Repeated_non_deterministic_single_result_subquery_is_not_lifted -> Microsoft.EntityFrameworkCore.DbFunctionsExtensions.Random
+    call test/EFCore.Specification.Tests/Query/NorthwindSelectQueryTestBase.cs:2558: .Where(o => EF.Functions.Random() >= 0)
+    def  src/EFCore/DbFunctionsExtensions.cs:71: public static double Random(this DbFunctions _)
+17. Microsoft.EntityFrameworkCore.Query.ComplexNavigationsCollectionsQuerySqlServerTest.Skip_Take_ToList_on_grouping_element -> Microsoft.EntityFrameworkCore.Query.ComplexNavigationsCollectionsQueryTestBase.Skip_Take_ToList_on_grouping_element
+    call test/EFCore.SqlServer.FunctionalTests/Query/ComplexNavigationsCollectionsQuerySqlServerTest.cs:2195: await base.Skip_Take_ToList_on_grouping_element(async);
+    def  test/EFCore.Specification.Tests/Query/ComplexNavigationsCollectionsQueryTestBase.cs:1940: [Theory, MemberData(nameof(IsAsyncData))]
+18. Microsoft.EntityFrameworkCore.Query.NorthwindMiscellaneousQuerySqlServerTest.Correlated_collection_with_distinct_without_default_identifiers_projecting_columns_with_navigation -> Microsoft.EntityFrameworkCore.Query.NorthwindMiscellaneousQueryTestBase.Correlated_collection_with_distinct_without_default_identifiers_projecting_columns_with_navigation
+    call test/EFCore.SqlServer.FunctionalTests/Query/NorthwindMiscellaneousQuerySqlServerTest.cs:6029: await base.Correlated_collection_with_distinct_without_default_identifiers_projecting_columns_with_navigation(async);
+    def  test/EFCore.Specification.Tests/Query/NorthwindMiscellaneousQueryTestBase.cs:4978: [Theory, MemberData(nameof(IsAsyncData))]
+19. Microsoft.EntityFrameworkCore.Types.Geometry.SqlServerGeometryCollectionTypeTest.ExecuteUpdate_within_json_to_nonjson_column -> Microsoft.EntityFrameworkCore.Types.RelationalTypeTestBase.ExecuteUpdate_within_json_to_nonjson_column
+    call test/EFCore.SqlServer.FunctionalTests/Types/Geometry/SqlServerGeometryCollectionTypeTest.cs:195: await base.ExecuteUpdate_within_json_to_nonjson_column();
+    def  test/EFCore.Relational.Specification.Tests/Types/RelationalTypeTestBase.cs:139: [Fact]
+20. Microsoft.EntityFrameworkCore.Metadata.Internal.EntityTypeTest.Can_get_set_reset_and_clear_primary_key -> Microsoft.EntityFrameworkCore.Metadata.IMutableTypeBase.AddProperty
+    call test/EFCore.Tests/Metadata/Internal/EntityTypeTest.cs:214: var idProperty = entityType.AddProperty(Customer.IdProperty);
+    def  src/EFCore/Metadata/IMutableTypeBase.cs:162: IMutableProperty AddProperty(

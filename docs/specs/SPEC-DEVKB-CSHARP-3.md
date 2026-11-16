@@ -103,3 +103,26 @@ Acceptance criteria:
 | R3 ≥ 3 falsifiable criteria, one failing today | 6; criterion 1 fails on 0.2.5 by construction, criterion 2 has a measured baseline |
 | R4 scope boundary | §2 Out of scope |
 | R5 no schema change | N3 |
+
+## 6. Results
+
+| Criterion | Result |
+|---|---|
+| 1 fixture tests | `tests/test_csharp_symbols.py`: 27 C# tests; the four round-3 core tests fail on 0.2.5; every fix found by the benchmark has its own test |
+| 2 caller-file recall up, precision ≥ 0.98 | recall MediatR 0.757 → 0.957, FluentValidation 0.625 → 0.888, Polly 0.814 → 0.915, Jellyfin 0.907 → 0.935, EF Core 0.744 → 0.775; precision 1.000 on all five, both versions |
+| 3 added edges ≥ 19/20 | every sampled added edge correct on all five; removals explained (`csharp-precision-sample.md`, Round 3) |
+| 4 random sample ≥ 19/20 | 20 edges per repository drawn with seed 2032 from the final graphs, each checked against the source (`csharp-samples/round3-random-*.txt`): MediatR 20/20, FluentValidation 20/20, Polly 20/20, Jellyfin 20/20, EF Core 19/20. The EF Core error (`query.ToList()` on an `IQueryable<Blog>` sent to EF Core's non-generic `ToList(this IEnumerable)`; C# picks LINQ's) was then fixed: LINQ beats an extension on the non-generic IEnumerable. That fix removed 505 such EF Core edges and nothing elsewhere, and added 29 correct ones (typed results downstream) |
+| 5 EF Core < 3 min, minimums raised | EF Core 142 s (1.1 GB); `bench/languages.yaml` minimums raised to about 80% of the new counts |
+| 6 benchmark on the released package | see `bench/exercises/csharp/DEVKB-VALUE.md` (re-run against the version installed from PyPI) |
+
+**Compiler truth.** No .NET SDK is needed locally: `.github/workflows/cs-truth.yml` restores the five repositories
+with the SDKs they pin (.NET 10, 11, and a .NET 12 daily build for EF Core) on GitHub's runners and writes the call
+graph Roslyn binds (`bench/roslyn_truth`). Calls bound: FluentValidation 99.7%, Jellyfin 99.7%, Polly 97%, MediatR
+96%, EF Core 95%.
+
+**Agent benchmark** (`bench/cs_value.py`, the C# twin of the C/C++ value report): six chain questions picked from the
+compiler graph, plain agent against devkb agent, Sonnet, two runs each, scored against the compiler:
+`bench/exercises/csharp/DEVKB-VALUE.md`.
+
+Still out of scope, as stated in §2: generic type inference, overload betterness, `dynamic`, LINQ query syntax, and
+the hierarchies of third-party types the table does not list.

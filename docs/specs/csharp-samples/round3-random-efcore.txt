@@ -1,0 +1,60 @@
+ 1. Microsoft.EntityFrameworkCore.Migrations.Internal.Migrator.GenerateDownSql -> src/EFCore.Relational/Migrations/IMigrationsSqlGenerator.cs::Microsoft.EntityFrameworkCore.Migrations.IMigrationsSqlGenerator.Generate
+    call src/EFCore.Relational/Migrations/Internal/Migrator.cs:796: .Generate(
+    def  30: IReadOnlyList<MigrationCommand> Generate(
+ 2. Microsoft.EntityFrameworkCore.Query.RelationalQueryableMethodTranslatingExpressionVisitor.TryTranslateGroupingElementProjection -> src/EFCore.Relational/Query/RelationalGroupByShaperExpression.cs::Microsoft.EntityFrameworkCore.Query.RelationalGroupByShaperExpression.ctor
+    call src/EFCore.Relational/Query/RelationalQueryableMethodTranslatingExpressionVisitor.cs:1014: new RelationalGroupByShaperExpression(
+    def  24: public RelationalGroupByShaperExpression(
+ 3. Microsoft.EntityFrameworkCore.Metadata.Internal.InternalEntityTypeBuilder.HasDiscriminator -> src/Shared/Check.cs::Microsoft.EntityFrameworkCore.Utilities.Check.DebugAssert
+    call src/EFCore/Metadata/Internal/InternalEntityTypeBuilder.cs:4447: Check.DebugAssert(name != null || type != null, $"Either {nameof(name)} or {nameof(type)} should be non-null");
+    def  105: [Conditional("DEBUG")]
+ 4. Microsoft.EntityFrameworkCore.Query.NorthwindSelectQueryCosmosTest.Select_datetime_Ticks_component -> test/EFCore.Cosmos.FunctionalTests/Query/NorthwindSelectQueryCosmosTest.cs::Microsoft.EntityFrameworkCore.Query.NorthwindSelectQueryCosmosTest.AssertSql
+    call test/EFCore.Cosmos.FunctionalTests/Query/NorthwindSelectQueryCosmosTest.cs:2023: AssertSql(
+    def  2221: private void AssertSql(params string[] expected)
+ 5. Microsoft.EntityFrameworkCore.QueryTest.AsSplitQuery_does_not_throw_for_InMemory -> src/Shared/EnumerableExtensions.cs::Microsoft.EntityFrameworkCore.Utilities.EnumerableExtensions.ToList
+    call test/EFCore.CrossStore.FunctionalTests/QueryTest.cs:26: query.ToList();
+    def  125: public static List<TSource> ToList<TSource>(this IEnumerable source)
+ 6. Microsoft.EntityFrameworkCore.ModelBuilding.InMemoryModelBuilderGenericRelationshipTypeTest.GenericOneToOneType.CreateModelBuilder -> test/EFCore.InMemory.FunctionalTests/ModelBuilding/InMemoryModelBuilderGenericRelationshipTypeTest.cs::Microsoft.EntityFrameworkCore.ModelBuilding.InMemoryModelBuilderGenericRelationshipTypeTest.GenericTypeTestModelBuilder
+    call test/EFCore.InMemory.FunctionalTests/ModelBuilding/InMemoryModelBuilderGenericRelationshipTypeTest.cs:11: => new GenericTypeTestModelBuilder(Fixture, configure);
+    def  20: public class GenericTypeTestModelBuilder(ModelBuilderFixtureBase fixture, Action<ModelConfigurationBuilder>? configure)
+ 7. Microsoft.EntityFrameworkCore.Scaffolding.CompiledModelInMemoryTest.AddReferences -> test/EFCore.Specification.Tests/TestUtilities/BuildReference.cs::Microsoft.EntityFrameworkCore.TestUtilities.BuildReference.ByName
+    call test/EFCore.InMemory.FunctionalTests/Scaffolding/CompiledModelInMemoryTest.cs:543: build.References.Add(BuildReference.ByName("Microsoft.EntityFrameworkCore.InMemory"));
+    def  24: public static BuildReference ByName(string name, bool copyLocal = false)
+ 8. Microsoft.EntityFrameworkCore.Query.NorthwindSqlQueryTestBase.SqlQuery_over_int_with_parameter -> test/EFCore.Relational.Specification.Tests/Query/NorthwindSqlQueryTestBase.cs::Microsoft.EntityFrameworkCore.Query.NorthwindSqlQueryTestBase.NormalizeDelimitersInInterpolatedString
+    call test/EFCore.Relational.Specification.Tests/Query/NorthwindSqlQueryTestBase.cs:77: NormalizeDelimitersInInterpolatedString(@$"SELECT [ProductID] FROM [Products] WHERE [ProductID] = {value}"));
+    def  89: protected FormattableString NormalizeDelimitersInInterpolatedString(FormattableString sql)
+ 9. Microsoft.EntityFrameworkCore.Query.OperatorsProceduralQueryTestBase.ResultExpressionPredicateRewriter.VisitMethodCall -> src/EFCore/Query/ReplacingExpressionVisitor.cs::Microsoft.EntityFrameworkCore.Query.ReplacingExpressionVisitor.Replace
+    call test/EFCore.Relational.Specification.Tests/Query/OperatorsProceduralQueryTestBase.cs:1176: var replaced = ReplacingExpressionVisitor.Replace(
+    def  31: public static Expression Replace(Expression original, Expression replacement, Expression tree)
+10. Microsoft.EntityFrameworkCore.Update.CommandBatchPreparerTest.BatchCommands_works_with_incomplete_updates_for_shared_table_no_leaf_dependent -> test/EFCore.Relational.Tests/Update/CommandBatchPreparerTest.cs::Microsoft.EntityFrameworkCore.Update.CommandBatchPreparerTest.CreateBatches
+    call test/EFCore.Relational.Tests/Update/CommandBatchPreparerTest.cs:1031: var batches = CreateBatches([firstEntry, secondEntry], modelData, sensitiveLogging: false);
+    def  1094: public List<ModificationCommandBatch> CreateBatches(
+11. Microsoft.EntityFrameworkCore.Update.CommandBatchPreparerTest.Batch_command_throws_on_commands_with_circular_dependencies_including_indexes -> test/EFCore.Relational.Tests/Update/CommandBatchPreparerTest.cs::Microsoft.EntityFrameworkCore.Update.CommandBatchPreparerTest.CreateContextServices
+    call test/EFCore.Relational.Tests/Update/CommandBatchPreparerTest.cs:500: var configuration = CreateContextServices(model);
+    def  1091: private static IServiceProvider CreateContextServices(IModel model)
+12. Microsoft.EntityFrameworkCore.LoggingTestBase.InvalidIncludePathError_throws_by_default -> test/EFCore.Specification.Tests/LoggingTestBase.cs::Microsoft.EntityFrameworkCore.LoggingTestBase.InvalidIncludePathErrorContext
+    call test/EFCore.Specification.Tests/LoggingTestBase.cs:38: using var context = new InvalidIncludePathErrorContext(CreateOptionsBuilder(new ServiceCollection()));
+    def  49: protected class InvalidIncludePathErrorContext(DbContextOptionsBuilder optionsBuilder) : DbContext(optionsBuilder.Options)
+13. Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.NonRelationshipTestBase.Can_upgrade_candidate_key_to_primary_key -> test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.cs::Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.ModelBuilderTestBase.CreateModelBuilder
+    call test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.NonRelationship.cs:196: var modelBuilder = CreateModelBuilder();
+    def  15: protected abstract TestModelBuilder CreateModelBuilder(Action<ModelConfigurationBuilder>? configure = null);
+14. Microsoft.EntityFrameworkCore.Query.GearsOfWarQueryTestBase.Nested_contains_with_enum -> test/EFCore.Specification.Tests/Query/QueryTestBase.cs::Microsoft.EntityFrameworkCore.Query.QueryTestBase.AssertQuery
+    call test/EFCore.Specification.Tests/Query/GearsOfWarQueryTestBase.cs:7142: await AssertQuery(
+    def  44: public Task AssertQuery<TResult>(
+15. Microsoft.EntityFrameworkCore.ManyToManyTrackingTestBase.Can_insert_many_to_many_with_suspected_dangling_join_unidirectional.ValidateFixup -> src/EFCore/ChangeTracking/ChangeTracker.cs::Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker.Entries
+    call test/EFCore.Specification.Tests/UnidirectionalManyToManyTrackingTestBase.cs:2510: Assert.Equal(12, context.ChangeTracker.Entries().Count());
+    def  177: public virtual IEnumerable<EntityEntry> Entries()
+16. Microsoft.EntityFrameworkCore.Query.JsonQuerySqlServerTest.FromSql_on_entity_with_json_project_json_collection -> test/EFCore.SqlServer.FunctionalTests/Query/JsonQuerySqlServerTest.cs::Microsoft.EntityFrameworkCore.Query.JsonQuerySqlServerTest.AssertSql
+    call test/EFCore.SqlServer.FunctionalTests/Query/JsonQuerySqlServerTest.cs:2986: AssertSql(
+    def  3253: private void AssertSql(params string[] expected)
+17. Microsoft.EntityFrameworkCore.Types.Temporal.SqlServerDateTimeTypeTest.ExecuteUpdate_within_json_to_parameter -> test/EFCore.Relational.Specification.Tests/Types/RelationalTypeTestBase.cs::Microsoft.EntityFrameworkCore.Types.RelationalTypeTestBase.AssertSql
+    call test/EFCore.SqlServer.FunctionalTests/Types/Temporal/SqlServerDateTimeTypeTest.cs:110: AssertSql(
+    def  160: protected void AssertSql(params string[] expected)
+18. Microsoft.EntityFrameworkCore.Update.JsonUpdateSqliteTest.Edit_single_property_byte -> test/EFCore.Sqlite.FunctionalTests/Update/JsonUpdateSqliteTest.cs::Microsoft.EntityFrameworkCore.Update.JsonUpdateSqliteTest.AssertSql
+    call test/EFCore.Sqlite.FunctionalTests/Update/JsonUpdateSqliteTest.cs:569: AssertSql(
+    def  2500: private void AssertSql(params string[] expected)
+19. Microsoft.EntityFrameworkCore.Update.StoreValueGenerationSqliteTest.Modify_with_no_generated_values -> test/EFCore.Relational.Specification.Tests/Update/StoreValueGenerationTestBase.cs::Microsoft.EntityFrameworkCore.Update.StoreValueGenerationTestBase.AssertSql
+    call test/EFCore.Sqlite.FunctionalTests/Update/StoreValueGenerationSqliteTest.cs:87: AssertSql(
+    def  347: protected virtual void AssertSql(params string[] expected)
+20. Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTrackerTest.Can_add_identifying_dependents_and_then_principal_interleaved_with_key_generation -> test/EFCore.Tests/ChangeTracking/ChangeTrackerTest.cs::Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTrackerTest.AssertProductAndDetailsFixedUp
+    call test/EFCore.Tests/ChangeTracking/ChangeTrackerTest.cs:3132: AssertProductAndDetailsFixedUp(context, tagDetails1, tagDetails2);
+    def  3273: private static void AssertProductAndDetailsFixedUp(

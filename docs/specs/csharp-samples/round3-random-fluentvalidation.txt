@@ -1,0 +1,60 @@
+ 1. FluentValidation.Tests.CascadingFailuresTester.Validation_continues_to_second_validator_when_first_validator_succeeds_and_globaldefault_both_Stop -> src/FluentValidation/DefaultValidatorExtensions.cs::FluentValidation.DefaultValidatorExtensions.Length
+    call src/FluentValidation.Tests/CascadingFailuresTester.cs:124: _validator.RuleFor(x => x.Surname).NotNull().Length(2, 10);
+    def  136: public static IRuleBuilderOptions<T, string> Length<T>(this IRuleBuilder<T, string> ruleBuilder, int min, int max)
+ 2. FluentValidation.Tests.CascadingFailuresTester.Validation_continues_on_failure_when_classlevel_Stop_and_ruleleveldefault_Stop_and_ruleleveloverride_Continue -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.RuleFor
+    call src/FluentValidation.Tests/CascadingFailuresTester.cs:189: _validator.RuleFor(x => x.Surname).Cascade(CascadeMode.Continue).NotNull().Equal("Foo");
+    def  210: public IRuleBuilderInitial<T, TProperty> RuleFor<TProperty>(Expression<Func<T, TProperty>> expression) {
+ 3. FluentValidation.Tests.ComplexValidationTester.Condition_should_work_with_complex_property_when_invoked_async -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldBeTrue
+    call src/FluentValidation.Tests/ComplexValidationTester.cs:123: result.IsValid.ShouldBeTrue();
+    def  36: public static void ShouldBeTrue(this bool b) => Assert.True(b);
+ 4. FluentValidation.Tests.CustomValidatorTester.New_Custom_Returns_single_failure_async -> src/FluentValidation/IValidationContext.cs::FluentValidation.ValidationContext.AddFailure
+    call src/FluentValidation.Tests/CustomValidatorTester.cs:52: context.AddFailure("Surname", "Fail");
+    def  281: public void AddFailure(ValidationFailure failure) {
+ 5. FluentValidation.Tests.EmailValidatorTests.Fails_email_validation_aspnetcore_compatible -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.RuleFor
+    call src/FluentValidation.Tests/EmailValidatorTests.cs:96: validator.RuleFor(x => x.Email).EmailAddress(EmailValidationMode.AspNetCoreCompatible);
+    def  210: public IRuleBuilderInitial<T, TProperty> RuleFor<TProperty>(Expression<Func<T, TProperty>> expression) {
+ 6. FluentValidation.Tests.EnumValidatorTests.When_the_enum_is_not_initialized_with_valid_value_then_the_validator_should_fail -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldBeFalse
+    call src/FluentValidation.Tests/EnumValidatorTests.cs:46: result.IsValid.ShouldBeFalse();
+    def  40: public static void ShouldBeFalse(this bool b) => Assert.False(b);
+ 7. FluentValidation.Tests.ExclusiveBetweenValidatorTests.When_the_text_is_larger_than_the_range_then_the_validator_should_fail -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldBeFalse
+    call src/FluentValidation.Tests/ExclusiveBetweenValidatorTests.cs:54: result.IsValid.ShouldBeFalse();
+    def  40: public static void ShouldBeFalse(this bool b) => Assert.False(b);
+ 8. FluentValidation.Tests.ForEachRuleTests.Executes_rule_for_each_item_in_collection_async -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/ForEachRuleTests.cs:126: result.Errors.Count.ShouldEqual(2);
+    def  26: public static void ShouldEqual(this object actual, object expected)
+ 9. FluentValidation.Tests.ForEachRuleTests.Failing_condition_should_prevent_multiple_components_running_and_not_throw -> src/FluentValidation/InlineValidator.cs::FluentValidation.InlineValidator
+    call src/FluentValidation.Tests/ForEachRuleTests.cs:683: var validator = new InlineValidator<Person>();
+    def  42: public class InlineValidator<T> : AbstractValidator<T> {
+10. FluentValidation.Tests.GreaterThanValidatorTester.Validates_with_nullable_when_property_is_null -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.Validate
+    call src/FluentValidation.Tests/GreaterThanValidatorTester.cs:127: var result = validator.Validate(new Person());
+    def  98: public ValidationResult Validate(T instance)
+11. FluentValidation.Tests.GreaterThanValidatorTester.Validates_with_nullable_when_property_is_null_cross_property -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldBeTrue
+    call src/FluentValidation.Tests/GreaterThanValidatorTester.cs:144: result.IsValid.ShouldBeTrue();
+    def  36: public static void ShouldBeTrue(this bool b) => Assert.True(b);
+12. FluentValidation.Tests.InheritanceValidatorTest.Validates_with_callback_accepting_derived_async -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.RuleFor
+    call src/FluentValidation.Tests/InheritanceValidatorTest.cs:207: impl1Validator.RuleFor(x => x.Name).MustAsync((s, token) => Task.FromResult(s != null));
+    def  210: public IRuleBuilderInitial<T, TProperty> RuleFor<TProperty>(Expression<Func<T, TProperty>> expression) {
+13. FluentValidation.Tests.LengthValidatorTests.When_the_text_is_between_the_range_specified_then_the_validator_should_pass -> src/FluentValidation.Tests/TestValidator.cs::FluentValidation.Tests.TestValidator.ctor
+    call src/FluentValidation.Tests/LengthValidatorTests.cs:34: var validator = new TestValidator(v => v.RuleFor(x => x.Surname).Length(1, 10));
+    def  24: public TestValidator() {
+14. FluentValidation.Tests.NotEmptyTester.When_value_is_Default_for_type_validator_should_fail_int -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldBeFalse
+    call src/FluentValidation.Tests/NotEmptyTester.cs:87: result.IsValid.ShouldBeFalse();
+    def  40: public static void ShouldBeFalse(this bool b) => Assert.False(b);
+15. FluentValidation.Tests.RegularExpressionValidatorTests.When_using_dollar_anchor_a_trailing_newline_is_still_considered_a_match -> src/FluentValidation.Tests/TestValidator.cs::FluentValidation.Tests.TestValidator.ctor
+    call src/FluentValidation.Tests/RegularExpressionValidatorTests.cs:71: var validator = new TestValidator(v => v.RuleFor(x => x.Surname).Matches(@"^\w\d$"));
+    def  24: public TestValidator() {
+16. FluentValidation.Tests.SharedConditionTests.Does_not_execute_customasync_Rule_when_condition_false -> src/FluentValidation/Results/ValidationFailure.cs::FluentValidation.Results.ValidationFailure.ctor
+    call src/FluentValidation.Tests/SharedConditionTests.cs:491: validator.RuleFor(x=>x).CustomAsync(async (x,ctx,c) => ctx.AddFailure(new ValidationFailure("foo", "bar")));
+    def  33: public ValidationFailure() {
+17. FluentValidation.Tests.ValidationResultTests.Should_be_valid_when_there_are_no_errors -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldBeTrue
+    call src/FluentValidation.Tests/ValidationResultTests.cs:32: result.IsValid.ShouldBeTrue();
+    def  36: public static void ShouldBeTrue(this bool b) => Assert.True(b);
+18. FluentValidation.Tests.ValidatorTesterTester.ShouldHaveValidationErrorFor_WithMessage_Only_throws_combining_several_conditions -> src/FluentValidation/TestHelper/ValidatorTestExtensions.cs::FluentValidation.TestHelper.ValidationTestExtension.Only
+    call src/FluentValidation.Tests/ValidatorTesterTester.cs:1001: .Only()
+    def  207: public static ITestValidationWith Only(this ITestValidationWith failures) {
+19. FluentValidation.Tests.ValidatorTesterTester.ShouldHaveValidationErrorFor_WithMessage_Only_throws -> src/FluentValidation/InlineValidator.cs::FluentValidation.InlineValidator
+    call src/FluentValidation.Tests/ValidatorTesterTester.cs:867: var validator = new InlineValidator<Person>();
+    def  42: public class InlineValidator<T> : AbstractValidator<T> {
+20. FluentValidation.Tests.ValidatorTesterTester.ShouldHaveValidationErrorFor_WithMessage_Only -> src/FluentValidation/TestHelper/TestValidationResult.cs::FluentValidation.TestHelper.TestValidationResult.ShouldHaveValidationErrorFor
+    call src/FluentValidation.Tests/ValidatorTesterTester.cs:887: .ShouldHaveValidationErrorFor(x => x.Surname)
+    def  36: public ITestValidationWith ShouldHaveValidationErrorFor<TProperty>(Expression<Func<T, TProperty>> memberAccessor) {

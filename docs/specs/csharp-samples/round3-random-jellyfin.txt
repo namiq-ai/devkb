@@ -1,0 +1,60 @@
+ 1. Emby.Server.Implementations.Library.LibraryManager.GetContentTypeOverride -> MediaBrowser.Model/IO/IFileSystem.cs::MediaBrowser.Model.IO.IFileSystem.AreEqual
+    call Emby.Server.Implementations/Library/LibraryManager.cs:2957: .FirstOrDefault(i => _fileSystem.AreEqual(i.Name, path)
+    def  114: bool AreEqual(string path1, string path2);
+ 2. Emby.Server.Implementations.Library.LibraryManager.AddMediaPathInternal -> MediaBrowser.Controller/Entities/CollectionFolder.cs::MediaBrowser.Controller.Entities.CollectionFolder.SaveLibraryOptions
+    call Emby.Server.Implementations/Library/LibraryManager.cs:3987: CollectionFolder.SaveLibraryOptions(virtualFolderPath, libraryOptions);
+    def  175: public static void SaveLibraryOptions(string path, LibraryOptions options)
+ 3. Emby.Server.Implementations.Sorting.IsPlayedComparer.GetValue -> MediaBrowser.Controller/Entities/BaseItem.cs::MediaBrowser.Controller.Entities.BaseItem.IsPlayed
+    call Emby.Server.Implementations/Sorting/IsPlayedComparer.cs:57: return x.IsPlayed(User, userItemData: null) ? 0 : 1;
+    def  2719: public virtual bool IsPlayed(User user, UserItemData userItemData)
+ 4. Jellyfin.Api.Controllers.ItemLookupController.GetMusicVideoRemoteSearchResults -> Jellyfin.Api/BaseJellyfinApiController.cs::Jellyfin.Api.BaseJellyfinApiController.Ok
+    call Jellyfin.Api/Controllers/ItemLookupController.cs:127: return Ok(results);
+    def  26: protected ActionResult<IEnumerable<T>> Ok<T>(IEnumerable<T>? value)
+ 5. Jellyfin.Api.Controllers.LiveTvController.GetLiveTvChannels -> MediaBrowser.Model/Querying/QueryResult.cs::MediaBrowser.Model.Querying.QueryResult.ctor
+    call Jellyfin.Api/Controllers/LiveTvController.cs:204: return new QueryResult<BaseItemDto>(
+    def  15: public QueryResult()
+ 6. Jellyfin.Api.Helpers.DynamicHlsHelper.GetOutputVideoCodecLevel -> MediaBrowser.Controller/MediaEncoding/EncodingJobInfo.cs::MediaBrowser.Controller.MediaEncoding.EncodingJobInfo.GetRequestedLevel
+    call Jellyfin.Api/Helpers/DynamicHlsHelper.cs:781: levelString = state.GetRequestedLevel(state.ActualOutputVideoCodec) ?? "41";
+    def  629: public string GetRequestedLevel(string codec)
+ 7. MediaBrowser.Controller.MediaEncoding.EncodingHelper.GetAppleVidFiltersPreferred -> MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs::MediaBrowser.Controller.MediaEncoding.EncodingHelper.ShouldEncodeSubtitle
+    call MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:5907: var hasSubs = state.SubtitleStream is not null && ShouldEncodeSubtitle(state);
+    def  8051: private static bool ShouldEncodeSubtitle(EncodingJobInfo state)
+ 8. MediaBrowser.Providers.MediaInfo.AudioFileProber.TryGetSanitizedUFIDFields -> MediaBrowser.Providers/MediaInfo/AudioFileProber.cs::MediaBrowser.Providers.MediaInfo.AudioFileProber.GetSanitizedStringTag
+    call MediaBrowser.Providers/MediaInfo/AudioFileProber.cs:661: owner = GetSanitizedStringTag(parts[0], track.Path);
+    def  630: private string? GetSanitizedStringTag(string? tag, string filePath)
+ 9. MediaBrowser.Providers.MediaInfo.FFProbeVideoInfo.Fetch -> MediaBrowser.Controller/Persistence/IMediaAttachmentRepository.cs::MediaBrowser.Controller.Persistence.IMediaAttachmentRepository.SaveMediaAttachments
+    call MediaBrowser.Providers/MediaInfo/FFProbeVideoInfo.cs:274: _mediaAttachmentRepository.SaveMediaAttachments(video.Id, mediaAttachments, cancellationToken);
+    def  27: void SaveMediaAttachments(Guid id, IReadOnlyList<MediaAttachment> attachments, CancellationToken cancellationToken);
+10. Jellyfin.LiveTv.Recordings.RecordingsManager.RecordStream -> src/Jellyfin.LiveTv/Timers/TimerManager.cs::Jellyfin.LiveTv.Timers.TimerManager.AddOrUpdate
+    call src/Jellyfin.LiveTv/Recordings/RecordingsManager.cs:412: _timerManager.AddOrUpdate(timer);
+    def  64: public void AddOrUpdate(TimerInfo item, bool resetTimer)
+11. Jellyfin.Api.Tests.Auth.FirstTimeSetupPolicy.FirstTimeSetupHandlerTests.ShouldDisallowUserIfOutsideSchedule -> src/Jellyfin.Database/Jellyfin.Database.Implementations/Entities/AccessSchedule.cs::Jellyfin.Database.Implementations.Entities.AccessSchedule.ctor
+    call tests/Jellyfin.Api.Tests/Auth/FirstTimeSetupPolicy/FirstTimeSetupHandlerTests.cs:112: AccessSchedule[] accessSchedules = { new AccessSchedule(DynamicDayOfWeek.Everyday, 0, 0, Guid.Empty) };
+    def  20: public AccessSchedule(DynamicDayOfWeek dayOfWeek, double startHour, double endHour, Guid userId)
+12. Jellyfin.Api.Tests.Controllers.ItemUpdateControllerTests.UpdateItem_SeriesRatingUnchanged_KeepsEpisodeRatings -> tests/Jellyfin.Api.Tests/Controllers/ItemUpdateControllerTests.cs::Jellyfin.Api.Tests.Controllers.ItemUpdateControllerTests.CreateSeries
+    call tests/Jellyfin.Api.Tests/Controllers/ItemUpdateControllerTests.cs:94: var (series, season, episodes) = CreateSeries("TV-PG", "TV-PG", "TV-14", null);
+    def  145: private static (Series Series, Season Season, Episode[] Episodes) CreateSeries(string seriesRating, params string?[] episodeR
+13. Jellyfin.Networking.Tests.NetworkManagerTests.InNetwork_True_Success -> src/Jellyfin.Networking/Manager/NetworkManager.cs::Jellyfin.Networking.Manager.NetworkManager.IsInLocalNetwork
+    call tests/Jellyfin.Networking.Tests/NetworkManagerTests.cs:36: Assert.True(networkManager.IsInLocalNetwork(ip));
+    def  989: public bool IsInLocalNetwork(string address)
+14. Jellyfin.Networking.Tests.NetworkParseTests.TestBindInterfaceOverrides -> MediaBrowser.Common/Net/NetworkConfiguration.cs::MediaBrowser.Common.Net.NetworkConfiguration
+    call tests/Jellyfin.Networking.Tests/NetworkParseTests.cs:356: var conf = new NetworkConfiguration()
+    def  10: public class NetworkConfiguration
+15. Jellyfin.Networking.Tests.NetworkParseTests.InitializeOverrides_StartupPublishedServerUrlPathDiffersFromBaseUrl_LogsWarningWithoutCredentials -> tests/Jellyfin.Networking.Tests/NetworkParseTests.cs::Jellyfin.Networking.Tests.NetworkParseTests.GetMockConfig
+    call tests/Jellyfin.Networking.Tests/NetworkParseTests.cs:624: using var nm = new NetworkManager(NetworkParseTests.GetMockConfig(conf), startupConf.Object, logger.Object);
+    def  21: internal static IConfigurationManager GetMockConfig(NetworkConfiguration conf)
+16. Jellyfin.Providers.Tests.ExternalId.MusicBrainzExternalUrlProviderTests.GetExternalUrls_MusicArtistWithMusicBrainzArtistId_ReturnsCorrectUrl -> MediaBrowser.Providers/Plugins/MusicBrainz/MusicBrainzArtistExternalUrlProvider.cs::MediaBrowser.Providers.Plugins.MusicBrainz.MusicBrainzArtistExternalUrlProvider
+    call tests/Jellyfin.Providers.Tests/ExternalId/MusicBrainzExternalUrlProviderTests.cs:112: var urls = new MusicBrainzArtistExternalUrlProvider().GetExternalUrls(artist);
+    def  12: public class MusicBrainzArtistExternalUrlProvider : IExternalUrlProvider
+17. Jellyfin.Providers.Tests.Manager.ItemImageProviderTests.RefreshImages_ProviderRemoteThrows_CountsAFailure -> MediaBrowser.Controller/Providers/ImageRefreshOptions.cs::MediaBrowser.Controller.Providers.ImageRefreshOptions.ctor
+    call tests/Jellyfin.Providers.Tests/Manager/ItemImageProviderTests.cs:627: var result = await itemImageProvider.RefreshImages(item, libraryOptions, new List<IImageProvider> { remoteProvider.Object }, 
+    def  12: public ImageRefreshOptions(IDirectoryService directoryService)
+18. Jellyfin.Server.Implementations.Tests.Updates.InstallationManagerTests.FilterPackages_NameOnly_Success -> Emby.Server.Implementations/Updates/InstallationManager.cs::Emby.Server.Implementations.Updates.InstallationManager.GetPackages
+    call tests/Jellyfin.Server.Implementations.Tests/Updates/InstallationManagerTests.cs:63: PackageInfo[] packages = await _installationManager.GetPackages(
+    def  104: public async Task<PackageInfo[]> GetPackages(string manifestName, string manifest, bool filterIncompatible, CancellationToken
+19. Jellyfin.Server.Implementations.Tests.Updates.InstallationManagerTests.FilterPackages_NameOnly_Success -> Emby.Server.Implementations/Updates/InstallationManager.cs::Emby.Server.Implementations.Updates.InstallationManager.FilterPackages
+    call tests/Jellyfin.Server.Implementations.Tests/Updates/InstallationManagerTests.cs:69: packages = _installationManager.FilterPackages(packages, "Anime").ToArray();
+    def  230: public IEnumerable<PackageInfo> FilterPackages(
+20. Jellyfin.Server.Implementations.Tests.Users.UserManagerLockHelperTests.Dispose_WhenCalledMultipleTimes_DoesNotThrow -> Jellyfin.Server.Implementations/Users/UserManager.cs::Jellyfin.Server.Implementations.Users.UserManager.LockHelper
+    call tests/Jellyfin.Server.Implementations.Tests/Users/UserManagerLockHelperTests.cs:85: using var helper = new UserManager.LockHelper();
+    def  1118: internal sealed class LockHelper : IDisposable

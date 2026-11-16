@@ -1,0 +1,95 @@
+FluentValidation: 3380 edges before, 4538 after; removed 10, added 1168
+
+## REMOVED (sample 10 of 10)
+ 1. FluentValidation.Tests.CustomValidatorTester.New_CustomAsync_within_ruleset -> FluentValidation.AbstractValidator.ValidateAsync
+    call src/FluentValidation.Tests/CustomValidatorTester.cs:111: var result = await validator.ValidateAsync(new Person(), v => v.IncludeRuleSets("foo"));
+    def  src/FluentValidation/AbstractValidator.cs:134: public virtual async Task<ValidationResult> ValidateAsync(ValidationContext<T> context, CancellationToken cancellation = default) {
+ 2. FluentValidation.Tests.LocalisedMessagesTester.Correctly_assigns_default_localized_error_message -> FluentValidation.Resources.LanguageManager.GetString
+    call src/FluentValidation.Tests/LocalisedMessagesTester.cs:50: var message = ValidatorOptions.Global.LanguageManager.GetString("NotEmptyValidator");
+    def  src/FluentValidation/Resources/LanguageManager.cs:130: public virtual string GetString(string key, CultureInfo culture = null) {
+ 3. FluentValidation.Tests.RulesetTests.Combines_rulesets_and_explicit_properties_async -> FluentValidation.AbstractValidator.ValidateAsync
+    call src/FluentValidation.Tests/RulesetTests.cs:265: var result = await validator.ValidateAsync(new Person(), options => {
+    def  src/FluentValidation/AbstractValidator.cs:134: public virtual async Task<ValidationResult> ValidateAsync(ValidationContext<T> context, CancellationToken cancellation = default) {
+ 4. FluentValidation.Tests.RulesetTests.Includes_combination_of_rulesets_async -> FluentValidation.AbstractValidator.ValidateAsync
+    call src/FluentValidation.Tests/RulesetTests.cs:306: var result = await validator.ValidateAsync(new Person(), options => {
+    def  src/FluentValidation/AbstractValidator.cs:134: public virtual async Task<ValidationResult> ValidateAsync(ValidationContext<T> context, CancellationToken cancellation = default) {
+ 5. FluentValidation.Tests.RulesetTests.Includes_all_rulesets_async -> FluentValidation.AbstractValidator.ValidateAsync
+    call src/FluentValidation.Tests/RulesetTests.cs:344: var result = await validator.ValidateAsync(new Person(), options => {
+    def  src/FluentValidation/AbstractValidator.cs:134: public virtual async Task<ValidationResult> ValidateAsync(ValidationContext<T> context, CancellationToken cancellation = default) {
+ 6. FluentValidation.Tests.SharedConditionTests.Async_condition_can_be_used_inside_ruleset -> FluentValidation.AbstractValidator.ValidateAsync
+    call src/FluentValidation.Tests/SharedConditionTests.cs:404: var result = await validator.ValidateAsync(new Person {Id = 5}, v => v.IncludeRuleSets("foo"));
+    def  src/FluentValidation/AbstractValidator.cs:134: public virtual async Task<ValidationResult> ValidateAsync(ValidationContext<T> context, CancellationToken cancellation = default) {
+ 7. FluentValidation.Tests.SharedConditionTests.RuleSet_can_be_used_inside_async_condition -> FluentValidation.AbstractValidator.ValidateAsync
+    call src/FluentValidation.Tests/SharedConditionTests.cs:430: var result = await validator.ValidateAsync(new Person {Id = 5}, v => v.IncludeRuleSets("foo"));
+    def  src/FluentValidation/AbstractValidator.cs:134: public virtual async Task<ValidationResult> ValidateAsync(ValidationContext<T> context, CancellationToken cancellation = default) {
+ 8. FluentValidation.Tests.ValidateAndThrowTester.Throws_exception_with_a_ruleset_async -> FluentValidation.AbstractValidator.ValidateAsync
+    call src/FluentValidation.Tests/ValidateAndThrowTester.cs:60: await validator.ValidateAsync(new Person(), v => v.IncludeRuleSets(ruleSetName).ThrowOnFailures());
+    def  src/FluentValidation/AbstractValidator.cs:134: public virtual async Task<ValidationResult> ValidateAsync(ValidationContext<T> context, CancellationToken cancellation = default) {
+ 9. FluentValidation.Tests.ValidateAndThrowTester.Does_not_throw_when_valid_and_a_ruleset_async -> FluentValidation.AbstractValidator.ValidateAsync
+    call src/FluentValidation.Tests/ValidateAndThrowTester.cs:111: await validator.ValidateAsync(person, v => v.IncludeRuleSets(ruleSetName).ThrowOnFailures());
+    def  src/FluentValidation/AbstractValidator.cs:134: public virtual async Task<ValidationResult> ValidateAsync(ValidationContext<T> context, CancellationToken cancellation = default) {
+10. FluentValidation.Tests.ValidatorSelectorTests.Executes_correct_rule_when_using_property_with_include_async -> FluentValidation.AbstractValidator.ValidateAsync
+    call src/FluentValidation.Tests/ValidatorSelectorTests.cs:142: var result = await validator.ValidateAsync(new Person(), v => v.IncludeProperties("Forename"));
+    def  src/FluentValidation/AbstractValidator.cs:134: public virtual async Task<ValidationResult> ValidateAsync(ValidationContext<T> context, CancellationToken cancellation = default) {
+
+## ADDED (sample 20 of 1168)
+ 1. FluentValidation.Tests.CascadingFailuresTester.Validation_continues_on_failure -> FluentValidation.DefaultValidatorExtensions.NotNull
+    call src/FluentValidation.Tests/CascadingFailuresTester.cs:42: _validator.RuleFor(x => x.Surname).NotNull().Equal("Foo");
+    def  src/FluentValidation/DefaultValidatorExtensions.cs:90: public static IRuleBuilderOptions<T, TProperty> NotNull<T, TProperty>(this IRuleBuilder<T, TProperty> ruleBuilder) {
+ 2. FluentValidation.Tests.CollectionValidatorWithParentTests.Should_work_with_top_level_collection_validator -> FluentValidation.IRuleBuilder.SetValidator
+    call src/FluentValidation.Tests/CollectionValidatorWithParentTests.cs:218: validator.RuleForEach(x => x).SetValidator(personValidator);
+    def  src/FluentValidation/Syntax.cs:73: IRuleBuilderOptions<T, TProperty> SetValidator<TValidator>(Func<T, TProperty, TValidator> validatorProvider, params string[] ruleSets)
+ 3. FluentValidation.Tests.CustomValidatorTester.New_custom_uses_empty_property_name_for_model_level_rule -> FluentValidation.ValidationContext.AddFailure
+    call src/FluentValidation.Tests/CustomValidatorTester.cs:142: validator.RuleFor(x => x).Custom((x, ctx) => ctx.AddFailure("Foo"));
+    def  src/FluentValidation/IValidationContext.cs:302: public void AddFailure(string errorMessage) {
+ 4. FluentValidation.Tests.CustomValidatorTester.Allows_conditions -> FluentValidation.DefaultValidatorOptions.When
+    call src/FluentValidation.Tests/CustomValidatorTester.cs:178: }).When(x => x.Age < 18);
+    def  src/FluentValidation/DefaultValidatorOptions.cs:214: public static IRuleBuilderOptionsConditions<T, TProperty> When<T, TProperty>(this IRuleBuilderOptionsConditions<T, TProperty> rule, Func<T, 
+ 5. FluentValidation.Tests.DefaultValidatorExtensionTester.NotEqual_should_create_NotEqualValidator_with_explicit_value -> FluentValidation.DefaultValidatorExtensions.NotEqual
+    call src/FluentValidation.Tests/DefaultValidatorExtensionTester.cs:81: validator.RuleFor(x => x.Surname).NotEqual("Foo");
+    def  src/FluentValidation/DefaultValidatorExtensions.cs:332: public static IRuleBuilderOptions<T, string> NotEqual<T>(this IRuleBuilder<T, string> ruleBuilder,
+ 6. FluentValidation.Tests.DefaultValidatorExtensionTester.AsyncModelTestValidator.ctor -> FluentValidation.DefaultValidatorExtensions.MustAsync
+    call src/FluentValidation.Tests/DefaultValidatorExtensionTester.cs:250: .MustAsync((g, cancel) => Task.FromResult(true));
+    def  src/FluentValidation/DefaultValidatorExtensions.cs:498: public static IRuleBuilderOptions<T, TProperty> MustAsync<T, TProperty>(this IRuleBuilder<T, TProperty> ruleBuilder, Func<T, TProperty, Vali
+ 7. FluentValidation.Tests.ForEachRuleTests.Can_access_parent_index -> FluentValidation.IRuleBuilder.SetValidator
+    call src/FluentValidation.Tests/ForEachRuleTests.cs:630: order.SetValidator(orderValidator);
+    def  src/FluentValidation/Syntax.cs:73: IRuleBuilderOptions<T, TProperty> SetValidator<TValidator>(Func<T, TProperty, TValidator> validatorProvider, params string[] ruleSets)
+ 8. FluentValidation.Tests.InheritanceValidatorTest.Validates_inheritance_async -> FluentValidation.Validators.PolymorphicValidator.Add
+    call src/FluentValidation.Tests/InheritanceValidatorTest.cs:63: v.Add(impl1Validator)
+    def  src/FluentValidation/Validators/PolymorphicValidator.cs:88: protected PolymorphicValidator<T, TProperty> Add(Type subclassType, IValidator validator, params string[] ruleSets) {
+ 9. FluentValidation.Tests.InheritanceValidatorTest.Rulesets_cascade_properly_with_polymorphic_validators -> FluentValidation.Internal.ValidationStrategy.IncludeRuleSets
+    call src/FluentValidation.Tests/InheritanceValidatorTest.cs:324: options.IncludeRuleSets("test").IncludeRulesNotInRuleSet();
+    def  src/FluentValidation/Internal/ValidationStrategy.cs:93: public ValidationStrategy<T> IncludeRuleSets(params string[] ruleSets) {
+10. FluentValidation.Tests.InheritanceValidatorTest.Rulesets_cascade_properly_with_polymorphic_validators -> FluentValidation.Internal.ValidationStrategy.IncludeRulesNotInRuleSet
+    call src/FluentValidation.Tests/InheritanceValidatorTest.cs:324: options.IncludeRuleSets("test").IncludeRulesNotInRuleSet();
+    def  src/FluentValidation/Internal/ValidationStrategy.cs:71: public ValidationStrategy<T> IncludeRulesNotInRuleSet() {
+11. FluentValidation.Tests.ModelLevelValidatorTests.Can_use_child_validator_at_model_level -> FluentValidation.IRuleBuilder.SetValidator
+    call src/FluentValidation.Tests/ModelLevelValidatorTests.cs:42: v.RuleFor(x => x).SetValidator(new ChildValidator());
+    def  src/FluentValidation/Syntax.cs:73: IRuleBuilderOptions<T, TProperty> SetValidator<TValidator>(Func<T, TProperty, TValidator> validatorProvider, params string[] ruleSets)
+12. FluentValidation.Tests.RuleBuilderTests.Should_set_custom_error -> FluentValidation.DefaultValidatorOptions.WithMessage
+    call src/FluentValidation.Tests/RuleBuilderTests.cs:61: builder.SetValidator(new TestPropertyValidator<Person, string>()).WithMessage("Bar");
+    def  src/FluentValidation/DefaultValidatorOptions.cs:145: public static IRuleBuilderOptions<T, TProperty> WithMessage<T, TProperty>(this IRuleBuilderOptions<T, TProperty> rule, Func<T, TProperty, st
+13. FluentValidation.Tests.RuleDependencyTests.Dependent_rules_inside_when -> FluentValidation.IRuleBuilderOptions.DependentRules
+    call src/FluentValidation.Tests/RuleDependencyTests.cs:93: .DependentRules(() =>
+    def  src/FluentValidation/Syntax.cs:86: IRuleBuilderOptions<T, TProperty> DependentRules(Action action);
+14. FluentValidation.Tests.RulesetTests.Combines_rulesets_and_explicit_properties -> FluentValidation.Internal.ValidationStrategy.IncludeRuleSets
+    call src/FluentValidation.Tests/RulesetTests.cs:247: options.IncludeRuleSets("Test");
+    def  src/FluentValidation/Internal/ValidationStrategy.cs:93: public ValidationStrategy<T> IncludeRuleSets(params string[] ruleSets) {
+15. FluentValidation.Tests.SharedConditionTests.Runs_otherwise_conditions_for_UnlessAsync -> FluentValidation.IConditionBuilder.Otherwise
+    call src/FluentValidation.Tests/SharedConditionTests.cs:683: }).Otherwise(() => {
+    def  src/FluentValidation/Syntax.cs:118: void Otherwise(Action action);
+16. FluentValidation.Tests.SharedConditionTests.When_condition_executed_for_each_instance_of_RuleForEach_condition_should_not_be_cached -> FluentValidation.IRuleBuilder.SetValidator
+    call src/FluentValidation.Tests/SharedConditionTests.cs:732: personValidator.RuleForEach(p => p.Children).SetValidator(childValidator);
+    def  src/FluentValidation/Syntax.cs:73: IRuleBuilderOptions<T, TProperty> SetValidator<TValidator>(Func<T, TProperty, TValidator> validatorProvider, params string[] ruleSets)
+17. FluentValidation.Tests.ValidatorTesterTester.Expected_error_code_check -> FluentValidation.TestHelper.TestValidationResult.ShouldHaveValidationErrorFor
+    call src/FluentValidation.Tests/ValidatorTesterTester.cs:455: .ShouldHaveValidationErrorFor(x => x.Surname)
+    def  src/FluentValidation/TestHelper/TestValidationResult.cs:57: public ITestValidationWith ShouldHaveValidationErrorFor(string propertyName) {
+18. FluentValidation.Tests.ValidatorTesterTester.ShouldHaveValidationErrorFor_WithMessage_Only_throws_when_there_is_a_failure_for_a_different_property -> FluentValidation.DefaultValidatorExtensions.NotEmpty
+    call src/FluentValidation.Tests/ValidatorTesterTester.cs:897: validator.RuleFor(x => x.Forename).NotEmpty();
+    def  src/FluentValidation/DefaultValidatorExtensions.cs:113: public static IRuleBuilderOptions<T, TProperty> NotEmpty<T, TProperty>(this IRuleBuilder<T, TProperty> ruleBuilder)
+19. FluentValidation.Tests.ValidatorTesterTester.ShouldHaveValidationErrorFor_WithMessage_Only_throws_combining_several_conditions_and_another_property -> FluentValidation.TestHelper.ValidationTestExtension.WithErrorCode
+    call src/FluentValidation.Tests/ValidatorTesterTester.cs:1024: .WithErrorCode("Foo")
+    def  src/FluentValidation/TestHelper/ValidatorTestExtensions.cs:187: public static ITestValidationWith WithErrorCode(this ITestValidationContinuation failures, string expectedErrorCode) {
+20. FluentValidation.Resources.LanguageManager.GetTranslation -> FluentValidation.Resources.CzechLanguage.GetTranslation
+    call src/FluentValidation/Resources/LanguageManager.cs:54: CzechLanguage.Culture => CzechLanguage.GetTranslation(key),
+    def  src/FluentValidation/Resources/Languages/CzechLanguage.cs:28: public static string GetTranslation(string key) => key switch {

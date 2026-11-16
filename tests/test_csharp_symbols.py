@@ -629,3 +629,89 @@ public class Use
     assert ("Q.Person.IsActor", 11) in hits, "the Where lambda's parameter is a Person"
     assert ("Q.Person.Greet", 12) in hits, "ToList() then First() is a Person"
     assert ("Q.Reg.RegisterMine", 14) in hits, "AddSingleton returns the IServiceCollection"
+
+
+def test_foreach_over_a_typed_local_and_color_color_properties(tmp_path):
+    (tmp_path / "F.cs").write_text('''namespace F;
+using System.Collections.Generic;
+public class Item { public void Touch() { } }
+public class Tracker { public bool HasChanges() => true; }
+public class Ctx { public Tracker Tracker { get; } }
+public class Use<TContext> where TContext : Ctx
+{
+    public void Go(List<Item> items, TContext context)
+    {
+        foreach (var it in items) { it.Touch(); }       // a foreach over a typed local
+        context.Tracker.HasChanges();                   // a generic receiver: the property named like its type
+    }
+}
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    pairs = {(_short(c["caller"]), _short(c["callee"])) for c in calls}
+    assert ("F.Use.Go", "F.Item.Touch") in pairs
+    assert ("F.Use.Go", "F.Tracker.HasChanges") in pairs
+
+
+def test_generic_parameters_are_their_constraint(tmp_path):
+    (tmp_path / "G.cs").write_text('''namespace G;
+public class Facade { }
+public class Database { }                                   // a type named like the property: must not win
+public class Context { public Facade Database { get; } }
+public static class Ext { public static int Client(this Facade f) => 0; }
+public class Use<TContext> where TContext : Context
+{
+    public void Go(TContext context) { context.Database.Client(); }
+}
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    assert ("G.Use.Go", "G.Ext.Client") in {(_short(c["caller"]), _short(c["callee"])) for c in calls}
+
+
+def test_a_new_expression_followed_by_a_member_is_not_the_locals_type():
+    loc = csharp_symbols._locals("var s = new Builder { A = 1 }.ToString(); var b = new Builder { A = 1 }; "
+                                 "var c = new Builder(2); var d = new Builder(1).Build();")
+    assert "s" not in loc and "d" not in loc and loc["b"] == "Builder" and loc["c"] == "Builder"
+
+
+def test_a_call_chained_on_an_object_initializer_is_typed(tmp_path):
+    (tmp_path / "I.cs").write_text('''namespace I;
+public class Options { public int A { get; set; } public bool Has(int x) => true; }
+public static class Ext { public static Options AddMore(this Options o, int x) => o; }
+public class Use
+{
+    public void Go(int f)
+    {
+        var o = new Options { A = f }
+            .AddMore(2);
+        o.Has(1);
+        new Options(){ A = 2 }.Has(3);
+    }
+}
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    hits = {(_short(c["callee"]), c["line"]) for c in calls if c["rel"] == "I.cs"}
+    assert ("I.Ext.AddMore", 9) in hits and ("I.Options.Has", 10) in hits
+
+
+def test_linq_beats_an_extension_on_the_non_generic_ienumerable(tmp_path):
+    (tmp_path / "L.cs").write_text('''namespace L;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+public static class E
+{
+    public static List<object> ToList(this IEnumerable source) => null;           // non-generic: loses to LINQ
+    public static int FindIndex<T>(this IReadOnlyList<T> source, System.Predicate<T> m) => 0;   // more specific: wins
+}
+public class Use
+{
+    public void Go(IQueryable<int> q, IReadOnlyList<int> xs)
+    {
+        q.ToList();
+        xs.FindIndex(x => x > 1);
+    }
+}
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    callees = {_short(c["callee"]) for c in calls if c["rel"] == "L.cs"}
+    assert "L.E.ToList" not in callees and "L.E.FindIndex" in callees
