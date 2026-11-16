@@ -156,6 +156,7 @@ class DevKBGraph:
     def __init__(self) -> None:
         self._nodes: dict[tuple[str, str], Node] = {}
         self._edges: set[Edge] = set()
+        self.meta: dict[str, Any] = {}   # build-report facts; never serialised into nodes or edges
 
     def add_node(self, node_type: str, natural_key: str, source: str, **props: Any) -> Node:
         if node_type not in NODE_TYPES:

@@ -39,9 +39,11 @@ KEEP_PROPS = {
     "Spec": ("title", "doc_type", "status", "spec_id"),
     "Symbol": ("kind", "line_start", "line_end", "complexity", "is_public", "docstring_summary",
                "unresolved_calls", "unresolved_files", "unresolved_file_count",  # ODSF-313: what a list answer cannot see
-               "module_callers"),  # calls made outside any function (import time, class bodies)
+               "module_callers",   # calls made outside any function (import time, class bodies)
+               "incomplete_reasons", "unattributed_errors",  # ADR-DEVKB-008 §2: C/C++ coverage beyond unresolved calls
+               "framework", "namespace", "overload_count"),
     "ErrorSignature": ("kind", "label", "message_template", "status_code"),
-    "TestCase": ("function", "file", "line"),
+    "TestCase": ("function", "file", "line", "framework"),
     "Commit": ("short_hash", "subject", "date"),
     "Endpoint": ("method", "path", "owner_symbol"),
     "Flow": ("touch_point_kind", "step_count"),
