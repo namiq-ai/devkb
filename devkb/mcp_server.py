@@ -40,7 +40,7 @@ class _LazyAPI:
             self._api = ProcessAPI(self._args[0], devkb_dir=self._args[1])
         return self._api
 
-    def call(self, name: str, **kw) -> dict:
+    def call(self, name: str, /, **kw) -> dict:
         try:
             return self.get().call(name, **kw)
         except GraphNotBuilt as e:
@@ -53,6 +53,8 @@ CORE = ["sdlc_context", "trace", "find_docs", "callers", "tests_for", "tests_to_
         "lineage", "graph_status", "config"]
 WORKFLOW = ["feature_brief", "bug_brief", "rca_trace", "refactor_scope", "explain_area", "find_code", "history"]
 DOCS = ["design_brief", "flow_sequence", "test_items", "review_doc", "role_brief"]
+# SPEC-DKB-003: what agents otherwise grep for (a definition and its body, a file's outline, where a name is used, what the docs say).
+READ = ["symbol", "outline", "uses", "search_docs"]
 # `core`: single-question tools. `workflow`: one tool per kind of development work, plus the few core tools those
 # workflows still need. `docs`: writing and reviewing designs and test specifications, and starting a role's session
 # (ODSF-311). `all`: every tool. A smaller set costs fewer tokens to load, so the choice is a deployment decision.
@@ -65,10 +67,10 @@ TOOLSETS = {"core": CORE, "workflow": WORKFLOW + ["review_pack", "tests_to_run",
             # agent implementing a feature with nothing to ask (it read whole files instead); lean stays as measured.
             # Packs over MCP: one call returns a whole answer (the measured "pack" arm put it in the prompt; here the
             # agent asks for it). `lean-pack` is the arm that measures that; `lean` stays as measured.
-            "lean-pack": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config", "pack"],
+            "lean-pack": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config", "pack"] + READ,
             "dev": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config",
-                    "explain_area", "feature_brief", "find_code", "pack"],
-            "all": CORE + WORKFLOW + DOCS + ["pack"]}
+                    "explain_area", "feature_brief", "find_code", "pack"] + READ,
+            "all": CORE + WORKFLOW + DOCS + READ + ["pack"]}
 INSTRUCTIONS = ("Dev-process graph for this repository: tickets, specs, commits, symbols, calls, tests, owners. "
                 "Ask it first, then read only the files it names. Every reply says if the graph is stale.")
 
@@ -138,6 +140,33 @@ def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
                "change": lambda: p.change(subject, path), "error": lambda: p.error(subject),
                "pr": lambda: p.pr(subject), "ticket": lambda: p.ticket(subject)}.get(kind)
         return run() if run else f"Unknown kind {kind!r}: use file, refactor, change, error, pr or ticket."
+
+    def _read(tool_name: str, **kw) -> str:
+        from devkb.read_tools import RENDER  # noqa: PLC0415
+        reply = api.call(tool_name, **kw)
+        if "error" in reply and "detail" in reply:           # no graph yet
+            return f"{reply['error']}: {reply['detail']} {reply.get('next', '')}"
+        return RENDER[tool_name](reply)
+
+    @tool
+    def symbol(query: str, source: bool = False, kind: str = "", under: str = "", limit: int = 8, lines: int = 80) -> str:
+        """Where a name is defined (name, A.b, path::name, glob, re:regex, prefix, words; typos tolerated): exact lines and signature; source=True prints the body."""
+        return _read("symbol", query=query, source=source, kind=kind, under=under, limit=limit, lines=lines)
+
+    @tool
+    def outline(path: str) -> str:
+        """A file's symbols in order with nesting and line ranges, plus its imports; a directory lists its files with symbol counts."""
+        return _read("outline", path=path)
+
+    @tool
+    def uses(name: str, under: str = "", docs: bool = False) -> str:
+        """Where a name, constant, module or key appears in code (text matches), grouped by file and by the symbol containing each use."""
+        return _read("uses", name=name, under=under, docs=docs)
+
+    @tool
+    def search_docs(query: str, under: str = "") -> str:
+        """Search documentation (md, rst, txt, adoc) for words or a re:regex; best files first, each hit with its heading."""
+        return _read("search_docs", query=query, under=under)
 
     @tool
     def review_pack(rev: str) -> str:

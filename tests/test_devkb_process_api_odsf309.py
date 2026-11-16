@@ -24,7 +24,7 @@ from devkb import process_api, service  # noqa: E402
 from devkb.project_context import ProjectContext  # noqa: E402
 from test_devkb_process_api_odsf306 import api  # noqa: E402,F401  (the fixture)
 
-ALL_TOOLS = {"graph_status", "symbol", "callers", "callees", "tests_for", "tests_to_run", "impact", "owner",
+ALL_TOOLS = {"graph_status", "symbol", "outline", "uses", "search_docs", "callers", "callees", "tests_for", "tests_to_run", "impact", "owner",
              "sdlc_context", "lineage", "trace", "find_docs", "review_pack", "find_code", "history", "feature_brief",
              "bug_brief", "rca_trace", "refactor_scope", "explain_area", "flow_sequence", "test_items", "design_brief",
              "review_doc", "role_brief", "config"}

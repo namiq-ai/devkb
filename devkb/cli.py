@@ -7,6 +7,7 @@
   devkb mcp     --project . [--toolset lean] serve the graph to an agent over MCP (stdio)
   devkb audit   --project .                 per-relation counts, fan-out and cost of the graph
   devkb coverage --project .                what share of the repository the graph covers
+  devkb symbol|outline|uses|docs QUERY      read tools: a definition and its body, a file's outline, where a name is used, what the docs say
 
 `--project` takes a repository path (or a code listed in DEVKB_REGISTRY). See devkb/project_context.py.
 """
@@ -43,6 +44,8 @@ def main(argv: list[str] | None = None) -> int:
     cmd, rest = argv[0], argv[1:]
     if cmd == "build":
         return _run("devkb.build_symbols", rest) or _run("devkb.build", rest)
+    if cmd in ("symbol", "outline", "uses", "docs"):
+        return _run("devkb.read_tools", [cmd, *rest])
     if cmd not in COMMANDS:
         print(f"devkb: unknown command {cmd!r}\n{__doc__}", file=sys.stderr)
         return 2

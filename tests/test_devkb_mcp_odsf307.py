@@ -20,7 +20,7 @@ TOOLS = re.findall(r"    @tool\n    def (\w+)\(", SERVER)
 
 
 def test_the_server_declares_its_read_only_tools_with_one_sentence_descriptions():
-    assert len(TOOLS) == 25 and len(set(TOOLS)) == 25  # 12 single-question (config: ODSF-312), 7 developer-task (ODSF-310), 5 document and role (ODSF-311), pack
+    assert len(TOOLS) == 29 and len(set(TOOLS)) == 29  # 12 single-question (config: ODSF-312), 7 developer-task (ODSF-310), 5 document and role (ODSF-311), pack, 4 read tools (SPEC-DKB-003)
     assert "readOnlyHint=True" in SERVER and "destructiveHint=False" in SERVER
     for name in TOOLS:
         doc = re.search(rf"def {name}\(.*?\n\s+\"\"\"(.*?)\"\"\"", SERVER, re.S).group(1)
@@ -82,7 +82,8 @@ def test_pack_is_a_tool_in_dev_and_lean_pack_and_lean_stays_as_measured():
     spec.loader.exec_module(module)
     assert "pack" in module.TOOLSETS["dev"] and "pack" in module.TOOLSETS["lean-pack"]
     assert module.TOOLSETS["lean"] == ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config"]
-    assert module.TOOLSETS["lean-pack"] == module.TOOLSETS["lean"] + ["pack"]
+    assert module.TOOLSETS["lean-pack"] == module.TOOLSETS["lean"] + ["pack"] + ["symbol", "outline", "uses", "search_docs"]  # SPEC-DKB-003
+    assert set(["symbol", "outline", "uses", "search_docs"]) <= set(module.TOOLSETS["dev"]) & set(module.TOOLSETS["all"])
 
 
 def test_the_server_starts_without_a_graph_and_says_how_to_get_one(tmp_path):

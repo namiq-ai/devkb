@@ -43,6 +43,9 @@ _HUNK = re.compile(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", re.MULTILINE)
 
 
 REPLY_BUDGET_BYTES = 3900
+# The read tools bound their own output (lines, files, hits) and say what they cut; trimming lists here would drop matches
+# because the source text they carry counts toward the byte budget.
+_OWN_CAPS = frozenset({"symbol", "outline", "uses", "search_docs"})
 # Words that carry no meaning in a request ("add a report for the specs"). Without this, "add" matches every method called add.
 STOP = frozenset("the and for add with that this from into how new use when why not are can has have was but its any all".split())
 
@@ -173,7 +176,8 @@ class ProcessAPI:
         else:
             if os.environ.get("DEVKB_NO_COVERAGE") == "1":  # ODSF-316 ablation only: the reply as it was before ODSF-313
                 reply.pop("coverage", None)
-            reply = _fit(reply)
+            if tool not in _OWN_CAPS:
+                reply = _fit(reply)
         stale, head, behind = self.stale.check()
         reply["_meta"] = {"built": self.idx.built_at[:16], "head": self.idx.git_head[:8], "stale": stale,
                           **({"behind": behind} if stale else {})}
@@ -303,11 +307,25 @@ class ProcessAPI:
                 "symbols": c.get("Symbol", 0), "tests": c.get("TestCase", 0), "specs": c.get("Spec", 0),
                 "tickets": c.get("Ticket", 0)}
 
-    def symbol(self, name: str, limit: int = 8) -> dict:
-        found = self.idx.short.get(name.rsplit(".", 1)[-1], [])
-        return {"name": name, "n": len(found),
-                "symbols": [{"k": self._key(i), "kind": self.idx.props[i].get("kind"),
-                             "line": self.idx.props[i].get("line_start")} for i in found[:limit]]}
+    # ── read tools (SPEC-DKB-003): what agents otherwise grep for; devkb/read_tools.py holds the logic ──
+    def _read(self):
+        if getattr(self, "_read_tools", None) is None:
+            from devkb.read_tools import ReadTools  # noqa: PLC0415
+            self._read_tools = ReadTools(self)
+        return self._read_tools
+
+    def symbol(self, query: str = "", name: str = "", source: bool = False, kind: str = "", under: str = "", limit: int = 8,
+               lines: int = 80) -> dict:
+        return self._read().symbol(query or name, source=source, kind=kind, under=under, limit=limit, lines=lines)
+
+    def outline(self, path: str, limit: int = 200) -> dict:
+        return self._read().outline(path, limit=limit)
+
+    def uses(self, name: str, under: str = "", docs: bool = False) -> dict:
+        return self._read().uses(name, under=under, docs=docs)
+
+    def search_docs(self, query: str, under: str = "") -> dict:
+        return self._read().search_docs(query, under=under)
 
     # ── ODSF-313: say what an answer cannot see, so a partial list never looks complete ──
     def _coverage(self, syms, shown: set[str] | None = None) -> dict:
@@ -1516,7 +1534,10 @@ def bench_api(api: ProcessAPI, reps: int = 25) -> dict:
     role = next(iter(sorted(api._role_table())), None)
     setting = next((idx.keys[i] for (typ, _k), i in sorted(idx.by_key.items()) if typ == "ConfigKey" and idx.sources("READS", i)), None)
     plan: list[tuple[str, dict | None, str]] = [
-        ("graph_status", {}, ""), ("symbol", {"name": sym.split("::")[-1]} if sym else None, "no symbol with a caller"),
+        ("graph_status", {}, ""), ("symbol", {"query": sym.split("::")[-1]} if sym else None, "no symbol with a caller"),
+        ("outline", {"path": files[0]} if files else None, "no file with callers"),
+        ("uses", {"name": sym.split("::")[-1].split(".")[-1]} if sym else None, "no symbol with a caller"),
+        ("search_docs", {"query": "specification"} if idx.spec_terms else None, "no specs"),
         ("callers", {"symbol": sym, "depth": 2} if sym else None, "no symbol with a caller"),
         ("callees", {"symbol": sym} if sym else None, "no symbol with a caller"),
         ("tests_for", {"ref": files[0]} if files else None, "no file with callers"),
