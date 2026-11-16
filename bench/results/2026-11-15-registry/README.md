@@ -6,7 +6,7 @@ Prefect), each at its pinned commit, run with the same pipeline, arms and protoc
 in `report-all.json` (H1–H4) are the paper's analysis applied to these runs, not new confirmatory tests.
 
 **Corrected on 2026-11-15** (see [Corrections](#corrections)): Prefect's first session ran its tool arms without
-tools, and four tasks had a truth that missed callers. The numbers below are the corrected ones.
+tools, four tasks had a truth that missed callers, and click was rerun with its current 8 tasks. The numbers below are the corrected ones.
 
 ## Setup
 
@@ -24,16 +24,17 @@ tools, and four tasks had a truth that missed callers. The numbers below are the
 
 ## Results, all seven repositories pooled
 
-1,038 runs over 52 tasks (the three tasks whose truth was wrong are excluded here and reported in the addendum),
-$66.28. Cost saved against plain (positive is cheaper) and quality difference, 95% bootstrap intervals resampling runs
-within task; Wilcoxon signed-rank over the 52 tasks, Holm-corrected (`report-all.json`):
+1,138 runs over 57 tasks (the three tasks whose truth was wrong are excluded here and reported in the addendum;
+click is its 8-task session, see Corrections), $69.79. Cost saved against plain (positive is cheaper) and quality
+difference, 95% bootstrap intervals resampling runs within task; Wilcoxon signed-rank over the 57 tasks,
+Holm-corrected (`report-all.json`):
 
 | Arm | Median cost per run | Cost saved | Quality difference | Mean score | p (Holm) |
 |---|---|---|---|---|---|
-| plain | $0.0755 | — | — | 0.928 | — |
-| core | $0.0605 | +19% [+13, +23] | +0.023 [+0.015, +0.031] | 0.951 | 0.010 (unadjusted) |
-| lean | $0.0417 | +39% [+34, +43] | +0.033 [+0.025, +0.040] | 0.961 | 3e-5 |
-| pack | $0.0264 | **+56%** [+52, +60] | **+0.051** [+0.043, +0.059] | 0.979 | 3e-8 |
+| plain | $0.0699 | — | — | 0.931 | — |
+| core | $0.0586 | +18% [+12, +23] | +0.024 [+0.017, +0.031] | 0.955 | 0.022 (unadjusted) |
+| lean | $0.0401 | +38% [+33, +42] | +0.032 [+0.025, +0.039] | 0.963 | 2e-5 |
+| pack | $0.0245 | **+55%** [+51, +59] | **+0.050** [+0.042, +0.057] | 0.981 | 2e-9 |
 
 No arm is worse than plain on quality (every lower bound is above zero).
 
@@ -44,7 +45,7 @@ By task kind (pooled; tasks per kind in brackets):
 | error trace, CLI (4) | +24% / +0.063 | +47% / +0.152 | +60% / +0.172 |
 | error to route handler (6) | +30% / +0.013 | +58% / +0.054 | **+77%** / +0.075 |
 | impact on route handlers (15) | +32% / +0.052 | +50% / +0.051 | **+66%** / +0.088 |
-| refactor scope (27) | **−17%** [−33, −3] / +0.003 | +2% [−12, +15] / −0.001 | +21% [+8, +32] / +0.007 |
+| refactor scope (32) | **−15%** [−30, −3] / +0.008 | +3% [−10, +15] / +0.004 | +22% [+10, +32] / +0.012 |
 
 Per repository (`<repo>/report.json`; lnbits and Mealie without their wrong-truth tasks):
 
@@ -52,39 +53,40 @@ Per repository (`<repo>/report.json`; lnbits and Mealie without their wrong-trut
 |---|---|---|---|---|---|---|---|
 | lattice-scan | 240 | 12 | $12.60 | 0.909 | +13% [+2, +23] / +0.022 | +36% [+27, +45] / +0.052 | +51% [+43, +59] / +0.058 |
 | devkb | 80 | 4 | $3.50 | 0.993 | −20% [−60, +9] / +0.006 | +1% [−35, +26] / +0.004 | +40% [+14, +60] / +0.004 |
-| click | 60 | 3 | $1.62 | 1.000 | −44% [−146, +11] / 0 | −3% [−88, +43] / 0 | −19% [−110, +31] / 0 |
+| click | 160 | 8 | $5.13 | 0.977 | −16% [−56, +13] / +0.023 | +6% [−28, +32] / +0.016 | +15% [−19, +40] / +0.023 |
 | Mealie | 120 | 6 | $7.35 | 0.853 | +3% [−21, +22] / +0.076 | +18% [−5, +36] / +0.095 | +42% [+20, +60] / +0.062 |
 | Dispatch | 160 | 8 | $11.15 | 0.915 | +26% [+14, +37] / +0.015 | +45% [+34, +55] / +0.040 | +61% [+52, +69] / +0.081 |
 | lnbits | 200 | 10 | $12.85 | 0.941 | +23% [+13, +33] / +0.011 | +53% [+45, +60] / +0.032 | +66% [+56, +74] / +0.049 |
 | Prefect | 178 | 9 | $17.22 | 0.947 | +28% [+17, +37] / +0.025 | +41% [+31, +50] / −0.017 | +59% [+51, +66] / +0.047 |
 
-Tokens by kind, median run, the 1,038 runs (lattice-scan's runs predate the separate input and cache-write fields, so
+Tokens by kind, median run, the 1,138 runs (lattice-scan's runs predate the separate input and cache-write fields, so
 the combined table shows them as one column):
 
 | Arm | Turns | Input + cache write | Cache read | Output | Context processed | Context saved |
 |---|---|---|---|---|---|---|
-| plain | 5.5 | 9,188 | 154,584 | 1,608 | 164,482 | — |
-| core | 7 | 4,654 | 172,816 | 1,839 | 187,362 | 0% |
-| lean | 6 | 2,184 | 146,214 | 1,338 | 156,170 | +25% |
-| pack | 3 | 1,388 | 76,162 | 914 | 77,330 | +56% |
+| plain | 4 | 8,273 | 122,614 | 1,395 | 125,781 | — |
+| core | 6 | 4,089 | 162,678 | 1,769 | 168,561 | −2% |
+| lean | 5 | 2,023 | 141,434 | 1,288 | 146,768 | +23% |
+| pack | 3 | 1,259 | 73,520 | 868 | 75,076 | +55% |
 
 Per task, score parts and the graph tools each arm called: `<repo>/detail.md`.
 
 ## Reading
 
-- **Packs are the consistent result**: cheaper and better on every repository with chain tasks (42–66%), 56% pooled.
-  The saving is where the answer is a chain: 66–77% on route-handler tasks, 60% on error traces, 21% on one-hop
+- **Packs are the consistent result**: cheaper and better on every repository with chain tasks (42–66%), 55% pooled.
+  The saving is where the answer is a chain: 66–77% on route-handler tasks, 60% on error traces, 22% on one-hop
   refactor scopes.
-- **Tools pay off on chains and cost extra on one-hop work.** The 12-tool set is 17% dearer than plain on refactor
+- **Tools pay off on chains and cost extra on one-hop work.** The 12-tool set is 15% dearer than plain on refactor
   scopes and 30–32% cheaper on route-handler chains; the 7-tool set breaks even on refactors and saves 47–58% on
   chains.
 - **Prefect, the largest repository, behaves like the others** once its tool arms have tools: lean 41% cheaper,
   core 28%. Its lean quality is the one negative point estimate (−0.017 [−0.041, +0.003], inside the 0.05
   non-inferiority margin), mostly one impact task (`_sync_automation_related_resources`, 0.76) where lean agents
   stopped after a median of three turns.
-- **Where plain is already perfect, the graph can only add overhead**: click (3 refactor tasks, plain 1.000) and devkb
-  (plain 0.993). click's intervals are too wide to conclude anything.
-- **Limits**: one model; 52 tasks of which 10 are error-to-handler or error-trace tasks; task generators written by
+- **Where plain search is already near perfect, the graph has little to save**: click (8 one-hop refactor tasks, plain
+  0.977) and devkb (4, plain 0.993). On click the pack was 15% cheaper and the 12-tool set 16% dearer, every interval
+  crossing zero; most pack agents still ran one confirming search before answering.
+- **Limits**: one model; 57 tasks of which 10 are error-to-handler or error-trace tasks; task generators written by
   the graph's authors (an independent truth check now runs before every run, below); exploratory.
 
 ## Corrections
@@ -109,6 +111,11 @@ Found while investigating why every arm scored 0.56–0.67 on lnbits `get_wallet
    invalid when its graph server did not connect, starts it with `uv --no-config`, stores whole answers (they were
    cut at 1,500 characters, so the original runs cannot be rescored), and `pipeline report` fails when a tool arm never
    called the graph.
+
+4. **click was rerun with its current task set.** Its first session had 3 tasks (pack −19%, intervals from −110% to
+   +31%). A graph fix found by the nightly benchmark (an overloaded function, `click.prompt`, now resolves) changed
+   which tasks the generator selects, to 8. click was rerun whole in a new session (all four arms, 160 runs, all valid,
+   every tool-arm run connected): `click/runs.jsonl`; the first session is kept in `click/superseded/`.
 
 Before the corrections, pooled over 55 tasks: pack +56%, lean +28%, core +9%. The pack result did not move; the tool
 arms' savings were understated because one repository's tool arms were measured without tools.

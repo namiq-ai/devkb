@@ -1,8 +1,8 @@
 {
  "model": "sonnet",
- "runs": 1038,
- "cost_usd": 66.28,
- "tasks": 52,
+ "runs": 1138,
+ "cost_usd": 69.79,
+ "tasks": 57,
  "repos": [
   "click",
   "devkb",
@@ -14,92 +14,92 @@
  ],
  "describe": {
   "plain": {
-   "runs": 260,
-   "valid": 260,
-   "median_cost": 0.0755,
-   "median_turns": 5.5,
-   "mean_score": 0.928,
+   "runs": 285,
+   "valid": 285,
+   "median_cost": 0.0699,
+   "median_turns": 4,
+   "mean_score": 0.9311,
    "graph_used": 0.0,
-   "median_result_bytes": 14615.0
+   "median_result_bytes": 12457
   },
   "core": {
-   "runs": 260,
-   "valid": 260,
-   "median_cost": 0.0605,
-   "median_turns": 7.0,
-   "mean_score": 0.9509,
+   "runs": 285,
+   "valid": 285,
+   "median_cost": 0.0586,
+   "median_turns": 6,
+   "mean_score": 0.9552,
    "graph_used": 1.0,
-   "median_result_bytes": 6770.0
+   "median_result_bytes": 6261
   },
   "lean": {
-   "runs": 258,
-   "valid": 258,
-   "median_cost": 0.0417,
-   "median_turns": 6.0,
-   "mean_score": 0.9608,
+   "runs": 283,
+   "valid": 283,
+   "median_cost": 0.0401,
+   "median_turns": 5,
+   "mean_score": 0.9634,
    "graph_used": 1.0,
-   "median_result_bytes": 4415.0
+   "median_result_bytes": 4240
   },
   "pack": {
-   "runs": 260,
-   "valid": 260,
-   "median_cost": 0.0264,
-   "median_turns": 3.0,
-   "mean_score": 0.9789,
+   "runs": 285,
+   "valid": 285,
+   "median_cost": 0.0245,
+   "median_turns": 3,
+   "mean_score": 0.9807,
    "graph_used": 0.0,
-   "median_result_bytes": 1073.5
+   "median_result_bytes": 939
   }
  },
  "pooled": {
   "core": {
    "cost": {
-    "tasks": 52,
-    "saved": 0.1852,
-    "lo": 0.1328,
-    "hi": 0.2343,
-    "p_wilcoxon": 0.009629546968533235
+    "tasks": 57,
+    "saved": 0.1754,
+    "lo": 0.1213,
+    "hi": 0.2247,
+    "p_wilcoxon": 0.022419321108004656
    },
    "quality": {
-    "diff": 0.0229,
-    "lo": 0.0152,
-    "hi": 0.0309,
+    "diff": 0.0241,
+    "lo": 0.017,
+    "hi": 0.0314,
     "non_inferior": true,
-    "arm_mean": 0.9509,
-    "plain_mean": 0.928
+    "arm_mean": 0.9552,
+    "plain_mean": 0.9311
    }
   },
   "lean": {
    "cost": {
-    "tasks": 52,
-    "saved": 0.3896,
-    "lo": 0.3432,
-    "hi": 0.4335,
-    "p_wilcoxon": 1.0987175801135358e-05
+    "tasks": 57,
+    "saved": 0.3781,
+    "lo": 0.3321,
+    "hi": 0.4221,
+    "p_wilcoxon": 5.0841533008014685e-06
    },
    "quality": {
-    "diff": 0.0325,
-    "lo": 0.0248,
-    "hi": 0.0402,
+    "diff": 0.0319,
+    "lo": 0.0247,
+    "hi": 0.0391,
     "non_inferior": true,
-    "arm_mean": 0.9604,
-    "plain_mean": 0.928
+    "arm_mean": 0.963,
+    "plain_mean": 0.9311
    }
   },
   "pack": {
    "cost": {
-    "tasks": 52,
-    "saved": 0.5592,
-    "lo": 0.5174,
-    "hi": 0.5993,
-    "p_wilcoxon": 8.642797884659226e-09
+    "tasks": 57,
+    "saved": 0.5478,
+    "lo": 0.505,
+    "hi": 0.588,
+    "p_wilcoxon": 4.1869437864468633e-10
    },
    "quality": {
-    "diff": 0.0509,
-    "lo": 0.0432,
-    "hi": 0.0588,
+    "diff": 0.0497,
+    "lo": 0.0424,
+    "hi": 0.057,
     "non_inferior": true,
-    "arm_mean": 0.9789,
-    "plain_mean": 0.928
+    "arm_mean": 0.9807,
+    "plain_mean": 0.9311
    }
   }
  },
@@ -109,8 +109,8 @@
     "cost": {
      "tasks": 6,
      "saved": 0.3045,
-     "lo": 0.2157,
-     "hi": 0.3862,
+     "lo": 0.2158,
+     "hi": 0.3871,
      "p_wilcoxon": 0.015625
     },
     "quality": {
@@ -126,14 +126,14 @@
     "cost": {
      "tasks": 6,
      "saved": 0.577,
-     "lo": 0.5016,
-     "hi": 0.648,
+     "lo": 0.5019,
+     "hi": 0.6484,
      "p_wilcoxon": 0.015625
     },
     "quality": {
      "diff": 0.0542,
-     "lo": 0.0408,
-     "hi": 0.0675,
+     "lo": 0.0406,
+     "hi": 0.0672,
      "non_inferior": true,
      "arm_mean": 0.9692,
      "plain_mean": 0.915
@@ -143,8 +143,8 @@
     "cost": {
      "tasks": 6,
      "saved": 0.7697,
-     "lo": 0.6847,
-     "hi": 0.8435,
+     "lo": 0.6815,
+     "hi": 0.8426,
      "p_wilcoxon": 0.015625
     },
     "quality": {
@@ -162,14 +162,14 @@
     "cost": {
      "tasks": 15,
      "saved": 0.3195,
-     "lo": 0.2436,
-     "hi": 0.3879,
+     "lo": 0.2429,
+     "hi": 0.3865,
      "p_wilcoxon": 0.000213623046875
     },
     "quality": {
      "diff": 0.0524,
-     "lo": 0.0296,
-     "hi": 0.0769,
+     "lo": 0.0295,
+     "hi": 0.0763,
      "non_inferior": true,
      "arm_mean": 0.9397,
      "plain_mean": 0.8872
@@ -179,14 +179,14 @@
     "cost": {
      "tasks": 15,
      "saved": 0.4992,
-     "lo": 0.4331,
-     "hi": 0.558,
+     "lo": 0.4336,
+     "hi": 0.5597,
      "p_wilcoxon": 6.103515625e-05
     },
     "quality": {
      "diff": 0.0513,
-     "lo": 0.0298,
-     "hi": 0.0735,
+     "lo": 0.0303,
+     "hi": 0.0736,
      "non_inferior": true,
      "arm_mean": 0.9385,
      "plain_mean": 0.8872
@@ -196,14 +196,14 @@
     "cost": {
      "tasks": 15,
      "saved": 0.6643,
-     "lo": 0.6032,
-     "hi": 0.7186,
+     "lo": 0.6047,
+     "hi": 0.7194,
      "p_wilcoxon": 3.0517578125e-05
     },
     "quality": {
      "diff": 0.0879,
-     "lo": 0.0645,
-     "hi": 0.1122,
+     "lo": 0.0643,
+     "hi": 0.1116,
      "non_inferior": true,
      "arm_mean": 0.9751,
      "plain_mean": 0.8872
@@ -215,14 +215,14 @@
     "cost": {
      "tasks": 4,
      "saved": 0.2419,
-     "lo": 0.1355,
+     "lo": 0.133,
      "hi": 0.3411,
      "p_wilcoxon": 0.0625
     },
     "quality": {
      "diff": 0.063,
-     "lo": 0.0252,
-     "hi": 0.1019,
+     "lo": 0.026,
+     "hi": 0.1013,
      "non_inferior": true,
      "arm_mean": 0.7981,
      "plain_mean": 0.7351
@@ -232,13 +232,13 @@
     "cost": {
      "tasks": 4,
      "saved": 0.4673,
-     "lo": 0.377,
-     "hi": 0.5464,
+     "lo": 0.3788,
+     "hi": 0.5467,
      "p_wilcoxon": 0.0625
     },
     "quality": {
      "diff": 0.1525,
-     "lo": 0.1203,
+     "lo": 0.12,
      "hi": 0.183,
      "non_inferior": true,
      "arm_mean": 0.8875,
@@ -249,8 +249,8 @@
     "cost": {
      "tasks": 4,
      "saved": 0.598,
-     "lo": 0.5142,
-     "hi": 0.6719,
+     "lo": 0.5144,
+     "hi": 0.6718,
      "p_wilcoxon": 0.0625
     },
     "quality": {
@@ -266,53 +266,53 @@
   "refactor": {
    "core": {
     "cost": {
-     "tasks": 27,
-     "saved": -0.1696,
-     "lo": -0.3292,
-     "hi": -0.0314,
-     "p_wilcoxon": 0.9999635517597198
+     "tasks": 32,
+     "saved": -0.1547,
+     "lo": -0.2988,
+     "hi": -0.0268,
+     "p_wilcoxon": 0.9999898828100413
     },
     "quality": {
-     "diff": 0.0029,
-     "lo": -0.0014,
-     "hi": 0.0071,
+     "diff": 0.0081,
+     "lo": 0.0038,
+     "hi": 0.0125,
      "non_inferior": true,
-     "arm_mean": 0.9849,
-     "plain_mean": 0.982
+     "arm_mean": 0.9873,
+     "plain_mean": 0.9792
     }
    },
    "lean": {
     "cost": {
-     "tasks": 27,
-     "saved": 0.0249,
-     "lo": -0.124,
-     "hi": 0.1546,
-     "p_wilcoxon": 0.5517058223485947
+     "tasks": 32,
+     "saved": 0.0349,
+     "lo": -0.1014,
+     "hi": 0.1549,
+     "p_wilcoxon": 0.32557414984330535
     },
     "quality": {
-     "diff": -0.0005,
-     "lo": -0.0072,
-     "hi": 0.0054,
+     "diff": 0.0037,
+     "lo": -0.0027,
+     "hi": 0.0095,
      "non_inferior": true,
-     "arm_mean": 0.9815,
-     "plain_mean": 0.982
+     "arm_mean": 0.9828,
+     "plain_mean": 0.9792
     }
    },
    "pack": {
     "cost": {
-     "tasks": 27,
-     "saved": 0.2092,
-     "lo": 0.0803,
+     "tasks": 32,
+     "saved": 0.2177,
+     "lo": 0.0968,
      "hi": 0.3223,
-     "p_wilcoxon": 0.001623593270778656
+     "p_wilcoxon": 1.1344440281391144e-05
     },
     "quality": {
-     "diff": 0.0071,
-     "lo": 0.0022,
-     "hi": 0.0114,
+     "diff": 0.0117,
+     "lo": 0.007,
+     "hi": 0.016,
      "non_inferior": true,
-     "arm_mean": 0.9891,
-     "plain_mean": 0.982
+     "arm_mean": 0.9908,
+     "plain_mean": 0.9792
     }
    }
   }
@@ -321,53 +321,53 @@
   "click": {
    "core": {
     "cost": {
-     "tasks": 3,
-     "saved": -0.437,
-     "lo": -1.4815,
-     "hi": 0.1057,
-     "p_wilcoxon": 1.0
+     "tasks": 8,
+     "saved": -0.164,
+     "lo": -0.548,
+     "hi": 0.1301,
+     "p_wilcoxon": 0.98828125
     },
     "quality": {
-     "diff": 0.0,
-     "lo": 0.0,
-     "hi": 0.0,
+     "diff": 0.0227,
+     "lo": 0.0131,
+     "hi": 0.0316,
      "non_inferior": true,
      "arm_mean": 1.0,
-     "plain_mean": 1.0
+     "plain_mean": 0.9773
     }
    },
    "lean": {
     "cost": {
-     "tasks": 3,
-     "saved": -0.0289,
-     "lo": -0.8753,
-     "hi": 0.4335,
-     "p_wilcoxon": 0.75
+     "tasks": 8,
+     "saved": 0.0622,
+     "lo": -0.2919,
+     "hi": 0.3205,
+     "p_wilcoxon": 0.19140625
     },
     "quality": {
-     "diff": 0.0,
-     "lo": 0.0,
-     "hi": 0.0,
+     "diff": 0.0164,
+     "lo": 0.0048,
+     "hi": 0.0275,
      "non_inferior": true,
-     "arm_mean": 1.0,
-     "plain_mean": 1.0
+     "arm_mean": 0.9938,
+     "plain_mean": 0.9773
     }
    },
    "pack": {
     "cost": {
-     "tasks": 3,
-     "saved": -0.1889,
-     "lo": -1.1141,
-     "hi": 0.3108,
-     "p_wilcoxon": 1.0
+     "tasks": 8,
+     "saved": 0.1465,
+     "lo": -0.19,
+     "hi": 0.3956,
+     "p_wilcoxon": 0.02734375
     },
     "quality": {
-     "diff": 0.0,
-     "lo": 0.0,
-     "hi": 0.0,
+     "diff": 0.0227,
+     "lo": 0.0131,
+     "hi": 0.0317,
      "non_inferior": true,
      "arm_mean": 1.0,
-     "plain_mean": 1.0
+     "plain_mean": 0.9773
     }
    }
   },
@@ -376,8 +376,8 @@
     "cost": {
      "tasks": 4,
      "saved": -0.1979,
-     "lo": -0.6046,
-     "hi": 0.0911,
+     "lo": -0.592,
+     "hi": 0.0932,
      "p_wilcoxon": 0.9375
     },
     "quality": {
@@ -393,8 +393,8 @@
     "cost": {
      "tasks": 4,
      "saved": 0.0101,
-     "lo": -0.3349,
-     "hi": 0.2719,
+     "lo": -0.3424,
+     "hi": 0.2697,
      "p_wilcoxon": 0.4375
     },
     "quality": {
@@ -410,8 +410,8 @@
     "cost": {
      "tasks": 4,
      "saved": 0.4023,
-     "lo": 0.1383,
-     "hi": 0.6016,
+     "lo": 0.1357,
+     "hi": 0.6042,
      "p_wilcoxon": 0.0625
     },
     "quality": {
@@ -429,14 +429,14 @@
     "cost": {
      "tasks": 8,
      "saved": 0.2637,
-     "lo": 0.1408,
-     "hi": 0.3683,
+     "lo": 0.1395,
+     "hi": 0.3687,
      "p_wilcoxon": 0.125
     },
     "quality": {
      "diff": 0.0146,
-     "lo": -0.0136,
-     "hi": 0.0486,
+     "lo": -0.0139,
+     "hi": 0.0469,
      "non_inferior": true,
      "arm_mean": 0.9293,
      "plain_mean": 0.9147
@@ -446,14 +446,14 @@
     "cost": {
      "tasks": 8,
      "saved": 0.4488,
-     "lo": 0.3441,
-     "hi": 0.5455,
+     "lo": 0.346,
+     "hi": 0.5492,
      "p_wilcoxon": 0.0390625
     },
     "quality": {
      "diff": 0.0397,
-     "lo": 0.0115,
-     "hi": 0.0731,
+     "lo": 0.0116,
+     "hi": 0.0734,
      "non_inferior": true,
      "arm_mean": 0.9545,
      "plain_mean": 0.9147
@@ -463,14 +463,14 @@
     "cost": {
      "tasks": 8,
      "saved": 0.6096,
-     "lo": 0.5189,
-     "hi": 0.6883,
+     "lo": 0.5205,
+     "hi": 0.6869,
      "p_wilcoxon": 0.01953125
     },
     "quality": {
      "diff": 0.0808,
      "lo": 0.0566,
-     "hi": 0.1108,
+     "hi": 0.1119,
      "non_inferior": true,
      "arm_mean": 0.9955,
      "plain_mean": 0.9147
@@ -482,14 +482,14 @@
     "cost": {
      "tasks": 12,
      "saved": 0.1295,
-     "lo": 0.019,
-     "hi": 0.2312,
+     "lo": 0.0221,
+     "hi": 0.2327,
      "p_wilcoxon": 0.36669921875
     },
     "quality": {
      "diff": 0.0217,
      "lo": 0.009,
-     "hi": 0.0349,
+     "hi": 0.0346,
      "non_inferior": true,
      "arm_mean": 0.931,
      "plain_mean": 0.9093
@@ -499,14 +499,14 @@
     "cost": {
      "tasks": 12,
      "saved": 0.3636,
-     "lo": 0.2686,
-     "hi": 0.4476,
+     "lo": 0.2703,
+     "hi": 0.4466,
      "p_wilcoxon": 0.046142578125
     },
     "quality": {
      "diff": 0.0516,
      "lo": 0.0406,
-     "hi": 0.062,
+     "hi": 0.0619,
      "non_inferior": true,
      "arm_mean": 0.9608,
      "plain_mean": 0.9093
@@ -516,13 +516,13 @@
     "cost": {
      "tasks": 12,
      "saved": 0.5136,
-     "lo": 0.4281,
-     "hi": 0.5873,
+     "lo": 0.4323,
+     "hi": 0.5913,
      "p_wilcoxon": 0.00244140625
     },
     "quality": {
      "diff": 0.0581,
-     "lo": 0.0481,
+     "lo": 0.0479,
      "hi": 0.0649,
      "non_inferior": true,
      "arm_mean": 0.9674,
@@ -535,14 +535,14 @@
     "cost": {
      "tasks": 10,
      "saved": 0.2329,
-     "lo": 0.1238,
-     "hi": 0.3291,
+     "lo": 0.1284,
+     "hi": 0.3294,
      "p_wilcoxon": 0.0322265625
     },
     "quality": {
      "diff": 0.0109,
-     "lo": -0.0009,
-     "hi": 0.0233,
+     "lo": -0.001,
+     "hi": 0.0232,
      "non_inferior": true,
      "arm_mean": 0.9521,
      "plain_mean": 0.9412
@@ -552,13 +552,13 @@
     "cost": {
      "tasks": 10,
      "saved": 0.5286,
-     "lo": 0.4481,
-     "hi": 0.6003,
+     "lo": 0.4455,
+     "hi": 0.6007,
      "p_wilcoxon": 0.0068359375
     },
     "quality": {
      "diff": 0.032,
-     "lo": 0.0243,
+     "lo": 0.0244,
      "hi": 0.0386,
      "non_inferior": true,
      "arm_mean": 0.9732,
@@ -569,13 +569,13 @@
     "cost": {
      "tasks": 10,
      "saved": 0.6581,
-     "lo": 0.5665,
-     "hi": 0.7404,
+     "lo": 0.5637,
+     "hi": 0.7418,
      "p_wilcoxon": 0.0048828125
     },
     "quality": {
      "diff": 0.0489,
-     "lo": 0.0349,
+     "lo": 0.0348,
      "hi": 0.0606,
      "non_inferior": true,
      "arm_mean": 0.99,
@@ -588,14 +588,14 @@
     "cost": {
      "tasks": 6,
      "saved": 0.0318,
-     "lo": -0.208,
-     "hi": 0.2215,
+     "lo": -0.2063,
+     "hi": 0.2225,
      "p_wilcoxon": 0.421875
     },
     "quality": {
      "diff": 0.0759,
-     "lo": 0.035,
-     "hi": 0.1138,
+     "lo": 0.0358,
+     "hi": 0.1134,
      "non_inferior": true,
      "arm_mean": 0.9293,
      "plain_mean": 0.8534
@@ -605,14 +605,14 @@
     "cost": {
      "tasks": 6,
      "saved": 0.1771,
-     "lo": -0.0515,
-     "hi": 0.364,
+     "lo": -0.0511,
+     "hi": 0.3551,
      "p_wilcoxon": 0.21875
     },
     "quality": {
      "diff": 0.0952,
-     "lo": 0.0629,
-     "hi": 0.1252,
+     "lo": 0.0633,
+     "hi": 0.1259,
      "non_inferior": true,
      "arm_mean": 0.9486,
      "plain_mean": 0.8534
@@ -622,14 +622,14 @@
     "cost": {
      "tasks": 6,
      "saved": 0.4234,
-     "lo": 0.2028,
-     "hi": 0.5989,
+     "lo": 0.2058,
+     "hi": 0.597,
      "p_wilcoxon": 0.015625
     },
     "quality": {
      "diff": 0.0622,
-     "lo": 0.0154,
-     "hi": 0.1075,
+     "lo": 0.0164,
+     "hi": 0.1064,
      "non_inferior": true,
      "arm_mean": 0.9156,
      "plain_mean": 0.8534
@@ -641,14 +641,14 @@
     "cost": {
      "tasks": 9,
      "saved": 0.2751,
-     "lo": 0.1726,
-     "hi": 0.3647,
+     "lo": 0.176,
+     "hi": 0.367,
      "p_wilcoxon": 0.013671875
     },
     "quality": {
      "diff": 0.0252,
-     "lo": 0.0127,
-     "hi": 0.0368,
+     "lo": 0.0128,
+     "hi": 0.0367,
      "non_inferior": true,
      "arm_mean": 0.972,
      "plain_mean": 0.9468
@@ -658,14 +658,14 @@
     "cost": {
      "tasks": 9,
      "saved": 0.4101,
-     "lo": 0.3145,
-     "hi": 0.4955,
+     "lo": 0.313,
+     "hi": 0.4949,
      "p_wilcoxon": 0.001953125
     },
     "quality": {
      "diff": -0.0173,
-     "lo": -0.0404,
-     "hi": 0.0035,
+     "lo": -0.0397,
+     "hi": 0.0036,
      "non_inferior": true,
      "arm_mean": 0.9295,
      "plain_mean": 0.9468
@@ -675,14 +675,14 @@
     "cost": {
      "tasks": 9,
      "saved": 0.5891,
-     "lo": 0.5108,
-     "hi": 0.6577,
+     "lo": 0.5098,
+     "hi": 0.6581,
      "p_wilcoxon": 0.001953125
     },
     "quality": {
      "diff": 0.0473,
      "lo": 0.0365,
-     "hi": 0.0573,
+     "hi": 0.0574,
      "non_inferior": true,
      "arm_mean": 0.9941,
      "plain_mean": 0.9468
@@ -696,61 +696,61 @@
  "hypotheses": {
   "H1": {
    "arm": "pack",
-   "p": 8.642797884659226e-09,
+   "p": 4.1869437864468633e-10,
    "cost": {
-    "tasks": 52,
-    "saved": 0.5592,
-    "lo": 0.5174,
-    "hi": 0.5993,
-    "p_wilcoxon": 8.642797884659226e-09
+    "tasks": 57,
+    "saved": 0.5478,
+    "lo": 0.505,
+    "hi": 0.588,
+    "p_wilcoxon": 4.1869437864468633e-10
    },
    "quality": {
-    "diff": 0.0509,
-    "lo": 0.0432,
-    "hi": 0.0588,
+    "diff": 0.0497,
+    "lo": 0.0424,
+    "hi": 0.057,
     "non_inferior": true,
-    "arm_mean": 0.9789,
-    "plain_mean": 0.928
+    "arm_mean": 0.9807,
+    "plain_mean": 0.9311
    },
-   "p_holm": 3.4571191538636904e-08
+   "p_holm": 1.6747775145787453e-09
   },
   "H2": {
    "arm": "lean",
-   "p": 1.0987175801135358e-05,
+   "p": 5.0841533008014685e-06,
    "cost": {
-    "tasks": 52,
-    "saved": 0.3896,
-    "lo": 0.3432,
-    "hi": 0.4335,
-    "p_wilcoxon": 1.0987175801135358e-05
+    "tasks": 57,
+    "saved": 0.3781,
+    "lo": 0.3321,
+    "hi": 0.4221,
+    "p_wilcoxon": 5.0841533008014685e-06
    },
    "quality": {
-    "diff": 0.0325,
-    "lo": 0.0248,
-    "hi": 0.0402,
+    "diff": 0.0319,
+    "lo": 0.0247,
+    "hi": 0.0391,
     "non_inferior": true,
-    "arm_mean": 0.9604,
-    "plain_mean": 0.928
+    "arm_mean": 0.963,
+    "plain_mean": 0.9311
    },
-   "p_holm": 3.2961527403406075e-05
+   "p_holm": 1.5252459902404405e-05
   },
   "H3": {
    "arm": "core",
-   "p": 0.009629546968533235,
+   "p": 0.022419321108004656,
    "cost": {
-    "tasks": 52,
-    "saved": 0.1852,
-    "lo": 0.1328,
-    "hi": 0.2343,
-    "p_wilcoxon": 0.009629546968533235
+    "tasks": 57,
+    "saved": 0.1754,
+    "lo": 0.1213,
+    "hi": 0.2247,
+    "p_wilcoxon": 0.022419321108004656
    },
    "quality": {
-    "diff": 0.0229,
-    "lo": 0.0152,
-    "hi": 0.0309,
+    "diff": 0.0241,
+    "lo": 0.017,
+    "hi": 0.0314,
     "non_inferior": true,
-    "arm_mean": 0.9509,
-    "plain_mean": 0.928
+    "arm_mean": 0.9552,
+    "plain_mean": 0.9311
    },
    "supported": true
   },
@@ -760,8 +760,8 @@
    "cost": {
     "tasks": 6,
     "saved": 0.7697,
-    "lo": 0.6847,
-    "hi": 0.8435,
+    "lo": 0.6815,
+    "hi": 0.8426,
     "p_wilcoxon": 0.015625
    },
    "quality": {
@@ -780,14 +780,14 @@
    "cost": {
     "tasks": 6,
     "saved": 0.577,
-    "lo": 0.5016,
-    "hi": 0.648,
+    "lo": 0.5019,
+    "hi": 0.6484,
     "p_wilcoxon": 0.015625
    },
    "quality": {
     "diff": 0.0542,
-    "lo": 0.0408,
-    "hi": 0.0675,
+    "lo": 0.0406,
+    "hi": 0.0672,
     "non_inferior": true,
     "arm_mean": 0.9692,
     "plain_mean": 0.915

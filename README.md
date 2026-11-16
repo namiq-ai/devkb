@@ -3,11 +3,11 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24267143.svg)](https://doi.org/10.5281/zenodo.24267143)
 
 **A knowledge graph of your repository for software development agents.** Agents answer "what calls this, what breaks, which tests"
-in one step instead of searching file by file: 56% cheaper, with better answers, in our benchmark.
+in one step instead of searching file by file: 55% cheaper, with better answers, in our benchmark.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/benchmark-dark.svg">
-  <img alt="Median cost per task: plain search $0.075 (quality 0.928); devkb 12 tools $0.060, 19% cheaper (0.951); devkb 7 tools $0.042, 39% cheaper (0.961); devkb pack $0.026, 56% cheaper (0.979)" src="docs/img/benchmark-light.svg">
+  <img alt="Median cost per task: plain search $0.070 (quality 0.931); devkb 12 tools $0.059, 18% cheaper (0.955); devkb 7 tools $0.040, 38% cheaper (0.963); devkb pack $0.025, 55% cheaper (0.981)" src="docs/img/benchmark-light.svg">
 </picture>
 
 ## 1. What devkb is
@@ -36,20 +36,20 @@ tickets.
 
 ## 2. How much it saves
 
-Latest benchmark: the 7 open-source repositories in [`bench/repos.yaml`](bench/repos.yaml), 52 tasks, 1,038 agent
+Latest benchmark: the 7 open-source repositories in [`bench/repos.yaml`](bench/repos.yaml), 57 tasks, 1,138 agent
 runs, the same model (Sonnet) in every arm, answers scored against truth computed from the source. Cost, turns and
 tokens are the median run; saving is per task against plain search, averaged over tasks; quality is the mean score:
 
 | | Plain search | devkb, 12 tools | devkb, 7 tools | devkb pack |
 |---|---|---|---|---|
-| **Cost per task** | $0.075 | $0.060 | $0.042 | **$0.026** |
-| **Saving** | — | 19% | 39% | **56%** |
-| **Quality** (0–1) | 0.928 | 0.951 (+0.023) | 0.961 (+0.033) | **0.979 (+0.051)** |
-| Turns | 5.5 | 7 | 6 | **3** |
-| Context processed (tokens) | 164k | 187k | 156k | **77k** |
-| of which cache reads | 155k | 173k | 146k | 76k |
-| of which new input and cache writes | 9.2k | 4.7k | 2.2k | 1.4k |
-| Output tokens | 1.6k | 1.8k | 1.3k | 0.9k |
+| **Cost per task** | $0.070 | $0.059 | $0.040 | **$0.025** |
+| **Saving** | — | 18% | 38% | **55%** |
+| **Quality** (0–1) | 0.931 | 0.955 (+0.024) | 0.963 (+0.032) | **0.981 (+0.050)** |
+| Turns | 4 | 6 | 5 | **3** |
+| Context processed (tokens) | 126k | 169k | 147k | **75k** |
+| of which cache reads | 123k | 163k | 141k | 74k |
+| of which new input and cache writes | 8.3k | 4.1k | 2.0k | 1.3k |
+| Output tokens | 1.4k | 1.8k | 1.3k | 0.9k |
 
 Saving and quality gain by repository (95% intervals in the results):
 
@@ -61,7 +61,7 @@ Saving and quality gain by repository (95% intervals in the results):
 | lattice-scan | 12 | 36% / +0.052 | **51%** / +0.058 |
 | Mealie | 6 | 18% / +0.095 | **42%** / +0.062 |
 | devkb | 4 | 1% / +0.004 | **40%** / +0.004 |
-| click | 3 | −3% / 0 | −19% / 0 |
+| click | 8 | 6% / +0.016 | 15% / +0.023 |
 
 The saving is in call chains (66–77% on tasks that trace an error or a change to the route handlers that reach it);
 on one-hop questions, as in click, plain search is already good. An earlier pre-registered study (30 held-out tasks,
@@ -89,13 +89,26 @@ devkb pack --project . error "message text"     # which route handlers reach it
 devkb pack --project . file path/to/file.py     # before editing a file
 ```
 
-For Codex, add to `~/.codex/config.toml`:
+### Your agent
+
+**Claude Code**: nothing more to do. `devkb init` registered the server in `.mcp.json` and pointed `CLAUDE.md` at the
+instructions. Start `claude` in the repository, approve the `devkb` server when asked, and check it with `/mcp`.
+
+**Cursor**: add `.cursor/mcp.json` to the repository, then enable `devkb` under Settings → MCP:
+
+```json
+{"mcpServers": {"devkb": {"command": "devkb", "args": ["mcp", "--project", ".", "--toolset", "dev"]}}}
+```
+
+**Codex**: add to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.devkb]
 command = "devkb"
 args = ["mcp", "--project", ".", "--toolset", "dev"]
 ```
+
+Codex and Cursor read the instructions in `AGENTS.md`; Claude Code reads them through `CLAUDE.md`.
 
 ## 4. Licence and citation
 

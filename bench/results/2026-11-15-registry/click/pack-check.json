@@ -1,11 +1,12 @@
 {
  "summary": {
-  "tasks": 3,
+  "tasks": 8,
   "mean_score": 1.0,
   "by_kind": {
    "refactor": 1.0
   },
-  "complete_but_wrong": []
+  "complete_but_wrong": [],
+  "truth_missing_callers": {}
  },
  "tasks": [
   {
@@ -20,6 +21,17 @@
    "words": 168
   },
   {
+   "task": "click-WIDE-option",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 344
+  },
+  {
    "task": "click-WIDE-term_len",
    "kind": "refactor",
    "score": 1.0,
@@ -31,7 +43,7 @@
    "words": 165
   },
   {
-   "task": "click-WIDE-_split_opt",
+   "task": "click-WIDE-help_option",
    "kind": "refactor",
    "score": 1.0,
    "parts": {
@@ -39,7 +51,115 @@
     "tests": 1.0
    },
    "complete": true,
-   "words": 152
+   "words": 170
+  },
+  {
+   "task": "click-WIDE-make_pass_decorator",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 164
+  },
+  {
+   "task": "click-WIDE-confirm",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 156
+  },
+  {
+   "task": "click-WIDE-prompt",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 186
+  },
+  {
+   "task": "click-WIDE-echo_via_pager",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 155
+  }
+ ],
+ "truth_check": [
+  {
+   "task": "click-WIDE-strip_ansi",
+   "truth": 6,
+   "found": 6,
+   "missing": [],
+   "unconfirmed": []
+  },
+  {
+   "task": "click-WIDE-option",
+   "truth": 25,
+   "found": 24,
+   "missing": [],
+   "unconfirmed": [
+    "tests/test_shell_completion.py"
+   ]
+  },
+  {
+   "task": "click-WIDE-term_len",
+   "truth": 4,
+   "found": 4,
+   "missing": [],
+   "unconfirmed": []
+  },
+  {
+   "task": "click-WIDE-help_option",
+   "truth": 5,
+   "found": 5,
+   "missing": [],
+   "unconfirmed": []
+  },
+  {
+   "task": "click-WIDE-make_pass_decorator",
+   "truth": 4,
+   "found": 4,
+   "missing": [],
+   "unconfirmed": []
+  },
+  {
+   "task": "click-WIDE-confirm",
+   "truth": 4,
+   "found": 3,
+   "missing": [],
+   "unconfirmed": [
+    "tests/test_utils/test_echo.py"
+   ]
+  },
+  {
+   "task": "click-WIDE-prompt",
+   "truth": 6,
+   "found": 5,
+   "missing": [],
+   "unconfirmed": [
+    "tests/test_utils/test_echo.py"
+   ]
+  },
+  {
+   "task": "click-WIDE-echo_via_pager",
+   "truth": 4,
+   "found": 4,
+   "missing": [],
+   "unconfirmed": []
   }
  ]
 }
