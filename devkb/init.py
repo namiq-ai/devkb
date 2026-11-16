@@ -32,8 +32,8 @@ HOOKS = ("post-commit", "post-merge", "post-checkout")
 AGENTS_BLOCK = """## devkb: before you change code
 
 This repository has a graph of its code (calls, tests, raised errors, commits, configuration) in `.devkb/`. Use it at
-these steps; each command prints the answer with the line of code that proves every item and says what it could not
-see:
+these steps, through the MCP server's `pack` tool or the `devkb pack` command (the same answer); each prints the answer
+with the line of code that proves every item and says what it could not see:
 
 1. **Before you edit an existing file**, run `devkb pack --project . file PATH`: which of its functions other files
    call (your change must keep them working), the files that depend on it, and the tests that exercise it.

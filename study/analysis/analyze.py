@@ -101,7 +101,7 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ns = ap.parse_args()
     rows = load(ns.runs)
-    arms = [a for a in ("plain", "core", "workflow", "lean", "pack") if any(r["arm"] == a for r in rows)]
+    arms = [a for a in ("plain", "core", "workflow", "lean", "lean-pack", "pack") if any(r["arm"] == a for r in rows)]
     rnd = random.Random(1)
     c = cells(rows)
     res = {"model": ns.model, "runs": len(rows), "cost_usd": round(sum(r["cost"] for r in rows), 2),
