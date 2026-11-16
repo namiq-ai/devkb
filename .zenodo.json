@@ -1,0 +1,14 @@
+{
+  "title": "devkb: a knowledge graph of a repository for coding agents",
+  "upload_type": "software",
+  "description": "<p>devkb builds a knowledge graph of a repository's code and development process (functions, calls, tests, routes, errors, configuration, commits, pull requests, tickets) and serves it to coding agents as pre-computed context packs and as an MCP server. The repository includes the benchmark harness, the registry of benchmarked repositories, raw runs, and the study behind the paper <em>Precomputed Context, Not More Tools: A Pre-Registered Study of Process Graphs for Coding Agents</em>, with a script that recomputes every result.</p>",
+  "creators": [
+    {"name": "Le, Hung T.", "affiliation": "Independent researcher"}
+  ],
+  "license": "Apache-2.0",
+  "access_right": "open",
+  "keywords": ["coding agents", "knowledge graph", "software process", "Model Context Protocol", "LLM agents", "benchmark", "pre-registration"],
+  "related_identifiers": [
+    {"identifier": "https://github.com/namiq-ai/devkb", "relation": "isSupplementTo", "scheme": "url"}
+  ]
+}

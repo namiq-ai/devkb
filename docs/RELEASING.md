@@ -64,6 +64,14 @@ result.
 
 Run `release` by hand from the Actions tab to rehearse: it audits, tests and builds, and publishes nothing.
 
+## DOI (Zenodo)
+
+Every published GitHub release is archived by Zenodo, which mints a DOI for that version and a concept DOI for all
+versions. The record's title, authors, licence and keywords come from [`.zenodo.json`](../.zenodo.json); GitHub's
+"Cite this repository" button reads [`CITATION.cff`](../CITATION.cff). Keep both, and `version` in `CITATION.cff`,
+in step with `pyproject.toml` at each release. One-time setup: sign in to zenodo.org with GitHub, Settings → GitHub,
+switch on `namiq-ai/devkb`.
+
 ## Publishing to PyPI
 
 Publishing is public and permanent: PyPI never accepts the same version twice, and a package once downloaded cannot
