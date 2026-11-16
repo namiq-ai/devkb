@@ -1,0 +1,125 @@
+efcore: 101259 edges before, 97754 after; removed 7266, added 3761
+
+## REMOVED (sample 20 of 7266)
+ 1. Microsoft.EntityFrameworkCore.Cosmos.Storage.Internal.CosmosClientWrapper.ReplaceItemOnceAsync -> Microsoft.EntityFrameworkCore.CosmosDatabaseFacadeExtensions.GetSessionToken
+    call src/EFCore.Cosmos/Storage/Internal/CosmosClientWrapper.cs:565: var itemRequestOptions = CreateItemRequestOptions(entry, sessionTokenStorage.GetSessionToken(containerId));
+    def  src/EFCore.Cosmos/Extensions/CosmosDatabaseFacadeExtensions.cs:34: public static string? GetSessionToken(this DatabaseFacade databaseFacade)
+ 2. Microsoft.EntityFrameworkCore.Migrations.Design.CSharpSnapshotGenerator.GenerateComplexPropertyAnnotations -> Microsoft.EntityFrameworkCore.Metadata.Internal.EntityTypeExtensions.GetDiscriminatorValue
+    call src/EFCore.Design/Migrations/Design/CSharpSnapshotGenerator.cs:740: var discriminatorValue = property.ComplexType.GetDiscriminatorValue();
+    def  src/EFCore/Metadata/Internal/EntityTypeExtensions.cs:355: public static object? GetDiscriminatorValue(this EntityType entityType)
+ 3. Microsoft.EntityFrameworkCore.Query.RelationalSqlTranslatingExpressionVisitor.VisitBinary.ProcessGetType.GeneratePredicateTpt -> Microsoft.EntityFrameworkCore.Metadata.Internal.EntityTypeExtensions.GetDiscriminatorValue
+    call src/EFCore.Relational/Query/RelationalSqlTranslatingExpressionVisitor.cs:399: .Select(e => (string)e.GetDiscriminatorValue()!)
+    def  src/EFCore/Metadata/Internal/EntityTypeExtensions.cs:355: public static object? GetDiscriminatorValue(this EntityType entityType)
+ 4. Microsoft.EntityFrameworkCore.SqlServer.Scaffolding.Internal.SqlServerDatabaseModelFactory.GetColumns -> Microsoft.EntityFrameworkCore.Internal.PartitionKeyBuilderExtensions.Add
+    call src/EFCore.SqlServer/Scaffolding/Internal/SqlServerDatabaseModelFactory.cs:864: table.Columns.Add(column);
+    def  src/EFCore.Cosmos/Extensions/Internal/PartitionKeyBuilderExtensions.cs:23: public static PartitionKeyBuilder Add(this PartitionKeyBuilder builder, object? value, IProperty? property)
+ 5. Microsoft.EntityFrameworkCore.ChangeTracking.Internal.ArrayPropertyValues.this[] -> Microsoft.EntityFrameworkCore.Internal.PartitionKeyBuilderExtensions.Add
+    call src/EFCore/ChangeTracking/Internal/ArrayPropertyValues.cs:455: complexObjectsList.Add(propertyValues?.ToObject());
+    def  src/EFCore.Cosmos/Extensions/Internal/PartitionKeyBuilderExtensions.cs:23: public static PartitionKeyBuilder Add(this PartitionKeyBuilder builder, object? value, IProperty? property)
+ 6. Microsoft.EntityFrameworkCore.Metadata.Conventions.InversePropertyAttributeConvention.ProcessEntityTypeMemberIgnored -> Microsoft.EntityFrameworkCore.Internal.TypeBaseExtensions.GetRuntimeProperties
+    call src/EFCore/Metadata/Conventions/InversePropertyAttributeConvention.cs:505: var navigationPropertyInfo = entityType.GetRuntimeProperties().Find(name);
+    def  src/EFCore/Extensions/Internal/TypeBaseExtensions.cs:50: public static IReadOnlyDictionary<string, PropertyInfo> GetRuntimeProperties(this IReadOnlyTypeBase type)
+ 7. Microsoft.EntityFrameworkCore.Query.PrimitiveCollectionsQueryCosmosTest.PrimitiveCollectionsQueryCosmosFixture.AddOptions -> Microsoft.EntityFrameworkCore.Query.IQueryFixtureBase.AddOptions
+    call test/EFCore.Cosmos.FunctionalTests/Query/PrimitiveCollectionsQueryCosmosTest.cs:2432: => base.AddOptions(
+    def  test/EFCore.Specification.Tests/Query/IQueryFixtureBase.cs:20: DbContextOptionsBuilder AddOptions(DbContextOptionsBuilder builder);
+ 8. Microsoft.EntityFrameworkCore.Metadata.Conventions.TableSharingConcurrencyTokenConventionTest.GetModelBuilder -> Microsoft.EntityFrameworkCore.Internal.PartitionKeyBuilderExtensions.Add
+    call test/EFCore.Relational.Tests/Metadata/Conventions/TableSharingConcurrencyTokenConventionTest.cs:296: conventionSet.ModelFinalizingConventions.Add(tableSharingConcurrencyTokenConvention);
+    def  src/EFCore.Cosmos/Extensions/Internal/PartitionKeyBuilderExtensions.cs:23: public static PartitionKeyBuilder Add(this PartitionKeyBuilder builder, object? value, IProperty? property)
+ 9. Microsoft.EntityFrameworkCore.Metadata.RelationalModelTest.AssertTables -> Microsoft.EntityFrameworkCore.Utilities.EnumerableExtensions.Any
+    call test/EFCore.Relational.Tests/Metadata/RelationalModelTest.cs:698: var orderDateIndex = orderType.GetIndexes().Single(i => i.Properties.Any(p => p.Name == nameof(Order.OrderDate)));
+    def  src/Shared/EnumerableExtensions.cs:115: public static bool Any(this IEnumerable source)
+10. Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.OneToManyTestBase.Can_have_principal_key_by_convention_specified_with_explicit_PK -> Microsoft.EntityFrameworkCore.Metadata.Internal.ForeignKeyExtensions.GetNavigations
+    call test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.OneToMany.cs:1529: Assert.Equal("BigMak", dependentType.GetNavigations().Single().Name);
+    def  src/EFCore/Metadata/Internal/ForeignKeyExtensions.cs:29: public static IEnumerable<IReadOnlyNavigation> GetNavigations(this IReadOnlyForeignKey foreignKey)
+11. Microsoft.EntityFrameworkCore.MonsterFixupTestBase.Fixup_with_binary_keys_happens_when_FKs_or_navigations_change_test -> Microsoft.EntityFrameworkCore.Utilities.DictionaryExtensions.Remove
+    call test/EFCore.Specification.Tests/MonsterFixupTestBase.cs:705: barcode1.BadScans.Remove(incorrectScan2);
+    def  src/Shared/DictionaryExtensions.cs:52: public static void Remove<TKey, TValue, TState>(
+12. Microsoft.EntityFrameworkCore.Query.ComplexTypeQueryTestBase.Can_update_entity_with_index_on_complex_type_property -> Microsoft.EntityFrameworkCore.Internal.PartitionKeyBuilderExtensions.Add
+    call test/EFCore.Specification.Tests/Query/ComplexTypeQueryTestBase.cs:1532: context.Add(
+    def  src/EFCore.Cosmos/Extensions/Internal/PartitionKeyBuilderExtensions.cs:23: public static PartitionKeyBuilder Add(this PartitionKeyBuilder builder, object? value, IProperty? property)
+13. Microsoft.EntityFrameworkCore.ExecutionStrategyTest.Retries_SaveChanges_on_execution_failure_with_two_contexts -> Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.OpenConnectionAsync
+    call test/EFCore.SqlServer.FunctionalTests/ExecutionStrategyTest.cs:390: await context.Database.OpenConnectionAsync();
+    def  src/EFCore.Relational/Extensions/RelationalDatabaseFacadeExtensions.cs:767: public static Task OpenConnectionAsync(
+14. Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlServerTest.Add_columns_to_temporal_table -> Microsoft.EntityFrameworkCore.SqlServerEntityTypeBuilderExtensions.HasPeriodStart
+    call test/EFCore.SqlServer.FunctionalTests/Migrations/MigrationsSqlServerTest.TemporalTables.cs:2352: ttb.HasPeriodStart("Start");
+    def  src/EFCore.SqlServer/Extensions/SqlServerEntityTypeBuilderExtensions.cs:533: public static IConventionEntityTypeBuilder? HasPeriodStart(
+15. Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlServerTest.Add_columns_to_temporal_table -> Microsoft.EntityFrameworkCore.SqlServerEntityTypeBuilderExtensions.HasPeriodEnd
+    call test/EFCore.SqlServer.FunctionalTests/Migrations/MigrationsSqlServerTest.TemporalTables.cs:2353: ttb.HasPeriodEnd("End");
+    def  src/EFCore.SqlServer/Extensions/SqlServerEntityTypeBuilderExtensions.cs:580: public static IConventionEntityTypeBuilder? HasPeriodEnd(
+16. Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlServerTest.Convert_sparse_column_of_temporal_table_to_regular -> Microsoft.EntityFrameworkCore.SqlServerEntityTypeBuilderExtensions.HasPeriodEnd
+    call test/EFCore.SqlServer.FunctionalTests/Migrations/MigrationsSqlServerTest.TemporalTables.cs:4436: ttb.HasPeriodEnd("End");
+    def  src/EFCore.SqlServer/Extensions/SqlServerEntityTypeBuilderExtensions.cs:580: public static IConventionEntityTypeBuilder? HasPeriodEnd(
+17. Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlServerTest.History_table_schema_not_created_if_we_know_it_already_exists2 -> Microsoft.EntityFrameworkCore.SqlServerEntityTypeBuilderExtensions.HasPeriodEnd
+    call test/EFCore.SqlServer.FunctionalTests/Migrations/MigrationsSqlServerTest.TemporalTables.cs:5058: ttb.HasPeriodEnd("SystemTimeEnd");
+    def  src/EFCore.SqlServer/Extensions/SqlServerEntityTypeBuilderExtensions.cs:580: public static IConventionEntityTypeBuilder? HasPeriodEnd(
+18. Microsoft.EntityFrameworkCore.ChangeTracking.Internal.FixupCompositeTest.Add_dependent_but_not_principal_one_to_many_FK_set_both_navs_set -> Microsoft.EntityFrameworkCore.Internal.PartitionKeyBuilderExtensions.Add
+    call test/EFCore.Tests/ChangeTracking/Internal/FixupCompositeTest.cs:1766: principal.Products.Add(dependent);
+    def  src/EFCore.Cosmos/Extensions/Internal/PartitionKeyBuilderExtensions.cs:23: public static PartitionKeyBuilder Add(this PartitionKeyBuilder builder, object? value, IProperty? property)
+19. Microsoft.EntityFrameworkCore.ChangeTracking.Internal.FixupTest.Add_principal_but_not_dependent_one_to_many_prin_uni -> Microsoft.EntityFrameworkCore.Internal.PartitionKeyBuilderExtensions.Add
+    call test/EFCore.Tests/ChangeTracking/Internal/FixupTest.cs:1043: principal.Products.Add(dependent);
+    def  src/EFCore.Cosmos/Extensions/Internal/PartitionKeyBuilderExtensions.cs:23: public static PartitionKeyBuilder Add(this PartitionKeyBuilder builder, object? value, IProperty? property)
+20. Microsoft.EntityFrameworkCore.DbSetTest.Use_of_set_throws_if_obtained_from_disposed_context -> Microsoft.EntityFrameworkCore.Utilities.DictionaryExtensions.Find
+    call test/EFCore.Tests/DbSetTest.cs:94: Assert.Throws<ObjectDisposedException>(() => set.Find(77)).Message);
+    def  src/Shared/DictionaryExtensions.cs:25: public static TValue? Find<TKey, TValue>(
+
+## ADDED (sample 20 of 3761)
+ 1. Microsoft.EntityFrameworkCore.Metadata.Internal.InternalStoredProcedureBuilder.CanHaveOriginalValueParameter -> Microsoft.EntityFrameworkCore.Metadata.ConfigurationSourceExtensions.Overrides
+    call src/EFCore.Relational/Metadata/Internal/InternalStoredProcedureBuilder.cs:251: || configurationSource.Overrides(Metadata.GetConfigurationSource());
+    def  src/EFCore/Metadata/ConfigurationSourceExtensions.cs:42: public static bool Overrides(this ConfigurationSource? newConfigurationSource, ConfigurationSource? oldConfigurationSource)
+ 2. Microsoft.EntityFrameworkCore.Metadata.StoreObjectIdentifier.Create -> Microsoft.EntityFrameworkCore.RelationalTypeBaseExtensions.GetTableName
+    call src/EFCore.Relational/Metadata/StoreObjectIdentifier.cs:34: var tableName = typeBase.GetTableName();
+    def  src/EFCore.Relational/Extensions/RelationalTypeBaseExtensions.cs:28: public static string? GetTableName(this IReadOnlyTypeBase typeBase)
+ 3. Microsoft.EntityFrameworkCore.Query.RelationalQueryableMethodTranslatingExpressionVisitor.TranslateSelectMany -> System.SharedTypeExtensions.GetSequenceType
+    call src/EFCore.Relational/Query/RelationalQueryableMethodTranslatingExpressionVisitor.cs:2555: var innerParameter = Expression.Parameter(selector.ReturnType.GetSequenceType(), "i");
+    def  src/Shared/SharedTypeExtensions.cs:142: public static Type GetSequenceType([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] this Type type)
+ 4. Microsoft.EntityFrameworkCore.SqlServerIndexExtensions.GetFullTextChangeTracking -> Microsoft.EntityFrameworkCore.RelationalIndexExtensions.FindSharedObjectRootIndex
+    call src/EFCore.SqlServer/Extensions/SqlServerIndexExtensions.cs:779: var sharedTableRootIndex = index.FindSharedObjectRootIndex(storeObject);
+    def  src/EFCore.Relational/Extensions/RelationalIndexExtensions.cs:389: public static IIndex? FindSharedObjectRootIndex(
+ 5. Microsoft.EntityFrameworkCore.SqlServer.Infrastructure.Internal.SqlServerModelValidator.ValidateUnsupportedIndexOptions -> Microsoft.EntityFrameworkCore.SqlServerIndexExtensions.IsClustered
+    call src/EFCore.SqlServer/Infrastructure/Internal/SqlServerModelValidator.cs:465: _ when index.IsClustered() is not null => "IsClustered",
+    def  src/EFCore.SqlServer/Extensions/SqlServerIndexExtensions.cs:38: public static bool? IsClustered(this IReadOnlyIndex index, in StoreObjectIdentifier storeObject)
+ 6. Microsoft.EntityFrameworkCore.SqlServer.Update.Internal.SqlServerUpdateSqlGenerator.AppendInsertSingleRowWithOutputInto -> Microsoft.EntityFrameworkCore.Update.UpdateSqlGenerator.AppendValues
+    call src/EFCore.SqlServer/Update/Internal/SqlServerUpdateSqlGenerator.cs:844: AppendValues(commandStringBuilder, name, schema, writeOperations);
+    def  src/EFCore.Relational/Update/UpdateSqlGenerator.cs:456: protected virtual void AppendValues(
+ 7. Microsoft.EntityFrameworkCore.Metadata.Internal.InternalComplexTypeBuilder.CanIgnore -> Microsoft.EntityFrameworkCore.Metadata.Internal.TypeBase.FindProperty
+    call src/EFCore/Metadata/Internal/InternalComplexTypeBuilder.cs:190: var property = Metadata.FindProperty(name);
+    def  src/EFCore/Metadata/Internal/TypeBase.cs:711: public virtual Property? FindProperty(string name)
+ 8. Microsoft.EntityFrameworkCore.Metadata.Internal.InternalNavigationBuilder.CanSetLazyLoadingEnabled -> Microsoft.EntityFrameworkCore.Metadata.ConfigurationSourceExtensions.Overrides
+    call src/EFCore/Metadata/Internal/InternalNavigationBuilder.cs:117: return configurationSource.Overrides(conventionNavigation.GetLazyLoadingEnabledConfigurationSource())
+    def  src/EFCore/Metadata/ConfigurationSourceExtensions.cs:42: public static bool Overrides(this ConfigurationSource? newConfigurationSource, ConfigurationSource? oldConfigurationSource)
+ 9. Microsoft.EntityFrameworkCore.BulkUpdates.NonSharedModelBulkUpdatesRelationalTestBase.UseTransaction -> Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.UseTransaction
+    call test/EFCore.Relational.Specification.Tests/BulkUpdates/NonSharedModelBulkUpdatesRelationalTestBase.cs:185: => facade.UseTransaction(transaction.GetDbTransaction());
+    def  src/EFCore.Relational/Extensions/RelationalDatabaseFacadeExtensions.cs:869: public static IDbContextTransaction? UseTransaction(
+10. Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.NonGenericTestComplexPropertyBuilder.PrimitiveCollection -> Microsoft.EntityFrameworkCore.Metadata.Builders.ComplexPropertyBuilder.PrimitiveCollection
+    call test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.NonGeneric.cs:538: return Wrap<TProperty>(PropertyBuilder.PrimitiveCollection(memberChain[^1].GetMemberType(), ToDottedName(memberChain)));
+    def  src/EFCore/Metadata/Builders/ComplexPropertyBuilder.cs:273: public virtual ComplexTypePrimitiveCollectionBuilder PrimitiveCollection(Type propertyType, string propertyName)
+11. Microsoft.EntityFrameworkCore.Query.AdHocMiscellaneousQuerySqlServerTest.Context30478.SeedAsync -> Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.ExecuteSqlRawAsync
+    call test/EFCore.SqlServer.FunctionalTests/Query/AdHocMiscellaneousQuerySqlServerTest.cs:1602: await Database.ExecuteSqlRawAsync("ALTER TABLE [Entities] SET (SYSTEM_VERSIONING = OFF)");
+    def  src/EFCore.Relational/Extensions/RelationalDatabaseFacadeExtensions.cs:646: public static async Task<int> ExecuteSqlRawAsync(
+12. Microsoft.EntityFrameworkCore.SqlServerDatabaseFacadeExtensionsTest.Is_configured_when_configuration_contains_associated_extension -> Microsoft.EntityFrameworkCore.SqlServerDbContextOptionsExtensions.UseSqlServer
+    call test/EFCore.SqlServer.Tests/Extensions/SqlServerDatabaseFacadeExtensionsTest.cs:22: optionsBuilder.UseSqlServer("Database=Crunchie");
+    def  src/EFCore.SqlServer/Extensions/SqlServerDbContextOptionsBuilderExtensions.cs:231: public static DbContextOptionsBuilder<TContext> UseSqlServer<TContext>(
+13. Microsoft.EntityFrameworkCore.ProxyGraphUpdatesSqliteTest.ChangeTrackingAndLazyLoading.ProxyGraphUpdatesWithChangeTrackingAndLazyLoadingSqliteFixture.AddOptions -> Microsoft.EntityFrameworkCore.ProxiesExtensions.UseChangeTrackingProxies
+    call test/EFCore.Sqlite.FunctionalTests/GraphUpdates/ProxyGraphUpdatesSqliteTest.cs:90: => base.AddOptions(builder.UseChangeTrackingProxies().UseLazyLoadingProxies());
+    def  src/EFCore.Proxies/ProxiesExtensions.cs:82: public static DbContextOptionsBuilder<TContext> UseChangeTrackingProxies<TContext>(
+14. Microsoft.EntityFrameworkCore.Query.SpatialQuerySqliteFixture.AddOptions -> Microsoft.EntityFrameworkCore.FixtureBase.AddOptions
+    call test/EFCore.Sqlite.FunctionalTests/Query/SpatialQuerySqliteFixture.cs:23: var optionsBuilder = base.AddOptions(builder);
+    def  test/EFCore.Specification.Tests/FixtureBase.cs:11: public virtual DbContextOptionsBuilder AddOptions(DbContextOptionsBuilder builder)
+15. TestNamespace.AutoIncrementEntityEntityType.CreateAnnotations -> Microsoft.EntityFrameworkCore.Metadata.RuntimeTypeBase.FindProperty
+    call test/EFCore.Sqlite.FunctionalTests/Scaffolding/Baselines/BigModel/AutoIncrementEntityEntityType.cs:113: var id = runtimeEntityType.FindProperty("Id");
+    def  src/EFCore/Metadata/RuntimeTypeBase.cs:274: public virtual RuntimeProperty? FindProperty(string name)
+16. Microsoft.EntityFrameworkCore.ChangeTracking.Internal.InternalEntityEntryTestBase.KContext.OnConfiguring -> Microsoft.EntityFrameworkCore.InMemoryDbContextOptionsExtensions.UseInMemoryDatabase
+    call test/EFCore.Tests/ChangeTracking/Internal/InternalEntityEntryTestBase.cs:908: => optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
+    def  src/EFCore.InMemory/Extensions/InMemoryDbContextOptionsExtensions.cs:118: public static DbContextOptionsBuilder UseInMemoryDatabase(
+17. Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparerTest.Can_define_different_custom_equals_for_key_and_non_key -> Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer.ctor
+    call test/EFCore.Tests/ChangeTracking/ValueComparerTest.cs:536: var comparer = new ValueComparer<Binary>(
+    def  src/EFCore/ChangeTracking/ValueComparer`.cs:97: public ValueComparer(
+18. Microsoft.EntityFrameworkCore.DbContextTest.Can_add_non_derived_context_as_transient_controlling_internal_services -> Microsoft.Extensions.DependencyInjection.EntityFrameworkServiceCollectionExtensions.AddDbContext
+    call test/EFCore.Tests/DbContextTest.Services.cs:2540: .AddDbContext<DbContext>((p, b) => b
+    def  src/EFCore/Extensions/EntityFrameworkServiceCollectionExtensions.cs:565: public static IServiceCollection AddDbContext
+19. Microsoft.EntityFrameworkCore.TypeExtensionsTest.Can_pretty_print_array_name -> System.SharedTypeExtensions.DisplayName
+    call test/EFCore.Tests/Extensions/TypeExtensionsTest.cs:521: => Assert.Equal(expected, type.DisplayName(fullName));
+    def  src/Shared/SharedTypeExtensions.cs:473: public static string DisplayName(this Type type, bool fullName = true, bool compilable = false)
+20. Microsoft.EntityFrameworkCore.Infrastructure.EntityFrameworkMetricsTest.Counts_when_execution_strategy_retries -> Microsoft.EntityFrameworkCore.ExecutionStrategyExtensions.ExecuteAsync
+    call test/EFCore.Tests/Infrastructure/EntityFrameworkMetricsTest.cs:272: executionStrategyMock.ExecuteAsync(() =>
+    def  src/EFCore/Storage/ExecutionStrategyExtensions.cs:423: public static Task<TResult> ExecuteAsync<TState, TResult>(

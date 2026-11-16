@@ -1,0 +1,60 @@
+ 1. Microsoft.EntityFrameworkCore.InMemory.Query.Internal.InMemoryExpressionTranslatingExpressionVisitor.VisitBinary -> src/EFCore.InMemory/Query/Internal/InMemoryExpressionTranslatingExpressionVisitor.cs::Microsoft.EntityFrameworkCore.InMemory.Query.Internal.InMemoryExpressionTranslatingExpressionVisitor.TryRewriteEntityEquality
+    call src/EFCore.InMemory/Query/Internal/InMemoryExpressionTranslatingExpressionVisitor.cs:236: && TryRewriteEntityEquality(
+    def  1327: private bool TryRewriteEntityEquality(
+ 2. Microsoft.EntityFrameworkCore.Diagnostics.RelationalLoggerExtensions.BoolWithDefaultWarning -> src/EFCore.Relational/Extensions/RelationalPropertyExtensions.cs::Microsoft.EntityFrameworkCore.RelationalPropertyExtensions.GetDefaultValue
+    call src/EFCore.Relational/Diagnostics/RelationalLoggerExtensions.cs:2796: var defaultValue = property.ClrType.GetDefaultValue();
+    def  963: public static object? GetDefaultValue(this IReadOnlyProperty property)
+ 3. Microsoft.EntityFrameworkCore.Diagnostics.CoreLoggerExtensions.DistinctAfterOrderByWithoutRowLimitingOperatorWarning -> src/EFCore/Diagnostics/IDiagnosticsLogger.cs::Microsoft.EntityFrameworkCore.Diagnostics.IDiagnosticsLogger.NeedsEventData
+    call src/EFCore/Diagnostics/CoreLoggerExtensions.cs:634: if (diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled))
+    def  121: [MethodImpl(MethodImplOptions.AggressiveInlining)] // Because hot path for logging
+ 4. Microsoft.EntityFrameworkCore.Metadata.Internal.ParameterBindingFactories.FindFactory -> src/EFCore/Metadata/ServiceParameterBindingFactory.cs::Microsoft.EntityFrameworkCore.Metadata.ServiceParameterBindingFactory.ctor
+    call src/EFCore/Metadata/Internal/ParameterBindingFactories.cs:42: ? new ServiceParameterBindingFactory(parameterType)
+    def  29: public ServiceParameterBindingFactory(Type serviceType)
+ 5. Microsoft.EntityFrameworkCore.Utilities.Check.NotEmpty -> src/Shared/Check.cs::Microsoft.EntityFrameworkCore.Utilities.Check.ThrowStringArgumentEmpty
+    call src/Shared/Check.cs:51: ThrowStringArgumentEmpty(parameterName);
+    def  128: [DoesNotReturn]
+ 6. Microsoft.EntityFrameworkCore.Query.NorthwindMiscellaneousQueryCosmosTest.Where_Join_Not_Exists -> test/EFCore.Specification.Tests/Query/QueryTestBase.cs::Microsoft.EntityFrameworkCore.Query.QueryTestBase.AssertTranslationFailed
+    call test/EFCore.Cosmos.FunctionalTests/Query/NorthwindMiscellaneousQueryCosmosTest.cs:1119: await AssertTranslationFailed(() => base.Where_Join_Not_Exists(async));
+    def  1260: protected static async Task AssertTranslationFailed(Func<Task> query)
+ 7. TestNamespace.PrincipalBasePrincipalDerivedDependentBasebyteEntityType.CreateForeignKey1 -> src/EFCore/Metadata/IEntityType.cs::Microsoft.EntityFrameworkCore.Metadata.IEntityType.FindProperty
+    call test/EFCore.Cosmos.FunctionalTests/Scaffolding/Baselines/BigModel/PrincipalBasePrincipalDerivedDependentBasebyteEntityType.cs:403: var runtimeForeignKey = declaringEntityType.AddForeignKey(new[] { declaringEntityType.FindProperty("DerivedsId"), declaringEn
+    def  436: new IProperty? FindProperty(MemberInfo memberInfo)
+ 8. Microsoft.EntityFrameworkCore.LoadTestBase.Load_one_to_one_reference_to_dependent_untyped -> test/EFCore.Specification.Tests/LoadTestBase.cs::Microsoft.EntityFrameworkCore.LoadTestBase.RecordLog
+    call test/EFCore.Specification.Tests/LoadTestBase.cs:1867: RecordLog();
+    def  5385: protected virtual void RecordLog()
+ 9. Microsoft.EntityFrameworkCore.Query.AdHocMiscellaneousQuerySqlServerTest.Batch_insert_with_sqlvariant_different_types -> test/EFCore.Specification.Tests/NonSharedModelTestBase.cs::Microsoft.EntityFrameworkCore.NonSharedModelTestBase.InitializeNonSharedTest
+    call test/EFCore.SqlServer.FunctionalTests/Query/AdHocMiscellaneousQuerySqlServerTest.cs:421: var contextFactory = await InitializeNonSharedTest<Context12482>();
+    def  39: protected virtual async Task<ContextFactory<TContext>> InitializeNonSharedTest<TContext>(
+10. Microsoft.EntityFrameworkCore.Query.AdHocMiscellaneousQuerySqlServerTest.Projecting_entity_with_value_converter_and_include_works -> test/EFCore.Specification.Tests/NonSharedModelTestBase.cs::Microsoft.EntityFrameworkCore.NonSharedModelTestBase.InitializeNonSharedTest
+    call test/EFCore.SqlServer.FunctionalTests/Query/AdHocMiscellaneousQuerySqlServerTest.cs:477: var contextFactory = await InitializeNonSharedTest<Context12518>(seed: c => c.SeedAsync());
+    def  39: protected virtual async Task<ContextFactory<TContext>> InitializeNonSharedTest<TContext>(
+11. Microsoft.EntityFrameworkCore.Query.NorthwindSetOperationsQuerySqlServerTest.Union_over_column_column -> test/EFCore.Specification.Tests/Query/NorthwindSetOperationsQueryTestBase.cs::Microsoft.EntityFrameworkCore.Query.NorthwindSetOperationsQueryTestBase.Union_over_column_column
+    call test/EFCore.SqlServer.FunctionalTests/Query/NorthwindSetOperationsQuerySqlServerTest.cs:541: await base.Union_over_column_column(async);
+    def  474: [Theory, MemberData(nameof(IsAsyncData))]
+12. Microsoft.EntityFrameworkCore.Query.PrimitiveCollectionsQueryOldSqlServerTest.Project_multiple_collections -> test/EFCore.Specification.Tests/Query/QueryTestBase.cs::Microsoft.EntityFrameworkCore.Query.QueryTestBase.AssertTranslationFailed
+    call test/EFCore.SqlServer.FunctionalTests/Query/PrimitiveCollectionsQueryOldSqlServerTest.cs:1928: => AssertTranslationFailed(base.Project_multiple_collections);
+    def  1260: protected static async Task AssertTranslationFailed(Func<Task> query)
+13. Microsoft.EntityFrameworkCore.Query.PrimitiveCollectionsQuerySqlServerTest.Values_of_enum_casted_to_underlying_value -> test/EFCore.SqlServer.FunctionalTests/Query/PrimitiveCollectionsQuerySqlServerTest.cs::Microsoft.EntityFrameworkCore.Query.PrimitiveCollectionsQuerySqlServerTest.AssertSql
+    call test/EFCore.SqlServer.FunctionalTests/Query/PrimitiveCollectionsQuerySqlServerTest.cs:3670: AssertSql(
+    def  4285: private void AssertSql(params string[] expected)
+14. Microsoft.EntityFrameworkCore.BuiltInDataTypesSqliteTest.Can_insert_and_read_back_all_mapped_sized_data_types -> test/EFCore.Specification.Tests/BuiltInDataTypesTestBase.cs::Microsoft.EntityFrameworkCore.BuiltInDataTypesTestBase.CreateContext
+    call test/EFCore.Sqlite.FunctionalTests/BuiltInDataTypesSqliteTest.cs:130: using (var context = CreateContext())
+    def  15: protected DbContext CreateContext()
+15. Microsoft.EntityFrameworkCore.BulkUpdates.Inheritance.TPHInheritanceBulkUpdatesSqliteTest.Update_where_hierarchy_subquery -> test/EFCore.Specification.Tests/BulkUpdates/Inheritance/InheritanceBulkUpdatesTestBase.cs::Microsoft.EntityFrameworkCore.BulkUpdates.Inheritance.InheritanceBulkUpdatesTestBase.Update_where_hierarchy_subquery
+    call test/EFCore.Sqlite.FunctionalTests/BulkUpdates/Inheritance/TPHInheritanceBulkUpdatesSqliteTest.cs:156: await base.Update_where_hierarchy_subquery(async);
+    def  93: [Theory(Skip = "InnerJoin"), MemberData(nameof(IsAsyncData))]
+16. Microsoft.EntityFrameworkCore.BulkUpdates.Inheritance.TPTFiltersInheritanceBulkUpdatesSqliteTest.ClearLog -> test/EFCore.Specification.Tests/TestUtilities/ListLoggerFactory.cs::Microsoft.EntityFrameworkCore.TestUtilities.ListLoggerFactory.Clear
+    call test/EFCore.Sqlite.FunctionalTests/BulkUpdates/Inheritance/TPTFiltersInheritanceBulkUpdatesSqliteTest.cs:223: => Fixture.TestSqlLoggerFactory.Clear();
+    def  23: public virtual void Clear()
+17. Microsoft.EntityFrameworkCore.Query.Associations.Navigations.NavigationsBulkUpdateSqliteTest.Update_required_nested_associate_to_null -> test/EFCore.Specification.Tests/Query/Associations/AssociationsBulkUpdateTestBase.cs::Microsoft.EntityFrameworkCore.Query.Associations.AssociationsBulkUpdateTestBase.Update_required_nested_associate_to_null
+    call test/EFCore.Sqlite.FunctionalTests/Query/Associations/Navigations/NavigationsBulkUpdateSqliteTest.cs:173: await base.Update_required_nested_associate_to_null();
+    def  284: [Fact]
+18. Microsoft.EntityFrameworkCore.Query.GearsOfWarQuerySqliteTest.Nav_expansion_inside_Skip_correlated_to_source -> test/EFCore.Specification.Tests/Query/GearsOfWarQueryTestBase.cs::Microsoft.EntityFrameworkCore.Query.GearsOfWarQueryTestBase.Nav_expansion_inside_Skip_correlated_to_source
+    call test/EFCore.Sqlite.FunctionalTests/Query/GearsOfWarQuerySqliteTest.cs:8538: await base.Nav_expansion_inside_Skip_correlated_to_source(async);
+    def  6952: [Theory(Skip = "issue #32303"), MemberData(nameof(IsAsyncData))]
+19. Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateDataTest.Can_read_and_manipulate_not_set_flags -> test/EFCore.Tests/ChangeTracking/Internal/StateDataTest.cs::Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateDataTest.PropertyManipulation
+    call test/EFCore.Tests/ChangeTracking/Internal/StateDataTest.cs:47: PropertyManipulation(
+    def  127: private void PropertyManipulation(
+20. Microsoft.EntityFrameworkCore.Infrastructure.ModelValidatorTest.Detects_non_owner_navigation_to_owned_entity_type -> test/EFCore.Tests/Infrastructure/ModelValidatorTestBase.cs::Microsoft.EntityFrameworkCore.Infrastructure.ModelValidatorTestBase.VerifyError
+    call test/EFCore.Tests/Infrastructure/ModelValidatorTest.cs:1736: VerifyError(
+    def  475: protected virtual void VerifyError(

@@ -10,3 +10,6 @@ languages:
       - {id: mediatr, url: https://github.com/jbogard/MediatR.git, commit: 1fad4c7a35c8dd4e733a0f8d43e28eddc1aa5f5b, min_symbols: 1250, min_calls: 530, min_tests: 195}
       - {id: fluentvalidation, url: https://github.com/FluentValidation/FluentValidation.git, commit: 5903fa65863ec66dabf10646b9c09b33130a03e8, min_symbols: 1740, min_calls: 2620, min_tests: 670}
       - {id: polly, url: https://github.com/App-vNext/Polly.git, commit: 3bac1c877ac5b94f0c09cbf4efe4c15fafce639d, min_symbols: 4430, min_calls: 4230, min_tests: 2100}
+      # big, well-known projects (SPEC-DEVKB-CSHARP-2): a media server and Microsoft's ORM, 1.8M lines
+      - {id: jellyfin, url: https://github.com/jellyfin/jellyfin.git, commit: 2953ed632c9277351483eff04f87a8276390691c, min_symbols: 13400, min_calls: 10100, min_tests: 1230}
+      - {id: efcore, url: https://github.com/dotnet/efcore.git, commit: 8859f78f10d013a06385c5817ab318414399f66f, min_symbols: 90000, min_calls: 78000, min_tests: 13700}
