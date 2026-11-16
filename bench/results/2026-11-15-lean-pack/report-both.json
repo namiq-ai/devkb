@@ -1,0 +1,455 @@
+{
+ "model": "sonnet",
+ "runs": 400,
+ "cost_usd": 23.68,
+ "tasks": 20,
+ "repos": [
+  "dispatch",
+  "lnbits"
+ ],
+ "describe": {
+  "plain": {
+   "runs": 100,
+   "valid": 99,
+   "median_cost": 0.0928,
+   "median_turns": 9.0,
+   "mean_score": 0.9374,
+   "graph_used": 0.0,
+   "median_result_bytes": 18501.0
+  },
+  "lean": {
+   "runs": 100,
+   "valid": 100,
+   "median_cost": 0.0451,
+   "median_turns": 6.0,
+   "mean_score": 0.9747,
+   "graph_used": 1.0,
+   "median_result_bytes": 5065.0
+  },
+  "lean-pack": {
+   "runs": 100,
+   "valid": 100,
+   "median_cost": 0.0318,
+   "median_turns": 4.0,
+   "mean_score": 0.9941,
+   "graph_used": 1.0,
+   "median_result_bytes": 7522.5
+  },
+  "pack": {
+   "runs": 100,
+   "valid": 100,
+   "median_cost": 0.0271,
+   "median_turns": 3.0,
+   "mean_score": 0.9797,
+   "graph_used": 0.0,
+   "median_result_bytes": 1132.0
+  }
+ },
+ "pooled": {
+  "lean": {
+   "cost": {
+    "tasks": 20,
+    "saved": 0.4159,
+    "lo": 0.3489,
+    "hi": 0.4756,
+    "p_wilcoxon": 0.0009927749633789062
+   },
+   "quality": {
+    "diff": 0.0374,
+    "lo": 0.0211,
+    "hi": 0.0541,
+    "non_inferior": true,
+    "arm_mean": 0.9747,
+    "plain_mean": 0.9374
+   }
+  },
+  "lean-pack": {
+   "cost": {
+    "tasks": 20,
+    "saved": 0.5271,
+    "lo": 0.4537,
+    "hi": 0.5904,
+    "p_wilcoxon": 0.0015764236450195312
+   },
+   "quality": {
+    "diff": 0.0567,
+    "lo": 0.0426,
+    "hi": 0.0712,
+    "non_inferior": true,
+    "arm_mean": 0.9941,
+    "plain_mean": 0.9374
+   }
+  },
+  "pack": {
+   "cost": {
+    "tasks": 20,
+    "saved": 0.5764,
+    "lo": 0.5051,
+    "hi": 0.6414,
+    "p_wilcoxon": 0.00013065338134765625
+   },
+   "quality": {
+    "diff": 0.0423,
+    "lo": 0.0273,
+    "hi": 0.058,
+    "non_inferior": true,
+    "arm_mean": 0.9797,
+    "plain_mean": 0.9374
+   }
+  }
+ },
+ "by_kind": {
+  "err_to_handler": {
+   "lean": {
+    "cost": {
+     "tasks": 5,
+     "saved": 0.5582,
+     "lo": 0.4686,
+     "hi": 0.6377,
+     "p_wilcoxon": 0.03125
+    },
+    "quality": {
+     "diff": -0.0045,
+     "lo": -0.0224,
+     "hi": 0.0145,
+     "non_inferior": true,
+     "arm_mean": 0.9678,
+     "plain_mean": 0.9722
+    }
+   },
+   "lean-pack": {
+    "cost": {
+     "tasks": 5,
+     "saved": 0.6782,
+     "lo": 0.5821,
+     "hi": 0.7567,
+     "p_wilcoxon": 0.03125
+    },
+    "quality": {
+     "diff": 0.0251,
+     "lo": 0.0192,
+     "hi": 0.03,
+     "non_inferior": true,
+     "arm_mean": 0.9973,
+     "plain_mean": 0.9722
+    }
+   },
+   "pack": {
+    "cost": {
+     "tasks": 5,
+     "saved": 0.7115,
+     "lo": 0.6066,
+     "hi": 0.7988,
+     "p_wilcoxon": 0.03125
+    },
+    "quality": {
+     "diff": 0.024,
+     "lo": 0.0177,
+     "hi": 0.0294,
+     "non_inferior": true,
+     "arm_mean": 0.9963,
+     "plain_mean": 0.9722
+    }
+   }
+  },
+  "impact": {
+   "lean": {
+    "cost": {
+     "tasks": 8,
+     "saved": 0.4987,
+     "lo": 0.4166,
+     "hi": 0.5677,
+     "p_wilcoxon": 0.00390625
+    },
+    "quality": {
+     "diff": 0.0796,
+     "lo": 0.0418,
+     "hi": 0.1185,
+     "non_inferior": true,
+     "arm_mean": 0.9659,
+     "plain_mean": 0.8863
+    }
+   },
+   "lean-pack": {
+    "cost": {
+     "tasks": 8,
+     "saved": 0.6999,
+     "lo": 0.6238,
+     "hi": 0.7647,
+     "p_wilcoxon": 0.00390625
+    },
+    "quality": {
+     "diff": 0.1095,
+     "lo": 0.0757,
+     "hi": 0.1432,
+     "non_inferior": true,
+     "arm_mean": 0.9958,
+     "plain_mean": 0.8863
+    }
+   },
+   "pack": {
+    "cost": {
+     "tasks": 8,
+     "saved": 0.6384,
+     "lo": 0.543,
+     "hi": 0.7217,
+     "p_wilcoxon": 0.00390625
+    },
+    "quality": {
+     "diff": 0.0786,
+     "lo": 0.043,
+     "hi": 0.1165,
+     "non_inferior": true,
+     "arm_mean": 0.965,
+     "plain_mean": 0.8863
+    }
+   }
+  },
+  "refactor": {
+   "lean": {
+    "cost": {
+     "tasks": 7,
+     "saved": -0.2381,
+     "lo": -0.6527,
+     "hi": 0.0633,
+     "p_wilcoxon": 0.9609375
+    },
+    "quality": {
+     "diff": 0.019,
+     "lo": 0.0065,
+     "hi": 0.0296,
+     "non_inferior": true,
+     "arm_mean": 0.9898,
+     "plain_mean": 0.9708
+    }
+   },
+   "lean-pack": {
+    "cost": {
+     "tasks": 7,
+     "saved": -0.529,
+     "lo": -1.0344,
+     "hi": -0.1515,
+     "p_wilcoxon": 0.9921875
+    },
+    "quality": {
+     "diff": 0.019,
+     "lo": 0.0063,
+     "hi": 0.0296,
+     "non_inferior": true,
+     "arm_mean": 0.9898,
+     "plain_mean": 0.9708
+    }
+   },
+   "pack": {
+    "cost": {
+     "tasks": 7,
+     "saved": 0.0262,
+     "lo": -0.35,
+     "hi": 0.2971,
+     "p_wilcoxon": 0.59375
+    },
+    "quality": {
+     "diff": 0.0139,
+     "lo": 0.002,
+     "hi": 0.0261,
+     "non_inferior": true,
+     "arm_mean": 0.9847,
+     "plain_mean": 0.9708
+    }
+   }
+  }
+ },
+ "by_repo": {
+  "dispatch": {
+   "lean": {
+    "cost": {
+     "tasks": 8,
+     "saved": 0.361,
+     "lo": 0.2279,
+     "hi": 0.4676,
+     "p_wilcoxon": 0.09765625
+    },
+    "quality": {
+     "diff": 0.0593,
+     "lo": 0.0232,
+     "hi": 0.0966,
+     "non_inferior": true,
+     "arm_mean": 0.9581,
+     "plain_mean": 0.8988
+    }
+   },
+   "lean-pack": {
+    "cost": {
+     "tasks": 8,
+     "saved": 0.4617,
+     "lo": 0.3276,
+     "hi": 0.5645,
+     "p_wilcoxon": 0.07421875
+    },
+    "quality": {
+     "diff": 0.0881,
+     "lo": 0.0572,
+     "hi": 0.1208,
+     "non_inferior": true,
+     "arm_mean": 0.9869,
+     "plain_mean": 0.8988
+    }
+   },
+   "pack": {
+    "cost": {
+     "tasks": 8,
+     "saved": 0.4649,
+     "lo": 0.3201,
+     "hi": 0.5862,
+     "p_wilcoxon": 0.0546875
+    },
+    "quality": {
+     "diff": 0.0527,
+     "lo": 0.02,
+     "hi": 0.0895,
+     "non_inferior": true,
+     "arm_mean": 0.9516,
+     "plain_mean": 0.8988
+    }
+   }
+  },
+  "lnbits": {
+   "lean": {
+    "cost": {
+     "tasks": 12,
+     "saved": 0.4521,
+     "lo": 0.3738,
+     "hi": 0.5225,
+     "p_wilcoxon": 0.004638671875
+    },
+    "quality": {
+     "diff": 0.0227,
+     "lo": 0.0081,
+     "hi": 0.0348,
+     "non_inferior": true,
+     "arm_mean": 0.9858,
+     "plain_mean": 0.9631
+    }
+   },
+   "lean-pack": {
+    "cost": {
+     "tasks": 12,
+     "saved": 0.5703,
+     "lo": 0.4799,
+     "hi": 0.6526,
+     "p_wilcoxon": 0.008056640625
+    },
+    "quality": {
+     "diff": 0.0358,
+     "lo": 0.023,
+     "hi": 0.0441,
+     "non_inferior": true,
+     "arm_mean": 0.9989,
+     "plain_mean": 0.9631
+    }
+   },
+   "pack": {
+    "cost": {
+     "tasks": 12,
+     "saved": 0.65,
+     "lo": 0.5668,
+     "hi": 0.7233,
+     "p_wilcoxon": 0.001220703125
+    },
+    "quality": {
+     "diff": 0.0354,
+     "lo": 0.0226,
+     "hi": 0.0438,
+     "non_inferior": true,
+     "arm_mean": 0.9985,
+     "plain_mean": 0.9631
+    }
+   }
+  }
+ },
+ "noise": {
+  "plain_score_sd_median": 0.0
+ },
+ "hypotheses": {
+  "H1": {
+   "arm": "pack",
+   "p": 0.00013065338134765625,
+   "cost": {
+    "tasks": 20,
+    "saved": 0.5764,
+    "lo": 0.5051,
+    "hi": 0.6414,
+    "p_wilcoxon": 0.00013065338134765625
+   },
+   "quality": {
+    "diff": 0.0423,
+    "lo": 0.0273,
+    "hi": 0.058,
+    "non_inferior": true,
+    "arm_mean": 0.9797,
+    "plain_mean": 0.9374
+   },
+   "p_holm": 0.000522613525390625
+  },
+  "H2": {
+   "arm": "lean",
+   "p": 0.0009927749633789062,
+   "cost": {
+    "tasks": 20,
+    "saved": 0.4159,
+    "lo": 0.3489,
+    "hi": 0.4756,
+    "p_wilcoxon": 0.0009927749633789062
+   },
+   "quality": {
+    "diff": 0.0374,
+    "lo": 0.0211,
+    "hi": 0.0541,
+    "non_inferior": true,
+    "arm_mean": 0.9747,
+    "plain_mean": 0.9374
+   },
+   "p_holm": 0.0029783248901367188
+  },
+  "H4-pack": {
+   "arm": "pack",
+   "p": 0.03125,
+   "cost": {
+    "tasks": 5,
+    "saved": 0.7115,
+    "lo": 0.6066,
+    "hi": 0.7988,
+    "p_wilcoxon": 0.03125
+   },
+   "quality": {
+    "diff": 0.024,
+    "lo": 0.0177,
+    "hi": 0.0294,
+    "non_inferior": true,
+    "arm_mean": 0.9963,
+    "plain_mean": 0.9722
+   },
+   "p_holm": 0.0625
+  },
+  "H4-lean": {
+   "arm": "lean",
+   "p": 0.03125,
+   "cost": {
+    "tasks": 5,
+    "saved": 0.5582,
+    "lo": 0.4686,
+    "hi": 0.6377,
+    "p_wilcoxon": 0.03125
+   },
+   "quality": {
+    "diff": -0.0045,
+    "lo": -0.0224,
+    "hi": 0.0145,
+    "non_inferior": true,
+    "arm_mean": 0.9678,
+    "plain_mean": 0.9722
+   },
+   "p_holm": 0.0625
+  }
+ }
+}

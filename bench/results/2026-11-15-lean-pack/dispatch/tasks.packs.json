@@ -1,0 +1,228 @@
+[
+ {
+  "id": "dispatch-ERR-update",
+  "kind": "err_to_handler",
+  "skill": "devkb-rca",
+  "prompt": "Users of the web API get an error whose message is: \"Unable to update cost model. No cost model found with that id.\". Trace it: name the function that raises it, every HTTP route handler function (a function decorated as a FastAPI route) that can reach that function through calls at any depth, and every test file that calls the raising function or any function on a path between it and those handlers. Answer with one JSON object: {\"raiser\": \"path::function\", \"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "raiser": "src/dispatch/cost_model/service.py::update",
+   "handlers": [
+    "src/dispatch/cost_model/views.py::update_cost_model"
+   ],
+   "test_files": [
+    "tests/cost_model/test_cost_model_service.py"
+   ],
+   "closure_size": 1
+  },
+  "pack": "# Graph pack: error \"Unable to update cost model. No cost model found with that id.\"\n\nBuilt from the dev-process graph at commit `dd2837e82a`. None of the files below has changed since; the line numbers are current.\n\n## Raised by\n- `src/dispatch/cost_model/service.py::update` \u2014 `src/dispatch/cost_model/service.py:107: def update(*, db_session, cost_model_in: CostModelUpdate) -> CostModel:`\n\n## Functions that reach it, at any depth (1)\n- `src/dispatch/cost_model/views.py::update_cost_model` \u2014 `src/dispatch/cost_model/views.py:55: return update(db_session=db_session, cost_model_in=cost_model_in)`\n\n## Route handlers that reach it (1)\n- `src/dispatch/cost_model/views.py::update_cost_model` (PUT /{cost_model_id})\n  - `src/dispatch/cost_model/views.py:55: return update(db_session=db_session, cost_model_in=cost_model_in)`\n  - path: `update_cost_model` \u2192 `update`\n\n## Test files on those paths (1)\n- `tests/cost_model/test_cost_model_service.py` \u2014 `tests/cost_model/test_cost_model_service.py:179: add_update_cost_model = update(db_session=session, cost_model_in=add_update_cost_model_in)`\n\nRun: `python3 -m pytest tests/cost_model/test_cost_model_service.py -q`\n\n## Coverage\n**Incomplete: 58 call site(s) under this name could not be attributed.** 72 symbols share the name, so most may be calls to the others. They are in 31 files; the 10 with the most: `src/dispatch/plugins/dispatch_slack/middleware.py`, `src/dispatch/plugins/dispatch_jira/plugin.py`, `src/dispatch/ticket/flows.py`, `src/dispatch/incident/messaging.py`, `src/dispatch/search/fulltext/__init__.py`, `src/dispatch/case/views.py`, `src/dispatch/cli.py`, `src/dispatch/conversation/flows.py`, `src/dispatch/document/flows.py`, `src/dispatch/incident/views.py`. Search the whole repository for the rest.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "error",
+   "message": "Unable to update cost model. No cost model found with that id."
+  }
+ },
+ {
+  "id": "dispatch-IMP-get_by_name_or_raise",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `get_by_name_or_raise` (defined in src/dispatch/tag/service.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "src/dispatch/data/source/views.py::create_source",
+    "src/dispatch/data/source/views.py::update_source",
+    "src/dispatch/incident_role/views.py::update_incident_role"
+   ],
+   "test_files": [
+    "tests/incident_role/test_incident_role_service.py"
+   ],
+   "closure_size": 7
+  },
+  "pack": "# Graph pack: changing `src/dispatch/tag/service.py::get_by_name_or_raise`\n\nBuilt from the dev-process graph at commit `dd2837e82a`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/dispatch/tag/service.py:24: def get_by_name_or_raise(*, db_session, project_id: int, tag_in: TagRead):`.\n\n## Functions that reach it, at any depth (7)\n- `src/dispatch/data/source/service.py::create` \u2014 `src/dispatch/data/source/service.py:57: project = project_service.get_by_name_or_raise(`\n- `src/dispatch/data/source/service.py::get_or_create` \u2014 `src/dispatch/data/source/service.py:161: return create(db_session=db_session, source_in=source_in)`\n- `src/dispatch/data/source/service.py::update` \u2014 `src/dispatch/data/source/service.py:185: source.owner = service_service.get_by_name_or_raise(`\n- `src/dispatch/data/source/views.py::create_source` \u2014 `src/dispatch/data/source/views.py:39: return create(db_session=db_session, source_in=source_in)`\n- `src/dispatch/data/source/views.py::update_source` \u2014 `src/dispatch/data/source/views.py:51: return update(db_session=db_session, source=source, source_in=source_in)`\n- `src/dispatch/incident_role/service.py::create_or_update` \u2014 `src/dispatch/incident_role/service.py:70: project = project_service.get_by_name_or_raise(db_session=db_session, project_in=project_in)`\n- `src/dispatch/incident_role/views.py::update_incident_role` \u2014 `src/dispatch/incident_role/views.py:47: \"policies\": create_or_update(`\n\n## Route handlers that reach it (3)\n- `src/dispatch/data/source/views.py::create_source` (POST  (src/dispatch/data/source/views.py)) \u2014 path: `create_source` \u2192 `create` \u2192 `get_by_name_or_raise`\n  - `src/dispatch/data/source/views.py:39: return create(db_session=db_session, source_in=source_in)`\n  - `src/dispatch/data/source/service.py:57: project = project_service.get_by_name_or_raise(`\n- `src/dispatch/data/source/views.py::update_source` (PUT /{source_id}) \u2014 path: `update_source` \u2192 `update` \u2192 `get_by_name_or_raise`\n  - `src/dispatch/data/source/views.py:51: return update(db_session=db_session, source=source, source_in=source_in)`\n  - `src/dispatch/data/source/service.py:185: source.owner = service_service.get_by_name_or_raise(`\n- `src/dispatch/incident_role/views.py::update_incident_role` (PUT /{role}) \u2014 path: `update_incident_role` \u2192 `create_or_update` \u2192 `get_by_name_or_raise`\n  - `src/dispatch/incident_role/views.py:47: \"policies\": create_or_update(`\n  - `src/dispatch/incident_role/service.py:70: project = project_service.get_by_name_or_raise(db_session=db_session, project_in=project_in)`\n\n## Test files to run (1): every test calling it or a function on those paths\n- `tests/incident_role/test_incident_role_service.py` \u2014 `tests/incident_role/test_incident_role_service.py:49: created_roles = create_or_update(`\n\nRun: `python3 -m pytest tests/incident_role/test_incident_role_service.py -q`\n\n## Coverage\n**Incomplete: 64 call site(s) under this name could not be attributed.** 85 symbols share the name, so most may be calls to the others. They are in 36 files; the 10 with the most: `src/dispatch/conversation/flows.py`, `src/dispatch/conference/flows.py`, `src/dispatch/group/flows.py`, `src/dispatch/plugins/dispatch_openai/plugin.py`, `src/dispatch/ticket/flows.py`, `src/dispatch/plugins/dispatch_slack/middleware.py`, `src/dispatch/plugins/dispatch_jira/plugin.py`, `src/dispatch/incident/messaging.py`, `src/dispatch/search/fulltext/__init__.py`, `src/dispatch/case/views.py`. Search the whole repository for the rest.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "change",
+   "name": "get_by_name_or_raise",
+   "path": "src/dispatch/tag/service.py"
+  }
+ },
+ {
+  "id": "dispatch-IMP-update_group",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `update_group` (defined in src/dispatch/group/flows.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "src/dispatch/case/views.py::create_case_channel",
+    "src/dispatch/task/views.py::create_task",
+    "src/dispatch/task/views.py::update_task"
+   ],
+   "test_files": [
+    "tests/signal/test_signal_flow.py",
+    "tests/task/test_task_service.py"
+   ],
+   "closure_size": 65
+  },
+  "pack": "# Graph pack: changing `src/dispatch/group/flows.py::update_group`\n\nBuilt from the dev-process graph at commit `dd2837e82a`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/dispatch/group/flows.py:91: def update_group(`.\n\n## Functions that reach it, at any depth (65)\n- `src/dispatch/case/flows.py::case_active_status_flow` \u2014 `src/dispatch/case/flows.py:723: reactivate_case_participants(case, db_session)`\n- `src/dispatch/case/flows.py::case_add_or_reactivate_participant_flow` \u2014 `src/dispatch/case/flows.py:124: group_flows.update_group(`\n- `src/dispatch/case/flows.py::case_assign_role_flow` \u2014 `src/dispatch/case/flows.py:1151: case_add_or_reactivate_participant_flow(participant_email, case.id, db_session=db_session)`\n- `src/dispatch/case/flows.py::case_closed_create_flow` \u2014 `src/dispatch/case/flows.py:452: case_new_create_flow(`\n- `src/dispatch/case/flows.py::case_create_conversation_flow` \u2014 `src/dispatch/case/flows.py:1198: case_add_or_reactivate_participant_flow(`\n- `src/dispatch/case/flows.py::case_create_resources_flow` \u2014 `src/dispatch/case/flows.py:1303: case_create_conversation_flow(`\n- `src/dispatch/case/flows.py::case_engage_oncall_flow` \u2014 `src/dispatch/case/flows.py:1410: oncall_participant_added = case_add_or_reactivate_participant_flow(`\n- `src/dispatch/case/flows.py::case_escalated_create_flow` \u2014 `src/dispatch/case/flows.py:428: case_new_create_flow(`\n- `src/dispatch/case/flows.py::case_escalated_status_flow` \u2014 `src/dispatch/case/flows.py:623: case_to_incident_escalate_flow(`\n- `src/dispatch/case/flows.py::case_new_create_flow` \u2014 `src/dispatch/case/flows.py:370: group_flows.update_group(`\n- `src/dispatch/case/flows.py::case_remove_participant_flow` \u2014 `src/dispatch/case/flows.py:186: group_flows.update_group(`\n- `src/dispatch/case/flows.py::case_stable_create_flow` \u2014 `src/dispatch/case/flows.py:409: case_new_create_flow(`\n- `src/dispatch/case/flows.py::case_status_transition_flow_dispatcher` \u2014 `src/dispatch/case/flows.py:783: case_escalated_status_flow(`\n- `src/dispatch/case/flows.py::case_to_incident_endpoint_escalate_flow` \u2014 `src/dispatch/case/flows.py:1132: common_escalate_flow(`\n- `src/dispatch/case/flows.py::case_to_incident_escalate_flow` \u2014 `src/dispatch/case/flows.py:1108: common_escalate_flow(`\n- `src/dispatch/case/flows.py::case_triage_create_flow` \u2014 `src/dispatch/case/flows.py:394: case_new_create_flow(`\n- `src/dispatch/case/flows.py::case_update_flow` \u2014 `src/dispatch/case/flows.py:533: group_flows.update_group(`\n- `src/dispatch/case/flows.py::common_escalate_flow` \u2014 `src/dispatch/case/flows.py:1030: group_flows.update_group(`\n- `src/dispatch/case/flows.py::reactivate_case_participants` \u2014 `src/dispatch/case/flows.py:695: case_add_or_reactivate_participant_flow(`\n- `src/dispatch/case/views.py::create_case_channel` \u2014 `src/dispatch/case/views.py:250: case_create_conversation_flow(`\n- `src/dispatch/cli.py::process_signals` \u2014 `src/dispatch/cli.py:1004: signal_flows.signal_instance_create_flow(`\n- `src/dispatch/incident/flows.py::incident_add_or_reactivate_participant_flow` \u2014 `src/dispatch/incident/flows.py:1086: group_flows.update_group(`\n- `src/dispatch/incident/flows.py::incident_assign_role_flow` \u2014 `src/dispatch/incident/flows.py:873: incident_add_or_reactivate_participant_flow(assignee_email, incident.id, db_session=db_session)`\n- `src/dispatch/incident/flows.py::incident_create_flow` \u2014 `src/dispatch/incident/flows.py:405: incident_create_resources(`\n- `src/dispatch/incident/flows.py::incident_create_resources` \u2014 `src/dispatch/incident/flows.py:323: group_flows.update_group(`\n- `src/dispatch/incident/flows.py::incident_create_resources_flow` \u2014 `src/dispatch/incident/flows.py:385: return incident_create_resources(incident=incident, db_session=db_session)`\n- `src/dispatch/incident/flows.py::incident_create_stable_flow` \u2014 `src/dispatch/incident/flows.py:448: incident_create_flow(`\n- `src/dispatch/incident/flows.py::incident_engage_oncall_flow` \u2014 `src/dispatch/incident/flows.py:982: oncall_participant_added = incident_add_or_reactivate_participant_flow(`\n- `src/dispatch/incident/flows.py::incident_remove_participant_flow` \u2014 `src/dispatch/incident/flows.py:1202: group_flows.update_group(`\n- `src/dispatch/incident/flows.py::incident_subscribe_participant_flow` \u2014 `src/dispatch/incident/flows.py:1032: group_flows.update_group(`\n- `src/dispatch/incident/flows.py::incident_update_flow` \u2014 `src/dispatch/incident/flows.py:809: incident_add_or_reactivate_participant_flow(`\n- `src/dispatch/incident/flows.py::reactivate_incident_participants` \u2014 `src/dispatch/incident/flows.py:129: incident_add_or_reactivate_participant_flow(`\n- `src/dispatch/incident/flows.py::status_flow_dispatcher` \u2014 `src/dispatch/incident/flows.py:736: reactivate_incident_participants(incident=incident, db_session=db_session)`\n- `src/dispatch/plugins/dispatch_slack/case/interactive.py::handle_case_participant_role_activity` \u2014 `src/dispatch/plugins/dispatch_slack/case/interactive.py:1296: participant = case_flows.case_add_or_reactivate_participant_flow(`\n- `src/dispatch/plugins/dispatch_slack/case/interactive.py::handle_create_channel_event` \u2014 `src/dispatch/plugins/dispatch_slack/case/interactive.py:1810: case_flows.case_create_conversation_flow(`\n- `src/dispatch/plugins/dispatch_slack/case/interactive.py::handle_edit_submission_event` \u2014 `src/dispatch/plugins/dispatch_slack/case/interactive.py:2133: case_flows.case_update_flow(`\n- `src/dispatch/plugins/dispatch_slack/case/interactive.py::handle_engagement_submission_event` \u2014 `src/dispatch/plugins/dispatch_slack/case/interactive.py:2880: send_engagement_response(`\n- `src/dispatch/plugins/dispatch_slack/case/interactive.py::handle_escalation_submission_event` \u2014 `src/dispatch/plugins/dispatch_slack/case/interactive.py:1620: case_flows.case_escalated_status_flow(`\n- `src/dispatch/plugins/dispatch_slack/case/interactive.py::handle_new_participant_message` \u2014 `src/dispatch/plugins/dispatch_slack/case/interactive.py:1240: participant = case_flows.case_add_or_reactivate_participant_flow(`\n- `src/dispatch/plugins/dispatch_slack/case/interactive.py::handle_report_submission_event` \u2014 `src/dispatch/plugins/dispatch_slack/case/interactive.py:2657: case_flows.case_new_create_flow(`\n- \u2026 25 more\n\n## Route handlers that reach it (3)\n- `src/dispatch/case/views.py::create_case_channel` (POST /{case_id}/resources/conversation) \u2014 path: `create_case_channel` \u2192 `case_create_conversation_flow` \u2192 `case_add_or_reactivate_participant_flow` \u2192 `update_group`\n  - `src/dispatch/case/views.py:250: case_create_conversation_flow(`\n  - `src/dispatch/case/flows.py:1198: case_add_or_reactivate_participant_flow(`\n  - `src/dispatch/case/flows.py:124: group_flows.update_group(`\n- `src/dispatch/task/views.py::create_task` (POST  (src/dispatch/task/views.py)) \u2014 path: `create_task` \u2192 `create` \u2192 `incident_add_or_reactivate_participant_flow` \u2192 `update_group`\n  - `src/dispatch/task/views.py:60: task = create(db_session=db_session, task_in=task_in)`\n  - `src/dispatch/task/service.py:84: assignee = incident_flows.incident_add_or_reactivate_participant_flow(`\n  - `src/dispatch/incident/flows.py:1086: group_flows.update_group(`\n- `src/dispatch/task/views.py::update_task` (PUT /{task_id}) \u2014 path: `update_task` \u2192 `update` \u2192 `incident_add_or_reactivate_participant_flow` \u2192 `update_group`\n  - `src/dispatch/task/views.py:106: task = update(db_session=db_session, task=task, task_in=task_in)`\n  - `src/dispatch/task/service.py:169: incident_flows.incident_add_or_reactivate_participant_flow(`\n  - `src/dispatch/incident/flows.py:1086: group_flows.update_group(`\n\n## Test files to run (2): every test calling it or a function on those paths\n- `tests/signal/test_signal_flow.py` (+2 more tests) \u2014 `tests/signal/test_signal_flow.py:483: post_flow_instance = signal_instance_create_flow(`\n- `tests/task/test_task_service.py` (+1 more tests) \u2014 `tests/task/test_task_service.py:24: task = create(db_session=session, task_in=task_in)`\n\nRun: `python3 -m pytest tests/signal/test_signal_flow.py tests/task/test_task_service.py -q`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "change",
+   "name": "update_group",
+   "path": "src/dispatch/group/flows.py"
+  }
+ },
+ {
+  "id": "dispatch-IMP-get_signal_engagement_by_name",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `get_signal_engagement_by_name` (defined in src/dispatch/signal/service.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "src/dispatch/signal/views.py::create_signal",
+    "src/dispatch/signal/views.py::update_signal",
+    "src/dispatch/signal/views.py::update_signal_with_filters"
+   ],
+   "test_files": [
+    "tests/signal/test_signal_service.py"
+   ],
+   "closure_size": 7
+  },
+  "pack": "# Graph pack: changing `src/dispatch/signal/service.py::get_signal_engagement_by_name`\n\nBuilt from the dev-process graph at commit `dd2837e82a`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/dispatch/signal/service.py:69: def get_signal_engagement_by_name(`.\n\n## Functions that reach it, at any depth (7)\n- `src/dispatch/signal/service.py::create` \u2014 `src/dispatch/signal/service.py:404: signal_engagement = get_signal_engagement_by_name(`\n- `src/dispatch/signal/service.py::get_signal_engagement_by_name_or_raise` \u2014 `src/dispatch/signal/service.py:85: signal_engagement = get_signal_engagement_by_name(`\n- `src/dispatch/signal/service.py::update` \u2014 `src/dispatch/signal/service.py:524: signal_engagement = get_signal_engagement_by_name_or_raise(`\n- `src/dispatch/signal/views.py::_update_signal` \u2014 `src/dispatch/signal/views.py:382: signal = update(`\n- `src/dispatch/signal/views.py::create_signal` \u2014 `src/dispatch/signal/views.py:357: return create(db_session=db_session, signal_in=signal_in, user=current_user)`\n- `src/dispatch/signal/views.py::update_signal` \u2014 `src/dispatch/signal/views.py:414: return _update_signal(`\n- `src/dispatch/signal/views.py::update_signal_with_filters` \u2014 `src/dispatch/signal/views.py:435: return _update_signal(`\n\n## Route handlers that reach it (3)\n- `src/dispatch/signal/views.py::create_signal` (POST  (src/dispatch/signal/views.py)) \u2014 path: `create_signal` \u2192 `create` \u2192 `get_signal_engagement_by_name`\n  - `src/dispatch/signal/views.py:357: return create(db_session=db_session, signal_in=signal_in, user=current_user)`\n  - `src/dispatch/signal/service.py:404: signal_engagement = get_signal_engagement_by_name(`\n- `src/dispatch/signal/views.py::update_signal` (PUT /{signal_id}) \u2014 path: `update_signal` \u2192 `_update_signal` \u2192 `update` \u2192 `get_signal_engagement_by_name_or_raise` \u2192 `get_signal_engagement_by_name`\n  - `src/dispatch/signal/views.py:414: return _update_signal(`\n  - `src/dispatch/signal/views.py:382: signal = update(`\n  - `src/dispatch/signal/service.py:524: signal_engagement = get_signal_engagement_by_name_or_raise(`\n  - `src/dispatch/signal/service.py:85: signal_engagement = get_signal_engagement_by_name(`\n- `src/dispatch/signal/views.py::update_signal_with_filters` (PUT /update/{signal_id}) \u2014 path: `update_signal_with_filters` \u2192 `_update_signal` \u2192 `update` \u2192 `get_signal_engagement_by_name_or_raise` \u2192 `get_signal_engagement_by_name`\n  - `src/dispatch/signal/views.py:435: return _update_signal(`\n  - `src/dispatch/signal/views.py:382: signal = update(`\n  - `src/dispatch/signal/service.py:524: signal_engagement = get_signal_engagement_by_name_or_raise(`\n  - `src/dispatch/signal/service.py:85: signal_engagement = get_signal_engagement_by_name(`\n\n## Test files to run (1): every test calling it or a function on those paths\n- `tests/signal/test_signal_service.py` (+3 more tests) \u2014 `tests/signal/test_signal_service.py:92: create(db_session=session, signal_in=signal_in)`\n\nRun: `python3 -m pytest tests/signal/test_signal_service.py -q`\n\n## Coverage\n**Incomplete: 64 call site(s) under this name could not be attributed.** 85 symbols share the name, so most may be calls to the others. They are in 36 files; the 10 with the most: `src/dispatch/conversation/flows.py`, `src/dispatch/conference/flows.py`, `src/dispatch/group/flows.py`, `src/dispatch/plugins/dispatch_openai/plugin.py`, `src/dispatch/ticket/flows.py`, `src/dispatch/plugins/dispatch_slack/middleware.py`, `src/dispatch/plugins/dispatch_jira/plugin.py`, `src/dispatch/incident/messaging.py`, `src/dispatch/search/fulltext/__init__.py`, `src/dispatch/case/views.py`. Search the whole repository for the rest.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "change",
+   "name": "get_signal_engagement_by_name",
+   "path": "src/dispatch/signal/service.py"
+  }
+ },
+ {
+  "id": "dispatch-IMP-get_signal_filter_by_name",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `get_signal_filter_by_name` (defined in src/dispatch/signal/service.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "src/dispatch/signal/views.py::create_signal",
+    "src/dispatch/signal/views.py::update_signal",
+    "src/dispatch/signal/views.py::update_signal_with_filters"
+   ],
+   "test_files": [
+    "tests/signal/test_signal_service.py"
+   ],
+   "closure_size": 8
+  },
+  "pack": "# Graph pack: changing `src/dispatch/signal/service.py::get_signal_filter_by_name`\n\nBuilt from the dev-process graph at commit `dd2837e82a`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/dispatch/signal/service.py:268: def get_signal_filter_by_name(*, db_session, project_id: int, name: str) -> SignalFilter | None:`.\n\n## Functions that reach it, at any depth (8)\n- `src/dispatch/plugins/dispatch_slack/case/interactive.py::handle_snooze_preview_event` \u2014 `src/dispatch/plugins/dispatch_slack/case/interactive.py:849: name_taken = signal_service.get_signal_filter_by_name(`\n- `src/dispatch/signal/service.py::create` \u2014 `src/dispatch/signal/service.py:413: signal_filter = get_signal_filter_by_name(`\n- `src/dispatch/signal/service.py::get_signal_filter_by_name_or_raise` \u2014 `src/dispatch/signal/service.py:252: signal_filter = get_signal_filter_by_name(`\n- `src/dispatch/signal/service.py::update` \u2014 `src/dispatch/signal/service.py:540: signal_filter = get_signal_filter_by_name_or_raise(`\n- `src/dispatch/signal/views.py::_update_signal` \u2014 `src/dispatch/signal/views.py:382: signal = update(`\n- `src/dispatch/signal/views.py::create_signal` \u2014 `src/dispatch/signal/views.py:357: return create(db_session=db_session, signal_in=signal_in, user=current_user)`\n- `src/dispatch/signal/views.py::update_signal` \u2014 `src/dispatch/signal/views.py:414: return _update_signal(`\n- `src/dispatch/signal/views.py::update_signal_with_filters` \u2014 `src/dispatch/signal/views.py:435: return _update_signal(`\n\n## Route handlers that reach it (3)\n- `src/dispatch/signal/views.py::create_signal` (POST  (src/dispatch/signal/views.py)) \u2014 path: `create_signal` \u2192 `create` \u2192 `get_signal_filter_by_name`\n  - `src/dispatch/signal/views.py:357: return create(db_session=db_session, signal_in=signal_in, user=current_user)`\n  - `src/dispatch/signal/service.py:413: signal_filter = get_signal_filter_by_name(`\n- `src/dispatch/signal/views.py::update_signal` (PUT /{signal_id}) \u2014 path: `update_signal` \u2192 `_update_signal` \u2192 `update` \u2192 `get_signal_filter_by_name_or_raise` \u2192 `get_signal_filter_by_name`\n  - `src/dispatch/signal/views.py:414: return _update_signal(`\n  - `src/dispatch/signal/views.py:382: signal = update(`\n  - `src/dispatch/signal/service.py:540: signal_filter = get_signal_filter_by_name_or_raise(`\n  - `src/dispatch/signal/service.py:252: signal_filter = get_signal_filter_by_name(`\n- `src/dispatch/signal/views.py::update_signal_with_filters` (PUT /update/{signal_id}) \u2014 path: `update_signal_with_filters` \u2192 `_update_signal` \u2192 `update` \u2192 `get_signal_filter_by_name_or_raise` \u2192 `get_signal_filter_by_name`\n  - `src/dispatch/signal/views.py:435: return _update_signal(`\n  - `src/dispatch/signal/views.py:382: signal = update(`\n  - `src/dispatch/signal/service.py:540: signal_filter = get_signal_filter_by_name_or_raise(`\n  - `src/dispatch/signal/service.py:252: signal_filter = get_signal_filter_by_name(`\n\n## Test files to run (1): every test calling it or a function on those paths\n- `tests/signal/test_signal_service.py` (+3 more tests) \u2014 `tests/signal/test_signal_service.py:92: create(db_session=session, signal_in=signal_in)`\n\nRun: `python3 -m pytest tests/signal/test_signal_service.py -q`\n\n## Coverage\n**Incomplete: 64 call site(s) under this name could not be attributed.** 85 symbols share the name, so most may be calls to the others. They are in 36 files; the 10 with the most: `src/dispatch/conversation/flows.py`, `src/dispatch/conference/flows.py`, `src/dispatch/group/flows.py`, `src/dispatch/plugins/dispatch_openai/plugin.py`, `src/dispatch/ticket/flows.py`, `src/dispatch/plugins/dispatch_slack/middleware.py`, `src/dispatch/plugins/dispatch_jira/plugin.py`, `src/dispatch/incident/messaging.py`, `src/dispatch/search/fulltext/__init__.py`, `src/dispatch/case/views.py`. Search the whole repository for the rest.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "change",
+   "name": "get_signal_filter_by_name",
+   "path": "src/dispatch/signal/service.py"
+  }
+ },
+ {
+  "id": "dispatch-WIDE-log_incident_event",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `log_incident_event` (defined in src/dispatch/event/service.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/dispatch/ai/service.py",
+    "src/dispatch/case/flows.py",
+    "src/dispatch/conference/flows.py",
+    "src/dispatch/conversation/flows.py",
+    "src/dispatch/document/flows.py",
+    "src/dispatch/event/flows.py",
+    "src/dispatch/event/service.py",
+    "src/dispatch/group/flows.py",
+    "src/dispatch/incident/flows.py",
+    "src/dispatch/incident/messaging.py",
+    "src/dispatch/incident/service.py",
+    "src/dispatch/participant/flows.py",
+    "src/dispatch/participant_role/flows.py",
+    "src/dispatch/plugins/dispatch_slack/incident/interactive.py",
+    "src/dispatch/report/flows.py",
+    "src/dispatch/storage/flows.py",
+    "src/dispatch/task/service.py",
+    "src/dispatch/ticket/flows.py",
+    "tests/event/test_event_service.py"
+   ],
+   "test_files": [
+    "tests/event/test_event_service.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/dispatch/event/service.py::log_incident_event`\n\nBuilt from the dev-process graph at commit `dd2837e82a`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/dispatch/event/service.py:91: def log_incident_event(`.\n\n## Files with a direct caller (19, tests included)\n- `src/dispatch/ai/service.py` (+2 more) \u2014 `src/dispatch/ai/service.py:433: event_service.log_incident_event(`\n- `src/dispatch/case/flows.py` \u2014 `src/dispatch/case/flows.py:942: event_service.log_incident_event(`\n- `src/dispatch/conference/flows.py` \u2014 `src/dispatch/conference/flows.py:29: event_service.log_incident_event(`\n- `src/dispatch/conversation/flows.py` (+1 more) \u2014 `src/dispatch/conversation/flows.py:551: event_service.log_incident_event(`\n- `src/dispatch/document/flows.py` (+1 more) \u2014 `src/dispatch/document/flows.py:110: event_service.log_incident_event(`\n- `src/dispatch/event/flows.py` \u2014 `src/dispatch/event/flows.py:15: def log_incident_event(`\n- `src/dispatch/event/service.py` \u2014 `src/dispatch/event/service.py:86: return log_incident_event(incident_id=subject.id, **kwargs)`\n- `src/dispatch/group/flows.py` (+1 more) \u2014 `src/dispatch/group/flows.py:81: event_service.log_incident_event(`\n- `src/dispatch/incident/flows.py` (+7 more) \u2014 `src/dispatch/incident/flows.py:630: event_service.log_incident_event(`\n- `src/dispatch/incident/messaging.py` \u2014 `src/dispatch/incident/messaging.py:388: event_service.log_incident_event(`\n- `src/dispatch/incident/service.py` \u2014 `src/dispatch/incident/service.py:214: event_service.log_incident_event(`\n- `src/dispatch/participant/flows.py` (+1 more) \u2014 `src/dispatch/participant/flows.py:90: event_service.log_incident_event(`\n- `src/dispatch/participant_role/flows.py` \u2014 `src/dispatch/participant_role/flows.py:63: event_service.log_incident_event(`\n- `src/dispatch/plugins/dispatch_slack/incident/interactive.py` (+2 more) \u2014 `src/dispatch/plugins/dispatch_slack/incident/interactive.py:1478: event_service.log_incident_event(`\n- `src/dispatch/report/flows.py` (+1 more) \u2014 `src/dispatch/report/flows.py:140: event_service.log_incident_event(`\n- `src/dispatch/storage/flows.py` (+1 more) \u2014 `src/dispatch/storage/flows.py:97: event_service.log_incident_event(`\n- `src/dispatch/task/service.py` \u2014 `src/dispatch/task/service.py:145: event_service.log_incident_event(`\n- `src/dispatch/ticket/flows.py` (+2 more) \u2014 `src/dispatch/ticket/flows.py:75: event_service.log_incident_event(`\n- `tests/event/test_event_service.py` \u2014 `tests/event/test_event_service.py:87: event = log_incident_event(`\n\n## Test files among them (1)\n- `tests/event/test_event_service.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "log_incident_event",
+   "role": "",
+   "path": "src/dispatch/event/service.py"
+  }
+ },
+ {
+  "id": "dispatch-WIDE-log_case_event",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `log_case_event` (defined in src/dispatch/event/service.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/dispatch/ai/service.py",
+    "src/dispatch/case/flows.py",
+    "src/dispatch/case/messaging.py",
+    "src/dispatch/case/service.py",
+    "src/dispatch/conversation/flows.py",
+    "src/dispatch/document/flows.py",
+    "src/dispatch/event/flows.py",
+    "src/dispatch/event/service.py",
+    "src/dispatch/group/flows.py",
+    "src/dispatch/participant/flows.py",
+    "src/dispatch/participant_role/flows.py",
+    "src/dispatch/plugins/dispatch_slack/case/interactive.py",
+    "src/dispatch/plugins/dispatch_slack/incident/interactive.py",
+    "src/dispatch/storage/flows.py",
+    "src/dispatch/ticket/flows.py",
+    "tests/case/test_case_event_views.py",
+    "tests/case/test_case_service.py",
+    "tests/event/test_event_service.py"
+   ],
+   "test_files": [
+    "tests/case/test_case_event_views.py",
+    "tests/case/test_case_service.py",
+    "tests/event/test_event_service.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/dispatch/event/service.py::log_case_event`\n\nBuilt from the dev-process graph at commit `dd2837e82a`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/dispatch/event/service.py:142: def log_case_event(`.\n\n## Files with a direct caller (18, tests included)\n- `src/dispatch/ai/service.py` \u2014 `src/dispatch/ai/service.py:686: event_service.log_case_event(`\n- `src/dispatch/case/flows.py` (+9 more) \u2014 `src/dispatch/case/flows.py:1187: event_service.log_case_event(`\n- `src/dispatch/case/messaging.py` \u2014 `src/dispatch/case/messaging.py:181: event_service.log_case_event(`\n- `src/dispatch/case/service.py` (+1 more) \u2014 `src/dispatch/case/service.py:229: event_service.log_case_event(`\n- `src/dispatch/conversation/flows.py` (+1 more) \u2014 `src/dispatch/conversation/flows.py:496: event_service.log_case_event(`\n- `src/dispatch/document/flows.py` (+1 more) \u2014 `src/dispatch/document/flows.py:103: event_service.log_case_event(`\n- `src/dispatch/event/flows.py` \u2014 `src/dispatch/event/flows.py:79: def log_case_event(`\n- `src/dispatch/event/service.py` \u2014 `src/dispatch/event/service.py:88: return log_case_event(case_id=subject.id, **kwargs)`\n- `src/dispatch/group/flows.py` (+1 more) \u2014 `src/dispatch/group/flows.py:74: event_service.log_case_event(`\n- `src/dispatch/participant/flows.py` \u2014 `src/dispatch/participant/flows.py:83: event_service.log_case_event(`\n- `src/dispatch/participant_role/flows.py` \u2014 `src/dispatch/participant_role/flows.py:157: event_service.log_case_event(`\n- `src/dispatch/plugins/dispatch_slack/case/interactive.py` \u2014 `src/dispatch/plugins/dispatch_slack/case/interactive.py:1265: event_service.log_case_event(`\n- `src/dispatch/plugins/dispatch_slack/incident/interactive.py` \u2014 `src/dispatch/plugins/dispatch_slack/incident/interactive.py:931: event = event_service.log_case_event(`\n- `src/dispatch/storage/flows.py` (+1 more) \u2014 `src/dispatch/storage/flows.py:90: event_service.log_case_event(`\n- `src/dispatch/ticket/flows.py` (+1 more) \u2014 `src/dispatch/ticket/flows.py:193: event_service.log_case_event(`\n- `tests/case/test_case_event_views.py` (+2 more) \u2014 `tests/case/test_case_event_views.py:220: event = log_case_event(`\n- `tests/case/test_case_service.py` \u2014 `tests/case/test_case_service.py:242: log_case_event(`\n- `tests/event/test_event_service.py` \u2014 `tests/event/test_event_service.py:99: event = log_case_event(`\n\n## Test files among them (3)\n- `tests/case/test_case_event_views.py`\n- `tests/case/test_case_service.py`\n- `tests/event/test_event_service.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "log_case_event",
+   "role": "",
+   "path": "src/dispatch/event/service.py"
+  }
+ },
+ {
+  "id": "dispatch-WIDE-get_by_email_and_project",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `get_by_email_and_project` (defined in src/dispatch/individual/service.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/dispatch/case/flows.py",
+    "src/dispatch/event/flows.py",
+    "src/dispatch/feedback/service/scheduled.py",
+    "src/dispatch/forms/service.py",
+    "src/dispatch/forms/type/service.py",
+    "src/dispatch/incident/flows.py",
+    "src/dispatch/individual/service.py",
+    "src/dispatch/individual/views.py",
+    "src/dispatch/plugins/dispatch_core/plugin.py",
+    "src/dispatch/plugins/dispatch_slack/feedback/interactive.py",
+    "src/dispatch/plugins/dispatch_slack/incident/interactive.py",
+    "src/dispatch/signal/service.py",
+    "tests/individual_contact/test_individual_contact_service.py"
+   ],
+   "test_files": [
+    "tests/individual_contact/test_individual_contact_service.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/dispatch/individual/service.py::get_by_email_and_project`\n\nBuilt from the dev-process graph at commit `dd2837e82a`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/dispatch/individual/service.py:35: def get_by_email_and_project(`.\n\n## Files with a direct caller (13, tests included)\n- `src/dispatch/case/flows.py` \u2014 `src/dispatch/case/flows.py:1421: individual = individual_service.get_by_email_and_project(`\n- `src/dispatch/event/flows.py` (+1 more) \u2014 `src/dispatch/event/flows.py:87: individual = individual_service.get_by_email_and_project(`\n- `src/dispatch/feedback/service/scheduled.py` \u2014 `src/dispatch/feedback/service/scheduled.py:101: individual = individual_service.get_by_email_and_project(`\n- `src/dispatch/forms/service.py` \u2014 `src/dispatch/forms/service.py:32: individual = individual_service.get_by_email_and_project(`\n- `src/dispatch/forms/type/service.py` \u2014 `src/dispatch/forms/type/service.py:34: individual = individual_service.get_by_email_and_project(`\n- `src/dispatch/incident/flows.py` (+1 more) \u2014 `src/dispatch/incident/flows.py:624: individual = individual_service.get_by_email_and_project(`\n- `src/dispatch/individual/service.py` (+1 more) \u2014 `src/dispatch/individual/service.py:51: individual_contact = get_by_email_and_project(`\n- `src/dispatch/individual/views.py` \u2014 `src/dispatch/individual/views.py:53: individual = get_by_email_and_project(`\n- `src/dispatch/plugins/dispatch_core/plugin.py` \u2014 `src/dispatch/plugins/dispatch_core/plugin.py:489: individual = individual_service.get_by_email_and_project(`\n- `src/dispatch/plugins/dispatch_slack/feedback/interactive.py` \u2014 `src/dispatch/plugins/dispatch_slack/feedback/interactive.py:419: else individual_service.get_by_email_and_project(`\n- `src/dispatch/plugins/dispatch_slack/incident/interactive.py` \u2014 `src/dispatch/plugins/dispatch_slack/incident/interactive.py:871: individual = individual_service.get_by_email_and_project(`\n- `src/dispatch/signal/service.py` (+1 more) \u2014 `src/dispatch/signal/service.py:452: individual = individual_service.get_by_email_and_project(`\n- `tests/individual_contact/test_individual_contact_service.py` \u2014 `tests/individual_contact/test_individual_contact_service.py:12: contact = get_by_email_and_project(`\n\n## Test files among them (1)\n- `tests/individual_contact/test_individual_contact_service.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "get_by_email_and_project",
+   "role": "",
+   "path": "src/dispatch/individual/service.py"
+  }
+ }
+]

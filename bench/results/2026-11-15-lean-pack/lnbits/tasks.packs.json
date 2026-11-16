@@ -1,0 +1,430 @@
+[
+ {
+  "id": "lnbits-ERR-decode_key",
+  "kind": "err_to_handler",
+  "skill": "devkb-rca",
+  "prompt": "Users of the web API get an error whose message is: \"The onchain encryption key must contain 32 random bytes.\". Trace it: name the function that raises it, every HTTP route handler function (a function decorated as a FastAPI route) that can reach that function through calls at any depth, and every test file that calls the raising function or any function on a path between it and those handlers. Answer with one JSON object: {\"raiser\": \"path::function\", \"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "raiser": "lnbits/core/services/onchain.py::decode_key",
+   "handlers": [
+    "lnbits/core/views/admin_api.py::api_backup_onchain_key",
+    "lnbits/core/views/admin_api.py::api_confirm_onchain_key_backup",
+    "lnbits/core/views/admin_api.py::api_setup_onchain_key",
+    "lnbits/core/views/onchain_api.py::create_hot_wallet",
+    "lnbits/core/views/onchain_api.py::hot_wallet_status"
+   ],
+   "test_files": [
+    "tests/api/test_onchain_wallet.py",
+    "tests/unit/onchain/test_hot_wallet.py",
+    "tests/unit/test_onchain_key.py"
+   ],
+   "closure_size": 12
+  },
+  "pack": "# Graph pack: error \"The onchain encryption key must contain 32 random bytes.\"\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\n## Raised by\n- `lnbits/core/services/onchain.py::decode_key` \u2014 `lnbits/core/services/onchain.py:93: def decode_key(encoded: str) -> bytes:`\n\n## Functions that reach it, at any depth (12)\n- `lnbits/core/services/onchain.py::_save_key` \u2014 `lnbits/core/services/onchain.py:531: if decode_key(target.read_text()) != key:`\n- `lnbits/core/services/onchain.py::confirm_onchain_key_backup` \u2014 `lnbits/core/services/onchain.py:205: status = await setup_onchain_key()`\n- `lnbits/core/services/onchain.py::decrypt_wallet_mnemonic` \u2014 `lnbits/core/services/onchain.py:232: return decrypt_mnemonic(encrypted, read_onchain_key(), _mnemonic_context(wallet))`\n- `lnbits/core/services/onchain.py::encrypt_wallet_mnemonic` \u2014 `lnbits/core/services/onchain.py:228: return encrypt_mnemonic(mnemonic, read_onchain_key(), _mnemonic_context(wallet))`\n- `lnbits/core/services/onchain.py::read_onchain_key` \u2014 `lnbits/core/services/onchain.py:118: stored = decode_key(key_path().read_text()) if key_path().exists() else None`\n- `lnbits/core/services/onchain.py::setup_onchain_key` \u2014 `lnbits/core/services/onchain.py:164: key = decode_key(restore)`\n- `lnbits/core/services/onchain.py::sign_payment` \u2014 `lnbits/core/services/onchain.py:288: mnemonic = decrypt_wallet_mnemonic(encrypted, wallet)`\n- `lnbits/core/views/admin_api.py::api_backup_onchain_key` \u2014 `lnbits/core/views/admin_api.py:212: status = await setup_onchain_key()`\n- `lnbits/core/views/admin_api.py::api_confirm_onchain_key_backup` \u2014 `lnbits/core/views/admin_api.py:246: return await confirm_onchain_key_backup(fingerprint)`\n- `lnbits/core/views/admin_api.py::api_setup_onchain_key` \u2014 `lnbits/core/views/admin_api.py:196: return await setup_onchain_key(`\n- `lnbits/core/views/onchain_api.py::create_hot_wallet` \u2014 `lnbits/core/views/onchain_api.py:250: read_onchain_key()`\n- `lnbits/core/views/onchain_api.py::hot_wallet_status` \u2014 `lnbits/core/views/onchain_api.py:223: read_onchain_key()`\n\n## Route handlers that reach it (5)\n- `lnbits/core/views/admin_api.py::api_backup_onchain_key` (POST /admin/api/v1/onchain/key/backup)\n  - `lnbits/core/views/admin_api.py:212: status = await setup_onchain_key()`\n  - `lnbits/core/services/onchain.py:164: key = decode_key(restore)`\n  - path: `api_backup_onchain_key` \u2192 `setup_onchain_key` \u2192 `decode_key`\n- `lnbits/core/views/admin_api.py::api_confirm_onchain_key_backup` (POST /admin/api/v1/onchain/key/confirm)\n  - `lnbits/core/views/admin_api.py:246: return await confirm_onchain_key_backup(fingerprint)`\n  - `lnbits/core/services/onchain.py:205: status = await setup_onchain_key()`\n  - `lnbits/core/services/onchain.py:164: key = decode_key(restore)`\n  - path: `api_confirm_onchain_key_backup` \u2192 `confirm_onchain_key_backup` \u2192 `setup_onchain_key` \u2192 `decode_key`\n- `lnbits/core/views/admin_api.py::api_setup_onchain_key` (POST /admin/api/v1/onchain/key)\n  - `lnbits/core/views/admin_api.py:196: return await setup_onchain_key(`\n  - `lnbits/core/services/onchain.py:164: key = decode_key(restore)`\n  - path: `api_setup_onchain_key` \u2192 `setup_onchain_key` \u2192 `decode_key`\n- `lnbits/core/views/onchain_api.py::create_hot_wallet` (POST /api/v1/onchain/hot-wallet)\n  - `lnbits/core/views/onchain_api.py:250: read_onchain_key()`\n  - `lnbits/core/services/onchain.py:118: stored = decode_key(key_path().read_text()) if key_path().exists() else None`\n  - path: `create_hot_wallet` \u2192 `read_onchain_key` \u2192 `decode_key`\n- `lnbits/core/views/onchain_api.py::hot_wallet_status` (GET /api/v1/onchain/hot-wallet/status)\n  - `lnbits/core/views/onchain_api.py:223: read_onchain_key()`\n  - `lnbits/core/services/onchain.py:118: stored = decode_key(key_path().read_text()) if key_path().exists() else None`\n  - path: `hot_wallet_status` \u2192 `read_onchain_key` \u2192 `decode_key`\n\n## Test files on those paths (3)\n- `tests/api/test_onchain_wallet.py` (+1 more tests) \u2014 `tests/api/test_onchain_wallet.py:54: \"fingerprint\": onchain.key_fingerprint(onchain.read_onchain_key()),`\n- `tests/unit/onchain/test_hot_wallet.py` (+5 more tests) \u2014 `tests/unit/onchain/test_hot_wallet.py:179: first = encrypt_wallet_mnemonic(PHRASE, wallet)`\n- `tests/unit/test_onchain_key.py` (+7 more tests) \u2014 `tests/unit/test_onchain_key.py:41: key = onchain.read_onchain_key()`\n\nRun: `python3 -m pytest tests/api/test_onchain_wallet.py tests/unit/onchain/test_hot_wallet.py tests/unit/test_onchain_key.py -q`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "error",
+   "message": "The onchain encryption key must contain 32 random bytes."
+  }
+ },
+ {
+  "id": "lnbits-ERR-onchain_key_status",
+  "kind": "err_to_handler",
+  "skill": "devkb-rca",
+  "prompt": "Users of the web API get an error whose message is: \"The onchain encryption key does not match this database. Restore its original key.\". Trace it: name the function that raises it, every HTTP route handler function (a function decorated as a FastAPI route) that can reach that function through calls at any depth, and every test file that calls the raising function or any function on a path between it and those handlers. Answer with one JSON object: {\"raiser\": \"path::function\", \"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "raiser": "lnbits/core/services/onchain.py::onchain_key_status",
+   "handlers": [
+    "lnbits/core/views/admin_api.py::api_backup_onchain_key",
+    "lnbits/core/views/admin_api.py::api_confirm_onchain_key_backup",
+    "lnbits/core/views/admin_api.py::api_onchain_key_status",
+    "lnbits/core/views/admin_api.py::api_setup_onchain_key",
+    "lnbits/core/views/admin_api.py::api_update_settings",
+    "lnbits/core/views/admin_api.py::api_update_settings_partial",
+    "lnbits/core/views/onchain_api.py::create_hot_wallet",
+    "lnbits/core/views/onchain_api.py::hot_wallet_status",
+    "lnbits/core/views/onchain_api.py::sign_hot_wallet_payment"
+   ],
+   "test_files": [
+    "tests/unit/test_onchain_key.py"
+   ],
+   "closure_size": 12
+  },
+  "pack": "# Graph pack: error \"The onchain encryption key does not match this database. Restore its original ke\"\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\n## Raised by\n- `lnbits/core/services/onchain.py::onchain_key_status` \u2014 `lnbits/core/services/onchain.py:135: async def onchain_key_status() -> OnchainKeyStatus:`\n- `lnbits/core/services/onchain.py::setup_onchain_key` \u2014 `lnbits/core/services/onchain.py:160: async def setup_onchain_key(restore: str | None = None) -> OnchainKeyStatus:`\n\n## Functions that reach it, at any depth (11)\n- `lnbits/core/services/onchain.py::confirm_onchain_key_backup` \u2014 `lnbits/core/services/onchain.py:205: status = await setup_onchain_key()`\n- `lnbits/core/services/onchain.py::require_onchain_payments` \u2014 `lnbits/core/services/onchain.py:219: status = await onchain_key_status()`\n- `lnbits/core/views/admin_api.py::api_backup_onchain_key` \u2014 `lnbits/core/views/admin_api.py:212: status = await setup_onchain_key()`\n- `lnbits/core/views/admin_api.py::api_confirm_onchain_key_backup` \u2014 `lnbits/core/views/admin_api.py:246: return await confirm_onchain_key_backup(fingerprint)`\n- `lnbits/core/views/admin_api.py::api_onchain_key_status` \u2014 `lnbits/core/views/admin_api.py:184: return await onchain_key_status()`\n- `lnbits/core/views/admin_api.py::api_setup_onchain_key` \u2014 `lnbits/core/views/admin_api.py:196: return await setup_onchain_key(`\n- `lnbits/core/views/admin_api.py::api_update_settings` \u2014 `lnbits/core/views/admin_api.py:149: status = await onchain_key_status()`\n- `lnbits/core/views/admin_api.py::api_update_settings_partial` \u2014 `lnbits/core/views/admin_api.py:271: return await api_update_settings(updatable_settings, account, payload)`\n- `lnbits/core/views/onchain_api.py::create_hot_wallet` \u2014 `lnbits/core/views/onchain_api.py:249: await require_onchain_payments()`\n- `lnbits/core/views/onchain_api.py::hot_wallet_status` \u2014 `lnbits/core/views/onchain_api.py:222: await require_onchain_payments()`\n- `lnbits/core/views/onchain_api.py::sign_hot_wallet_payment` \u2014 `lnbits/core/views/onchain_api.py:340: await require_onchain_payments()`\n\n## Route handlers that reach it (9)\n- `lnbits/core/views/admin_api.py::api_backup_onchain_key` (POST /admin/api/v1/onchain/key/backup)\n  - `lnbits/core/views/admin_api.py:212: status = await setup_onchain_key()`\n  - path: `api_backup_onchain_key` \u2192 `setup_onchain_key`\n- `lnbits/core/views/admin_api.py::api_confirm_onchain_key_backup` (POST /admin/api/v1/onchain/key/confirm)\n  - `lnbits/core/views/admin_api.py:246: return await confirm_onchain_key_backup(fingerprint)`\n  - `lnbits/core/services/onchain.py:205: status = await setup_onchain_key()`\n  - path: `api_confirm_onchain_key_backup` \u2192 `confirm_onchain_key_backup` \u2192 `setup_onchain_key`\n- `lnbits/core/views/admin_api.py::api_onchain_key_status` (GET /admin/api/v1/onchain/key)\n  - `lnbits/core/views/admin_api.py:184: return await onchain_key_status()`\n  - path: `api_onchain_key_status` \u2192 `onchain_key_status`\n- `lnbits/core/views/admin_api.py::api_setup_onchain_key` (POST /admin/api/v1/onchain/key)\n  - `lnbits/core/views/admin_api.py:196: return await setup_onchain_key(`\n  - path: `api_setup_onchain_key` \u2192 `setup_onchain_key`\n- `lnbits/core/views/admin_api.py::api_update_settings` (PUT /admin/api/v1/settings)\n  - `lnbits/core/views/admin_api.py:149: status = await onchain_key_status()`\n  - path: `api_update_settings` \u2192 `onchain_key_status`\n- `lnbits/core/views/admin_api.py::api_update_settings_partial` (PATCH /admin/api/v1/settings)\n  - `lnbits/core/views/admin_api.py:271: return await api_update_settings(updatable_settings, account, payload)`\n  - `lnbits/core/views/admin_api.py:149: status = await onchain_key_status()`\n  - path: `api_update_settings_partial` \u2192 `api_update_settings` \u2192 `onchain_key_status`\n- `lnbits/core/views/onchain_api.py::create_hot_wallet` (POST /api/v1/onchain/hot-wallet)\n  - `lnbits/core/views/onchain_api.py:249: await require_onchain_payments()`\n  - `lnbits/core/services/onchain.py:219: status = await onchain_key_status()`\n  - path: `create_hot_wallet` \u2192 `require_onchain_payments` \u2192 `onchain_key_status`\n- `lnbits/core/views/onchain_api.py::hot_wallet_status` (GET /api/v1/onchain/hot-wallet/status)\n  - `lnbits/core/views/onchain_api.py:222: await require_onchain_payments()`\n  - `lnbits/core/services/onchain.py:219: status = await onchain_key_status()`\n  - path: `hot_wallet_status` \u2192 `require_onchain_payments` \u2192 `onchain_key_status`\n- `lnbits/core/views/onchain_api.py::sign_hot_wallet_payment` (POST /api/v1/onchain/hot-wallet/{wallet_id}/sign)\n  - `lnbits/core/views/onchain_api.py:340: await require_onchain_payments()`\n  - `lnbits/core/services/onchain.py:219: status = await onchain_key_status()`\n  - path: `sign_hot_wallet_payment` \u2192 `require_onchain_payments` \u2192 `onchain_key_status`\n\n## Test files on those paths (1)\n- `tests/unit/test_onchain_key.py` (+10 more tests) \u2014 `tests/unit/test_onchain_key.py:84: assert not (await onchain.onchain_key_status()).configured`\n\nRun: `python3 -m pytest tests/unit/test_onchain_key.py -q`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "error",
+   "message": "The onchain encryption key does not match this database. Restore its original key."
+  }
+ },
+ {
+  "id": "lnbits-ERR-validate_identity",
+  "kind": "err_to_handler",
+  "skill": "devkb-rca",
+  "prompt": "Users of the web API get an error whose message is: \"Verification expired. Please log in again.\". Trace it: name the function that raises it, every HTTP route handler function (a function decorated as a FastAPI route) that can reach that function through calls at any depth, and every test file that calls the raising function or any function on a path between it and those handlers. Answer with one JSON object: {\"raiser\": \"path::function\", \"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "raiser": "lnbits/core/services/two_factor.py::validate_identity",
+   "handlers": [
+    "lnbits/core/views/two_factor_api.py::acknowledge_recovery",
+    "lnbits/core/views/two_factor_api.py::confirm_factor",
+    "lnbits/core/views/two_factor_api.py::disable_factor",
+    "lnbits/core/views/two_factor_api.py::regenerate_recovery",
+    "lnbits/core/views/two_factor_api.py::setup_factor",
+    "lnbits/core/views/two_factor_api.py::verify_two_factor"
+   ],
+   "test_files": [
+    "tests/api/test_two_factor.py"
+   ],
+   "closure_size": 12
+  },
+  "pack": "# Graph pack: error \"Verification expired. Please log in again.\"\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\n## Raised by\n- `lnbits/core/services/two_factor.py::validate_identity` \u2014 `lnbits/core/services/two_factor.py:90: def validate_identity(config: TwoFactorConfig, payload: AccessTokenPayload) -> None:`\n\n## Functions that reach it, at any depth (12)\n- `lnbits/core/services/two_factor.py::acknowledge_recovery_codes` \u2014 `lnbits/core/services/two_factor.py:219: validate_identity(config, payload)`\n- `lnbits/core/services/two_factor.py::begin_enrollment` \u2014 `lnbits/core/services/two_factor.py:146: validate_identity(config, payload)`\n- `lnbits/core/services/two_factor.py::disable_two_factor` \u2014 `lnbits/core/services/two_factor.py:246: validate_identity(config, payload)`\n- `lnbits/core/services/two_factor.py::regenerate_recovery_codes` \u2014 `lnbits/core/services/two_factor.py:229: validate_identity(config, payload)`\n- `lnbits/core/services/two_factor.py::verify_factor` \u2014 `lnbits/core/services/two_factor.py:172: validate_identity(config, payload)`\n- `lnbits/core/views/two_factor_api.py::acknowledge_recovery` \u2014 `lnbits/core/views/two_factor_api.py:153: await acknowledge_recovery_codes(account.id, payload)`\n- `lnbits/core/views/two_factor_api.py::confirm_factor` \u2014 `lnbits/core/views/two_factor_api.py:121: config, codes = await verify_factor(account.id, payload, data.code, enrolling=True)`\n- `lnbits/core/views/two_factor_api.py::disable_factor` \u2014 `lnbits/core/views/two_factor_api.py:173: config = await disable_two_factor(account.id, payload)`\n- `lnbits/core/views/two_factor_api.py::regenerate_recovery` \u2014 `lnbits/core/views/two_factor_api.py:162: codes = await regenerate_recovery_codes(account.id, payload)`\n- `lnbits/core/views/two_factor_api.py::setup_factor` \u2014 `lnbits/core/views/two_factor_api.py:100: secret = await begin_enrollment(account.id, payload)`\n- `lnbits/core/views/two_factor_api.py::two_factor_identity` \u2014 `lnbits/core/views/two_factor_api.py:50: validate_identity(config, payload)`\n- `lnbits/core/views/two_factor_api.py::verify_two_factor` \u2014 `lnbits/core/views/two_factor_api.py:135: config, _ = await verify_factor(account.id, payload, data.code)`\n\n## Route handlers that reach it (6)\n- `lnbits/core/views/two_factor_api.py::acknowledge_recovery` (POST /api/v1/auth/2fa/recovery/acknowledge)\n  - `lnbits/core/views/two_factor_api.py:153: await acknowledge_recovery_codes(account.id, payload)`\n  - `lnbits/core/services/two_factor.py:219: validate_identity(config, payload)`\n  - path: `acknowledge_recovery` \u2192 `acknowledge_recovery_codes` \u2192 `validate_identity`\n- `lnbits/core/views/two_factor_api.py::confirm_factor` (POST /api/v1/auth/2fa/confirm)\n  - `lnbits/core/views/two_factor_api.py:121: config, codes = await verify_factor(account.id, payload, data.code, enrolling=True)`\n  - `lnbits/core/services/two_factor.py:172: validate_identity(config, payload)`\n  - path: `confirm_factor` \u2192 `verify_factor` \u2192 `validate_identity`\n- `lnbits/core/views/two_factor_api.py::disable_factor` (DELETE /api/v1/auth/2fa)\n  - `lnbits/core/views/two_factor_api.py:173: config = await disable_two_factor(account.id, payload)`\n  - `lnbits/core/services/two_factor.py:246: validate_identity(config, payload)`\n  - path: `disable_factor` \u2192 `disable_two_factor` \u2192 `validate_identity`\n- `lnbits/core/views/two_factor_api.py::regenerate_recovery` (POST /api/v1/auth/2fa/recovery)\n  - `lnbits/core/views/two_factor_api.py:162: codes = await regenerate_recovery_codes(account.id, payload)`\n  - `lnbits/core/services/two_factor.py:229: validate_identity(config, payload)`\n  - path: `regenerate_recovery` \u2192 `regenerate_recovery_codes` \u2192 `validate_identity`\n- `lnbits/core/views/two_factor_api.py::setup_factor` (POST /api/v1/auth/2fa/setup)\n  - `lnbits/core/views/two_factor_api.py:100: secret = await begin_enrollment(account.id, payload)`\n  - `lnbits/core/services/two_factor.py:146: validate_identity(config, payload)`\n  - path: `setup_factor` \u2192 `begin_enrollment` \u2192 `validate_identity`\n- `lnbits/core/views/two_factor_api.py::verify_two_factor` (POST /api/v1/auth/2fa/verify)\n  - `lnbits/core/views/two_factor_api.py:135: config, _ = await verify_factor(account.id, payload, data.code)`\n  - `lnbits/core/services/two_factor.py:172: validate_identity(config, payload)`\n  - path: `verify_two_factor` \u2192 `verify_factor` \u2192 `validate_identity`\n\n## Test files on those paths (1)\n- `tests/api/test_two_factor.py` \u2014 `tests/api/test_two_factor.py:345: verify_factor(factor_account.id, payload, enrollment[\"recovery_codes\"][0])`\n\nRun: `python3 -m pytest tests/api/test_two_factor.py -q`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "error",
+   "message": "Verification expired. Please log in again."
+  }
+ },
+ {
+  "id": "lnbits-ERR-check_users_limit",
+  "kind": "err_to_handler",
+  "skill": "devkb-rca",
+  "prompt": "Users of the web API get an error whose message is: \"Max amount of users have been created\". Trace it: name the function that raises it, every HTTP route handler function (a function decorated as a FastAPI route) that can reach that function through calls at any depth, and every test file that calls the raising function or any function on a path between it and those handlers. Answer with one JSON object: {\"raiser\": \"path::function\", \"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "raiser": "lnbits/core/services/users.py::check_users_limit",
+   "handlers": [
+    "lnbits/core/views/api.py::api_create_account",
+    "lnbits/core/views/auth_api.py::handle_oauth_token",
+    "lnbits/core/views/auth_api.py::nostr_login",
+    "lnbits/core/views/auth_api.py::register",
+    "lnbits/core/views/generic.py::lnurlwallet",
+    "lnbits/core/views/user_api.py::api_create_user"
+   ],
+   "test_files": [
+    "tests/api/test_api.py",
+    "tests/api/test_auth.py",
+    "tests/api/test_auth_api.py",
+    "tests/api/test_callback_api.py",
+    "tests/api/test_extension_api.py",
+    "tests/api/test_lnurl_api.py",
+    "tests/api/test_onchain_wallet.py",
+    "tests/api/test_payment_api.py",
+    "tests/api/test_two_factor.py",
+    "tests/api/test_user_api.py",
+    "tests/api/test_users.py",
+    "tests/api/test_wallet_api.py",
+    "tests/api/test_wallet_key_access.py",
+    "tests/conftest.py",
+    "tests/regtest/test_real_invoice.py",
+    "tests/unit/test_bolt12.py",
+    "tests/unit/test_bolt12_clnrest_errors.py",
+    "tests/unit/test_bolt12_eclair_fees.py",
+    "tests/unit/test_bolt12_idempotency.py",
+    "tests/unit/test_bolt12_invoice_amount.py",
+    "tests/unit/test_bolt12_pending.py",
+    "tests/unit/test_bolt12_phoenixd_responses.py",
+    "tests/unit/test_bolt12_wait_seconds.py",
+    "tests/unit/test_crud_payments.py",
+    "tests/unit/test_crud_users.py",
+    "tests/unit/test_decorators.py",
+    "tests/unit/test_fiat_invoice_expiry.py",
+    "tests/unit/test_fiat_providers.py",
+    "tests/unit/test_pay_invoice.py",
+    "tests/unit/test_paypal_capture_event.py",
+    "tests/unit/test_registration_security.py",
+    "tests/unit/test_security_accounting.py",
+    "tests/unit/test_services_hold_invoice.py",
+    "tests/unit/test_services_users.py",
+    "tests/unit/test_services_wallet_limit.py"
+   ],
+   "closure_size": 10
+  },
+  "pack": "# Graph pack: error \"Max amount of users have been created\"\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\n## Raised by\n- `lnbits/core/services/users.py::check_users_limit` \u2014 `lnbits/core/services/users.py:111: async def check_users_limit(conn: Connection | None = None):`\n\n## Functions that reach it, at any depth (10)\n- `lnbits/commands.py::create_user` \u2014 `lnbits/commands.py:326: user = await create_user_account_no_ckeck(account)`\n- `lnbits/core/services/users.py::create_user_account` \u2014 `lnbits/core/services/users.py:59: return await create_user_account_no_ckeck(account, wallet_name)`\n- `lnbits/core/services/users.py::create_user_account_no_ckeck` \u2014 `lnbits/core/services/users.py:69: await check_users_limit(conn)`\n- `lnbits/core/views/api.py::api_create_account` \u2014 `lnbits/core/views/api.py:90: user = await create_user_account(wallet_name=data.name)`\n- `lnbits/core/views/auth_api.py::_handle_sso_login` \u2014 `lnbits/core/views/auth_api.py:687: await create_user_account(account)`\n- `lnbits/core/views/auth_api.py::handle_oauth_token` \u2014 `lnbits/core/views/auth_api.py:445: return await _handle_sso_login(userinfo, user_id)`\n- `lnbits/core/views/auth_api.py::nostr_login` \u2014 `lnbits/core/views/auth_api.py:178: await create_user_account(account)`\n- `lnbits/core/views/auth_api.py::register` \u2014 `lnbits/core/views/auth_api.py:492: await create_user_account(account, activation_verified=True)`\n- `lnbits/core/views/generic.py::lnurlwallet` \u2014 `lnbits/core/views/generic.py:171: account = await create_user_account()`\n- `lnbits/core/views/user_api.py::api_create_user` \u2014 `lnbits/core/views/user_api.py:123: user = await create_user_account_no_ckeck(account, default_exts=data.extensions)`\n\n## Route handlers that reach it (6)\n- `lnbits/core/views/api.py::api_create_account` (POST /api/v1/account)\n  - `lnbits/core/views/api.py:90: user = await create_user_account(wallet_name=data.name)`\n  - `lnbits/core/services/users.py:59: return await create_user_account_no_ckeck(account, wallet_name)`\n  - `lnbits/core/services/users.py:69: await check_users_limit(conn)`\n  - path: `api_create_account` \u2192 `create_user_account` \u2192 `create_user_account_no_ckeck` \u2192 `check_users_limit`\n- `lnbits/core/views/auth_api.py::handle_oauth_token` (GET /api/v1/auth/{provider}/token)\n  - `lnbits/core/views/auth_api.py:445: return await _handle_sso_login(userinfo, user_id)`\n  - `lnbits/core/views/auth_api.py:687: await create_user_account(account)`\n  - `lnbits/core/services/users.py:59: return await create_user_account_no_ckeck(account, wallet_name)`\n  - `lnbits/core/services/users.py:69: await check_users_limit(conn)`\n  - path: `handle_oauth_token` \u2192 `_handle_sso_login` \u2192 `create_user_account` \u2192 `create_user_account_no_ckeck` \u2192 `check_users_limit`\n- `lnbits/core/views/auth_api.py::nostr_login` (POST /api/v1/auth/nostr)\n  - `lnbits/core/views/auth_api.py:178: await create_user_account(account)`\n  - `lnbits/core/services/users.py:59: return await create_user_account_no_ckeck(account, wallet_name)`\n  - `lnbits/core/services/users.py:69: await check_users_limit(conn)`\n  - path: `nostr_login` \u2192 `create_user_account` \u2192 `create_user_account_no_ckeck` \u2192 `check_users_limit`\n- `lnbits/core/views/auth_api.py::register` (POST /api/v1/auth/register)\n  - `lnbits/core/views/auth_api.py:492: await create_user_account(account, activation_verified=True)`\n  - `lnbits/core/services/users.py:59: return await create_user_account_no_ckeck(account, wallet_name)`\n  - `lnbits/core/services/users.py:69: await check_users_limit(conn)`\n  - path: `register` \u2192 `create_user_account` \u2192 `create_user_account_no_ckeck` \u2192 `check_users_limit`\n- `lnbits/core/views/generic.py::lnurlwallet` (GET /lnurlwallet)\n  - `lnbits/core/views/generic.py:171: account = await create_user_account()`\n  - `lnbits/core/services/users.py:59: return await create_user_account_no_ckeck(account, wallet_name)`\n  - `lnbits/core/services/users.py:69: await check_users_limit(conn)`\n  - path: `lnurlwallet` \u2192 `create_user_account` \u2192 `create_user_account_no_ckeck` \u2192 `check_users_limit`\n- `lnbits/core/views/user_api.py::api_create_user` (POST /users/api/v1/user)\n  - `lnbits/core/views/user_api.py:123: user = await create_user_account_no_ckeck(account, default_exts=data.extensions)`\n  - `lnbits/core/services/users.py:69: await check_users_limit(conn)`\n  - path: `api_create_user` \u2192 `create_user_account_no_ckeck` \u2192 `check_users_limit`\n\n## Test files on those paths (35)\n- `tests/api/test_api.py` \u2014 `tests/api/test_api.py:1297: user = await create_user_account(`\n- `tests/api/test_auth.py` (+4 more tests) \u2014 `tests/api/test_auth.py:2068: user = await create_user_account(account)`\n- `tests/api/test_auth_api.py` (+1 more tests) \u2014 `tests/api/test_auth_api.py:39: user = await create_user_account(`\n- `tests/api/test_callback_api.py` (+1 more tests) \u2014 `tests/api/test_callback_api.py:89: user = await create_user_account(`\n- `tests/api/test_extension_api.py` (+1 more tests) \u2014 `tests/api/test_extension_api.py:616: regular_user = await create_user_account(`\n- `tests/api/test_lnurl_api.py` \u2014 `tests/api/test_lnurl_api.py:165: user = await create_user_account(`\n- `tests/api/test_onchain_wallet.py` \u2014 `tests/api/test_onchain_wallet.py:36: user = await create_user_account()`\n- `tests/api/test_payment_api.py` (+4 more tests) \u2014 `tests/api/test_payment_api.py:508: user = await create_user_account()`\n- `tests/api/test_two_factor.py` (+2 more tests) \u2014 `tests/api/test_two_factor.py:549: response = await _handle_sso_login(`\n- `tests/api/test_user_api.py` (+3 more tests) \u2014 `tests/api/test_user_api.py:127: user = await create_user_account(`\n- `tests/api/test_users.py` \u2014 `tests/api/test_users.py:485: user = await create_user_account(`\n- `tests/api/test_wallet_api.py` (+4 more tests) \u2014 `tests/api/test_wallet_api.py:17: owner = await create_user_account(`\n- `tests/api/test_wallet_key_access.py` \u2014 `tests/api/test_wallet_key_access.py:25: user = await create_user_account(account)`\n- `tests/conftest.py` (+3 more tests) \u2014 `tests/conftest.py:178: user = await create_user_account(account)`\n- `tests/regtest/test_real_invoice.py` \u2014 `tests/regtest/test_real_invoice.py:295: user = await create_user_account()`\n- `tests/unit/test_bolt12.py` (+5 more tests) \u2014 `tests/unit/test_bolt12.py:482: user = await create_user_account()`\n- `tests/unit/test_bolt12_clnrest_errors.py` \u2014 `tests/unit/test_bolt12_clnrest_errors.py:85: user = await create_user_account()`\n- `tests/unit/test_bolt12_eclair_fees.py` \u2014 `tests/unit/test_bolt12_eclair_fees.py:35: user = await create_user_account()`\n- `tests/unit/test_bolt12_idempotency.py` \u2014 `tests/unit/test_bolt12_idempotency.py:24: user = await create_user_account()`\n- `tests/unit/test_bolt12_invoice_amount.py` \u2014 `tests/unit/test_bolt12_invoice_amount.py:118: user = await create_user_account()`\n- `tests/unit/test_bolt12_pending.py` \u2014 `tests/unit/test_bolt12_pending.py:25: user = await create_user_account()`\n- `tests/unit/test_bolt12_phoenixd_responses.py` \u2014 `tests/unit/test_bolt12_phoenixd_responses.py:18: user = await create_user_account()`\n- `tests/unit/test_bolt12_wait_seconds.py` \u2014 `tests/unit/test_bolt12_wait_seconds.py:60: user = await create_user_account()`\n- `tests/unit/test_crud_payments.py` (+2 more tests) \u2014 `tests/unit/test_crud_payments.py:34: user = await create_user_account()`\n- `tests/unit/test_crud_users.py` (+3 more tests) \u2014 `tests/unit/test_crud_users.py:27: user = await create_user_account(account)`\n- `tests/unit/test_decorators.py` \u2014 `tests/unit/test_decorators.py:55: await create_user_account(account)`\n- `tests/unit/test_fiat_invoice_expiry.py` \u2014 `tests/unit/test_fiat_invoice_expiry.py:94: user = await create_user_account()`\n- `tests/unit/test_fiat_providers.py` (+2 more tests) \u2014 `tests/unit/test_fiat_providers.py:1687: user = await create_user_account()`\n- `tests/unit/test_pay_invoice.py` (+1 more tests) \u2014 `tests/unit/test_pay_invoice.py:173: user = await create_user_account()`\n- `tests/unit/test_paypal_capture_event.py` \u2014 `tests/unit/test_paypal_capture_event.py:14: user = await create_user_account()`\n- `tests/unit/test_registration_security.py` (+2 more tests) \u2014 `tests/unit/test_registration_security.py:75: await users.create_user_account(account)`\n- `tests/unit/test_security_accounting.py` (+1 more tests) \u2014 `tests/unit/test_security_accounting.py:65: await users.create_user_account(Account(id=\"b\" * 32, username=\"uninvited\"))`\n- `tests/unit/test_services_hold_invoice.py` \u2014 `tests/unit/test_services_hold_invoice.py:26: user = await create_user_account()`\n- `tests/unit/test_services_users.py` (+3 more tests) \u2014 `tests/unit/test_services_users.py:40: await create_user_account()`\n- `tests/unit/test_services_wallet_limit.py` (+1 more tests) \u2014 `tests/unit/test_services_wallet_limit.py:61: user = await create_user_account()`\n\nRun: `python3 -m pytest tests/api/test_api.py tests/api/test_auth.py tests/api/test_auth_api.py tests/api/test_callback_api.py tests/api/test_extension_api.py tests/api/test_lnurl_api.py tests/api/test_onchain_wallet.py tests/api/test_payment_api.py tests/api/test_two_factor.py tests/api/test_user_api.py tests/api/test_users.py tests/api/test_wallet_api.py tests/api/test_wallet_key_access.py tests/conftest.py tests/regtest/test_real_invoice.py tests/unit/test_bolt12.py tests/unit/test_bolt12_clnrest_errors.py tests/unit/test_bolt12_eclair_fees.py tests/unit/test_bolt12_idempotency.py tests/unit/test_bolt12_invoice_amount.py tests/unit/test_bolt12_pending.py tests/unit/test_bolt12_phoenixd_responses.py tests/unit/test_bolt12_wait_seconds.py tests/unit/test_crud_payments.py tests/unit/test_crud_users.py tests/unit/test_decorators.py tests/unit/test_fiat_invoice_expiry.py tests/unit/test_fiat_providers.py tests/unit/test_pay_invoice.py tests/unit/test_paypal_capture_event.py tests/unit/test_registration_security.py tests/unit/test_security_accounting.py tests/unit/test_services_hold_invoice.py tests/unit/test_services_users.py tests/unit/test_services_wallet_limit.py -q`\n\n## Coverage\n**Incomplete: 8 call site(s) under this name could not be attributed.** Search only these files for them: `tests/unit/test_wasm_extension_events.py`, `lnbits/core/wasm_ext/routes/register.py`, `tests/unit/test_scheduler.py`, `tests/unit/test_wasm_extension_automatic_schedules.py`, `tests/unit/test_wasm_invoice_security.py`.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "error",
+   "message": "Max amount of users have been created"
+  }
+ },
+ {
+  "id": "lnbits-IMP-generate_filter_params_openapi",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `generate_filter_params_openapi` (defined in lnbits/helpers.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "lnbits/core/views/audit_api.py::api_get_audit",
+    "lnbits/core/views/audit_api.py::api_get_audit_stats",
+    "lnbits/core/views/payment_api.py::api_all_payments_paginated",
+    "lnbits/core/views/payment_api.py::api_payments",
+    "lnbits/core/views/payment_api.py::api_payments_counting_stats",
+    "lnbits/core/views/payment_api.py::api_payments_daily_stats",
+    "lnbits/core/views/payment_api.py::api_payments_history",
+    "lnbits/core/views/payment_api.py::api_payments_paginated",
+    "lnbits/core/views/payment_api.py::api_payments_wallets_stats",
+    "lnbits/core/views/scheduler_api.py::api_get_scheduled_job_runs",
+    "lnbits/core/views/scheduler_api.py::api_get_scheduled_jobs",
+    "lnbits/core/views/user_api.py::api_get_users",
+    "lnbits/core/views/wallet_api.py::api_wallets_paginated"
+   ],
+   "test_files": [
+    "tests/api/test_payment_api.py"
+   ],
+   "closure_size": 13
+  },
+  "pack": "# Graph pack: changing `lnbits/helpers.py::generate_filter_params_openapi`\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\nDefined at `lnbits/helpers.py:124: def generate_filter_params_openapi(model: type[FilterModel], keep_optional=False):`.\n\n## Functions that reach it, at any depth (13)\n- `lnbits/core/views/audit_api.py::api_get_audit` \u2014 `lnbits/core/views/audit_api.py:25: (def api_get_audit)`\n- `lnbits/core/views/audit_api.py::api_get_audit_stats` \u2014 `lnbits/core/views/audit_api.py:37: (def api_get_audit_stats)`\n- `lnbits/core/views/payment_api.py::api_all_payments_paginated` \u2014 `lnbits/core/views/payment_api.py:243: (def api_all_payments_paginated)`\n- `lnbits/core/views/payment_api.py::api_payments` \u2014 `lnbits/core/views/payment_api.py:103: (def api_payments)`\n- `lnbits/core/views/payment_api.py::api_payments_counting_stats` \u2014 `lnbits/core/views/payment_api.py:135: (def api_payments_counting_stats)`\n- `lnbits/core/views/payment_api.py::api_payments_daily_stats` \u2014 `lnbits/core/views/payment_api.py:187: (def api_payments_daily_stats)`\n- `lnbits/core/views/payment_api.py::api_payments_history` \u2014 `lnbits/core/views/payment_api.py:121: (def api_payments_history)`\n- `lnbits/core/views/payment_api.py::api_payments_paginated` \u2014 `lnbits/core/views/payment_api.py:208: (def api_payments_paginated)`\n- `lnbits/core/views/payment_api.py::api_payments_wallets_stats` \u2014 `lnbits/core/views/payment_api.py:167: (def api_payments_wallets_stats)`\n- `lnbits/core/views/scheduler_api.py::api_get_scheduled_job_runs` \u2014 `lnbits/core/views/scheduler_api.py:50: (def api_get_scheduled_job_runs)`\n- `lnbits/core/views/scheduler_api.py::api_get_scheduled_jobs` \u2014 `lnbits/core/views/scheduler_api.py:30: (def api_get_scheduled_jobs)`\n- `lnbits/core/views/user_api.py::api_get_users` \u2014 `lnbits/core/views/user_api.py:71: (def api_get_users)`\n- `lnbits/core/views/wallet_api.py::api_wallets_paginated` \u2014 `lnbits/core/views/wallet_api.py:96: (def api_wallets_paginated)`\n\n## Route handlers that reach it (13)\n- `lnbits/core/views/audit_api.py::api_get_audit` (GET /audit/api/v1) \u2014 path: `api_get_audit` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/audit_api.py:25: (def api_get_audit)`\n- `lnbits/core/views/audit_api.py::api_get_audit_stats` (GET /audit/api/v1/stats) \u2014 path: `api_get_audit_stats` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/audit_api.py:37: (def api_get_audit_stats)`\n- `lnbits/core/views/payment_api.py::api_all_payments_paginated` (GET /api/v1/payments/all/paginated) \u2014 path: `api_all_payments_paginated` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/payment_api.py:243: (def api_all_payments_paginated)`\n- `lnbits/core/views/payment_api.py::api_payments` (GET /api/v1/payments) \u2014 path: `api_payments` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/payment_api.py:103: (def api_payments)`\n- `lnbits/core/views/payment_api.py::api_payments_counting_stats` (GET /api/v1/payments/stats/count) \u2014 path: `api_payments_counting_stats` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/payment_api.py:135: (def api_payments_counting_stats)`\n- `lnbits/core/views/payment_api.py::api_payments_daily_stats` (GET /api/v1/payments/stats/daily) \u2014 path: `api_payments_daily_stats` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/payment_api.py:187: (def api_payments_daily_stats)`\n- `lnbits/core/views/payment_api.py::api_payments_history` (GET /api/v1/payments/history) \u2014 path: `api_payments_history` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/payment_api.py:121: (def api_payments_history)`\n- `lnbits/core/views/payment_api.py::api_payments_paginated` (GET /api/v1/payments/paginated) \u2014 path: `api_payments_paginated` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/payment_api.py:208: (def api_payments_paginated)`\n- `lnbits/core/views/payment_api.py::api_payments_wallets_stats` (GET /api/v1/payments/stats/wallets) \u2014 path: `api_payments_wallets_stats` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/payment_api.py:167: (def api_payments_wallets_stats)`\n- `lnbits/core/views/scheduler_api.py::api_get_scheduled_job_runs` (GET /scheduler/api/v1/runs) \u2014 path: `api_get_scheduled_job_runs` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/scheduler_api.py:50: (def api_get_scheduled_job_runs)`\n- `lnbits/core/views/scheduler_api.py::api_get_scheduled_jobs` (GET /scheduler/api/v1) \u2014 path: `api_get_scheduled_jobs` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/scheduler_api.py:30: (def api_get_scheduled_jobs)`\n- `lnbits/core/views/user_api.py::api_get_users` (GET /users/api/v1/user) \u2014 path: `api_get_users` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/user_api.py:71: (def api_get_users)`\n- `lnbits/core/views/wallet_api.py::api_wallets_paginated` (GET /api/v1/wallet/paginated) \u2014 path: `api_wallets_paginated` \u2192 `generate_filter_params_openapi`\n  - `lnbits/core/views/wallet_api.py:96: (def api_wallets_paginated)`\n\n## Test files to run (1): every test calling it or a function on those paths\n- `tests/api/test_payment_api.py` (+3 more tests) \u2014 `tests/api/test_payment_api.py:66: count_stats = await api_payments_counting_stats(`\n\nRun: `python3 -m pytest tests/api/test_payment_api.py -q`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "change",
+   "name": "generate_filter_params_openapi",
+   "path": "lnbits/helpers.py"
+  }
+ },
+ {
+  "id": "lnbits-IMP-explorer_client",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `explorer_client` (defined in lnbits/core/services/blockexplorer.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "lnbits/core/views/onchain_api.py::api_tx_broadcast",
+    "lnbits/core/views/onchain_api.py::create_hot_wallet",
+    "lnbits/core/views/onchain_api.py::fee_estimates",
+    "lnbits/core/views/onchain_api.py::previous_transaction",
+    "lnbits/core/views/onchain_api.py::sign_hot_wallet_payment",
+    "lnbits/core/views/onchain_api.py::start_sync",
+    "lnbits/core/views/wallet_api.py::api_update_config",
+    "lnbits/core/views/wallet_api.py::api_wallet_create_or_update"
+   ],
+   "test_files": [
+    "tests/api/test_onchain_wallet.py",
+    "tests/unit/onchain/test_explorer.py"
+   ],
+   "closure_size": 13
+  },
+  "pack": "# Graph pack: changing `lnbits/core/services/blockexplorer.py::explorer_client`\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\nDefined at `lnbits/core/services/blockexplorer.py:498: def explorer_client(config: OnchainConfig, network: str) -> Explorer:`.\n\n## Functions that reach it, at any depth (13)\n- `lnbits/core/services/onchain.py::_scan` \u2014 `lnbits/core/services/onchain.py:563: async with explorer_client(`\n- `lnbits/core/services/onchain.py::_scan_with_lease` \u2014 `lnbits/core/services/onchain.py:647: result = await asyncio.wait_for(_scan(wallet_id), timeout=1500)`\n- `lnbits/core/services/onchain.py::request_scan` \u2014 `lnbits/core/services/onchain.py:406: scan_wallet(wallet_id, max_age=SCAN_MAX_AGE if if_needed else None), name=name`\n- `lnbits/core/services/onchain.py::scan_wallet` \u2014 `lnbits/core/services/onchain.py:381: await _scan_with_lease(wallet_id, max_age=max_age)`\n- `lnbits/core/services/onchain.py::sync_wallets` \u2014 `lnbits/core/services/onchain.py:414: await scan_wallet(wallet_id, max_age=0)`\n- `lnbits/core/views/onchain_api.py::api_tx_broadcast` \u2014 `lnbits/core/views/onchain_api.py:201: async with explorer_client(`\n- `lnbits/core/views/onchain_api.py::create_hot_wallet` \u2014 `lnbits/core/views/onchain_api.py:288: request_scan(auth.wallet_id)`\n- `lnbits/core/views/onchain_api.py::fee_estimates` \u2014 `lnbits/core/views/onchain_api.py:400: async with explorer_client(`\n- `lnbits/core/views/onchain_api.py::previous_transaction` \u2014 `lnbits/core/views/onchain_api.py:420: async with explorer_client(`\n- `lnbits/core/views/onchain_api.py::sign_hot_wallet_payment` \u2014 `lnbits/core/views/onchain_api.py:349: async with explorer_client(`\n- `lnbits/core/views/onchain_api.py::start_sync` \u2014 `lnbits/core/views/onchain_api.py:381: return {\"scheduled\": request_scan(auth.wallet_id, if_needed=if_needed)}`\n- `lnbits/core/views/wallet_api.py::api_update_config` \u2014 `lnbits/core/views/wallet_api.py:364: request_scan(auth.wallet_id)`\n- `lnbits/core/views/wallet_api.py::api_wallet_create_or_update` \u2014 `lnbits/core/views/wallet_api.py:313: request_scan(auth.wallet_id)`\n\n## Route handlers that reach it (8)\n- `lnbits/core/views/onchain_api.py::api_tx_broadcast` (POST /api/v1/onchain/tx) \u2014 path: `api_tx_broadcast` \u2192 `explorer_client`\n  - `lnbits/core/views/onchain_api.py:201: async with explorer_client(`\n- `lnbits/core/views/onchain_api.py::create_hot_wallet` (POST /api/v1/onchain/hot-wallet) \u2014 path: `create_hot_wallet` \u2192 `request_scan` \u2192 `scan_wallet` \u2192 `_scan_with_lease` \u2192 `_scan` \u2192 `explorer_client`\n  - `lnbits/core/views/onchain_api.py:288: request_scan(auth.wallet_id)`\n  - `lnbits/core/services/onchain.py:406: scan_wallet(wallet_id, max_age=SCAN_MAX_AGE if if_needed else None), name=name`\n  - `lnbits/core/services/onchain.py:381: await _scan_with_lease(wallet_id, max_age=max_age)`\n  - `lnbits/core/services/onchain.py:647: result = await asyncio.wait_for(_scan(wallet_id), timeout=1500)`\n  - `lnbits/core/services/onchain.py:563: async with explorer_client(`\n- `lnbits/core/views/onchain_api.py::fee_estimates` (GET /api/v1/onchain/fees) \u2014 path: `fee_estimates` \u2192 `explorer_client`\n  - `lnbits/core/views/onchain_api.py:400: async with explorer_client(`\n- `lnbits/core/views/onchain_api.py::previous_transaction` (GET /api/v1/onchain/tx/{tx_id}/hex) \u2014 path: `previous_transaction` \u2192 `explorer_client`\n  - `lnbits/core/views/onchain_api.py:420: async with explorer_client(`\n- `lnbits/core/views/onchain_api.py::sign_hot_wallet_payment` (POST /api/v1/onchain/hot-wallet/{wallet_id}/sign) \u2014 path: `sign_hot_wallet_payment` \u2192 `explorer_client`\n  - `lnbits/core/views/onchain_api.py:349: async with explorer_client(`\n- `lnbits/core/views/onchain_api.py::start_sync` (POST /api/v1/onchain/sync) \u2014 path: `start_sync` \u2192 `request_scan` \u2192 `scan_wallet` \u2192 `_scan_with_lease` \u2192 `_scan` \u2192 `explorer_client`\n  - `lnbits/core/views/onchain_api.py:381: return {\"scheduled\": request_scan(auth.wallet_id, if_needed=if_needed)}`\n  - `lnbits/core/services/onchain.py:406: scan_wallet(wallet_id, max_age=SCAN_MAX_AGE if if_needed else None), name=name`\n  - `lnbits/core/services/onchain.py:381: await _scan_with_lease(wallet_id, max_age=max_age)`\n  - `lnbits/core/services/onchain.py:647: result = await asyncio.wait_for(_scan(wallet_id), timeout=1500)`\n  - `lnbits/core/services/onchain.py:563: async with explorer_client(`\n- `lnbits/core/views/wallet_api.py::api_update_config` (PUT /api/v1/wallet/onchain/config) \u2014 path: `api_update_config` \u2192 `request_scan` \u2192 `scan_wallet` \u2192 `_scan_with_lease` \u2192 `_scan` \u2192 `explorer_client`\n  - `lnbits/core/views/wallet_api.py:364: request_scan(auth.wallet_id)`\n  - `lnbits/core/services/onchain.py:406: scan_wallet(wallet_id, max_age=SCAN_MAX_AGE if if_needed else None), name=name`\n  - `lnbits/core/services/onchain.py:381: await _scan_with_lease(wallet_id, max_age=max_age)`\n  - `lnbits/core/services/onchain.py:647: result = await asyncio.wait_for(_scan(wallet_id), timeout=1500)`\n  - `lnbits/core/services/onchain.py:563: async with explorer_client(`\n- `lnbits/core/views/wallet_api.py::api_wallet_create_or_update` (POST /api/v1/wallet/onchain) \u2014 path: `api_wallet_create_or_update` \u2192 `request_scan` \u2192 `scan_wallet` \u2192 `_scan_with_lease` \u2192 `_scan` \u2192 `explorer_client`\n  - `lnbits/core/views/wallet_api.py:313: request_scan(auth.wallet_id)`\n  - `lnbits/core/services/onchain.py:406: scan_wallet(wallet_id, max_age=SCAN_MAX_AGE if if_needed else None), name=name`\n  - `lnbits/core/services/onchain.py:381: await _scan_with_lease(wallet_id, max_age=max_age)`\n  - `lnbits/core/services/onchain.py:647: result = await asyncio.wait_for(_scan(wallet_id), timeout=1500)`\n  - `lnbits/core/services/onchain.py:563: async with explorer_client(`\n\n## Test files to run (2): every test calling it or a function on those paths\n- `tests/api/test_onchain_wallet.py` (+7 more tests) \u2014 `tests/api/test_onchain_wallet.py:1513: task = asyncio.create_task(onchain._scan(wallet.id))`\n- `tests/unit/onchain/test_explorer.py` \u2014 `tests/unit/onchain/test_explorer.py:195: async with blockexplorer.explorer_client(OnchainConfig(), \"Testnet4\") as provider:`\n\nRun: `python3 -m pytest tests/api/test_onchain_wallet.py tests/unit/onchain/test_explorer.py -q`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "change",
+   "name": "explorer_client",
+   "path": "lnbits/core/services/blockexplorer.py"
+  }
+ },
+ {
+  "id": "lnbits-IMP-is_wasm_extension_id",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `is_wasm_extension_id` (defined in lnbits/core/wasm_ext/wasm/loader.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "lnbits/core/views/extension_api.py::api_activate_extension",
+    "lnbits/core/views/extension_api.py::api_deactivate_extension",
+    "lnbits/core/views/extension_api.py::api_install_extension",
+    "lnbits/core/views/extension_api.py::api_uninstall_extension"
+   ],
+   "test_files": [
+    "tests/api/test_extension_api.py",
+    "tests/unit/test_app_extensions.py",
+    "tests/unit/test_extension_autoupdate.py",
+    "tests/unit/test_models_extensions.py",
+    "tests/unit/test_services_extensions.py",
+    "tests/unit/test_wasm_extension_automatic_schedules.py"
+   ],
+   "closure_size": 31
+  },
+  "pack": "# Graph pack: changing `lnbits/core/wasm_ext/wasm/loader.py::is_wasm_extension_id`\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\nDefined at `lnbits/core/wasm_ext/wasm/loader.py:29: def is_wasm_extension_id(ext_id: str) -> bool:`.\n\n## Functions that reach it, at any depth (31)\n- `lnbits/app.py::build_all_installed_extensions_list` \u2014 `lnbits/app.py:343: await migrate_extension_database(ext_info, current_version)`\n- `lnbits/app.py::check_and_register_extensions` \u2014 `lnbits/app.py:558: if is_wasm_extension_id(ext.code):`\n- `lnbits/app.py::check_installed_extensions` \u2014 `lnbits/app.py:307: await deactivate_extension(ext.id)`\n- `lnbits/app.py::lifespan` \u2014 `lnbits/app.py:170: await startup(app)`\n- `lnbits/app.py::restore_installed_extension` \u2014 `lnbits/app.py:432: await migrate_extension_database(ext, current_version)`\n- `lnbits/app.py::startup` \u2014 `lnbits/app.py:112: await check_and_register_extensions(app)`\n- `lnbits/commands.py::_call_install_extension` \u2014 `lnbits/commands.py:765: await api_install_extension(data)`\n- `lnbits/commands.py::_call_uninstall_extension` \u2014 `lnbits/commands.py:783: await api_uninstall_extension(extension)`\n- `lnbits/commands.py::database_migrate` \u2014 `lnbits/commands.py:171: loop.run_until_complete(migrate_databases())`\n- `lnbits/commands.py::extensions_install` \u2014 `lnbits/commands.py:482: await install_extension(extension, repo_index, source_repo, url, admin_user)`\n- `lnbits/commands.py::extensions_list` \u2014 `lnbits/commands.py:349: for ext in await build_all_installed_extensions_list():`\n- `lnbits/commands.py::extensions_uninstall` \u2014 `lnbits/commands.py:511: await _call_uninstall_extension(extension, url, admin_user)`\n- `lnbits/commands.py::extensions_update` \u2014 `lnbits/commands.py:409: await update_extension(extension, repo_index, source_repo, url, admin_user)`\n- `lnbits/commands.py::install_extension` \u2014 `lnbits/commands.py:604: await _call_install_extension(data, url, admin_user)`\n- `lnbits/commands.py::update_extension` \u2014 `lnbits/commands.py:657: await _call_install_extension(data, url, admin_user)`\n- `lnbits/core/helpers.py::migrate_databases` \u2014 `lnbits/core/helpers.py:142: await migrate_extension_database(ext, current_version)`\n- `lnbits/core/helpers.py::migrate_extension_database` \u2014 `lnbits/core/helpers.py:40: if is_wasm_extension_id(ext.id):`\n- `lnbits/core/services/extensions.py::_auto_update_extension` \u2014 `lnbits/core/services/extensions.py:866: await deactivate_extension(ext.id)`\n- `lnbits/core/services/extensions.py::_install_extension_update` \u2014 `lnbits/core/services/extensions.py:895: await deactivate_extension(updated.id)`\n- `lnbits/core/services/extensions.py::activate_extension` \u2014 `lnbits/core/services/extensions.py:685: await start_extension_background_work(ext.code)`\n- `lnbits/core/services/extensions.py::auto_update_extensions` \u2014 `lnbits/core/services/extensions.py:275: await deactivate_extension(ext.id)`\n- `lnbits/core/services/extensions.py::deactivate_extension` \u2014 `lnbits/core/services/extensions.py:689: if is_wasm_extension_id(ext_id):`\n- `lnbits/core/services/extensions.py::install_extension` \u2014 `lnbits/core/services/extensions.py:251: await stop_extension_background_work(ext_info.id)`\n- `lnbits/core/services/extensions.py::start_extension_background_work` \u2014 `lnbits/core/services/extensions.py:737: if is_wasm_extension_id(ext_id):`\n- `lnbits/core/services/extensions.py::stop_extension_background_work` \u2014 `lnbits/core/services/extensions.py:702: if is_wasm_extension_id(ext_id):`\n- `lnbits/core/services/extensions.py::uninstall_extension` \u2014 `lnbits/core/services/extensions.py:661: await stop_extension_background_work(ext_id)`\n- `lnbits/core/tasks.py::scheduled_extension_updates` \u2014 `lnbits/core/tasks.py:54: await auto_update_extensions(reload_active=True)`\n- `lnbits/core/views/extension_api.py::api_activate_extension` \u2014 `lnbits/core/views/extension_api.py:656: await deactivate_extension(ext_id)`\n- `lnbits/core/views/extension_api.py::api_deactivate_extension` \u2014 `lnbits/core/views/extension_api.py:672: await deactivate_extension(ext_id)`\n- `lnbits/core/views/extension_api.py::api_install_extension` \u2014 `lnbits/core/views/extension_api.py:164: await deactivate_extension(extension.code)`\n- `lnbits/core/views/extension_api.py::api_uninstall_extension` \u2014 `lnbits/core/views/extension_api.py:711: await uninstall_extension(ext_id)`\n\n## Route handlers that reach it (4)\n- `lnbits/core/views/extension_api.py::api_activate_extension` (PUT /api/v1/extension/{ext_id}/activate) \u2014 path: `api_activate_extension` \u2192 `deactivate_extension` \u2192 `is_wasm_extension_id`\n  - `lnbits/core/views/extension_api.py:656: await deactivate_extension(ext_id)`\n  - `lnbits/core/services/extensions.py:689: if is_wasm_extension_id(ext_id):`\n- `lnbits/core/views/extension_api.py::api_deactivate_extension` (PUT /api/v1/extension/{ext_id}/deactivate) \u2014 path: `api_deactivate_extension` \u2192 `deactivate_extension` \u2192 `is_wasm_extension_id`\n  - `lnbits/core/views/extension_api.py:672: await deactivate_extension(ext_id)`\n  - `lnbits/core/services/extensions.py:689: if is_wasm_extension_id(ext_id):`\n- `lnbits/core/views/extension_api.py::api_install_extension` (POST /api/v1/extension) \u2014 path: `api_install_extension` \u2192 `deactivate_extension` \u2192 `is_wasm_extension_id`\n  - `lnbits/core/views/extension_api.py:164: await deactivate_extension(extension.code)`\n  - `lnbits/core/services/extensions.py:689: if is_wasm_extension_id(ext_id):`\n- `lnbits/core/views/extension_api.py::api_uninstall_extension` (DELETE /api/v1/extension/{ext_id}) \u2014 path: `api_uninstall_extension` \u2192 `uninstall_extension` \u2192 `stop_extension_background_work` \u2192 `is_wasm_extension_id`\n  - `lnbits/core/views/extension_api.py:711: await uninstall_extension(ext_id)`\n  - `lnbits/core/services/extensions.py:661: await stop_extension_background_work(ext_id)`\n  - `lnbits/core/services/extensions.py:702: if is_wasm_extension_id(ext_id):`\n\n## Test files to run (6): every test calling it or a function on those paths\n- `tests/api/test_extension_api.py` (+5 more tests) \u2014 `tests/api/test_extension_api.py:133: installed = await api_install_extension(create_data)`\n- `tests/unit/test_app_extensions.py` (+7 more tests) \u2014 `tests/unit/test_app_extensions.py:39: await check_and_register_extensions(app)`\n- `tests/unit/test_extension_autoupdate.py` (+11 more tests) \u2014 `tests/unit/test_extension_autoupdate.py:117: await services.auto_update_extensions(reload_active=reload_active)`\n- `tests/unit/test_models_extensions.py` \u2014 `tests/unit/test_models_extensions.py:89: extensions = await build_all_installed_extensions_list()`\n- `tests/unit/test_services_extensions.py` (+13 more tests) \u2014 `tests/unit/test_services_extensions.py:57: await install_extension(ext_info)`\n- `tests/unit/test_wasm_extension_automatic_schedules.py` (+2 more tests) \u2014 `tests/unit/test_wasm_extension_automatic_schedules.py:289: await app_module.check_and_register_extensions(FastAPI())`\n\nRun: `python3 -m pytest tests/api/test_extension_api.py tests/unit/test_app_extensions.py tests/unit/test_extension_autoupdate.py tests/unit/test_models_extensions.py tests/unit/test_services_extensions.py tests/unit/test_wasm_extension_automatic_schedules.py -q`\n\n## Coverage\n**Incomplete: 2 call site(s) under this name could not be attributed.** They are in files already listed above; check those files' other calls under this name.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "change",
+   "name": "is_wasm_extension_id",
+   "path": "lnbits/core/wasm_ext/wasm/loader.py"
+  }
+ },
+ {
+  "id": "lnbits-IMP-get_wallet_addresses",
+  "kind": "impact",
+  "skill": "devkb-feature",
+  "prompt": "You are about to change the behaviour of `get_wallet_addresses` (defined in lnbits/core/services/wallets.py). Before editing, find which HTTP route handler functions (functions decorated as FastAPI routes) can reach it through calls at any depth, and which test files you must run: every test file that calls it or any function on a path between it and those handlers. Answer with one JSON object: {\"handlers\": [\"path::function\", ...], \"test_files\": [\"path\", ...]}.",
+  "truth": {
+   "handlers": [
+    "lnbits/core/views/onchain_api.py::api_get_addresses",
+    "lnbits/core/views/onchain_api.py::api_tx_broadcast",
+    "lnbits/core/views/onchain_api.py::create_hot_wallet",
+    "lnbits/core/views/onchain_api.py::start_sync",
+    "lnbits/core/views/wallet_api.py::api_update_config",
+    "lnbits/core/views/wallet_api.py::api_wallet_create_or_update"
+   ],
+   "test_files": [
+    "tests/api/test_onchain_wallet.py"
+   ],
+   "closure_size": 11
+  },
+  "pack": "# Graph pack: changing `lnbits/core/services/wallets.py::get_wallet_addresses`\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\nDefined at `lnbits/core/services/wallets.py:211: async def get_wallet_addresses(wallet: OnchainWallet) -> list[Address]:`.\n\n## Functions that reach it, at any depth (11)\n- `lnbits/core/services/onchain.py::_scan` \u2014 `lnbits/core/services/onchain.py:577: addresses = await get_wallet_addresses(wallet)`\n- `lnbits/core/services/onchain.py::_scan_with_lease` \u2014 `lnbits/core/services/onchain.py:647: result = await asyncio.wait_for(_scan(wallet_id), timeout=1500)`\n- `lnbits/core/services/onchain.py::request_scan` \u2014 `lnbits/core/services/onchain.py:406: scan_wallet(wallet_id, max_age=SCAN_MAX_AGE if if_needed else None), name=name`\n- `lnbits/core/services/onchain.py::scan_wallet` \u2014 `lnbits/core/services/onchain.py:381: await _scan_with_lease(wallet_id, max_age=max_age)`\n- `lnbits/core/services/onchain.py::sync_wallets` \u2014 `lnbits/core/services/onchain.py:414: await scan_wallet(wallet_id, max_age=0)`\n- `lnbits/core/views/onchain_api.py::api_get_addresses` \u2014 `lnbits/core/views/onchain_api.py:125: return await get_wallet_addresses(wallet)`\n- `lnbits/core/views/onchain_api.py::api_tx_broadcast` \u2014 `lnbits/core/views/onchain_api.py:207: request_scan(auth.wallet_id)`\n- `lnbits/core/views/onchain_api.py::create_hot_wallet` \u2014 `lnbits/core/views/onchain_api.py:287: await get_wallet_addresses(wallet)`\n- `lnbits/core/views/onchain_api.py::start_sync` \u2014 `lnbits/core/views/onchain_api.py:381: return {\"scheduled\": request_scan(auth.wallet_id, if_needed=if_needed)}`\n- `lnbits/core/views/wallet_api.py::api_update_config` \u2014 `lnbits/core/views/wallet_api.py:364: request_scan(auth.wallet_id)`\n- `lnbits/core/views/wallet_api.py::api_wallet_create_or_update` \u2014 `lnbits/core/views/wallet_api.py:312: await get_wallet_addresses(wallet)`\n\n## Route handlers that reach it (6)\n- `lnbits/core/views/onchain_api.py::api_get_addresses` (GET /api/v1/onchain/addresses/{wallet_id}) \u2014 path: `api_get_addresses` \u2192 `get_wallet_addresses`\n  - `lnbits/core/views/onchain_api.py:125: return await get_wallet_addresses(wallet)`\n- `lnbits/core/views/onchain_api.py::api_tx_broadcast` (POST /api/v1/onchain/tx) \u2014 path: `api_tx_broadcast` \u2192 `request_scan` \u2192 `scan_wallet` \u2192 `_scan_with_lease` \u2192 `_scan` \u2192 `get_wallet_addresses`\n  - `lnbits/core/views/onchain_api.py:207: request_scan(auth.wallet_id)`\n  - `lnbits/core/services/onchain.py:406: scan_wallet(wallet_id, max_age=SCAN_MAX_AGE if if_needed else None), name=name`\n  - `lnbits/core/services/onchain.py:381: await _scan_with_lease(wallet_id, max_age=max_age)`\n  - `lnbits/core/services/onchain.py:647: result = await asyncio.wait_for(_scan(wallet_id), timeout=1500)`\n  - `lnbits/core/services/onchain.py:577: addresses = await get_wallet_addresses(wallet)`\n- `lnbits/core/views/onchain_api.py::create_hot_wallet` (POST /api/v1/onchain/hot-wallet) \u2014 path: `create_hot_wallet` \u2192 `get_wallet_addresses`\n  - `lnbits/core/views/onchain_api.py:287: await get_wallet_addresses(wallet)`\n- `lnbits/core/views/onchain_api.py::start_sync` (POST /api/v1/onchain/sync) \u2014 path: `start_sync` \u2192 `request_scan` \u2192 `scan_wallet` \u2192 `_scan_with_lease` \u2192 `_scan` \u2192 `get_wallet_addresses`\n  - `lnbits/core/views/onchain_api.py:381: return {\"scheduled\": request_scan(auth.wallet_id, if_needed=if_needed)}`\n  - `lnbits/core/services/onchain.py:406: scan_wallet(wallet_id, max_age=SCAN_MAX_AGE if if_needed else None), name=name`\n  - `lnbits/core/services/onchain.py:381: await _scan_with_lease(wallet_id, max_age=max_age)`\n  - `lnbits/core/services/onchain.py:647: result = await asyncio.wait_for(_scan(wallet_id), timeout=1500)`\n  - `lnbits/core/services/onchain.py:577: addresses = await get_wallet_addresses(wallet)`\n- `lnbits/core/views/wallet_api.py::api_update_config` (PUT /api/v1/wallet/onchain/config) \u2014 path: `api_update_config` \u2192 `request_scan` \u2192 `scan_wallet` \u2192 `_scan_with_lease` \u2192 `_scan` \u2192 `get_wallet_addresses`\n  - `lnbits/core/views/wallet_api.py:364: request_scan(auth.wallet_id)`\n  - `lnbits/core/services/onchain.py:406: scan_wallet(wallet_id, max_age=SCAN_MAX_AGE if if_needed else None), name=name`\n  - `lnbits/core/services/onchain.py:381: await _scan_with_lease(wallet_id, max_age=max_age)`\n  - `lnbits/core/services/onchain.py:647: result = await asyncio.wait_for(_scan(wallet_id), timeout=1500)`\n  - `lnbits/core/services/onchain.py:577: addresses = await get_wallet_addresses(wallet)`\n- `lnbits/core/views/wallet_api.py::api_wallet_create_or_update` (POST /api/v1/wallet/onchain) \u2014 path: `api_wallet_create_or_update` \u2192 `get_wallet_addresses`\n  - `lnbits/core/views/wallet_api.py:312: await get_wallet_addresses(wallet)`\n\n## Test files to run (1): every test calling it or a function on those paths\n- `tests/api/test_onchain_wallet.py` (+7 more tests) \u2014 `tests/api/test_onchain_wallet.py:1513: task = asyncio.create_task(onchain._scan(wallet.id))`\n\nRun: `python3 -m pytest tests/api/test_onchain_wallet.py -q`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "change",
+   "name": "get_wallet_addresses",
+   "path": "lnbits/core/services/wallets.py"
+  }
+ },
+ {
+  "id": "lnbits-WIDE-update_wallet_balance",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `update_wallet_balance` (defined in lnbits/core/services/payments.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "lnbits/core/views/user_api.py",
+    "tests/api/test_force_resend_api.py",
+    "tests/api/test_onchain_wallet.py",
+    "tests/api/test_wallet_api.py",
+    "tests/conftest.py",
+    "tests/regtest/test_real_invoice.py",
+    "tests/unit/test_bolt12.py",
+    "tests/unit/test_bolt12_clnrest_errors.py",
+    "tests/unit/test_bolt12_eclair_fees.py",
+    "tests/unit/test_bolt12_idempotency.py",
+    "tests/unit/test_bolt12_invoice_amount.py",
+    "tests/unit/test_bolt12_pending.py",
+    "tests/unit/test_bolt12_phoenixd_responses.py",
+    "tests/unit/test_bolt12_wait_seconds.py",
+    "tests/unit/test_crud_payments.py",
+    "tests/unit/test_fiat_providers.py",
+    "tests/unit/test_pay_invoice.py",
+    "tests/unit/test_services_funding_source.py",
+    "tests/unit/test_services_payments.py",
+    "tests/unit/test_services_shared_wallet.py"
+   ],
+   "test_files": [
+    "tests/api/test_force_resend_api.py",
+    "tests/api/test_onchain_wallet.py",
+    "tests/api/test_wallet_api.py",
+    "tests/conftest.py",
+    "tests/regtest/test_real_invoice.py",
+    "tests/unit/test_bolt12.py",
+    "tests/unit/test_bolt12_clnrest_errors.py",
+    "tests/unit/test_bolt12_eclair_fees.py",
+    "tests/unit/test_bolt12_idempotency.py",
+    "tests/unit/test_bolt12_invoice_amount.py",
+    "tests/unit/test_bolt12_pending.py",
+    "tests/unit/test_bolt12_phoenixd_responses.py",
+    "tests/unit/test_bolt12_wait_seconds.py",
+    "tests/unit/test_crud_payments.py",
+    "tests/unit/test_fiat_providers.py",
+    "tests/unit/test_pay_invoice.py",
+    "tests/unit/test_services_funding_source.py",
+    "tests/unit/test_services_payments.py",
+    "tests/unit/test_services_shared_wallet.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `lnbits/core/services/payments.py::update_wallet_balance`\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\nDefined at `lnbits/core/services/payments.py:564: async def update_wallet_balance(`.\n\n## Files with a direct caller (20, tests included)\n- `lnbits/core/views/user_api.py` \u2014 `lnbits/core/views/user_api.py:409: await update_wallet_balance(wallet=wallet, amount=int(data.amount), memo=memo)`\n- `tests/api/test_force_resend_api.py` \u2014 `tests/api/test_force_resend_api.py:19: await update_wallet_balance(wallet, 1_040)`\n- `tests/api/test_onchain_wallet.py` \u2014 `tests/api/test_onchain_wallet.py:358: await update_wallet_balance(wallet, amount)`\n- `tests/api/test_wallet_api.py` \u2014 `tests/api/test_wallet_api.py:257: await update_wallet_balance(wallet=wallet, amount=2_000)`\n- `tests/conftest.py` (+1 more) \u2014 `tests/conftest.py:194: await update_wallet_balance(`\n- `tests/regtest/test_real_invoice.py` \u2014 `tests/regtest/test_real_invoice.py:299: await update_wallet_balance(wallet, 1100)`\n- `tests/unit/test_bolt12.py` (+5 more) \u2014 `tests/unit/test_bolt12.py:182: await update_wallet_balance(wallet, 1000)`\n- `tests/unit/test_bolt12_clnrest_errors.py` \u2014 `tests/unit/test_bolt12_clnrest_errors.py:87: await update_wallet_balance(wallet, 1000)`\n- `tests/unit/test_bolt12_eclair_fees.py` \u2014 `tests/unit/test_bolt12_eclair_fees.py:37: await update_wallet_balance(wallet, 102)`\n- `tests/unit/test_bolt12_idempotency.py` (+1 more) \u2014 `tests/unit/test_bolt12_idempotency.py:26: await update_wallet_balance(wallet, 1000)`\n- `tests/unit/test_bolt12_invoice_amount.py` \u2014 `tests/unit/test_bolt12_invoice_amount.py:120: await update_wallet_balance(wallet, 1000)`\n- `tests/unit/test_bolt12_pending.py` \u2014 `tests/unit/test_bolt12_pending.py:27: await update_wallet_balance(wallet, 1000)`\n- `tests/unit/test_bolt12_phoenixd_responses.py` \u2014 `tests/unit/test_bolt12_phoenixd_responses.py:20: await update_wallet_balance(wallet, 1000)`\n- `tests/unit/test_bolt12_wait_seconds.py` \u2014 `tests/unit/test_bolt12_wait_seconds.py:62: await update_wallet_balance(wallet, 1000)`\n- `tests/unit/test_crud_payments.py` (+1 more) \u2014 `tests/unit/test_crud_payments.py:160: await update_wallet_balance(wallet, 10)`\n- `tests/unit/test_fiat_providers.py` \u2014 `tests/unit/test_fiat_providers.py:1690: await payments.update_wallet_balance(wallet=faucet_wallet, amount=100_000_000)`\n- `tests/unit/test_pay_invoice.py` (+1 more) \u2014 `tests/unit/test_pay_invoice.py:954: await update_wallet_balance(payer, 10_000)`\n- `tests/unit/test_services_funding_source.py` \u2014 `tests/unit/test_services_funding_source.py:191: await update_wallet_balance(wallet=wallet, amount=amount)`\n- `tests/unit/test_services_payments.py` \u2014 `tests/unit/test_services_payments.py:593: await update_wallet_balance(wallet, 0, memo=memo)`\n- `tests/unit/test_services_shared_wallet.py` (+1 more) \u2014 `tests/unit/test_services_shared_wallet.py:675: await update_wallet_balance(mirror_wallet, 100000)`\n\n## Test files among them (19)\n- `tests/api/test_force_resend_api.py`\n- `tests/api/test_onchain_wallet.py`\n- `tests/api/test_wallet_api.py`\n- `tests/conftest.py`\n- `tests/regtest/test_real_invoice.py`\n- `tests/unit/test_bolt12.py`\n- `tests/unit/test_bolt12_clnrest_errors.py`\n- `tests/unit/test_bolt12_eclair_fees.py`\n- `tests/unit/test_bolt12_idempotency.py`\n- `tests/unit/test_bolt12_invoice_amount.py`\n- `tests/unit/test_bolt12_pending.py`\n- `tests/unit/test_bolt12_phoenixd_responses.py`\n- `tests/unit/test_bolt12_wait_seconds.py`\n- `tests/unit/test_crud_payments.py`\n- `tests/unit/test_fiat_providers.py`\n- `tests/unit/test_pay_invoice.py`\n- `tests/unit/test_services_funding_source.py`\n- `tests/unit/test_services_payments.py`\n- `tests/unit/test_services_shared_wallet.py`\n\n(The defining file `lnbits/core/services/payments.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "update_wallet_balance",
+   "role": "",
+   "path": "lnbits/core/services/payments.py"
+  }
+ },
+ {
+  "id": "lnbits-WIDE-get_wallets",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `get_wallets` (defined in lnbits/core/crud/wallets.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "lnbits/core/crud/users.py",
+    "lnbits/core/services/wallets.py",
+    "lnbits/core/views/user_api.py",
+    "lnbits/core/wasm_ext/api/host.py",
+    "tests/api/test_onchain_wallet.py",
+    "tests/api/test_user_api.py",
+    "tests/api/test_users.py",
+    "tests/unit/test_crud_users.py",
+    "tests/unit/test_services_shared_wallet.py",
+    "tests/unit/test_services_users.py"
+   ],
+   "test_files": [
+    "tests/api/test_onchain_wallet.py",
+    "tests/api/test_user_api.py",
+    "tests/api/test_users.py",
+    "tests/unit/test_crud_users.py",
+    "tests/unit/test_services_shared_wallet.py",
+    "tests/unit/test_services_users.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `lnbits/core/crud/wallets.py::get_wallets`\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\nDefined at `lnbits/core/crud/wallets.py:217: async def get_wallets(`.\n\n## Files with a direct caller (10, tests included)\n- `lnbits/core/crud/users.py` \u2014 `lnbits/core/crud/users.py:267: wallets = await get_wallets(account.id, deleted=False, conn=conn)`\n- `lnbits/core/services/wallets.py` \u2014 `lnbits/core/services/wallets.py:137: mirror_wallets = await get_wallets(`\n- `lnbits/core/views/user_api.py` (+2 more) \u2014 `lnbits/core/views/user_api.py:360: wallets = await get_wallets(user_id, deleted=False)`\n- `lnbits/core/wasm_ext/api/host.py` \u2014 `lnbits/core/wasm_ext/api/host.py:492: user_wallets = await get_wallets(self.user_id)`\n- `tests/api/test_onchain_wallet.py` (+1 more) \u2014 `tests/api/test_onchain_wallet.py:1256: assert await get_wallets(user.id)`\n- `tests/api/test_user_api.py` \u2014 `tests/api/test_user_api.py:82: active_wallets = await get_wallets(user.id, deleted=False)`\n- `tests/api/test_users.py` (+3 more) \u2014 `tests/api/test_users.py:600: wallets = await get_wallets(user_id=user_id, deleted=True)`\n- `tests/unit/test_crud_users.py` (+2 more) \u2014 `tests/unit/test_crud_users.py:167: wallets = await get_wallets(account.id, deleted=False)`\n- `tests/unit/test_services_shared_wallet.py` \u2014 `tests/unit/test_services_shared_wallet.py:231: invited_user_wallets = await get_wallets(invited_user.id)`\n- `tests/unit/test_services_users.py` (+1 more) \u2014 `tests/unit/test_services_users.py:97: wallets = await get_wallets(user.id)`\n\n## Test files among them (6)\n- `tests/api/test_onchain_wallet.py`\n- `tests/api/test_user_api.py`\n- `tests/api/test_users.py`\n- `tests/unit/test_crud_users.py`\n- `tests/unit/test_services_shared_wallet.py`\n- `tests/unit/test_services_users.py`\n\n(The defining file `lnbits/core/crud/wallets.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "get_wallets",
+   "role": "",
+   "path": "lnbits/core/crud/wallets.py"
+  }
+ },
+ {
+  "id": "lnbits-WIDE-create_account",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `create_account` (defined in lnbits/core/crud/users.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "lnbits/core/services/users.py",
+    "tests/api/test_fiat_wallet_type.py",
+    "tests/api/test_scheduler_api.py",
+    "tests/unit/test_crud_users.py",
+    "tests/unit/test_first_install.py",
+    "tests/unit/test_services_assets.py",
+    "tests/unit/test_services_funding_source.py",
+    "tests/unit/test_services_lnurl.py",
+    "tests/unit/test_services_notifications.py",
+    "tests/unit/test_services_payments.py",
+    "tests/unit/test_services_users.py"
+   ],
+   "test_files": [
+    "tests/api/test_fiat_wallet_type.py",
+    "tests/api/test_scheduler_api.py",
+    "tests/unit/test_crud_users.py",
+    "tests/unit/test_first_install.py",
+    "tests/unit/test_services_assets.py",
+    "tests/unit/test_services_funding_source.py",
+    "tests/unit/test_services_lnurl.py",
+    "tests/unit/test_services_notifications.py",
+    "tests/unit/test_services_payments.py",
+    "tests/unit/test_services_users.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `lnbits/core/crud/users.py::create_account`\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\nDefined at `lnbits/core/crud/users.py:29: async def create_account(`.\n\n## Files with a direct caller (11, tests included)\n- `lnbits/core/services/users.py` (+1 more) \u2014 `lnbits/core/services/users.py:89: account = await create_account(account, conn=conn)`\n- `tests/api/test_fiat_wallet_type.py` \u2014 `tests/api/test_fiat_wallet_type.py:401: await create_account(account)`\n- `tests/api/test_scheduler_api.py` \u2014 `tests/api/test_scheduler_api.py:176: account = await create_account(`\n- `tests/unit/test_crud_users.py` (+1 more) \u2014 `tests/unit/test_crud_users.py:77: await create_account(account)`\n- `tests/unit/test_first_install.py` (+1 more) \u2014 `tests/unit/test_first_install.py:110: await create_account(`\n- `tests/unit/test_services_assets.py` \u2014 `tests/unit/test_services_assets.py:179: await create_account(Account(id=user_id, username=f\"user_{user_id[:8]}\"))`\n- `tests/unit/test_services_funding_source.py` \u2014 `tests/unit/test_services_funding_source.py:189: await create_account(Account(id=user_id, username=f\"user_{user_id[:8]}\"))`\n- `tests/unit/test_services_lnurl.py` \u2014 `tests/unit/test_services_lnurl.py:409: await create_account(Account(id=user_id, username=f\"user_{user_id[:8]}\"))`\n- `tests/unit/test_services_notifications.py` \u2014 `tests/unit/test_services_notifications.py:976: await create_account(account)`\n- `tests/unit/test_services_payments.py` \u2014 `tests/unit/test_services_payments.py:910: await create_account(account)`\n- `tests/unit/test_services_users.py` (+2 more) \u2014 `tests/unit/test_services_users.py:68: await create_account(existing)`\n\n## Test files among them (10)\n- `tests/api/test_fiat_wallet_type.py`\n- `tests/api/test_scheduler_api.py`\n- `tests/unit/test_crud_users.py`\n- `tests/unit/test_first_install.py`\n- `tests/unit/test_services_assets.py`\n- `tests/unit/test_services_funding_source.py`\n- `tests/unit/test_services_lnurl.py`\n- `tests/unit/test_services_notifications.py`\n- `tests/unit/test_services_payments.py`\n- `tests/unit/test_services_users.py`\n\n(The defining file `lnbits/core/crud/users.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "create_account",
+   "role": "",
+   "path": "lnbits/core/crud/users.py"
+  }
+ },
+ {
+  "id": "lnbits-WIDE-pay_offer",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `pay_offer` (defined in lnbits/core/services/payments.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "lnbits/core/views/payment_api.py",
+    "tests/unit/test_bolt12.py",
+    "tests/unit/test_bolt12_clnrest_errors.py",
+    "tests/unit/test_bolt12_eclair_fees.py",
+    "tests/unit/test_bolt12_idempotency.py",
+    "tests/unit/test_bolt12_invoice_amount.py",
+    "tests/unit/test_bolt12_pending.py",
+    "tests/unit/test_bolt12_phoenixd_responses.py",
+    "tests/unit/test_bolt12_wait_seconds.py"
+   ],
+   "test_files": [
+    "tests/unit/test_bolt12.py",
+    "tests/unit/test_bolt12_clnrest_errors.py",
+    "tests/unit/test_bolt12_eclair_fees.py",
+    "tests/unit/test_bolt12_idempotency.py",
+    "tests/unit/test_bolt12_invoice_amount.py",
+    "tests/unit/test_bolt12_pending.py",
+    "tests/unit/test_bolt12_phoenixd_responses.py",
+    "tests/unit/test_bolt12_wait_seconds.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `lnbits/core/services/payments.py::pay_offer`\n\nBuilt from the dev-process graph at commit `c8d4701304`. None of the files below has changed since; the line numbers are current.\n\nDefined at `lnbits/core/services/payments.py:105: async def pay_offer(`.\n\n## Files with a direct caller (9, tests included)\n- `lnbits/core/views/payment_api.py` \u2014 `lnbits/core/views/payment_api.py:307: return await pay_offer(`\n- `tests/unit/test_bolt12.py` (+11 more) \u2014 `tests/unit/test_bolt12.py:185: first = await pay_offer(`\n- `tests/unit/test_bolt12_clnrest_errors.py` \u2014 `tests/unit/test_bolt12_clnrest_errors.py:102: await pay_offer(wallet_id=wallet.id, offer=BOLT12_OFFER, amount_sat=100)`\n- `tests/unit/test_bolt12_eclair_fees.py` \u2014 `tests/unit/test_bolt12_eclair_fees.py:86: payment = await pay_offer(`\n- `tests/unit/test_bolt12_idempotency.py` (+5 more) \u2014 `tests/unit/test_bolt12_idempotency.py:82: pay_offer(`\n- `tests/unit/test_bolt12_invoice_amount.py` \u2014 `tests/unit/test_bolt12_invoice_amount.py:123: await pay_offer(wallet_id=wallet.id, offer=BOLT12_OFFER, amount_sat=21)`\n- `tests/unit/test_bolt12_pending.py` (+2 more) \u2014 `tests/unit/test_bolt12_pending.py:111: payment = await pay_offer(`\n- `tests/unit/test_bolt12_phoenixd_responses.py` (+3 more) \u2014 `tests/unit/test_bolt12_phoenixd_responses.py:92: payment = await pay_offer(wallet_id=wallet.id, offer=BOLT12_OFFER, amount_sat=100)`\n- `tests/unit/test_bolt12_wait_seconds.py` \u2014 `tests/unit/test_bolt12_wait_seconds.py:73: payment = await pay_offer(wallet_id=wallet.id, offer=BOLT12_OFFER, amount_sat=1)`\n\n## Test files among them (8)\n- `tests/unit/test_bolt12.py`\n- `tests/unit/test_bolt12_clnrest_errors.py`\n- `tests/unit/test_bolt12_eclair_fees.py`\n- `tests/unit/test_bolt12_idempotency.py`\n- `tests/unit/test_bolt12_invoice_amount.py`\n- `tests/unit/test_bolt12_pending.py`\n- `tests/unit/test_bolt12_phoenixd_responses.py`\n- `tests/unit/test_bolt12_wait_seconds.py`\n\n(The defining file `lnbits/core/services/payments.py` is not counted as a caller.)\n\n## Coverage\n**Incomplete: 11 call site(s) under this name could not be attributed.** 9 symbols share the name, so most may be calls to the others. Search only these files for them: `tests/unit/test_bolt12_wallets.py`, `lnbits/core/services/payments.py`.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "pay_offer",
+   "role": "",
+   "path": "lnbits/core/services/payments.py"
+  }
+ }
+]
