@@ -201,7 +201,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="devkb-sdlc MCP server (stdio)")
     ap.add_argument("--project", default=os.environ.get("DEVKB_PROJECT"))
     ap.add_argument("--devkb-dir", default=os.environ.get("DEVKB_DIR"))
-    ap.add_argument("--toolset", default=os.environ.get("DEVKB_TOOLSET", "all"), choices=sorted(TOOLSETS))
+    ap.add_argument("--toolset", default=os.environ.get("DEVKB_TOOLSET", "lean-pack"), choices=sorted(TOOLSETS))
     ns = ap.parse_args()
     if not ns.project:
         ns.project = project_for(Path.cwd())
