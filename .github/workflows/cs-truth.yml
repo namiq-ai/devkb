@@ -1,0 +1,61 @@
+# Compiler truth for the C# benchmarks (bench/roslyn_truth): restores each dogfood repository at its pinned commit
+# with the SDK it asks for, and writes the call graph Roslyn binds as an artifact. Runs on pushes to bench/cs-truth
+# or by hand; nothing here publishes or writes to any repository.
+name: cs-truth
+on:
+  push:
+    branches: [bench/cs-truth]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  truth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: mediatr, url: "https://github.com/jbogard/MediatR.git", commit: 1fad4c7a35c8dd4e733a0f8d43e28eddc1aa5f5b, channel: "10.0", quality: GA, projects: "src test samples"}
+          - {id: fluentvalidation, url: "https://github.com/FluentValidation/FluentValidation.git", commit: 5903fa65863ec66dabf10646b9c09b33130a03e8, channel: "10.0", quality: GA, projects: "src"}
+          - {id: polly, url: "https://github.com/App-vNext/Polly.git", commit: 3bac1c877ac5b94f0c09cbf4efe4c15fafce639d, channel: "11.0", quality: GA, projects: "src test bench samples"}
+          - {id: jellyfin, url: "https://github.com/jellyfin/jellyfin.git", commit: 2953ed632c9277351483eff04f87a8276390691c, channel: "10.0", quality: GA, projects: "Emby.Naming Emby.Server.Implementations Jellyfin.Api Jellyfin.Data Jellyfin.Server Jellyfin.Server.Implementations MediaBrowser.Common MediaBrowser.Controller MediaBrowser.LocalMetadata MediaBrowser.MediaEncoding MediaBrowser.Model MediaBrowser.Providers MediaBrowser.XbmcMetadata src tests"}
+          - {id: efcore, url: "https://github.com/dotnet/efcore.git", commit: 8859f78f10d013a06385c5817ab318414399f66f, channel: "12.0", quality: daily, projects: "src/EFCore.Relational/EFCore.Relational.csproj"}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+      - name: The SDK the repository pins
+        run: |
+          curl -sSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
+          bash "$RUNNER_TEMP/dotnet-install.sh" --channel "${{ matrix.channel }}" --quality "${{ matrix.quality }}" --install-dir "$DOTNET_ROOT"
+          dotnet --list-sdks
+      - name: Check out ${{ matrix.id }} at its pinned commit
+        run: |
+          git init -q "$RUNNER_TEMP/repo"
+          git -C "$RUNNER_TEMP/repo" fetch -q --depth 1 "${{ matrix.url }}" "${{ matrix.commit }}"
+          git -C "$RUNNER_TEMP/repo" checkout -q FETCH_HEAD
+      - name: Restore
+        working-directory: ${{ runner.temp }}/repo
+        run: |
+          : > "$RUNNER_TEMP/projects.txt"
+          for p in ${{ matrix.projects }}; do
+            if [ -f "$p" ]; then echo "$p" >> "$RUNNER_TEMP/projects.txt"; else git ls-files "$p" | grep '\.csproj$' >> "$RUNNER_TEMP/projects.txt" || true; fi
+          done
+          wc -l < "$RUNNER_TEMP/projects.txt"
+          while read -r p; do dotnet restore "$p" -v q -p:TreatWarningsAsErrors=false || echo "restore failed: $p"; done < "$RUNNER_TEMP/projects.txt"
+      - name: Roslyn call graph
+        working-directory: bench/roslyn_truth
+        env:
+          DOTNET_ROLL_FORWARD: LatestMajor
+        run: |
+          dotnet build -c Release -v q
+          xargs -a "$RUNNER_TEMP/projects.txt" dotnet bin/Release/net10.0/RoslynTruth.dll "$RUNNER_TEMP/repo" "$RUNNER_TEMP/truth-${{ matrix.id }}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truth-${{ matrix.id }}
+          path: ${{ runner.temp }}/truth-${{ matrix.id }}.json

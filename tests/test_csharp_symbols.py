@@ -406,3 +406,226 @@ public class Bench { public static Pol Pol { get; } = new Pol(); public void Go(
     _, calls = csharp_symbols.extract(_repo(tmp_path))
     assert not [c for c in calls if c["callee"].endswith("P.Helper.Run")], (
         "Pol.Run fits a member: never the extension; c.Run on an outside type: `Run` is also a repository method")
+
+
+# ── round 3 (SPEC-DEVKB-CSHARP-3): typed expressions ─────────────────────────────────────────────────────────
+
+ROUND3 = '''namespace R3;
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq.Expressions;
+using System.Threading;
+using System.Threading.Tasks;
+
+public class Order { public void Ship() { } public Customer Owner { get; set; } }
+public class Customer { public void Notify() { } }
+public class Builder
+{
+    public Builder Named(string n) => this;
+    public Order Build() => new Order();
+}
+public class Repo
+{
+    public Builder Start() => new Builder();
+    public Task<Order> LoadAsync(int id) => null;
+    public IReadOnlyList<Order> All() => null;
+    public Order Find(int id) => null;
+}
+public class Config { public void Enable() { } }
+public class Model { public string Name { get; set; } }
+public static class Setup
+{
+    public static void Configure(this Repo repo, Action<Config> configure) { }
+    public static void Map(this Repo repo, Expression<Func<Model, string>> pick) { }
+    public static string Head(this TextReader reader) => null;
+    public static int IndexOf(this IReadOnlyList<Order> orders, Order o) => 0;
+}
+public class Finder { public Order Find(string key) => null; }
+public class Token { public void Run(CancellationToken ct) { } }
+public static class TokenExt { public static void Run(this Token t, Action work) { } }
+
+public class Use
+{
+    private readonly Repo _repo = new Repo();
+
+    public async Task Go(Repo repo, StreamReader reader, List<Order> list, Finder finder, Token tok)
+    {
+        repo.Start()
+            .Named("x")
+            .Build()
+            .Ship();                                     // chained over lines: Start -> Named -> Build -> Ship
+        (await repo.LoadAsync(1)).Ship();                // awaited result
+        var o = repo.Find(2);
+        o.Ship();                                        // var from a call
+        var later = await repo.LoadAsync(3).ConfigureAwait(false);
+        later.Ship();                                    // var from an awaited call
+        foreach (var each in repo.All()) { each.Ship(); }  // foreach element
+        o.Owner.Notify();                                // property chain
+        _repo.Find(4).Owner.Notify();                    // call result, then a property
+        repo.Configure(c => c.Enable());                 // lambda parameter from Action<Config>
+        repo.Map(m => m.Name);                           // Expression<Func<Model, string>>
+        reader.Head();                                   // StreamReader is a TextReader (.NET table)
+        list.IndexOf(o);                                 // List<T> has its own IndexOf: never the extension
+        finder.Find("k");                                // a string literal: Finder.Find(string)
+        tok.Run(() => { });                              // a lambda cannot be a CancellationToken: the extension
+    }
+}
+'''
+
+
+def _round3(tmp_path):
+    """{source line: callees resolved on it}, per call site (extract() keeps one edge per caller and callee)."""
+    sc = csharp_symbols.scan_file("R3.cs", ROUND3)
+    for x in sc["symbols"]:
+        x["rel"], x["key"] = "R3.cs", "R3.cs::" + ".".join(x["qparts"])
+    index = csharp_symbols._Index(sc["symbols"])
+    go = next(x for x in sc["symbols"] if x["name"] == "Go")
+    lines = ROUND3.splitlines()
+    got = {}
+    for callee, _conf, line, _text, _why in csharp_symbols._calls_in(go, sc["masked"], sc["nl"], index, {}, sc["raw"]):
+        if callee is not None:
+            got.setdefault(lines[line - 1].split("//")[0].strip(), set()).add(".".join(callee["qparts"]))
+    return got
+
+
+def test_calls_on_call_results_are_typed(tmp_path):
+    got = _round3(tmp_path)
+    assert got['.Named("x")'] == {"R3.Builder.Named"}
+    assert got[".Build()"] == {"R3.Builder.Build"}
+    assert got[".Ship();"] == {"R3.Order.Ship"}
+    assert "R3.Order.Ship" in got["(await repo.LoadAsync(1)).Ship();"]
+    assert "R3.Order.Ship" in got["o.Ship();"]
+    assert "R3.Order.Ship" in got["later.Ship();"]
+    assert "R3.Order.Ship" in got["foreach (var each in repo.All()) { each.Ship(); }"]
+
+
+def test_property_chains_and_lambda_parameters_are_typed(tmp_path):
+    got = _round3(tmp_path)
+    assert "R3.Customer.Notify" in got["o.Owner.Notify();"]
+    assert "R3.Customer.Notify" in got["_repo.Find(4).Owner.Notify();"]
+    assert "R3.Config.Enable" in got["repo.Configure(c => c.Enable());"]
+
+
+def test_dotnet_hierarchies_and_members(tmp_path):
+    got = _round3(tmp_path)
+    assert got["reader.Head();"] == {"R3.Setup.Head"}, "StreamReader derives from TextReader"
+    assert "list.IndexOf(o);" not in got, "List<T>.IndexOf is List's own"
+
+
+def test_argument_types_rule_candidates_out(tmp_path):
+    got = _round3(tmp_path)
+    assert got['finder.Find("k");'] == {"R3.Finder.Find"}
+    assert got["tok.Run(() => { });"] == {"R3.TokenExt.Run"}, "a lambda is not a CancellationToken"
+
+
+def test_an_expression_bodied_member_with_braces_in_its_expression_is_a_member(tmp_path):
+    (tmp_path / "E.cs").write_text('''namespace E;
+public class Opts { public int A { get; set; } }
+public static class Ext
+{
+    public static Opts Make(this string s, int a) => Build(new Opts
+    {
+        A = a
+    });
+    public static Opts Build(Opts o) => o;
+    public static int After() => 1;                       // the type-level scan continues normally after it
+}
+''')
+    syms, calls = csharp_symbols.extract(_repo(tmp_path))
+    names = {_short(s["key"]) for s in syms}
+    assert {"E.Ext.Make", "E.Ext.Build", "E.Ext.After"} <= names
+    make = next(s for s in syms if s["name"] == "Make")
+    assert make["ext"] and (make["line_start"], make["line_end"]) == (5, 8)
+    assert ("E.Ext.Make", "E.Ext.Build") in {(_short(c["caller"]), _short(c["callee"])) for c in calls}
+
+
+def test_using_aliases_lambda_shadowing_and_invisible_receivers(tmp_path):
+    (tmp_path / "A.cs").write_text('''namespace A;
+using Dto = A.Item;
+using System.Linq;
+public class Item { }
+public class Movie : Item { }
+public class Service { public void Save(Dto item) { } }
+public static class Q { public static int Pick<T>(this System.Linq.IQueryable<T> q, int n) => n; }
+public class Use
+{
+    public void Go(Service svc, Microsoft.EntityFrameworkCore.DbSet<Item> set, int[] xs)
+    {
+        svc.Save(new Movie());                       // `Dto` is an alias of Item; a Movie is an Item
+        int i = 0;
+        xs.Select(i => Twice(i)).ToList();          // the lambda's `i` is not the outer int
+        set.Pick(1);                                 // DbSet<T> is an IQueryable<T> (table)
+    }
+    private int Twice(object o) => 0;
+}
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    pairs = {(_short(c["caller"]), _short(c["callee"])) for c in calls}
+    assert ("A.Use.Go", "A.Service.Save") in pairs, "alias resolved before the type check"
+    assert ("A.Use.Go", "A.Use.Twice") in pairs
+    assert ("A.Use.Go", "A.Q.Pick") in pairs
+
+
+def test_arrays_take_list_extensions_and_spans_accept_arrays(tmp_path):
+    (tmp_path / "S.cs").write_text('''namespace S;
+using System;
+using System.Collections.Generic;
+public static class L { public static int IndexOf<T>(this IReadOnlyList<T> xs, T x) => 0; }
+public static class W { internal static int Write(Span<byte> buffer, int n) => n; }
+public class Use
+{
+    public void Go(string[] names, List<string> list)
+    {
+        names.IndexOf("a");                         // arrays implement IList.IndexOf explicitly: the extension
+        list.IndexOf("a");                          // List<T>.IndexOf is List's own
+        byte[] buffer = new byte[8];
+        W.Write(buffer, 1);                         // byte[] converts to Span<byte>
+    }
+}
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    hits = [(_short(c["callee"]), c["line"]) for c in calls if c["rel"] == "S.cs"]
+    assert ("S.L.IndexOf", 10) in hits and not [h for h in hits if h == ("S.L.IndexOf", 11)]
+    assert any(h[0] == "S.W.Write" for h in hits)
+
+
+def test_tuple_typed_fields_are_not_methods_named_after_a_modifier(tmp_path):
+    (tmp_path / "T.cs").write_text('''namespace T;
+public class C
+{
+    private (string A, int B) _key;
+    public (int X, int Y)? Pair { get; set; }
+    private static (string Command, int Id) _q;
+    public (int, int) Make() => (1, 2);
+}
+''')
+    syms, _ = csharp_symbols.extract(_repo(tmp_path))
+    names = {s["name"] for s in syms}
+    assert not names & {"private", "public", "static"} and "Make" in names
+
+
+def test_linq_lambdas_and_fluent_builders(tmp_path):
+    (tmp_path / "Q.cs").write_text('''namespace Q;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
+public class Person { public bool IsActor() => true; public void Greet() { } }
+public static class Reg { public static IServiceCollection RegisterMine(this IServiceCollection s) => s; }
+public class Use
+{
+    public void Go(List<Person> people, IServiceCollection services)
+    {
+        var actors = people.Where(i => i.IsActor()).ToList();
+        actors.First().Greet();
+        people.FirstOrDefault(p => p.IsActor())?.Greet();
+        services.AddSingleton<Person>().RegisterMine();
+    }
+}
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    hits = {(_short(c["callee"]), c["line"]) for c in calls if c["rel"] == "Q.cs"}
+    assert ("Q.Person.IsActor", 11) in hits, "the Where lambda's parameter is a Person"
+    assert ("Q.Person.Greet", 12) in hits, "ToList() then First() is a Person"
+    assert ("Q.Reg.RegisterMine", 14) in hits, "AddSingleton returns the IServiceCollection"

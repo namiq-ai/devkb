@@ -27,6 +27,8 @@ import subprocess
 from bisect import bisect_left
 from pathlib import Path
 
+from devkb import csharp_dotnet as dotnet
+
 _SKIP = re.compile(r"(^|/)(obj|bin|node_modules|vendor|third_party|packages)/|\.g\.cs$|\.g\.i\.cs$|\.Designer\.cs$"
                    r"|(^|/)AssemblyInfo\.cs$|\.AssemblyAttributes\.cs$")
 _MAX_BYTES = 2_000_000
@@ -245,7 +247,7 @@ def _params(p: str) -> dict[str, str]:
     return {name: typ.split(".")[-1] for typ, name in _PARAM.findall(p)}
 
 
-_ATTR_ANY = re.compile(r"\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]")
+_ATTR_ANY = re.compile(r"\[\s*[A-Za-z_][^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]")   # an attribute starts with a name; `[]` is an array
 
 
 def _top_parts(p: str) -> list[str]:
@@ -282,6 +284,84 @@ def _this_type(params: str) -> str | None:
     return m.group(1).split(".")[-1] if m else None
 
 
+def _split_top(s: str, sep: str = ",") -> list[str]:
+    """`s` split at `sep` outside (), [], {} and generic <>; generic text is kept."""
+    parts, depth, cur = [], 0, []
+    for c in s:
+        if c in "<([{":
+            depth += 1
+        elif c in ">)]}" and depth:
+            depth -= 1
+        if c == sep and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+    parts.append("".join(cur))
+    return [x for x in parts if x.strip()]
+
+
+def _strip_end_generics(s: str) -> str:
+    """`s` without a balanced `<...>` at its end (a method's own generic parameter list)."""
+    s = s.rstrip()
+    if not s.endswith(">"):
+        return s
+    depth = 0
+    for j in range(len(s) - 1, -1, -1):
+        if s[j] == ">":
+            depth += 1
+        elif s[j] == "<":
+            depth -= 1
+            if depth == 0:
+                return s[:j].rstrip()
+    return s
+
+
+def _pt(text: str | None):
+    """A type's text as (simple name, (argument types...)); arrays are ("Array", (element,)). None if not a type."""
+    t = re.sub(r"\s+", "", text or "").replace("?", "").replace("global::", "")
+    if not t or t.startswith("("):
+        return None
+    arr = 0
+    while t.endswith("[]"):
+        t, arr = t[:-2], arr + 1
+    m = re.match(r"^([A-Za-z_][\w.]*)(?:<(.*)>)?$", t)
+    if m:
+        args = tuple(_pt(a) for a in _split_top(m.group(2))) if m.group(2) else ()
+        out = (m.group(1).split(".")[-1], args)
+    else:
+        mm = re.match(r"^([A-Za-z_][\w.]*)", t)                 # unbalanced generics: the outer name is enough
+        if not mm:
+            return None
+        out = (mm.group(1).split(".")[-1], ())
+    for _ in range(arr):
+        out = ("Array", (out,))
+    return out
+
+
+def _last_type_token(text: str):
+    """The type at the end of `text` once attributes and modifiers are gone (a return or property type)."""
+    text = _MODIFIERS.sub(" ", _ATTR_ANY.sub(" ", text))
+    toks = _split_top(text.strip(), " ")
+    return _pt(toks[-1]) if toks else None
+
+
+def _pfull(params: str) -> list[dict]:
+    """Each parameter: name, parsed type, whether optional, whether `params`, whether `this`."""
+    out = []
+    for part in _split_top(_ATTR_ANY.sub(" ", params)):
+        decl = _split_top(part, "=")[0] if "=" in part else part
+        optional = "=" in part and not part.strip().startswith("=")
+        mods = re.match(r"\s*((?:(?:this|ref|out|in|params|scoped|readonly)\s+)*)", decl)
+        words = mods.group(1).split()
+        toks = _split_top(decl[mods.end():].strip(), " ")
+        if len(toks) < 2:
+            continue
+        out.append({"name": toks[-1].lstrip("@"), "t": _pt("".join(toks[:-1])), "optional": optional,
+                    "params": "params" in words, "this": "this" in words})
+    return out
+
+
 _ARG_SCAN = 4000                                                     # longer argument lists: count unknown
 
 
@@ -309,6 +389,115 @@ def _arg_count(body: str, raw: str, k: int) -> int | None:
     return None
 
 
+class _Args:
+    """A call's arguments: `n` (None when uncertain), per-argument text and span, their types where certain, and
+    whether any is named (which switches the type check off: positions no longer map to parameters)."""
+    __slots__ = ("n", "items", "close", "named", "types")
+
+    def __init__(self, n, items, close, named):
+        self.n, self.items, self.close, self.named, self.types = n, items, close, named, None
+
+
+def _args(body: str, raw: str, k: int) -> _Args:
+    """The arguments of the call whose `(` is at body[k] (same rules as `_arg_count`)."""
+    depth, cuts, top_lt = 0, [k], False
+    for j in range(k, min(len(body), k + _ARG_SCAN)):
+        c = body[j]
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                if not (body[k + 1:j].strip() or any(q in raw[k + 1:j] for q in "\"'")):
+                    return _Args(0, [], j, False)
+                cuts.append(j)
+                if top_lt:
+                    return _Args(None, None, j, False)
+                items = [(body[a + 1:b], raw[a + 1:b], a + 1, b) for a, b in zip(cuts, cuts[1:])]
+                named = any(re.match(r"\s*@?[A-Za-z_]\w*\s*:(?!:)", it[0]) for it in items)
+                return _Args(len(items), items, j, named)
+        elif depth == 1:
+            if c == ",":
+                cuts.append(j)
+            elif c == "<":
+                top_lt = True
+    return _Args(None, None, None, False)
+
+
+_LAMBDA = re.compile(r"^\s*(?:static\s+)?(?:async\s+)?(?:\(\s*(?P<ps>[^()]*)\)|@?(?P<p>[A-Za-z_]\w*))\s*=>")
+
+
+def _arg_type(mtext: str, rtext: str, type_of):
+    """An argument's type where its text makes it certain, else None. `type_of(name)` types an identifier."""
+    mt, rt = mtext.strip(), rtext.strip()
+    if not rt:
+        return None
+    if not mt and rt[:1] in "\"$@":
+        return ("string", ())                                    # a whole string literal (the mask blanks it)
+    if not mt and rt[:1] == "'":
+        return ("char", ())
+    if re.match(r"^nameof\s*\(", mt) and mt.endswith(")"):
+        return ("string", ())
+    if re.match(r"^-?\d[\d_]*(?:\.\d+)?[fFdDmMuUlL]*$", mt):
+        return ("#number", ())
+    if mt in ("true", "false"):
+        return ("bool", ())
+    if _LAMBDA.match(mt):
+        return ("#lambda", ())
+    m = re.match(r"^new\s+([A-Za-z_][\w.]*(?:<[^()]*>)?)\s*(?:\([^()]*\)|\{[^{}]*\})$", mt)
+    if m:
+        return _pt(m.group(1))
+    m = re.match(r"^@?([A-Za-z_]\w*)$", mt)
+    if m and m.group(1) not in ("null", "default", "this", "base"):
+        return type_of(m.group(1))
+    return None
+
+
+def _lambda_param_types(pt, k: int):
+    """The parameter types a lambda with `k` parameters gets when passed where `pt` (a parsed type) is expected."""
+    if pt and pt[0] == "Expression" and pt[1]:
+        pt = pt[1][0]
+    if not pt:
+        return None
+    if pt[0] == "Func":
+        ts = list(pt[1][:-1])
+    elif pt[0] in ("Action", "Predicate"):
+        ts = list(pt[1])
+    else:
+        return None
+    return ts if len(ts) == k else None
+
+
+def _unwrap(t):
+    """`await x` where x is a `t`: a Task's or ValueTask's result type."""
+    if t and t[0] in dotnet.AWAITABLE:
+        return t[1][0] if t[1] else None
+    return t
+
+
+def _elem(t):
+    """The element type of a `foreach` over a `t`."""
+    if not t:
+        return None
+    if t[0] == "Array" or (t[0] in dotnet.SEQUENCES and t[1]):
+        return t[1][0] if t[1] else None
+    return None
+
+
+def _local_fn_sig(h: str, k: int, ptext: str) -> dict:
+    """A local function's signature, as `_member_head` records a method's: arity, parameter and return types."""
+    bare = _ATTR_ANY.sub(" ", ptext)
+    head = re.sub(r"@?[A-Za-z_]\w*$", "", _strip_end_generics(h[:k]))
+    head = re.sub(r"\b(static|async|unsafe|extern)\b", " ", head)
+    gm = re.search(r"<([^<>]*)>\s*$", h[:k].rstrip())
+    return {"arity": _arity(bare, False), "pfull": _pfull(ptext), "ret_full": _last_type_token(head),
+            "gparams": {g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set()}
+
+
+_MODIFIER_WORDS = frozenset("public private protected internal static readonly sealed abstract virtual override "
+                            "async unsafe extern new partial volatile required file const".split())
+
+
 def _member_head(h: str) -> dict | None:
     """Name, kind and parameter text of a member header (method, constructor, operator, property), or None."""
     h = re.sub(r"\s+", " ", h).strip()
@@ -328,8 +517,8 @@ def _member_head(h: str) -> dict | None:
         if re.search(r"\boperator\s*\S+$", before) or re.search(r"\b(implicit|explicit)\s+operator\b", before):
             return {"name": "operator", "kind": "method", "params": h[k + 1:close], "static_ext": False}
         m = re.search(r"@?([A-Za-z_]\w*)$", before)
-        if not m or m.group(1) in _NOT_CALL:
-            return None
+        if not m or m.group(1) in _NOT_CALL or m.group(1) in _MODIFIER_WORDS:
+            return None                       # `private (int A, string B) _field;`: a tuple type, not a method `private`
         rest = before[: m.start()].strip()
         if rest and not re.search(r"[\w>\]?)]$", rest) and rest[-1:] not in "~":
             return None
@@ -337,7 +526,9 @@ def _member_head(h: str) -> dict | None:
         bare = _ATTR_ANY.sub(" ", params)                           # `[Attr] this Type x` is still an extension
         ext = bool(re.match(r"\s*this\s", bare)) and bool(re.search(r"\bstatic\b", h[:k]))
         gm = re.search(r"<([^<>]*)>\s*$", h[:k].rstrip())
+        ret_text = re.sub(r"@?[A-Za-z_]\w*$", "", _strip_end_generics(h[:k]))
         return {"name": m.group(1), "kind": "method", "params": params, "static_ext": ext, "ret": _ret_type(rest),
+                "ret_full": _last_type_token(ret_text) if rest else None, "pfull": _pfull(params),
                 "static": bool(re.search(r"\bstatic\b", h[:k])),
                 "arity": _arity(bare, ext), "this_type": _this_type(bare) if ext else None,
                 "gparams": {g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set()}
@@ -346,7 +537,8 @@ def _member_head(h: str) -> dict | None:
     m = re.search(r"([A-Za-z_][\w.<>\[\],? ]*?)\s+@?([A-Za-z_]\w*)$", _strip_generics(h))
     if not m or m.group(2) in _NOT_CALL:
         return None
-    return {"name": m.group(2), "kind": "property", "params": "", "static_ext": False, "ret": _ret_type(m.group(1))}
+    return {"name": m.group(2), "kind": "property", "params": "", "static_ext": False, "ret": _ret_type(m.group(1)),
+            "ret_full": _last_type_token(re.sub(r"\s*@?[A-Za-z_]\w*$", "", h))}
 
 
 def _ret_type(rest: str) -> str | None:
@@ -369,7 +561,7 @@ def _close(s: str, k: int) -> int | None:
     return None
 
 
-_FIELD = re.compile(r"(?:^|\s)([A-Za-z_][\w.]*)(?:<[^;=]*>)?\??(?:\[\])?\s+@?([A-Za-z_]\w*)\s*(?:=|$)")
+_FIELD = re.compile(r"(?:^|\s)(?P<t>[A-Za-z_][\w.]*(?:<[^;=]*>)?)\??(?P<arr>\[\])?\s+@?(?P<n>[A-Za-z_]\w*)\s*(?:=|$)")
 _LOCAL_FN = re.compile(r"^(?:(?:static|async|unsafe|extern)\s+)*[A-Za-z_][\w.<>\[\],?\s]*?\s+@?([A-Za-z_]\w*)\s*"
                        r"(?:<[^()]*>)?\s*\(")
 
@@ -432,6 +624,15 @@ def scan_file(rel: str, text: str) -> dict:
                     mh = _member_head(header)
                     if mh:
                         frame = _member_frame(mh, attrs, header, top, head_start, i, add)
+                elif (arrow := _arrow(header)) is not None and not top.get("pending") and \
+                        (_assign(header) is None or _assign(header) > arrow):
+                    # `... => new X { A = 1 };` or `=> Run(x => { ... });`: an expression-bodied member whose
+                    # expression holds braces. Its body runs from the arrow to the `;` that ends it at type level.
+                    mh = _member_head(header[:arrow])
+                    if mh:
+                        f = _member_frame(mh, attrs, header[:arrow], top, head_start, i, add)
+                        top["pending"] = (f["sym"], last + arrow)
+                        frame = {"kind": "block", "q": top["q"], "start": i, "member": f["sym"]}
             elif top["kind"] == "member" and top.get("property"):
                 frame = {"kind": "block", "q": top["q"], "start": i, "member": top["sym"]}   # an accessor body
             elif top["kind"] in ("member", "block"):
@@ -442,9 +643,10 @@ def scan_file(rel: str, text: str) -> dict:
                 if lm and owner is not None and _assign(h) is None and lm.group(1) not in _NOT_CALL:
                     k = h.find("(", lm.end() - 1)
                     close = _close(h, k)
+                    ptext = h[k + 1:close] if close else ""
                     s = add("function", lm.group(1), owner["qparts"] + (lm.group(1),), head_start, i,
-                            params=_params(h[k + 1:close] if close else ""), body=[], type_q=owner.get("type_q"),
-                            attrs=set())
+                            params=_params(ptext), body=[], type_q=owner.get("type_q"), attrs=set(),
+                            **_local_fn_sig(h, k, ptext))
                     frame = {"kind": "member", "q": top["q"], "sym": s, "start": i}
                 else:
                     frame = {"kind": "block", "q": top["q"], "start": i, "member": owner}
@@ -469,6 +671,10 @@ def scan_file(rel: str, text: str) -> dict:
                     tm = _TYPE_HEAD.search(header)
                     if tm:                                         # `record R(int X);` with no body
                         _type_frame(tm, header, top["q"], head_start, i, add, line)
+            elif top["kind"] == "type" and top.get("pending"):
+                sym, body_start = top.pop("pending")             # the end of a braced expression body
+                sym["body"].append((body_start, i))
+                sym["line_end"] = line(i)
             elif top["kind"] == "type" and not top.get("enum"):
                 arrow = _arrow(header)
                 assign = _assign(header)
@@ -483,8 +689,11 @@ def scan_file(rel: str, text: str) -> dict:
                         _member_frame(mh, attrs, header, top, head_start, i, add)
                 else:
                     fm = _FIELD.search(_MODIFIERS.sub(" ", header[:assign] if assign is not None else header))
-                    if fm and fm.group(2) not in _NOT_CALL:
-                        top["sym"]["fields"][fm.group(2)] = fm.group(1).split(".")[-1]
+                    if fm and fm.group("n") not in _NOT_CALL:
+                        top["sym"]["fields"][fm.group("n")] = re.sub(r"<.*", "", fm.group("t")).split(".")[-1]
+                        ft = _pt(fm.group("t") + (fm.group("arr") or ""))
+                        if ft:
+                            top["sym"].setdefault("ffull", {})[fm.group("n")] = ft
             elif top["kind"] == "member" and top.get("property"):
                 pass                                                # `get; set;` or `get => x;`
             elif top["kind"] in ("member", "block"):
@@ -495,12 +704,51 @@ def scan_file(rel: str, text: str) -> dict:
                 if lm and owner is not None and lm.group(1) not in _NOT_CALL and h.split(" ", 1)[0] not in _CONTROL:
                     k = h.find("(", lm.end() - 1)
                     close = _close(h, k)
+                    ptext = h[k + 1:close] if close else ""
                     add("function", lm.group(1), owner["qparts"] + (lm.group(1),), head_start, i,
-                        params=_params(h[k + 1:close] if close else ""), body=[(last, i)],
-                        type_q=owner.get("type_q"), attrs=set())
+                        params=_params(ptext), body=[(last, i)],
+                        type_q=owner.get("type_q"), attrs=set(), **_local_fn_sig(h, k, ptext))
             last = i + 1
         i += 1
-    return {"symbols": symbols, "masked": masked, "nl": nl, "raw": text.replace("\ufeff", " ")}
+    aliases = {m.group(1): t for m in _ALIAS.finditer(masked) if (t := _pt(m.group(2)))}
+    if aliases:
+        for sym in symbols:
+            _dealias_symbol(sym, aliases)
+    return {"symbols": symbols, "masked": masked, "nl": nl, "raw": text.replace("\ufeff", " "), "aliases": aliases}
+
+
+# `using BaseItemDto = MediaBrowser.Controller.Entities.BaseItem;` (Jellyfin): the alias names another type
+_ALIAS = re.compile(r"^[ \t]*(?:global\s+)?using\s+@?([A-Za-z_]\w*)\s*=\s*([^;=]+);", re.M)
+
+
+def _dealias(t, aliases: dict):
+    if not t or not aliases:
+        return t
+    target = aliases.get(t[0])
+    args = tuple(_dealias(x, aliases) for x in t[1])
+    if target is None:
+        return (t[0], args)
+    return (target[0], args or target[1])
+
+
+def _dealias_symbol(sym: dict, aliases: dict) -> None:
+    """Rewrite every type a symbol records through its file's `using X = Y;` aliases."""
+    name = lambda n: aliases[n][0] if n in aliases else n           # noqa: E731
+    for p in sym.get("pfull") or []:
+        p["t"] = _dealias(p["t"], aliases)
+    if sym.get("ret_full"):
+        sym["ret_full"] = _dealias(sym["ret_full"], aliases)
+    if sym.get("ret"):
+        sym["ret"] = name(sym["ret"])
+    if sym.get("this_type"):
+        sym["this_type"] = name(sym["this_type"])
+    for d in ("params", "fields"):
+        if sym.get(d):
+            sym[d] = {k: name(v) for k, v in sym[d].items()}
+    if sym.get("ffull"):
+        sym["ffull"] = {k: _dealias(v, aliases) for k, v in sym["ffull"].items()}
+    if sym.get("bases"):
+        sym["bases"] = [name(b) for b in sym["bases"]]
 
 
 def _type_frame(tm, header: str, q: tuple[str, ...], start: int, brace: int, add, line) -> dict:
@@ -514,8 +762,11 @@ def _type_frame(tm, header: str, q: tuple[str, ...], start: int, brace: int, add
         k = after.find("(", 0)
         close = _close(after, k)
         params = after[k + 1:close] if close else ""
+    gm = re.match(r"\s*<([^<>]*)>", after)
     sym = add(kind, name, tq, start, brace, bases=_base_names(after), fields=_params(params), type_q=tq,
-              body=[], attrs=set(), is_interface=tm.group(1) == "interface")
+              body=[], attrs=set(), is_interface=tm.group(1) == "interface",
+              ffull={p["name"]: p["t"] for p in _pfull(params) if p["t"]},
+              tgparams={g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set())
     return {"kind": "type", "q": tq, "sym": sym, "enum": kind == "enum", "start": brace}
 
 
@@ -527,10 +778,12 @@ def _member_frame(mh: dict, attrs: set[str], header: str, top: dict, start: int,
     s = add("method", name, top["q"] + (name,), start, brace, params=_params(mh["params"]), body=[],
             type_q=top["q"], attrs=attrs, ext=mh.get("static_ext", False), ret=mh.get("ret"),
             arity=mh.get("arity"), this_type=mh.get("this_type"), gparams=mh.get("gparams", set()),
-            static=mh.get("static", False),
+            static=mh.get("static", False), ret_full=mh.get("ret_full"), pfull=mh.get("pfull"),
             is_test=bool(attrs & TEST_ATTRS))
     if mh["kind"] == "property" and mh.get("ret"):
         tsym["fields"][mh["name"]] = mh["ret"]
+        if mh.get("ret_full"):
+            tsym.setdefault("ffull", {})[mh["name"]] = mh["ret_full"]
     return {"kind": "member", "q": top["q"], "sym": s, "start": brace, "property": mh["kind"] == "property"}
 
 
@@ -553,6 +806,18 @@ class _Index:
         # instance methods by name: on a receiver we cannot see, a call to such a name (with arguments it accepts)
         # may be that method, so an extension of the same name is not the only reading
         self.instance_methods: dict[str, list[dict]] = {}
+        self.by_key: dict[str, list[dict]] = {}        # overloads share a key
+        self.type_gparams: dict[tuple, set[str]] = {}
+        self.implicit: set[str] = set()                 # types declaring a conversion operator (any argument may fit)
+        self.enums: set[str] = set()
+        for s in symbols:
+            self.by_key.setdefault(s["key"], []).append(s)
+            if s["kind"] in ("class", "enum"):
+                self.type_gparams.setdefault(s["qparts"], set()).update(s.get("tgparams") or ())
+                if s["kind"] == "enum":
+                    self.enums.add(s["name"])
+            if s["name"] == "operator" and s.get("type_q"):
+                self.implicit.add(s["type_q"][-1])
         for s in symbols:
             if s["kind"] == "method" and not s.get("ext") and not s.get("static") and s.get("arity") is not None:
                 # (no arity: a property, which `x.Name()` does not call)
@@ -590,18 +855,96 @@ class _Index:
                 out.update(dict.fromkeys(t.get("bases", [])))
         return list(out)
 
-    @staticmethod
-    def fits(sym: dict, n: int | None, explicit_this: bool = False) -> bool:
-        """Whether `sym` accepts `n` arguments (unknown count or unknown arity: yes). `explicit_this`: the call names
-        no receiver (`M(x)`, `Type.M(x)`), so an extension method's `this` is one of the `n`."""
+    def fits(self, sym: dict, a, explicit_this: bool = False) -> bool:
+        """Whether `sym` accepts the call's arguments `a` (an `_Args`, a count, or None): their number (round 2) and,
+        where both sides are certain, their types (round 3). Unknown means yes. `explicit_this`: the call names no
+        receiver (`M(x)`, `Type.M(x)`), so an extension method's `this` is one of the arguments."""
+        n = a.n if isinstance(a, _Args) else a
         ar = sym.get("arity")
-        if n is None or ar is None:
-            return True
-        if explicit_this and sym.get("ext"):
-            n -= 1
-        return ar[0] <= n and (ar[1] is None or n <= ar[1])
+        if n is not None and ar is not None:
+            m = n - 1 if explicit_this and sym.get("ext") else n
+            if not (ar[0] <= m and (ar[1] is None or m <= ar[1])):
+                return False
+        return not isinstance(a, _Args) or self.accepts(sym, a, explicit_this)
 
-    def member(self, tq: tuple[str, ...], name: str, n: int | None = None, seen: frozenset = frozenset(),
+    def accepts(self, sym: dict, a: "_Args", explicit_this: bool = False) -> bool:
+        """False only when an argument's certain type cannot convert to the parameter at its position."""
+        if a.types is None or a.named or not sym.get("pfull"):
+            return True
+        ps = sym["pfull"]
+        if sym.get("ext") and not explicit_this:
+            ps = ps[1:]
+        gp = set(sym.get("gparams") or ()) | self.type_gparams.get(sym.get("type_q"), set())
+        for i, at in enumerate(a.types):
+            if at is None:
+                continue
+            if i < len(ps):
+                p = ps[i]
+            elif ps and ps[-1]["params"]:
+                p = ps[-1]
+            else:
+                continue
+            pt = p["t"]
+            ok = self.compatible(at, pt, gp)
+            if not ok and p["params"] and pt and pt[0] == "Array" and pt[1]:
+                ok = self.compatible(at, pt[1][0], gp)
+            if not ok:
+                return False
+        return True
+
+    def _repo_ancestors(self, name: str) -> tuple[set[str], bool]:
+        """(names a repository type `name` is, as far as known; whether some outside base is not in the table)."""
+        qs = sorted({t["qparts"] for t in self.types.get(name, [])})
+        names = set().union(*(self.ancestors(q) for q in qs)) if qs else {name}
+        out, unknown = set(names), False
+        for b in names:
+            if b not in self.types:
+                if dotnet.known(b):
+                    out |= dotnet.ancestors(b)
+                else:
+                    unknown = True
+        return out, unknown
+
+    def compatible(self, at, pt, gp: set[str]) -> bool:
+        """Whether an argument of type `at` may be passed where `pt` is expected. False only when certain."""
+        if at is None or pt is None:
+            return True
+        a, p = at[0], pt[0]
+        if a == "Expression" and at[1]:
+            a = "LambdaExpression"                                # `Expression<TDelegate>` derives from LambdaExpression
+        if p in gp or p in ("object", "Object", "dynamic") or p == a:
+            return True
+        p_repo = p in self.types and p not in self.implicit
+        p_prim = p in dotnet.PRIMITIVES
+        p_deleg = p in dotnet.DELEGATES
+        p_known = dotnet.known(p)
+        if a == "#lambda":
+            return not (p_prim or (p in self.types) or (p_known and not p_deleg))
+        literal = {"#number": dotnet.NUMERIC, "bool": {"bool", "Boolean"}, "char": {"char"} | dotnet.NUMERIC,
+                   "string": {"string", "String"}}
+        if a in literal or (a in dotnet.PRIMITIVES and a not in self.types):
+            fits_p = literal.get(a) or ({a} | (dotnet.NUMERIC if a in dotnet.NUMERIC else set()))
+            if a == "#number" and p in self.enums:
+                return True                                       # `0` converts to any enum
+            if p in fits_p:
+                return True
+            if a in ("string", "String") and p_known:
+                return p in dotnet.ancestors("string") or p in ("ReadOnlySpan", "ReadOnlyMemory")
+            return not (p_prim or p_deleg or p_repo or p_known)
+        if a in self.types:                                       # a repository type
+            names, unknown = self._repo_ancestors(a)
+            if p in names or a in self.implicit:
+                return True
+            if p_prim or p_deleg or p_repo:
+                return False
+            return unknown or not p_known
+        if dotnet.known(a):                                       # a .NET type the table knows
+            if p in dotnet.ancestors(a) or p in dotnet.CONVERTS.get(a, ()):
+                return True
+            return not (p_repo or p_prim or p_deleg or p_known)
+        return True       # a type we cannot see (a generic parameter, an outside type the table lacks): no ruling out
+
+    def member(self, tq: tuple[str, ...], name: str, n=None, seen: frozenset = frozenset(),
                explicit_this: bool = False) -> dict | None:
         """The member `name` of type `tq` (or of its bases, class base first) that accepts `n` arguments. A type
         whose members of that name accept none of them hides nothing: the search goes on to its bases."""
@@ -637,7 +980,16 @@ class _Index:
                     todo.append(bq)
         return out
 
-    def extension(self, name: str, n: int | None, rtype: str | None, near: tuple[str, ...]) -> dict | None:
+    def dotnet_member(self, rtype: str | None, near: tuple[str, ...]) -> set[str]:
+        """Instance method names the receiver has from .NET (its own type if outside, or its outside bases)."""
+        if not rtype:
+            return set()
+        if rtype not in self.types:
+            return dotnet.members(rtype) or set()
+        names, _ = self._repo_ancestors(rtype)
+        return set().union(*((dotnet.members(b) or set()) for b in names if b not in self.types))
+
+    def extension(self, name: str, n, rtype: str | None, near: tuple[str, ...]) -> dict | None:
         """The extension method `x.name(...)` means: among those so named that accept `n` arguments, the one whose
         `this` type fits the receiver. Receiver of a repository type: its own type, a base or an interface, or a
         generic parameter. Of an outside type (whose bases the repository cannot show): its name, `I` + its name
@@ -660,11 +1012,17 @@ class _Index:
         # an instance method of some repository type, so named and taking these arguments, could be the target
         shared = any(self.fits(c, n) for c in self.instance_methods.get(name, []))
         if rtype:
-            # An outside type's own members are invisible here. Its exact name in `this` is safe; `this object` or
-            # `this T` only when no repository type has an ordinary method of that name either (Polly:
-            # `restClient.ExecuteAsync(request)` is RestSharp's, and `ResiliencePipeline.ExecuteAsync` exists).
-            exact = [c for c in cands if c.get("this_type") in (rtype, "I" + rtype)]
-            return self._one(exact or ([] if shared else generic))
+            # An outside type. Its exact name in `this` is safe, and so (round 3) is any ancestor the .NET table
+            # knows (`StreamReader` -> `TextReader`). `this object` or `this T` only when no repository type has an
+            # ordinary method of that name either (Polly: `restClient.ExecuteAsync(request)` is RestSharp's).
+            # (`object` is not among them here: the table's member lists are not complete enough to say a type has
+            # no method of that name, so a `this object` extension keeps the stricter rule below)
+            anc = (dotnet.ancestors(rtype) - {"object"}) if dotnet.known(rtype) else {rtype}
+            exact = [c for c in cands if c.get("this_type") in anc | {"I" + rtype}]
+            if exact or dotnet.known(rtype):
+                return self._one(exact or ([] if shared else generic))
+            # a type neither the repository nor the table can show (Jellyfin's EF Core `DbSet<T>`): what is known
+            # about it is no more than about an unknown receiver, so the same rule as below applies
         one = self._one(every)
         if one is None or n is None or shared:
             return None                       # unknown receiver: one method by that name, no ordinary method so named
@@ -682,7 +1040,25 @@ class _Index:
                     return found
         return None
 
-    def constructor(self, name: str, near: tuple[str, ...], n: int | None = None) -> dict | None:
+    def field_full(self, tq: tuple[str, ...] | None, name: str, seen: frozenset = frozenset()):
+        """The parsed type of field or property `name` of `tq` or its bases."""
+        if not tq or tq in seen or len(seen) > 16:
+            return None
+        for t in self.types.get(tq[-1], []):
+            if t["qparts"] == tq:
+                if name in (t.get("ffull") or {}):
+                    return t["ffull"][name]
+                if name in t.get("fields", {}):
+                    return (t["fields"][name], ())
+        for b in self.bases(tq):
+            bq = self.type_named(b, tq[:-1])
+            if bq and bq != tq:
+                found = self.field_full(bq, name, seen | {tq})
+                if found:
+                    return found
+        return None
+
+    def constructor(self, name: str, near: tuple[str, ...], n=None) -> dict | None:
         tq = self.type_named(name, near)
         if not tq:
             return None
@@ -694,17 +1070,24 @@ _CALL = re.compile(r"(?P<new>\bnew\s+)?(?P<chain>@?[A-Za-z_]\w*(?:\s*\??\.\s*@?[
                    r"(?:<[^<>();{}]*(?:<[^<>();{}]*>[^<>();{}]*)*>)?\s*\(")
 _LOCAL = re.compile(r"(?:^|[;{(\s,])(?!(?:using|await|return|yield|throw|new|else|case|in|is|as|out|ref|const|"
                     r"static|readonly|fixed|unsafe|checked|lock|foreach|for|while|if|scoped)\s)"
-                    r"(?:var|(?P<t>[A-Za-z_][\w.]*)(?:<[^;=(){}]*>)?\??(?:\[\])?)\s+@?(?P<n>[A-Za-z_]\w*)"
-                    r"\s*(?:=\s*new\s+(?P<nt>[A-Za-z_][\w.]*))?")
+                    r"(?:var|(?P<t>[A-Za-z_][\w.]*(?:<[^;=(){}]*>)?)\??(?P<arr>\[\])?)\s+@?(?P<n>[A-Za-z_]\w*)\b(?!\s*[(<])"   # `T Name(`: a local function, not a variable
+                    r"\s*(?:=\s*new\s+(?P<nt>[A-Za-z_][\w.]*(?:<[^;=(){}]*?>)?)\s*[({])?")
+
+
+def _locals_full(body: str) -> dict[str, tuple]:
+    """{local or parameter name: parsed type} for declarations in `body` (`T x`, `var x = new T(...)`)."""
+    out: dict[str, tuple] = {}
+    for m in _LOCAL.finditer(body):
+        text = m.group("nt") or (m.group("t") + (m.group("arr") or "") if m.group("t") else None)
+        t = _pt(text) if text else None
+        if t and t[0] not in _NOT_CALL and m.group("n") not in _NOT_CALL:
+            out.setdefault(m.group("n"), t)
+    return out
 
 
 def _locals(body: str) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for m in _LOCAL.finditer(body):
-        t = m.group("nt") or m.group("t")
-        if t and t not in _NOT_CALL and m.group("n") not in _NOT_CALL:
-            out.setdefault(m.group("n"), t.split(".")[-1])
-    return out
+    return {k: v[0] if v[0] != "Array" else (v[1][0][0] if v[1] and v[1][0] else "Array")
+            for k, v in _locals_full(body).items()}
 
 
 # Only the text just before a call decides how to read it; slicing the whole body prefix per call was quadratic
@@ -731,21 +1114,84 @@ def _why(m, before: str, parts: list[str], rtype: str | None, name: str, index: 
     return "receiver-unknown-single"
 
 
-def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: dict[str, dict], raw: str = ""):
+_VAR_BEFORE = re.compile(r"\bvar\s+@?(?P<n>[A-Za-z_]\w*)\s*=\s*(?P<aw>await\s+)?$")
+_FOREACH_BEFORE = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[A-Za-z_]\w*)\s+in\s+(?P<aw>await\s+)?$")
+_AFTER_STMT = re.compile(r"^\s*(?:\.\s*ConfigureAwait\s*\([^()]*\)\s*)?;")
+_AFTER_FOREACH = re.compile(r"^\s*(?:\.\s*ConfigureAwait\s*\([^()]*\)\s*)?\)")
+_FOREACH_LOCAL = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[A-Za-z_]\w*)\s+in\s+@?(?P<src>[A-Za-z_]\w*)\s*\)")
+
+
+def _awaited(body: str, q: int, results: dict):
+    """`(await <call>)` closing at body[q]: (the call's result type unwrapped, where the expression starts)."""
+    depth, j, lo = 0, q, max(0, q - _ARG_SCAN)
+    while j >= lo:
+        c = body[j]
+        if c in ")]}":
+            depth += 1
+        elif c in "([{":
+            depth -= 1
+            if depth == 0:
+                break
+        j -= 1
+    if j < lo or body[j] != "(":
+        return None
+    inner = body[j + 1:q]
+    if not re.match(r"\s*await\s", inner):
+        return None
+    tail = inner.rstrip()
+    cm = re.search(r"\)\s*\.\s*ConfigureAwait\s*\([^()]*\)$", tail)
+    end = j + 1 + (cm.start() if cm else len(tail) - 1)
+    r = results.get(end)
+    return (_unwrap(r[0]), j) if r and r[0] else None
+
+
+def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: dict[str, dict], raw: str = "",
+              aliases: dict | None = None):
     """Yield (callee or None, confidence, line, text, why) for each call in `s`'s bodies; `why` is "resolved", or
-    the reason it is not (see `_why`)."""
+    the reason it is not (see `_why`).
+
+    Round 3: expressions are typed as the calls are visited left to right. Each call that resolves records its
+    result type at its closing parenthesis, so `a.B().C()`, `(await a.B()).C()`, `var x = a.B();` and
+    `foreach (var x in a.B())` type what follows; a lambda passed to a resolved method gets its parameters typed from
+    the delegate it is passed as, for the span of its body; `x.P.Q.M()` walks property types."""
     tq = s.get("type_q") or ()
     nested = [span for f in locals_fns.values() for span in f.get("body", [])]   # a local function's calls are its own
     for start, end in s["body"]:
         body = masked[start:end]
         rbody = raw[start:end] if raw else body
-        types = dict(s.get("params", {}))
-        types.update(_locals(body))
+        types: dict[str, tuple] = {k: (v, ()) for k, v in s.get("params", {}).items()}
+        types.update({p["name"]: p["t"] for p in s.get("pfull") or [] if p.get("t")})
+        types.update({k: _dealias(v, aliases) for k, v in _locals_full(body).items()})
+        for fm in _FOREACH_LOCAL.finditer(body):                  # foreach (var x in items)
+            el = _elem(types.get(fm.group("src")) or (index.field_full(tq, fm.group("src")) if tq else None))
+            if el:
+                types.setdefault(fm.group("n"), el)
+        results: dict[int, tuple] = {}                            # close paren -> (result type, expression start)
+        scoped: list[tuple] = []                                  # (from, to, name, type): lambda parameters
+
+        def type_of(nm: str, pos: int):
+            for a0, b0, x, t in reversed(scoped):
+                if x == nm and a0 <= pos < b0:
+                    return t                                      # a lambda parameter (None: untyped, still shadows)
+            if nm in types:
+                return types[nm]
+            return index.field_full(tq, nm) if tq else None
+
+        def walk(t, props):
+            for prop in props:
+                if t is None:
+                    return None
+                q = index.type_named(t[0], tq)
+                t = index.field_full(q, prop) if q else None
+            return t
+
         for m in _CALL.finditer(body):
             at = start + m.start()
             if any(a <= at < b for a, b in nested if not (a <= start and end <= b)):
                 continue
-            pre = body[max(0, m.start() - _LOOKBACK): m.start()].rstrip()
+            off = max(0, m.start() - _LOOKBACK)
+            window = body[off: m.start()]
+            pre = window.rstrip()
             word = re.search(r"([A-Za-z_]\w*)$", pre)
             if not m.group("new") and ((word and word.group(1) not in _KEEP_BEFORE and not pre.endswith("."))
                                        or (pre.endswith(">") and not pre.endswith("=>") and not pre.endswith("->"))):
@@ -755,61 +1201,177 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             name = parts[-1]
             if name in _NOT_CALL and not m.group("new"):
                 continue
-            before = body[max(0, m.start() - _LOOKBACK): m.start()].rstrip()
+            before = pre
             line = bisect_left(nl, start + m.end("chain") - 1) + 1     # the name's line, not the chain's first
-            found = None
-            rtype = None
+            found, rt, rtype, static, dotnet_bound, explicit = None, None, None, False, False, False
             index.ambiguous = False
-            n = _arg_count(body, rbody, m.end() - 1)
+            a_ = _args(body, rbody, m.end() - 1)
+            if a_.items is not None:
+                a_.types = [_dealias(_arg_type(mi, ri, lambda nm, pos=ai: type_of(nm, pos)), aliases)
+                            for mi, ri, ai, _bi in a_.items]
+            if a_.items:                                          # untyped first; typed entries added later win
+                for mi, _ri, ai, bi in a_.items:
+                    lm = _LAMBDA.match(mi)
+                    if lm:
+                        for part in (_split_top(lm.group("ps")) if lm.group("ps") is not None else [lm.group("p")]):
+                            toks = _split_top(part.strip(), " ")
+                            declared = _dealias(_pt("".join(toks[:-1])), aliases) if len(toks) > 1 else None
+                            scoped.append((ai, bi, toks[-1].lstrip("@"), declared))
+            expr_start = m.start()
+            chained = False
+            if not m.group("new") and before.endswith("."):
+                left = before[:-1].rstrip()
+                left = left[:-1].rstrip() if left.endswith(("?", "!")) else left
+                if left.endswith(")"):
+                    q = off + len(left) - 1
+                    r = results.get(q) or _awaited(body, q, results)
+                    if r and r[0]:
+                        chained = True
+                        rt = walk(r[0], parts[:-1])
+                        expr_start = r[1]
+                    else:
+                        chained = None
+                else:
+                    chained = None
+            new_type = None
             if m.group("new"):
-                hit = index.constructor(name, tq, n)
+                gm = re.match(r"new\s+([^(]*)\(", m.group(0))
+                new_type = _dealias(_pt(gm.group(1)), aliases) if gm else None
+                hit = index.constructor(name, tq, a_)
                 found = (hit, 0.6) if hit else None
-            elif before.endswith("."):
-                found = None                                     # a call on an expression's result: type unknown
+            elif chained is None:
+                found = None                                      # a call on an expression we cannot type
+            elif chained:
+                rtype = rt[0] if rt else None
             elif len(parts) == 1:
-                hit = locals_fns.get(name) or (index.member(tq, name, n, explicit_this=True) if tq else None)
+                explicit = True
+                hit = locals_fns.get(name) or (index.member(tq, name, a_, explicit_this=True) if tq else None)
                 found = (hit, 0.8) if hit else None
             else:
                 if parts[0] == "this" and len(parts) > 2:
                     parts = parts[1:]                             # `this.field.M()` is `field.M()`
                 recv, rest = parts[0], parts[1:-1]
-                rtype = None
                 if recv in ("this", "base") and not rest:
                     if recv == "this":
-                        hit = index.member(tq, name, n) or index.extension(name, n, tq[-1] if tq else None, tq)
+                        hit = index.member(tq, name, a_) or index.extension(name, a_, tq[-1] if tq else None, tq)
                     else:
                         hit = next((h for b in index.bases(tq) if (bq := index.type_named(b, tq))
-                                    and (h := index.member(bq, name, n))), None)
+                                    and (h := index.member(bq, name, a_))), None)
                     found = (hit, 0.8) if hit else None
                 else:
-                    static = False
-                    if not rest:
-                        rtype = types.get(recv) or (index.field_type(tq, recv) if tq else None)
-                        if rtype:
-                            bq = index.type_named(rtype, tq)
-                            hit = index.member(bq, name, n) if bq else None
+                    rt0 = type_of(recv, m.start())
+                    if rt0:
+                        rt = walk(rt0, rest)
+                        rtype = rt[0] if rt else None
+                    elif recv[:1].isupper() and (bq := index.type_named(recv, tq)):
+                        if not rest:
+                            static = explicit = True
+                            hit = index.member(bq, name, a_, explicit_this=True)   # `Type.Member(...)`: static
                             found = (hit, 0.7) if hit else None
-                        elif recv[:1].isupper() and (bq := index.type_named(recv, tq)):
-                            static = True
-                            hit = index.member(bq, name, n, explicit_this=True)   # `Type.Member(...)`: static
-                            found = (hit, 0.7) if hit else None
-                    elif rest and (bq := index.type_named(rest[-1], tq)) and rest[-1][:1].isupper():
-                        static = True
-                        hit = index.member(bq, name, n, explicit_this=True)       # `Ns.Type.Member(...)`
+                        else:
+                            rt = walk((recv, ()), rest)            # `Type.StaticProperty.M()`
+                            rtype = rt[0] if rt else None
+                    if found is None and rt0 is None and rtype is None and rest and rest[-1][:1].isupper() and \
+                            (bq := index.type_named(rest[-1], tq)):
+                        static = explicit = True
+                        hit = index.member(bq, name, a_, explicit_this=True)       # `Ns.Type.Member(...)`
                         found = (hit, 0.6) if hit else None
-                    if found is None and not index.ambiguous:      # `x.Ext()`: chosen by arguments and receiver;
-                        # (C#: an instance member that fits wins over any extension, even when we cannot tell which)
-                        # a failed `Type.M()` may be a property sharing a type's name (`User.GetUserId()`)
-                        ext = index.extension(name, n, None if static else rtype, tq)
-                        found = (ext, 0.6 if rtype else 0.5) if ext else None
-            if found and found[0]["key"] == s["key"]:
+            if rtype and found is None:
+                bq = index.type_named(rtype, tq)
+                hit = index.member(bq, name, a_) if bq else None
+                found = (hit, 0.7) if hit else None
+                if found is None and not index.ambiguous and name in index.dotnet_member(rtype, tq):
+                    dotnet_bound = True                           # C#: the receiver's own .NET method wins
+            if found is None and not index.ambiguous and not dotnet_bound and not m.group("new") \
+                    and chained is not None and (len(parts) > 1 or chained):
+                # `x.Ext()`: chosen by arguments and receiver; a failed `Type.M()` may be a property sharing a type's
+                # name (`User.GetUserId()`)
+                ext = index.extension(name, a_, None if static else rtype, tq)
+                found = (ext, 0.6 if rtype else 0.5) if ext else None
+            callee = found[0] if found else None
+            if callee is not None and callee["key"] == s["key"]:
+                callee, found = None, None
+                recursion = True
+            else:
+                recursion = False
+            # what the call returns, and its lambdas' parameter types
+            res = new_type
+            if callee is not None:
+                ovs = [o for o in index.by_key.get(callee["key"], [callee]) if index.fits(o, a_, explicit)] or [callee]
+                rets = set()
+                for o in ovs:
+                    if o["name"] == "ctor" or o["kind"] in ("class", "enum"):
+                        t = new_type or (o["type_q"][-1] if o["name"] == "ctor" else o["name"], ())
+                    else:
+                        t = o.get("ret_full")
+                        if t and t[0] in (o.get("gparams") or ()):
+                            t = rt if (o.get("ext") and not explicit and o.get("this_type") == t[0]) else None
+                        elif t and t[0] in index.type_gparams.get(o.get("type_q"), set()):
+                            t = None
+                        if t and t[0] in ("void", "Void"):
+                            t = None
+                    rets.add(t)
+                res = rets.pop() if len(rets) == 1 else None
+                if a_.items:
+                    skip = 1 if callee.get("ext") and not explicit else 0
+                    for i, (mi, _ri, ai, bi) in enumerate(a_.items):
+                        lm = _LAMBDA.match(mi)
+                        if not lm:
+                            continue
+                        names = ([w.split()[-1] for w in lm.group("ps").split(",") if w.strip()]
+                                 if lm.group("ps") is not None else [lm.group("p")])
+                        cand = set()
+                        for o in ovs:
+                            ps = (o.get("pfull") or [])[skip if o.get("ext") else 0:]
+                            lt = _lambda_param_types(ps[i]["t"], len(names)) if i < len(ps) else None
+                            gp = set(o.get("gparams") or ())
+                            cand.add(tuple(None if (x is None or x[0] in gp) else x for x in lt) if lt else None)
+                        if len(cand) == 1 and (lt := cand.pop()):
+                            for nm, t in zip(names, lt):
+                                if t:
+                                    scoped.append((ai, bi, nm.lstrip("@"), t))
+            if callee is None and rt is not None and not m.group("new"):
+                # an outside method on a typed receiver: LINQ over a known element type, or a fluent builder
+                el = _elem(rt)
+                if el is not None and name in dotnet.LINQ_LAMBDA and a_.items:
+                    for mi, _ri, ai, bi in a_.items:
+                        lm = _LAMBDA.match(mi)
+                        if lm and lm.group("p"):
+                            scoped.append((ai, bi, lm.group("p").lstrip("@"), el))
+                if el is not None and name in dotnet.LINQ_SAME:
+                    res = ("IEnumerable", (el,))
+                elif el is not None and name in dotnet.LINQ_ELEMENT:
+                    res = el
+                elif el is not None and name in dotnet.LINQ_TO:
+                    res = (dotnet.LINQ_TO[name], (el,))
+                elif rt[0] in dotnet.FLUENT_SELF:
+                    res = rt
+            if res is not None and a_.close is not None:
+                results[a_.close] = (res, expr_start)
+                head = body[max(0, expr_start - _LOOKBACK): expr_start]
+                tail = body[a_.close + 1: a_.close + 80]
+                vm = _VAR_BEFORE.search(head)
+                if vm and _AFTER_STMT.match(tail):
+                    t = _unwrap(res) if vm.group("aw") else res
+                    if t:
+                        types[vm.group("n")] = t
+                fe = _FOREACH_BEFORE.search(head)
+                if fe and _AFTER_FOREACH.match(tail):
+                    t = _elem(_unwrap(res) if fe.group("aw") else res)
+                    if t:
+                        types[fe.group("n")] = t
+            if recursion:
                 continue                                          # recursion: not an edge, not unresolved
             if found:
                 yield found[0], found[1], line, chain, "resolved"
+            elif dotnet_bound:
+                yield None, 0.0, line, name, "external"           # the receiver's own .NET method
             elif name in index.by_name:
-                yield None, 0.0, line, name, _why(m, before, parts, rtype if len(parts) > 1 else None, name, index)
+                why = "chained" if chained is None else _why(m, before, parts, rtype if len(parts) > 1 else None,
+                                                             name, index)
+                yield None, 0.0, line, name, why
             else:
-                yield None, 0.0, line, name, "external"               # no symbol of that name in the repository
+                yield None, 0.0, line, name, "external"           # no symbol of that name in the repository
 
 
 # ── repository ───────────────────────────────────────────────────────────────
@@ -851,7 +1413,8 @@ def extract(repo_root: Path, stats: dict | None = None) -> tuple[list[dict], lis
             continue
         sc = scans[s["rel"]]
         locals_fns = local_fns.get(s["qparts"], {})
-        for callee, conf, line, text, why in _calls_in(s, sc["masked"], sc["nl"], index, locals_fns, sc["raw"]):
+        for callee, conf, line, text, why in _calls_in(s, sc["masked"], sc["nl"], index, locals_fns, sc["raw"],
+                                                       sc.get("aliases")):
             if stats is not None:
                 stats[why] = stats.get(why, 0) + 1
             if why == "external":
