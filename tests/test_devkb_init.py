@@ -92,5 +92,5 @@ def test_init_warns_when_agents_could_not_start_the_devkb_command(monkeypatch, c
     monkeypatch.setattr(shutil, "which", lambda name: str(venv / "bin" / "devkb"))
     monkeypatch.setattr(_sys, "base_prefix", "/usr")
     assert "only on the PATH of this virtual environment" in init.server_command_problem()
-    monkeypatch.setattr(shutil, "which", lambda name: "/home/u/.local/bin/devkb")
+    monkeypatch.setattr(shutil, "which", lambda name: "/opt/tools/bin/devkb")
     assert init.server_command_problem() is None
