@@ -77,6 +77,7 @@ def _run_once(task: dict, arm: str, cfg_dir: Path) -> dict:
     path.write_text(json.dumps(cfg))
     control = (TOOL_ROOT / "devkb" / "bench" / "control.md").read_text()
     addendum = {"plain": control, "pack": control, "core": skill("devkb-sdlc"), "lean": skill("devkb-lean"),
+                "lean-pack": skill("devkb-lean-pack"),
                 "workflow": skill(task["skill"])}[arm]
     tools = base.READ_TOOLS + (["mcp__devkb-sdlc"] if arm not in ("plain", "pack") else [])
     prompt = task["prompt"] + (FORCE if arm not in ("plain", "pack") else "")

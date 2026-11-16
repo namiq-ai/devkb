@@ -162,7 +162,7 @@ def run(e: dict, work: Path, arms: str, reps: int, model: str, workers: int) -> 
     return 0
 
 
-ARM_ORDER = ("plain", "core", "workflow", "lean", "pack")
+ARM_ORDER = ("plain", "core", "workflow", "lean", "lean-pack", "pack")
 
 
 def token_table(rows: list[dict]) -> str:

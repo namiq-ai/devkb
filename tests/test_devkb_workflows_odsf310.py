@@ -168,5 +168,5 @@ def test_the_toolsets_register_exactly_the_tools_they_name():
     registered = set(re.findall(r"    @tool\n    def (\w+)\(", server))
     ns: dict = {}
     exec(re.search(r"CORE = .*?TOOLSETS = \{.*?\}\n", server, re.S).group(0), ns)
-    assert set(ns["TOOLSETS"]["all"]) == registered and set(ns["CORE"]) | set(ns["WORKFLOW"]) | set(ns["DOCS"]) == registered
+    assert set(ns["TOOLSETS"]["all"]) == registered and set(ns["CORE"]) | set(ns["WORKFLOW"]) | set(ns["DOCS"]) | {"pack"} == registered
     assert set(ns["TOOLSETS"]["workflow"]) <= registered and set(ns["WORKFLOW"]) <= set(ns["TOOLSETS"]["workflow"])

@@ -41,9 +41,12 @@ TOOLSETS = {"core": CORE, "workflow": WORKFLOW + ["review_pack", "tests_to_run",
             "lean": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config"],
             # `devkb init`'s default: lean, plus orienting in an area before writing new code there. Lean alone left an
             # agent implementing a feature with nothing to ask (it read whole files instead); lean stays as measured.
+            # Packs over MCP: one call returns a whole answer (the measured "pack" arm put it in the prompt; here the
+            # agent asks for it). `lean-pack` is the arm that measures that; `lean` stays as measured.
+            "lean-pack": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config", "pack"],
             "dev": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config",
-                    "explain_area", "feature_brief", "find_code"],
-            "all": CORE + WORKFLOW + DOCS}
+                    "explain_area", "feature_brief", "find_code", "pack"],
+            "all": CORE + WORKFLOW + DOCS + ["pack"]}
 INSTRUCTIONS = ("Dev-process graph for this repository: tickets, specs, commits, symbols, calls, tests, owners. "
                 "Ask it first, then read only the files it names. Every reply says if the graph is stale.")
 
@@ -100,6 +103,16 @@ def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
     def owner(path: str) -> str:
         """Which role owns a path and which roles must not touch it."""
         return _compact(api.call("owner", path=path))
+
+    @tool
+    def pack(kind: str, subject: str, path: str = "", role: str = "") -> str:
+        """Whole answer in one call, with proof lines and coverage. kind: file (subject=path), refactor or change (a function), error (message), pr, ticket."""
+        from devkb.packs import Packer  # noqa: PLC0415
+        p = Packer(api)
+        run = {"file": lambda: p.file(subject), "refactor": lambda: p.refactor(subject, role, path),
+               "change": lambda: p.change(subject, path), "error": lambda: p.error(subject),
+               "pr": lambda: p.pr(subject), "ticket": lambda: p.ticket(subject)}.get(kind)
+        return run() if run else f"Unknown kind {kind!r}: use file, refactor, change, error, pr or ticket."
 
     @tool
     def review_pack(rev: str) -> str:
