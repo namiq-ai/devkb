@@ -1,0 +1,104 @@
+Polly: 5381 edges before, 6372 after; removed 13, added 1004
+
+## REMOVED (sample 13 of 13)
+ 1. Polly.Utils.CancellationTokenSourcePool.Create -> Polly.Utils.CancellationTokenSourcePool.PooledCancellationTokenSourcePool
+    call src/Polly.Core/Utils/CancellationTokenSourcePool.cs:15: return new PooledCancellationTokenSourcePool(timeProvider);
+    def  src/Polly.Core/Utils/CancellationTokenSourcePool.Pooled.cs:6: internal sealed class PooledCancellationTokenSourcePool : CancellationTokenSourcePool
+ 2. Snippets.Docs.Retry.AntiPattern_CallingMethodBefore -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call src/Snippets/Docs/Retry.cs:317: await retry.ExecuteAsync(DoSomething);
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 3. Snippets.Docs.Retry.Pattern_CallingMethodBefore -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call src/Snippets/Docs/Retry.cs:333: await retry.ExecuteAsync(ct =>
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 4. Snippets.Docs.Retry.Pattern_MultipleFailures -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call src/Snippets/Docs/Retry.cs:392: var foo = await timeout.ExecuteAsync((ct) => JsonSerializer.DeserializeAsync<Foo>(stream, cancellationToken: ct));
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 5. Polly.Core.Tests.Issues.IssuesTests.DiscardedRegistryPipeline_ReportsCallbackFailure -> Polly.TestUtils.FakeTelemetryListener
+    call test/Polly.Core.Tests/Issues/IssuesTests.DiscardedRegistryPipelines_3286.cs:80: var listener = new FakeTelemetryListener();
+    def  test/Polly.TestUtils/FakeTelemetryListener.cs:10: public sealed class FakeTelemetryListener : TelemetryListener
+ 6. Polly.Core.Tests.Issues.IssuesTests.InfiniteRetry_Delay_Does_Not_Overflow_2163 -> Polly.TestUtils.FakeTelemetryListener
+    call test/Polly.Core.Tests/Issues/IssuesTests.InfiniteRetry_2163.cs:31: var listener = new FakeTelemetryListener();
+    def  test/Polly.TestUtils/FakeTelemetryListener.cs:10: public sealed class FakeTelemetryListener : TelemetryListener
+ 7. Polly.Core.Tests.Simmy.Fault.ChaosFaultStrategyTests.Given_enabled_and_randomly_within_threshold_should_inject_fault_instead_returning_outcome -> Polly.Core.Benchmarks.Utils.Helper.ExecuteAsync
+    call test/Polly.Core.Tests/Simmy/Fault/ChaosFaultStrategyTests.cs:124: () => sut.ExecuteAsync(async _ =>
+    def  bench/Polly.Core.Benchmarks/Utils/Helper.cs:7: public static async ValueTask ExecuteAsync(this object obj, PollyVersion version)
+ 8. Polly.Core.Tests.Utils.CancellationTokenSourcePoolTests.RentReturn_Reusable_EnsureProperBehavior -> Polly.Utils.CancellationTokenSourcePool.PooledCancellationTokenSourcePool
+    call test/Polly.Core.Tests/Utils/CancellationTokenSourcePoolTests.cs:38: var pool = new CancellationTokenSourcePool.PooledCancellationTokenSourcePool(GetTimeProvider(timeProvider));
+    def  src/Polly.Core/Utils/CancellationTokenSourcePool.Pooled.cs:6: internal sealed class PooledCancellationTokenSourcePool : CancellationTokenSourcePool
+ 9. Polly.Core.Tests.Utils.CancellationTokenSourcePoolTests.RentReturn_Reusable_EnsureProperBehavior -> Polly.Utils.CancellationTokenSourcePool.PooledCancellationTokenSourcePool.Return
+    call test/Polly.Core.Tests/Utils/CancellationTokenSourcePoolTests.cs:43: pool.Return(cts);
+    def  src/Polly.Core/Utils/CancellationTokenSourcePool.Pooled.cs:35: public override void Return(CancellationTokenSource source)
+10. Polly.Core.Tests.Utils.Pipeline.CompositePipelineComponentTests.ctor -> Polly.TestUtils.FakeTelemetryListener
+    call test/Polly.Core.Tests/Utils/Pipeline/CompositePipelineComponentTests.cs:16: _listener = new FakeTelemetryListener();
+    def  test/Polly.TestUtils/FakeTelemetryListener.cs:10: public sealed class FakeTelemetryListener : TelemetryListener
+11. Polly.Extensions.Tests.DependencyInjection.PollyServiceCollectionExtensionTests.AddResiliencePipeline_CustomInstanceName_EnsureReported -> Polly.TestUtils.FakeTelemetryListener
+    call test/Polly.Extensions.Tests/DependencyInjection/PollyServiceCollectionExtensionTests.cs:386: var listener = new FakeTelemetryListener();
+    def  test/Polly.TestUtils/FakeTelemetryListener.cs:10: public sealed class FakeTelemetryListener : TelemetryListener
+12. Polly.Extensions.Tests.Registry.ConfigureBuilderContextExtensionsTests.ConfigureReloads_MonitorRegistrationReturnsNull_DoesNotThrow -> Polly.TestUtils.FakeTelemetryListener
+    call test/Polly.Extensions.Tests/Registry/ConfigureBuilderContextExtensionsTests.cs:32: var listener = new FakeTelemetryListener();
+    def  test/Polly.TestUtils/FakeTelemetryListener.cs:10: public sealed class FakeTelemetryListener : TelemetryListener
+13. Polly.Extensions.Tests.ReloadableResiliencePipelineTests.AddResiliencePipeline_EnsureReloadable -> Polly.TestUtils.FakeTelemetryListener
+    call test/Polly.Extensions.Tests/ReloadableResiliencePipelineTests.cs:23: var fakeListener = new FakeTelemetryListener();
+    def  test/Polly.TestUtils/FakeTelemetryListener.cs:10: public sealed class FakeTelemetryListener : TelemetryListener
+
+## ADDED (sample 20 of 1004)
+ 1. Snippets.Docs.CircuitBreaker.Usage -> Polly.PredicateBuilder.HandleResult
+    call src/Snippets/Docs/CircuitBreaker.cs:48: .HandleResult(response => response.StatusCode == HttpStatusCode.InternalServerError)
+    def  src/Polly.Core/PredicateBuilder.TResult.cs:109: public PredicateBuilder<TResult> HandleResult(TResult result, IEqualityComparer<TResult>? comparer = null)
+ 2. Snippets.Docs.Fallback.Usage -> Polly.PredicateBuilder.HandleResult
+    call src/Snippets/Docs/Fallback.cs:19: .HandleResult(r => r is null),
+    def  src/Polly.Core/PredicateBuilder.TResult.cs:109: public PredicateBuilder<TResult> HandleResult(TResult result, IEqualityComparer<TResult>? comparer = null)
+ 3. Snippets.Docs.Migration.SafeExecute_V8 -> Polly.ResilienceContextPool.Get
+    call src/Snippets/Docs/Migration.Execute.cs:61: var context = ResilienceContextPool.Shared.Get();
+    def  src/Polly.Core/ResilienceContextPool.cs:75: public abstract ResilienceContext Get(ResilienceContextCreationArguments arguments);
+ 4. Snippets.Docs.ResiliencePipelines.ResiliencePipelinesDiagramTimeoutRetry -> Polly.RetryResiliencePipelineBuilderExtensions.AddRetry
+    call src/Snippets/Docs/ResiliencePipelines.cs:104: .AddRetry(new()) // inner
+    def  src/Polly.Core/Retry/RetryResiliencePipelineBuilderExtensions.cs:44: [UnconditionalSuppressMessage(
+ 5. Snippets.Docs.Retry.Pattern_SleepingStrategies -> Polly.RetryResiliencePipelineBuilderExtensions.AddRetry
+    call src/Snippets/Docs/Retry.cs:262: .AddRetry(slowRetries)
+    def  src/Polly.Core/Retry/RetryResiliencePipelineBuilderExtensions.cs:44: [UnconditionalSuppressMessage(
+ 6. Polly.Core.Tests.CircuitBreaker.Controller.CircuitStateControllerTests.BreakAsync_Ok -> Polly.CircuitBreaker.CircuitStateController.CloseCircuitAsync
+    call test/Polly.Core.Tests/CircuitBreaker/Controller/CircuitStateControllerTests.cs:144: await controller.CloseCircuitAsync(context);
+    def  src/Polly.Core/CircuitBreaker/Controller/CircuitStateController.cs:108: public Task CloseCircuitAsync(ResilienceContext context)
+ 7. Polly.Core.Tests.Hedging.Controller.HedgingExecutionContextTests.TryWaitForCompletedExecutionAsync_SynchronousExecution_Ok -> Polly.Hedging.Utils.HedgingExecutionContext.TryWaitForCompletedExecutionAsync
+    call test/Polly.Core.Tests/Hedging/Controller/HedgingExecutionContextTests.cs:155: var task = context.TryWaitForCompletedExecutionAsync(System.Threading.Timeout.InfiniteTimeSpan).AsTask();
+    def  src/Polly.Core/Hedging/Controller/HedgingExecutionContext.cs:96: public async ValueTask<TaskExecution<T>?> TryWaitForCompletedExecutionAsync(TimeSpan hedgingDelay)
+ 8. Polly.Core.Tests.ResiliencePipelineTests.ExecuteAsync_T_EnsureCallStackPreserved -> Polly.ResilienceContextPool.Get
+    call test/Polly.Core.Tests/ResiliencePipelineTests.AsyncT.cs:94: var context = ResilienceContextPool.Shared.Get(TestCancellation.Token);
+    def  src/Polly.Core/ResilienceContextPool.cs:75: public abstract ResilienceContext Get(ResilienceContextCreationArguments arguments);
+ 9. Polly.Core.Tests.Simmy.Outcomes.ChaosOutcomeStrategyTests.CreateSut -> Polly.TestUtils.ResilienceStrategyExtensions.AsPipeline
+    call test/Polly.Core.Tests/Simmy/Outcomes/ChaosOutcomeStrategyTests.cs:253: new ChaosOutcomeStrategy<TResult>(options, _telemetry).AsPipeline();
+    def  test/Polly.TestUtils/ResilienceStrategyExtensions.cs:8: public static ResiliencePipeline<T> AsPipeline<T>(this ResilienceStrategy<T> strategy)
+10. Polly.Core.Tests.Simmy.Utils.GeneratorHelperTests.Generator_OutsideRange_ReturnsNull -> Polly.ResilienceContextPool.Get
+    call test/Polly.Core.Tests/Simmy/Utils/GeneratorHelperTests.cs:47: var context = ResilienceContextPool.Shared.Get(TestCancellation.Token);
+    def  src/Polly.Core/ResilienceContextPool.cs:75: public abstract ResilienceContext Get(ResilienceContextCreationArguments arguments);
+11. Polly.Core.Tests.Utils.CancellationTokenSourcePoolTests.RentReturn_Reusable_EnsureProperBehavior -> Polly.Utils.CancellationTokenSourcePool.PooledCancellationTokenSourcePool.ctor
+    call test/Polly.Core.Tests/Utils/CancellationTokenSourcePoolTests.cs:38: var pool = new CancellationTokenSourcePool.PooledCancellationTokenSourcePool(GetTimeProvider(timeProvider));
+    def  src/Polly.Core/Utils/CancellationTokenSourcePool.Pooled.cs:12: public PooledCancellationTokenSourcePool(TimeProvider timeProvider) => _pool = new(
+12. Polly.Core.Tests.Utils.TimeProviderExtensionsTests.DelayAsync_MaxTimeSpan_DoesNotThrow -> Polly.ResilienceContextPool.Get
+    call test/Polly.Core.Tests/Utils/TimeProviderExtensionsTests.cs:104: var context = ResilienceContextPool.Shared.Get(cts.Token);
+    def  src/Polly.Core/ResilienceContextPool.cs:75: public abstract ResilienceContext Get(ResilienceContextCreationArguments arguments);
+13. Polly.Extensions.Tests.Issues.IssuesTests.PartitionedRateLimiter_EnsureUserLimited_1365.ExecuteBatch -> Polly.ResilienceProperties.Set
+    call test/Polly.Extensions.Tests/Issues/IssuesTests.PartitionedRateLimiter_1365.cs:67: context.Properties.Set(userKey, user);
+    def  src/Polly.Core/ResilienceProperties.cs:70: public void Set<TValue>(ResiliencePropertyKey<TValue> key, TValue value) => Options[key.Key] = value;
+14. Polly.Extensions.Tests.Registry.ConfigureBuilderContextExtensionsTests.ConfigureReloads_MonitorRegistrationReturnsNull_DoesNotThrow -> Polly.TestUtils.FakeTelemetryListener.ctor
+    call test/Polly.Extensions.Tests/Registry/ConfigureBuilderContextExtensionsTests.cs:32: var listener = new FakeTelemetryListener();
+    def  test/Polly.TestUtils/FakeTelemetryListener.cs:15: public FakeTelemetryListener(Action<TelemetryEventArguments<object, object>> callback) => _callback = callback;
+15. Polly.Extensions.Tests.Telemetry.TelemetryListenerImplTests.WriteExecutionAttemptEvent_Metering_Ok -> Polly.TestUtils.TestUtilities.WithResultType
+    call test/Polly.Extensions.Tests/Telemetry/TelemetryListenerImplTests.cs:235: ReportEvent(telemetry, outcome, context: ResilienceContextPool.Shared.Get("op-key", TestCancellation.Token).WithResultType<bool>(), arg: att
+    def  test/Polly.TestUtils/TestUtilities.cs:103: public static ResilienceContext WithResultType<T>(this ResilienceContext context)
+16. Polly.Extensions.Tests.Telemetry.TelemetryResiliencePipelineBuilderExtensionsTests.ConfigureTelemetry_EnsureLogging -> Polly.TestUtils.ResilienceStrategyExtensions.AddStrategy
+    call test/Polly.Extensions.Tests/Telemetry/TelemetryResiliencePipelineBuilderExtensionsTests.cs:26: _builder.AddStrategy(new TestResilienceStrategy()).Build().Execute(_ => { }, TestCancellation.Token);
+    def  test/Polly.TestUtils/ResilienceStrategyExtensions.cs:15: public static ResiliencePipelineBuilder<T> AddStrategy<T>(this ResiliencePipelineBuilder<T> builder, ResilienceStrategy<T> strategy)
+17. Polly.RateLimiting.Tests.RateLimiterResiliencePipelineBuilderExtensionsTests.AddConcurrencyLimiter_InvalidOptions_Throws -> Polly.ResiliencePipelineBuilder.ctor
+    call test/Polly.RateLimiting.Tests/RateLimiterResiliencePipelineBuilderExtensionsTests.cs:64: return new ResiliencePipelineBuilder().AddConcurrencyLimiter(new ConcurrencyLimiterOptions
+    def  src/Polly.Core/ResiliencePipelineBuilder.TResult.cs:23: internal ResiliencePipelineBuilder(ResiliencePipelineBuilderBase other)
+18. Polly.Specs.Bulkhead.BulkheadSpecsBase.Should_control_executions_per_specification -> Polly.Specs.Helpers.Bulkhead.TraceableAction.AllowCompletion
+    call test/Polly.Specs/Bulkhead/BulkheadSpecsBase.cs:175: Actions.First(a => a.Status == TraceableActionStatus.Executing).AllowCompletion();
+    def  test/Polly.Specs/Helpers/Bulkhead/TraceableAction.cs:216: public void AllowCompletion() =>
+19. Polly.Specs.Caching.CacheTResultSpecs.Should_throw_when_on_cache_miss_is_null -> Polly.Caching.TtlStrategyExtensions.For
+    call test/Polly.Specs/Caching/CacheTResultSpecs.cs:753: ITtlStrategy<ResultPrimitive> ttlStrategyGeneric = new ContextualTtl().For<ResultPrimitive>();
+    def  src/Polly/Caching/TtlStrategyExtensions.cs:15: internal static ITtlStrategy<TResult> For<TResult>(this ITtlStrategy ttlStrategy) =>
+20. Polly.Specs.Retry.RetryTResultSpecs.Should_not_return_handled_result_when_one_of_the_handled_results_raised_same_number_of_times_as_retry_count -> Polly.PolicyBuilder.OrResult
+    call test/Polly.Specs/Retry/RetryTResultSpecs.cs:104: .OrResult(ResultPrimitive.FaultAgain)
+    def  src/Polly/PolicyBuilder.OrSyntax.cs:139: public PolicyBuilder<TResult> OrResult(TResult result) =>

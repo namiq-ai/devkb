@@ -1,0 +1,125 @@
+jellyfin: 12621 edges before, 13447 after; removed 62, added 888
+
+## REMOVED (sample 20 of 62)
+ 1. Emby.Server.Implementations.Library.LibraryManager.ConvertImageToLocal -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call Emby.Server.Implementations/Library/LibraryManager.cs:3753: foreach (var url in image.Path.Split('|'))
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+ 2. Emby.Server.Implementations.Playlists.PlaylistManager.RemoveItemFromPlaylistAsync -> MediaBrowser.Controller.Library.ILibraryManager.GetItemById
+    call Emby.Server.Implementations/Playlists/PlaylistManager.cs:278: if (_libraryManager.GetItemById(playlistId) is not Playlist playlist)
+    def  MediaBrowser.Controller/Library/ILibraryManager.cs:229: public T? GetItemById<T>(Guid id, User? user)
+ 3. Jellyfin.Api.Helpers.StreamingHelpers.ParseParams -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call Jellyfin.Api/Helpers/StreamingHelpers.cs:399: var vals = request.Params.Split(';');
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+ 4. Jellyfin.Server.Implementations.Item.BaseItemMapper.Map -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call Jellyfin.Server.Implementations/Item/BaseItemMapper.cs:115: dto.Genres = string.IsNullOrWhiteSpace(entity.Genres) ? [] : entity.Genres.Split('|');
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+ 5. Jellyfin.Server.Implementations.Item.ItemPersistenceService.ReconcileUserDataAsync -> Jellyfin.Database.Implementations.JellyfinDbContext.SaveChangesAsync
+    call Jellyfin.Server.Implementations/Item/ItemPersistenceService.cs:283: await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    def  src/Jellyfin.Database/Jellyfin.Database.Implementations/JellyfinDbContext.cs:261: public override async Task<int> SaveChangesAsync(
+ 6. Jellyfin.Server.Migrations.Routines.FixIncorrectOwnerIdRelationships.ReassignOrphanedExtrasAsync -> Jellyfin.Database.Implementations.JellyfinDbContext.SaveChangesAsync
+    call Jellyfin.Server/Migrations/Routines/20260115120000_FixIncorrectOwnerIdRelationships.cs:303: await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    def  src/Jellyfin.Database/Jellyfin.Database.Implementations/JellyfinDbContext.cs:261: public override async Task<int> SaveChangesAsync(
+ 7. Jellyfin.Server.Migrations.Routines.ConsolidateLocalizedUserViews.MoveAncestorsAsync -> Jellyfin.Database.Implementations.JellyfinDbContext.SaveChangesAsync
+    call Jellyfin.Server/Migrations/Routines/20260825200000_ConsolidateLocalizedUserViews.cs:360: await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    def  src/Jellyfin.Database/Jellyfin.Database.Implementations/JellyfinDbContext.cs:261: public override async Task<int> SaveChangesAsync(
+ 8. MediaBrowser.Controller.SyncPlay.Queue.PlayQueueManager.SetPlayingItemById -> Jellyfin.Extensions.ReadOnlyListExtension.FindIndex
+    call MediaBrowser.Controller/SyncPlay/Queue/PlayQueueManager.cs:253: PlayingItemIndex = playlist.FindIndex(item => item.ItemId.Equals(itemId));
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:43: public static int FindIndex<T>(this IReadOnlyList<T> source, Predicate<T> match)
+ 9. MediaBrowser.Controller.SyncPlay.Queue.PlayQueueManager.MovePlaylistItem -> Jellyfin.Extensions.ReadOnlyListExtension.IndexOf
+    call MediaBrowser.Controller/SyncPlay/Queue/PlayQueueManager.cs:360: PlayingItemIndex = playlist.IndexOf(playingItem);
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:18: public static int IndexOf<T>(this IReadOnlyList<T> source, T value)
+10. MediaBrowser.MediaEncoding.Encoder.MediaEncoder.ExtractVideoImagesOnIntervalAccelerated -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call MediaBrowser.MediaEncoding/Encoder/MediaEncoder.cs:882: var darParts = imageStream.AspectRatio.Split(':');
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+11. MediaBrowser.Model.Extensions.ContainerHelper.ContainsContainer -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call MediaBrowser.Model/Extensions/ContainerHelper.cs:90: var allInputContainers = inputContainer.Split(',');
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+12. MediaBrowser.Providers.Subtitles.SubtitleManager.DownloadSubtitles -> Emby.Server.Implementations.Library.LibraryManager.GetLibraryOptions
+    call MediaBrowser.Providers/Subtitles/SubtitleManager.cs:142: var libraryOptions = BaseItem.LibraryManager.GetLibraryOptions(video);
+    def  Emby.Server.Implementations/Library/LibraryManager.cs:2889: public LibraryOptions GetLibraryOptions(BaseItem item)
+13. MediaBrowser.Providers.Subtitles.SubtitleManager.UploadSubtitle -> Emby.Server.Implementations.Library.LibraryManager.GetLibraryOptions
+    call MediaBrowser.Providers/Subtitles/SubtitleManager.cs:189: var libraryOptions = BaseItem.LibraryManager.GetLibraryOptions(video);
+    def  Emby.Server.Implementations/Library/LibraryManager.cs:2889: public LibraryOptions GetLibraryOptions(BaseItem item)
+14. Jellyfin.LiveTv.Listings.SchedulesDirect.GetHeadends -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call src/Jellyfin.LiveTv/Listings/SchedulesDirect.cs:570: Id = string.IsNullOrWhiteSpace(lineup.Lineup) ? lineup.Uri?.Split('/')[^1] : lineup.Lineup
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+15. Jellyfin.LiveTv.LiveTvManager.GetProgram -> MediaBrowser.Controller.Library.ILibraryManager.GetItemById
+    call src/Jellyfin.LiveTv/LiveTvManager.cs:179: var program = _libraryManager.GetItemById(id);
+    def  MediaBrowser.Controller/Library/ILibraryManager.cs:229: public T? GetItemById<T>(Guid id, User? user)
+16. Jellyfin.LiveTv.LiveTvMediaSourceProvider.GetChannelStream -> MediaBrowser.Controller.Library.ILibraryManager.GetItemById
+    call src/Jellyfin.LiveTv/LiveTvMediaSourceProvider.cs:270: var channel = (LiveTvChannel)_libraryManager.GetItemById(id);
+    def  MediaBrowser.Controller/Library/ILibraryManager.cs:229: public T? GetItemById<T>(Guid id, User? user)
+17. Jellyfin.LiveTv.Recordings.RecordingsManager.FetchInternetMetadata -> Jellyfin.Extensions.ReadOnlyListExtension.FirstOrDefault
+    call src/Jellyfin.LiveTv/Recordings/RecordingsManager.cs:473: return results.FirstOrDefault();
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:67: public static T? FirstOrDefault<T>(this IReadOnlyList<T>? source)
+18. Jellyfin.Model.Tests.StreamBuilderTests.BuildVideoItemSimpleTest -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call tests/Jellyfin.Model.Tests/Dlna/StreamBuilderTests.cs:448: var containers = mediaSource.Container.Split(',');
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+19. Jellyfin.Server.Implementations.Tests.Item.BaseItemRepositoryPlayedOrderingTests.IsPlayed_CountsAPartiallyWatchedSeriesAsUnwatched -> Jellyfin.Extensions.ReadOnlyListExtension.IndexOf
+    call tests/Jellyfin.Server.Implementations.Tests/Item/BaseItemRepositoryPlayedOrderingTests.cs:72: Assert.True(ids.IndexOf(_partiallyWatchedSeries) < ids.IndexOf(_watchedSeries));
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:18: public static int IndexOf<T>(this IReadOnlyList<T> source, T value)
+20. Jellyfin.Server.Implementations.Tests.Item.ItemPersistenceOwnedRowTests.SaveItems_UpdateExistingItem_ReplacesOwnedRows -> Jellyfin.Extensions.StringExtensions.Count
+    call tests/Jellyfin.Server.Implementations.Tests/Item/ItemPersistenceOwnedRowTests.cs:75: Assert.Equal(2, ctx.BaseItemProviders.Count(e => e.ItemId.Equals(id)));
+    def  src/Jellyfin.Extensions/StringExtensions.cs:61: public static int Count(this ReadOnlySpan<char> value, char needle)
+
+## ADDED (sample 20 of 888)
+ 1. Jellyfin.Server.Implementations.Item.ItemPersistenceService.ReattachUserDataAsync -> MediaBrowser.Controller.Entities.BaseItem.GetUserDataKeys
+    call Jellyfin.Server.Implementations/Item/ItemPersistenceService.cs:233: var userKeys = item.GetUserDataKeys().Distinct().ToList();
+    def  MediaBrowser.Controller/Entities/BaseItem.cs:1787: public virtual List<string> GetUserDataKeys()
+ 2. MediaBrowser.Controller.Entities.Folder.GetLinkedChildren -> MediaBrowser.Controller.Entities.BaseItem.GetOwner
+    call MediaBrowser.Controller/Entities/Folder.cs:1774: var childOwner = child.GetOwner() ?? child;
+    def  MediaBrowser.Controller/Entities/BaseItem.cs:905: public BaseItem GetOwner()
+ 3. MediaBrowser.Controller.LiveTv.TimerInfo.IsNews -> Jellyfin.Extensions.EnumerableExtensions.Contains
+    call MediaBrowser.Controller/LiveTv/TimerInfo.cs:130: public bool IsNews => Tags.Contains("News", StringComparison.OrdinalIgnoreCase);
+    def  src/Jellyfin.Extensions/EnumerableExtensions.cs:20: public static bool Contains(this IEnumerable<string> source, ReadOnlySpan<char> value, StringComparison stringComparison)
+ 4. MediaBrowser.MediaEncoding.Transcoding.TranscodeManager.OnTranscodeBeginRequest -> MediaBrowser.Controller.MediaEncoding.TranscodingJob.IncrementActiveRequestCount
+    call MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:700: job.IncrementActiveRequestCount();
+    def  MediaBrowser.Controller/MediaEncoding/TranscodingJob.cs:199: public int IncrementActiveRequestCount()
+ 5. MediaBrowser.Providers.Manager.ProviderManager.GetAvailableRemoteImages -> MediaBrowser.Controller.Providers.IRemoteImageProvider.GetSupportedImages
+    call MediaBrowser.Providers/Manager/ProviderManager.cs:314: providers = providers.Where(i => i.GetSupportedImages(item).Contains(query.ImageType.Value));
+    def  MediaBrowser.Controller/Providers/IRemoteImageProvider.cs:21: IEnumerable<ImageType> GetSupportedImages(BaseItem item);
+ 6. MediaBrowser.Providers.Plugins.Tmdb.TmdbClientManager.CacheSearch -> MediaBrowser.Providers.Plugins.Tmdb.TmdbClientManager.Count
+    call MediaBrowser.Providers/Plugins/Tmdb/TmdbClientManager.cs:768: Size = 1 + Count(results.Results)
+    def  MediaBrowser.Providers/Plugins/Tmdb/TmdbClientManager.cs:771: private static long Count<T>(IReadOnlyCollection<T>? items) => items?.Count ?? 0;
+ 7. Jellyfin.Api.Tests.Controllers.SubtitleControllerTests.GetSubtitle_VobSubIdxPair_FallsBackToEncoder -> Jellyfin.Api.Controllers.SubtitleController.GetSubtitle
+    call tests/Jellyfin.Api.Tests/Controllers/SubtitleControllerTests.cs:76: var result = await controller.GetSubtitle(_itemId, _itemId.ToString("N"), SubtitleIndex, "vobsub", null, null, null, null, null);
+    def  Jellyfin.Api/Controllers/SubtitleController.cs:215: [HttpGet("Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/Stream.{routeFormat}")]
+ 8. Jellyfin.Controller.Tests.MediaEncoding.EncodingHelperTests.GetMapArgs_MksSecondTrack_MapsInFileIndex1 -> MediaBrowser.Controller.MediaEncoding.EncodingHelper.GetMapArgs
+    call tests/Jellyfin.Controller.Tests/MediaEncoding/EncodingHelperTests.cs:161: var args = CreateHelper().GetMapArgs(state);
+    def  MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:3129: public string GetMapArgs(EncodingJobInfo state)
+ 9. Jellyfin.Providers.Tests.MediaInfo.FFProbeVideoInfoTests.FetchEmbeddedInfo_ExtraWithCreationDate_StaysWithoutDates -> Jellyfin.Providers.Tests.MediaInfo.FFProbeVideoInfoTests.CreateRefreshOptions
+    call tests/Jellyfin.Providers.Tests/MediaInfo/FFProbeVideoInfoTests.cs:255: _fFProbeVideoInfo.FetchEmbeddedInfo(video, CreateMediaInfoWithCreationDate(), CreateRefreshOptions(replaceAllMetadata), new LibraryOptions()
+    def  tests/Jellyfin.Providers.Tests/MediaInfo/FFProbeVideoInfoTests.cs:274: private static MetadataRefreshOptions CreateRefreshOptions(bool replaceAllMetadata)
+10. Jellyfin.Server.Implementations.Tests.Item.BaseItemRepositoryPlayedOrderingTests.SeriesIds -> Jellyfin.Server.Implementations.Tests.Item.BaseItemRepositoryPlayedOrderingTests.Query
+    call tests/Jellyfin.Server.Implementations.Tests/Item/BaseItemRepositoryPlayedOrderingTests.cs:120: .GetItemList(Query(BaseItemKind.Series, (sortBy, SortOrder.Ascending)))
+    def  tests/Jellyfin.Server.Implementations.Tests/Item/BaseItemRepositoryPlayedOrderingTests.cs:124: private InternalItemsQuery Query(BaseItemKind kind, params (ItemSortBy OrderBy, SortOrder SortOrder)[] orderBy)
+11. Jellyfin.Server.Implementations.Tests.Item.DescendantQueryHelperTests.GetFolderIdsMatching_LinkedFolder_MatchesOnLanguageOnly -> Jellyfin.Server.Implementations.Tests.Item.DescendantQueryHelperTests.AddStream
+    call tests/Jellyfin.Server.Implementations.Tests/Item/DescendantQueryHelperTests.cs:352: AddStream(ctx, episode, MediaStreamTypeEntity.Subtitle, "ger");
+    def  tests/Jellyfin.Server.Implementations.Tests/Item/DescendantQueryHelperTests.cs:488: private static void AddStream(JellyfinDbContext context, Guid itemId, MediaStreamTypeEntity type, string? language = null)
+12. Jellyfin.Server.Implementations.Tests.Library.SeriesResolverTests.ResolvePath_SeriesFolderWithNoProviderId_HasNoProviderIds -> Jellyfin.Server.Implementations.Tests.Library.SeriesResolverTests.MakeTvArgs
+    call tests/Jellyfin.Server.Implementations.Tests/Library/SeriesResolverTests.cs:91: var series = _resolver.ResolvePath(MakeTvArgs("/media/Show")) as Series;
+    def  tests/Jellyfin.Server.Implementations.Tests/Library/SeriesResolverTests.cs:32: private MediaBrowser.Controller.Library.ItemResolveArgs MakeTvArgs(string path) =>
+13. Jellyfin.Server.Implementations.Tests.Localization.LocalizationManagerTests.GetCountries_All_Success -> Emby.Server.Implementations.Localization.LocalizationManager.GetCountries
+    call tests/Jellyfin.Server.Implementations.Tests/Localization/LocalizationManagerTests.cs:25: var countries = localizationManager.GetCountries().ToList();
+    def  Emby.Server.Implementations/Localization/LocalizationManager.cs:284: public IReadOnlyList<CountryInfo> GetCountries()
+14. Jellyfin.Server.Implementations.Tests.Localization.LocalizationManagerTests.GetLanguageDisplayName_InvalidInput_ReturnsNull -> Emby.Server.Implementations.Localization.LocalizationManager.LoadAll
+    call tests/Jellyfin.Server.Implementations.Tests/Localization/LocalizationManagerTests.cs:151: await localizationManager.LoadAll();
+    def  Emby.Server.Implementations/Localization/LocalizationManager.cs:126: public async Task LoadAll()
+15. Jellyfin.Server.Implementations.Tests.Localization.LocalizationManagerTests.GetRatingScore_ListWithoutKnownRating_WarnsOnce -> Emby.Server.Implementations.Localization.LocalizationManager.LoadAll
+    call tests/Jellyfin.Server.Implementations.Tests/Localization/LocalizationManagerTests.cs:405: await localizationManager.LoadAll();
+    def  Emby.Server.Implementations/Localization/LocalizationManager.cs:126: public async Task LoadAll()
+16. Jellyfin.Server.Implementations.Tests.Localization.LocalizationManagerTests.GetRatingScore_UnknownRatingWithKnownCountry_ReturnsNull -> Emby.Server.Implementations.Localization.LocalizationManager.GetRatingScore
+    call tests/Jellyfin.Server.Implementations.Tests/Localization/LocalizationManagerTests.cs:465: Assert.Null(localizationManager.GetRatingScore(rating));
+    def  Emby.Server.Implementations/Localization/LocalizationManager.cs:374: public ParentalRatingScore? GetRatingScore(string rating, string? countryCode = null)
+17. Jellyfin.Server.Implementations.Tests.Localization.LocalizationManagerTests.GetLocalizedString_Invalid_Success -> Emby.Server.Implementations.Localization.LocalizationManager.GetLocalizedString
+    call tests/Jellyfin.Server.Implementations.Tests/Localization/LocalizationManagerTests.cs:511: var translated = localizationManager.GetLocalizedString(key);
+    def  Emby.Server.Implementations/Localization/LocalizationManager.cs:606: public string GetLocalizedString(string phrase, string culture)
+18. Jellyfin.Server.Implementations.Tests.Localization.LocalizationManagerTests.GetServerLocalizedString_UsesServerCulture -> Emby.Server.Implementations.Localization.LocalizationManager.GetServerLocalizedString
+    call tests/Jellyfin.Server.Implementations.Tests/Localization/LocalizationManagerTests.cs:581: var translated = localizationManager.GetServerLocalizedString("Artists");
+    def  Emby.Server.Implementations/Localization/LocalizationManager.cs:600: public string GetServerLocalizedString(string phrase)
+19. Jellyfin.Server.Implementations.Tests.SessionManager.SessionManagerTests.AddAdditionalUser_Should_ThrowSecurityException_WhenAttachingAnotherUser -> Emby.Server.Implementations.Session.SessionManager.AddAdditionalUser
+    call tests/Jellyfin.Server.Implementations.Tests/SessionManager/SessionManagerTests.cs:176: Assert.Throws<SecurityException>(() => sessionManager.AddAdditionalUser(attackerSession.Id, attackerSession.Id, victim.Id));
+    def  Emby.Server.Implementations/Session/SessionManager.cs:1629: public void AddAdditionalUser(string controllingSessionId, string sessionId, Guid userId)
+20. Jellyfin.Server.Implementations.Tests.SessionManager.SessionManagerTests.RemoveAdditionalUser_Should_ThrowSecurityException_WhenModifyingAnotherUsersSession -> Emby.Server.Implementations.Session.SessionManager.RemoveAdditionalUser
+    call tests/Jellyfin.Server.Implementations.Tests/SessionManager/SessionManagerTests.cs:204: Assert.Throws<SecurityException>(() => sessionManager.RemoveAdditionalUser(attackerSession.Id, victimSession.Id, attacker.Id));
+    def  Emby.Server.Implementations/Session/SessionManager.cs:1669: public void RemoveAdditionalUser(string controllingSessionId, string sessionId, Guid userId)

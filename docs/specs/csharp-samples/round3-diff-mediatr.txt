@@ -1,0 +1,65 @@
+MediatR: 666 edges before, 774 after; removed 0, added 108
+
+## REMOVED (sample 0 of 0)
+
+## ADDED (sample 20 of 108)
+ 1. MediatR.Pipeline.RequestPreProcessorBehavior.Handle -> MediatR.Pipeline.IRequestPreProcessor.Process
+    call src/MediatR/Pipeline/RequestPreProcessorBehavior.cs:24: await processor.Process(request, cancellationToken).ConfigureAwait(false);
+    def  src/MediatR/Pipeline/IRequestPreProcessor.cs:18: Task Process(TRequest request, CancellationToken cancellationToken);
+ 2. MediatR.Benchmarks.Benchmarks.GlobalSetup -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddOpenBehavior
+    call test/MediatR.Benchmarks/Benchmarks.cs:25: cfg.AddOpenBehavior(typeof(GenericPipelineBehavior<,>));
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:227: public MediatRServiceConfiguration AddOpenBehavior(Type openBehaviorType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+ 3. MediatR.DependencyInjectionTests.Providers.StashBoxServiceProviderFixture.Provider -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssemblyContaining
+    call test/MediatR.DependencyInjectionTests/Providers/StashBoxServiceProviderFixture.cs:15: services.AddMediatR(x => x.RegisterServicesFromAssemblyContaining(typeof(Pong)));
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:135: public MediatRServiceConfiguration RegisterServicesFromAssemblyContaining(Type type)
+ 4. MediatR.Tests.GenericRequestHandlerTests.ShouldResolveAllCombinationsOfGenericHandler -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssemblies
+    call test/MediatR.Tests/GenericRequestHandlerTests.cs:23: cfg.RegisterServicesFromAssemblies(dynamicAssembly);
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:155: public MediatRServiceConfiguration RegisterServicesFromAssemblies(
+ 5. MediatR.Tests.GenericRequestHandlerTests.ShouldThrowExceptionWhenGenericTypeParametersExceedsMaximum -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssembly
+    call test/MediatR.Tests/GenericRequestHandlerTests.cs:205: cfg.RegisterServicesFromAssembly(assembly);
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:143: public MediatRServiceConfiguration RegisterServicesFromAssembly(Assembly assembly)
+ 6. MediatR.Tests.Licensing.LicenseAccessorTests.NestedPlatformNotSupportedException_LogsClientRedistributionInfo -> MediatR.Licensing.LicenseAccessor.LogValidationFailure
+    call test/MediatR.Tests/Licensing/LicenseAccessorTests.cs:139: accessor.LogValidationFailure(exception);
+    def  src/MediatR/Licensing/LicenseAccessor.cs:198: internal void LogValidationFailure(Exception? exception)
+ 7. MediatR.Tests.Licensing.LicenseKeyFactoryTests.Should_log_an_exception_from_the_factory_after_the_initiating_scope_is_disposed -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssembly
+    call test/MediatR.Tests/Licensing/LicenseKeyFactoryTests.cs:173: cfg.RegisterServicesFromAssembly(typeof(Mediator).Assembly);
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:143: public MediatRServiceConfiguration RegisterServicesFromAssembly(Assembly assembly)
+ 8. MediatR.Extensions.Microsoft.DependencyInjection.Tests.OpenGenericConstraintInferenceTests.Should_apply_open_post_processor_with_type_parameter_bound_from_request_constraint -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddOpenRequestPostProcessor
+    call test/MediatR.Tests/MicrosoftExtensionsDI/OpenGenericConstraintInferenceTests.cs:135: var (mediator, output) = BuildMediator(cfg => cfg.AddOpenRequestPostProcessor(typeof(ContextPostProcessor<,,>)));
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:513: public MediatRServiceConfiguration AddOpenRequestPostProcessor(Type openBehaviorType, ServiceLifetime serviceLifetime = ServiceLifetime.Tran
+ 9. MediatR.Extensions.Microsoft.DependencyInjection.Tests.OpenGenericConstraintInferenceTests.Should_try_every_constraint_link_when_inferring_type_parameter -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddOpenBehavior
+    call test/MediatR.Tests/MicrosoftExtensionsDI/OpenGenericConstraintInferenceTests.cs:297: var (mediator, output) = BuildMediator(cfg => cfg.AddOpenBehavior(typeof(TwoLinkBehavior<,,>)));
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:227: public MediatRServiceConfiguration AddOpenBehavior(Type openBehaviorType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+10. MediatR.Extensions.Microsoft.DependencyInjection.Tests.OpenGenericConstraintInferenceTests.Should_try_every_occurrence_of_a_repeated_type_parameter_in_a_constraint -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddOpenBehavior
+    call test/MediatR.Tests/MicrosoftExtensionsDI/OpenGenericConstraintInferenceTests.cs:399: var (mediator, output) = BuildMediator(cfg => cfg.AddOpenBehavior(typeof(PairBehavior<,,>)));
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:227: public MediatRServiceConfiguration AddOpenBehavior(Type openBehaviorType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+11. MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.Should_wrap_with_behavior -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddBehavior
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:402: cfg.AddBehavior<IPipelineBehavior<Ping, Pong>, OuterBehavior>();
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:214: public MediatRServiceConfiguration AddBehavior(Type serviceType, Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.
+12. MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.Should_register_pre_and_post_processors -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddRequestPreProcessor
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:468: cfg.AddRequestPreProcessor<IRequestPreProcessor<Ping>, FirstConcretePreProcessor>();
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:406: public MediatRServiceConfiguration AddRequestPreProcessor(Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.Transie
+13. MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.Should_register_pre_and_post_processors -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddOpenRequestPreProcessor
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:470: cfg.AddOpenRequestPreProcessor(typeof(FirstPreProcessor<>));
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:429: public MediatRServiceConfiguration AddOpenRequestPreProcessor(Type openBehaviorType, ServiceLifetime serviceLifetime = ServiceLifetime.Trans
+14. MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.Should_register_pre_and_post_processors -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddRequestPostProcessor
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:472: cfg.AddRequestPostProcessor<IRequestPostProcessor<Ping, Pong>, FirstConcretePostProcessor>();
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:491: public MediatRServiceConfiguration AddRequestPostProcessor(Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.Transi
+15. MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.Should_pick_up_base_exception_behaviors -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssembly
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:524: services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Ping).Assembly));
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:143: public MediatRServiceConfiguration RegisterServicesFromAssembly(Assembly assembly)
+16. MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.Should_handle_exceptions_from_behaviors -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddBehavior
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:545: cfg.AddBehavior<ThrowingBehavior>();
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:214: public MediatRServiceConfiguration AddBehavior(Type serviceType, Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.
+17. MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.Should_pick_up_exception_actions -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssembly
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:564: services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Ping).Assembly));
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:143: public MediatRServiceConfiguration RegisterServicesFromAssembly(Assembly assembly)
+18. MediatR.Extensions.Microsoft.DependencyInjection.Tests.StreamPipelineTests.Should_register_and_wrap_with_behavior -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddStreamBehavior
+    call test/MediatR.Tests/MicrosoftExtensionsDI/StreamPipelineTests.cs:99: cfg.AddStreamBehavior<IStreamPipelineBehavior<StreamPing, Pong>, OuterBehavior>();
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:320: public MediatRServiceConfiguration AddStreamBehavior(Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+19. MediatR.Tests.NotificationPublisherTests.Should_handle_sequentially_by_default -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssemblyContaining
+    call test/MediatR.Tests/NotificationPublisherTests.cs:39: cfg.RegisterServicesFromAssemblyContaining<Notification>();
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:135: public MediatRServiceConfiguration RegisterServicesFromAssemblyContaining(Type type)
+20. MediatR.Tests.SendTests.ctor -> Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddOpenBehavior
+    call test/MediatR.Tests/SendTests.cs:26: cfg.AddOpenBehavior(typeof(TimeoutBehavior<,>), ServiceLifetime.Transient);
+    def  src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs:227: public MediatRServiceConfiguration AddOpenBehavior(Type openBehaviorType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)

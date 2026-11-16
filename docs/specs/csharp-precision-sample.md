@@ -81,3 +81,50 @@ count as resolved.
 
 **Build** (`devkb build`, whole graph): MediatR 1.2 s, FluentValidation 1.8 s, Polly 6.0 s, Jellyfin 11.9 s
 (0.2.4: 36.6 s), EF Core 120 s and 1.0 GB peak memory (0.2.4: did not finish in 16 minutes).
+
+## Round 3 (SPEC-DEVKB-CSHARP-3): typed expressions, .NET's types, argument types
+
+**Caller-file recall and precision** (`bench/cs_recall.py REPO --ref origin/main`: 150 methods per repository whose
+name is one method in the repository and not a common .NET name; both versions scored on the *same* methods; truth =
+the files whose masked code calls the name; `round3-recall.jsonl`):
+
+| | MediatR | FluentValidation | Polly | Jellyfin | EF Core |
+|---|---|---|---|---|---|
+| recall 0.2.5 | 0.757 | 0.625 | 0.814 | 0.907 | 0.744 |
+| **recall round 3** | **0.957** | **0.888** | **0.915** | **0.935** | **0.775** |
+| precision, both | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+
+**Edges against 0.2.5** (`round3-diff-*.txt`, 20 removed and 20 added sampled per repository, each checked against
+the source): MediatR 666 → 774, FluentValidation 3,380 → 4,538, Polly 5,381 → 6,372, Jellyfin 12,621 → 13,447,
+EF Core 97,754 → 134,421 (after the LINQ fix below). Every sampled added edge was correct. The removed edges are 0.2.5 errors (LINQ, `string`,
+`List<T>` and `Queue<T>` members sent to repository extensions; one-argument calls sent to two-parameter extensions;
+a lambda passed where a `CancellationToken` is expected), or edges that moved to the declaration the compiler binds
+(an interface-typed property's interface method instead of an implementation; a base class's 3-argument overload
+instead of a 4-parameter override), or a stated limit: `builder.AppendJoin(...)` on a `StringBuilder` (the table
+knows .NET member names, not signatures), and calls on receivers typed only by an inferred, ambiguous name.
+
+**Found by the benchmark while building the round, each fixed and tested** (the measurement first, then the cause):
+
+| Seen | Cause | Change |
+|---|---|---|
+| Polly recall looked flat (0.863 → 0.857) | the two versions were scored on different method sets (each picked its own unique names) | `cs_recall.py` scores both on one set; Polly is 0.814 → 0.915 |
+| Jellyfin recall stayed 0.623 | the truth counted `ILoggerFactory.CreateLogger` calls as callers of Jellyfin's own `CreateLogger` | .NET's common method names (incl. Microsoft.Extensions) excluded from the sample; the same table binds them |
+| a method named `private` | `private (string A, int B) _field;`: a tuple-typed field read as a method | modifier keywords are never member names |
+| `services.AddTimeout(...)` lost | `=> builder.AddTimeout(new Options { ... });`: an expression-bodied member holding braces was not a member at all (a round-1 bug) | the member is recorded and its body runs to the `;` |
+| `ReattachUserDataAsync(movie, ...)` ruled out | `using BaseItemDto = ...BaseItem;` aliases were not resolved | aliases applied to every recorded type |
+| `GetTopParentIdsForQuery(i, ...)` ruled out | the lambda's `i` took the type of an outer `int i` | every lambda parameter shadows outer names |
+| `new ConditionOtherwiseBuilder<T>(_rules, Condition)` ruled out | a local function `bool Condition(...)` read as a variable of type `bool` | `T Name(` is never a variable |
+| `PropertyChain.FromExpression(expr)` ruled out | `Expression<Func<...>>` parsed like the non-generic `Expression` | a generic `Expression<T>` is a `LambdaExpression` |
+| `WriteGetMessage(buffer, ...)` ruled out | `byte[]` into `Span<byte>`: .NET's implicit conversions unknown | conversions table (arrays, spans, memory, string) |
+| `names.IndexOf(x)` on a `string[]` lost | arrays given `IList`'s member names, though arrays implement them explicitly | arrays keep only their own members |
+| `source.AsValueTask()` lost | a local function's parameters had no types, so its lambda got none | local functions record their full signature |
+| `context.Database.GetCosmosClient()` lost | `TContext` unknown; "a property named like a type" guessed `Database` (a different EF Core type) | generic constraints (`where TContext : DbContext`) type parameters; a wrong guess falls back to the unknown-receiver rule |
+| `FindValueConverter(discriminatorProperty)` ruled out | an *inferred* argument type (from a call's result) was slightly off | only declared types rule candidates out |
+| `var cs = new SqliteConnectionStringBuilder { ... }.ToString();` typed as the builder | `var x = new T ...` accepted though a member followed | only when the `new` expression is the whole value |
+| `new DtoOptions { ... }.AddClientFields(User)` lost | object initializers without `()` recorded no result, and chains after `}` were not read | recorded at the closing brace; chains after `}` |
+| random sample, EF Core 19/20: `query.ToList()` on an `IQueryable<Blog>` sent to EF Core's `ToList(this IEnumerable)` | C# prefers LINQ's `this IEnumerable<T>` (a better conversion) | an extension on the non-generic IEnumerable loses to LINQ's method of that name; 505 EF Core edges removed, 29 correct ones gained, no change elsewhere |
+| `people.Where(i => i.IsType(...))` missed | LINQ lambdas untyped | LINQ over a known element type; fluent builders (`IServiceCollection`) return themselves |
+
+**Random sample of the final graphs** (seed 2032, 20 per repository, `round3-random-*.txt`): MediatR 20/20,
+FluentValidation 20/20, Polly 20/20, Jellyfin 20/20, EF Core 19/20 before the LINQ fix (the one error is the edge that
+fix removes).

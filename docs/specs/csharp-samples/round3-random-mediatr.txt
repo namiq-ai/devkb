@@ -1,0 +1,60 @@
+ 1. MediatR.Examples.Windsor.Program.ResolveRequestExceptionAction -> samples/MediatR.Examples.Windsor/Program.cs::MediatR.Examples.Windsor.Program.CreateArraysOutOfResolvedTypeAndEnumerableInterfaceTypes
+    call samples/MediatR.Examples.Windsor/Program.cs:155: Array resultArray = CreateArraysOutOfResolvedTypeAndEnumerableInterfaceTypes(type, resolvedType, serviceFactory, enumerableEx
+    def  160: private static Array CreateArraysOutOfResolvedTypeAndEnumerableInterfaceTypes(Type type, object resolvedType, ServiceFactory 
+ 2. MediatR.Examples.ExceptionHandler.ConnectionExceptionHandler.Handle -> src/MediatR/Pipeline/RequestExceptionHandlerState.cs::MediatR.Pipeline.RequestExceptionHandlerState.SetHandled
+    call samples/MediatR.Examples/ExceptionHandler/ExceptionsHandlers.cs:43: state.SetHandled(new Pong());
+    def  23: public void SetHandled(TResponse response)
+ 3. MediatR.Registration.ServiceRegistrar.AddAllConcretionsThatClose -> src/MediatR/Registration/ServiceRegistrar.cs::MediatR.Registration.ServiceRegistrar.GetConcreteRequestTypes
+    call src/MediatR/Registration/ServiceRegistrar.cs:305: var concreteRequests = GetConcreteRequestTypes(openRequestInterface, concretion, assembliesToScan, cancellationToken);
+    def  228: private static List<Type>? GetConcreteRequestTypes(Type openRequestHandlerInterface, Type openRequestHandlerImplementation, I
+ 4. MediatR.Registration.ServiceRegistrar.IsSameArrayShape -> src/MediatR/Registration/ServiceRegistrar.cs::MediatR.Registration.ServiceRegistrar.IsSzArray
+    call src/MediatR/Registration/ServiceRegistrar.cs:513: && IsSzArray(pattern) == IsSzArray(concrete);
+    def  516: private static bool IsSzArray(Type arrayType) => arrayType == arrayType.GetElementType()!.MakeArrayType();
+ 5. MediatR.Wrappers.NotificationHandlerWrapperImpl.Handle -> src/MediatR/NotificationHandlerExecutor.cs::MediatR.NotificationHandlerExecutor
+    call src/MediatR/Wrappers/NotificationHandlerWrapper.cs:28: .Select(static x => new NotificationHandlerExecutor(x, (theNotification, theToken) => x.Handle((TNotification)theNotification
+    def  7: public record NotificationHandlerExecutor(object HandlerInstance, Func<INotification, CancellationToken, Task> HandlerCallbac
+ 6. MediatR.DependencyInjectionTests.OpenBehaviorClosingStrategyTests.Should_still_close_behavior_with_extra_type_parameter_for_scanned_requests_when_closing_in_container -> test/MediatR.DependencyInjectionTests/OpenBehaviorClosingStrategyTests.cs::MediatR.DependencyInjectionTests.OpenBehaviorClosingStrategyTests.CreateServices
+    call test/MediatR.DependencyInjectionTests/OpenBehaviorClosingStrategyTests.cs:234: var provider = Containers[container](CreateServices(typeof(ContextTxBehavior<,,>), OpenBehaviorClosingStrategy.CloseInContain
+    def  148: private static IServiceCollection CreateServices(Type openBehaviorType, OpenBehaviorClosingStrategy? strategy = null) =>
+ 7. MediatR.Tests.ExceptionTests.Should_throw_argument_exception_for_publish_when_request_is_null -> test/MediatR.Tests/TestContainer.cs::MediatR.Tests.TestContainer.Create
+    call test/MediatR.Tests/ExceptionTests.cs:174: var container = TestContainer.Create(cfg =>
+    def  10: public static IServiceProvider Create(Action<ServiceCollection> config)
+ 8. MediatR.Tests.Licensing.LicenseKeyFactoryTests.ReadLicense -> src/MediatR/Licensing/LicenseAccessor.cs::MediatR.Licensing.LicenseAccessor.ctor
+    call test/MediatR.Tests/Licensing/LicenseKeyFactoryTests.cs:286: _ = new LicenseAccessor(configuration, container, loggerFactory).Current;
+    def  30: public LicenseAccessor(MediatRServiceConfiguration configuration, IServiceProvider serviceProvider, ILoggerFactory loggerFact
+ 9. MediatR.Extensions.Microsoft.DependencyInjection.Tests.DuplicateAssemblyResolutionTests.ctor -> src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs::Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssemblies
+    call test/MediatR.Tests/MicrosoftExtensionsDI/DuplicateAssemblyResolutionTests.cs:18: services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblies(typeof(Ping).Assembly, typeof(Ping).Assembly));
+    def  155: public MediatRServiceConfiguration RegisterServicesFromAssemblies(
+10. MediatR.Extensions.Microsoft.DependencyInjection.Tests.DuplicateAssemblyResolutionTests.ctor -> src/MediatR/MicrosoftExtensionsDI/MediatRServiceCollectionExtensions.cs::Microsoft.Extensions.DependencyInjection.MediatRServiceCollectionExtensions.AddMediatR
+    call test/MediatR.Tests/MicrosoftExtensionsDI/DuplicateAssemblyResolutionTests.cs:18: services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblies(typeof(Ping).Assembly, typeof(Ping).Assembly));
+    def  30: public static IServiceCollection AddMediatR(this IServiceCollection services,
+11. MediatR.Extensions.Microsoft.DependencyInjection.Tests.Issue1118Tests.BuildProvider -> src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs::Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssembly
+    call test/MediatR.Tests/MicrosoftExtensionsDI/Issue1118Tests.cs:66: services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Issue1118Tests).Assembly));
+    def  143: public MediatRServiceConfiguration RegisterServicesFromAssembly(Assembly assembly)
+12. MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.Should_handle_constrained_generics -> src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs::Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.AddRequestPreProcessor
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:588: cfg.AddRequestPreProcessor<IRequestPreProcessor<Ping>, FirstConcretePreProcessor>();
+    def  373: public MediatRServiceConfiguration AddRequestPreProcessor<TServiceType, TImplementationType>(ServiceLifetime serviceLifetime 
+13. MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.Should_handle_open_behavior_registration -> src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs::Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:665: var cfg = new MediatRServiceConfiguration();
+    def  13: public class MediatRServiceConfiguration
+14. MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.Should_handle_inferred_pre_processor_registration -> src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs::Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssemblyContaining
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:780: cfg.RegisterServicesFromAssemblyContaining<Ping>();
+    def  127: public MediatRServiceConfiguration RegisterServicesFromAssemblyContaining<T>()
+15. MediatR.Extensions.Microsoft.DependencyInjection.Tests.TypeResolutionTests.ctor -> src/MediatR/MicrosoftExtensionsDI/MediatRServiceCollectionExtensions.cs::Microsoft.Extensions.DependencyInjection.MediatRServiceCollectionExtensions.AddMediatR
+    call test/MediatR.Tests/MicrosoftExtensionsDI/TypeResolutionTests.cs:22: services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining(typeof(Ping)));
+    def  30: public static IServiceCollection AddMediatR(this IServiceCollection services,
+16. MediatR.Tests.NotificationHandlerTests.Should_call_abstract_handle_method -> src/MediatR/INotificationHandler.cs::MediatR.INotificationHandler.Handle
+    call test/MediatR.Tests/NotificationHandlerTests.cs:39: await handler.Handle(
+    def  18: Task Handle(TNotification notification, CancellationToken cancellationToken);
+17. MediatR.Tests.Pipeline.RequestExceptionActionTests.PingHandler.Handle -> test/MediatR.Tests/Pipeline/RequestExceptionActionTests.cs::MediatR.Tests.Pipeline.RequestExceptionActionTests.PingException.ctor
+    call test/MediatR.Tests/Pipeline/RequestExceptionActionTests.cs:42: throw new PingException(request.Message);
+    def  26: public PingException(string? message) : base(message)
+18. MediatR.Tests.Pipeline.RequestExceptionHandlerTests.PingPongExceptionHandler.Handle -> src/MediatR/Pipeline/RequestExceptionHandlerState.cs::MediatR.Pipeline.RequestExceptionHandlerState.SetHandled
+    call test/MediatR.Tests/Pipeline/RequestExceptionHandlerTests.cs:62: state.SetHandled(new Pong() { Message = exception.Message + " Handled"});
+    def  23: public void SetHandled(TResponse response)
+19. MediatR.Tests.SendTests.Should_resolve_open_handler_if_not_defined -> src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs::Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration.RegisterServicesFromAssemblies
+    call test/MediatR.Tests/SendTests.cs:335: cfg.RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly());
+    def  155: public MediatRServiceConfiguration RegisterServicesFromAssemblies(
+20. MediatR.Tests.ServiceFactoryTests.Should_throw_given_no_handler -> src/MediatR/Mediator.cs::MediatR.Mediator.ctor
+    call test/MediatR.Tests/ServiceFactoryTests.cs:39: var mediator = new Mediator(serviceProvider);
+    def  29: public Mediator(IServiceProvider serviceProvider)
