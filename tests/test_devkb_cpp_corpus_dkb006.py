@@ -111,7 +111,9 @@ def test_python_only_repository_builds_byte_identical_graph_with_the_cpp_pass_pr
 
 
 def test_this_repository_has_no_cpp_files_so_its_graph_has_no_cpp_rows():
-    assert not subprocess.run(["git", "ls-files", "*.c", "*.cc", "*.cpp", "*.h", "*.hpp"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    # test fixtures are C/C++ on purpose; the product itself has none
+    tracked = subprocess.run(["git", "ls-files", "*.c", "*.cc", "*.cpp", "*.h", "*.hpp"], cwd=ROOT, capture_output=True, text=True).stdout.split()
+    assert not [f for f in tracked if not f.startswith("tests/fixtures/")]
 
 
 def test_make_cpp_check_exists_and_is_not_a_gate_dependency():
