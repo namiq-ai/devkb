@@ -20,7 +20,7 @@ from devkb.test_discovery import list_test_files, tests_in_file
 def extract(ctx: ProjectContext) -> DevKBGraph:
     g = DevKBGraph()
     for rel in list_test_files(ctx.repo_root, ctx.tests_dir):
-        framework = "pytest" if rel.endswith(".py") else "js"
+        framework = "pytest" if rel.endswith(".py") else "csharp" if rel.endswith(".cs") else "js"
         cases = tests_in_file(ctx.repo_root, rel)
         if not cases:
             continue

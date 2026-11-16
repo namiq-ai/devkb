@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from devkb.project_context import CONFIG_FILES, registry, resolve, run_repo_scripts  # noqa: E402
 from devkb.service import CompactIndex, Staleness, Telemetry, load_index, words  # noqa: E402
-from devkb.test_discovery import _JS_TEST, _PY_TEST  # noqa: E402
+from devkb.test_discovery import _CS_TEST, _JS_TEST, _PY_TEST  # noqa: E402
 
 _TICKET_ID = re.compile(r"\b[A-Z][A-Z0-9]{1,6}-\d+\b")
 # ODSF writes `### OWN:`; OCO writes `### YOU OWN:`, `### YOU OWN (read + write freely):` or `### TL OWNS:`.
@@ -89,7 +89,7 @@ _TEST_TREE = re.compile(r"(^|/)(tests?/[^/].*\.py|conftest\.py)$")
 def is_test_path(path: str) -> bool:
     """Test code: a test module by name, or any Python file in a tests/ or test/ tree (fixtures, helpers, conftest),
     since a change that breaks those breaks the test run just the same."""
-    return bool(_PY_TEST.search(path) or _JS_TEST.search(path) or _TEST_TREE.search(path))
+    return bool(_PY_TEST.search(path) or _JS_TEST.search(path) or _CS_TEST.search(path) or _TEST_TREE.search(path))
 
 
 def _lines(block: str) -> list[str]:

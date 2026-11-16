@@ -29,9 +29,10 @@ Everything runs locally: devkb reads files and runs `git`, never your code (unle
 | Python | ✅ Supported | functions, classes, calls (through imports, re-exports, typed objects, base classes), tests, FastAPI/Flask routes, raised and logged errors, environment variables; every pack |
 | TypeScript, TSX | 🟡 Partial | functions, components, classes, and the HTTP calls they make to backend routes; not calls between them |
 | JavaScript (`.js`, `.mjs`) | 🟡 Partial | as TypeScript |
+| C# | ✅ Supported | classes, structs, interfaces, records, methods, constructors, properties, local and extension methods, calls (same type, `this`/`base`, typed receivers, static `Type.M()`, `new T()`), xUnit/NUnit/MSTest tests; every pack. Not: calls on an expression's result, overloads by argument type |
 | Odoo XML | 🟡 Partial | templates and menus |
 | Bash / shell | ⬜ Not yet | files and history only |
-| C, C++, Java, Rust, Go, C#, others | ⬜ Not yet | files and history only |
+| C, C++, Java, Rust, Go, others | ⬜ Not yet | files and history only |
 
 "Files and history" is the language-independent layer every repository gets: files, commits, pull requests and
 tickets.

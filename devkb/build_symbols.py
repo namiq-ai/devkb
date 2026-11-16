@@ -45,7 +45,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from devkb import ts_symbols  # noqa: E402
+from devkb import csharp_symbols, ts_symbols  # noqa: E402
 from devkb.extractors.tickets_git import _run  # noqa: E402
 from devkb.gitutil import git_head  # noqa: E402
 from devkb.model import DevKBGraph  # noqa: E402
@@ -1253,6 +1253,9 @@ def extract(repo_root: Path) -> DevKBGraph:
             )
         for symbol_qn, method, path in route_calls:
             ts_route_calls.append((rel_path, symbol_qn, method, path))
+
+    # ── C#: type and member definitions, and the calls between them (SPEC-DEVKB-CSHARP) ──
+    csharp_symbols.add_to_graph(g, repo_root)
 
     # ── ODSF-304: Odoo XML declarations (templates, views, actions, menus) ──
     for rel_path, decls in _odoo_xml_symbols(repo_root).items():
