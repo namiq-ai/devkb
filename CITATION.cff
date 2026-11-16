@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use devkb or its benchmark, please cite the paper below."
+title: "devkb: a knowledge graph of a repository for coding agents"
+type: software
+authors:
+  - family-names: Le
+    given-names: Hung T.
+    affiliation: Independent researcher
+license: Apache-2.0
+repository-code: "https://github.com/namiq-ai/devkb"
+version: 0.1.1
+date-released: 2026-11-15
+keywords:
+  - coding agents
+  - knowledge graph
+  - Model Context Protocol
+  - benchmark
+preferred-citation:
+  type: article
+  title: "Precomputed Context, Not More Tools: A Pre-Registered Study of Process Graphs for Coding Agents"
+  authors:
+    - family-names: Le
+      given-names: Hung T.
+  year: 2026
