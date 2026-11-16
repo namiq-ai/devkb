@@ -128,3 +128,8 @@ knows .NET member names, not signatures), and calls on receivers typed only by a
 **Random sample of the final graphs** (seed 2032, 20 per repository, `round3-random-*.txt`): MediatR 20/20,
 FluentValidation 20/20, Polly 20/20, Jellyfin 20/20, EF Core 19/20 before the LINQ fix (the one error is the edge that
 fix removes).
+
+**On the release.** devkb 0.2.6 installed from PyPI has a C# extractor byte-identical to the code measured here
+(SHA-256 compared). EF Core re-measured against the `v0.2.5` tag on the released code: recall 0.744 → 0.775,
+precision 1.000 (`round3-recall-efcore-release.json`). The agent benchmark on the release:
+`bench/exercises/csharp/DEVKB-VALUE.md`.

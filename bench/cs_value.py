@@ -2,6 +2,7 @@
 bench/exercises/cpp/DEVKB-VALUE.md, same question, same columns).
 
   python bench/cs_value.py setup  WORK QUESTIONS.json      copy each repository for the devkb arm and `devkb init` it
+                                                         (DEVKB_BIN=path/to/devkb: the installed release does it)
   python bench/cs_value.py run    WORK QUESTIONS.json [--reps 2] [--parallel 3] [--model sonnet]
   python bench/cs_value.py report WORK QUESTIONS.json OUT.md
 
@@ -59,12 +60,18 @@ def setup(work: Path, qs: list[dict]) -> None:
         dst = arm_dir(work, repo, "devkb")
         if not dst.exists():
             shutil.copytree(repo, dst, symlinks=True)
-        subprocess.run([PY, "-m", "devkb.cli", "init", "--project", str(dst), "--toolset", "lean-pack"], cwd=ROOT,
-                       check=True, env=dict(os.environ, PYTHONPATH=str(ROOT)))
-        # the server this checkout's code runs (devkb init writes `devkb mcp`, which would be the installed release)
-        cfg = {"mcpServers": {"devkb": {"command": PY, "args": ["-m", "devkb.cli", "mcp", "--project", str(dst),
-                                                                "--toolset", "lean-pack"],
-                                        "env": {"PYTHONPATH": str(ROOT)}}}}
+        released = os.environ.get("DEVKB_BIN")          # the installed release (`devkb`), or this checkout's code
+        if released:
+            subprocess.run([released, "init", "--project", str(dst), "--toolset", "lean-pack"], check=True)
+            cfg = {"mcpServers": {"devkb": {"command": released,
+                                            "args": ["mcp", "--project", str(dst), "--toolset", "lean-pack"]}}}
+        else:
+            subprocess.run([PY, "-m", "devkb.cli", "init", "--project", str(dst), "--toolset", "lean-pack"], cwd=ROOT,
+                           check=True, env=dict(os.environ, PYTHONPATH=str(ROOT)))
+            # devkb init writes `devkb mcp` (the installed release): run this checkout's code instead
+            cfg = {"mcpServers": {"devkb": {"command": PY, "args": ["-m", "devkb.cli", "mcp", "--project", str(dst),
+                                                                    "--toolset", "lean-pack"],
+                                            "env": {"PYTHONPATH": str(ROOT)}}}}
         (work / f"mcp-{short(repo)}.json").write_text(json.dumps(cfg))
         print("ready:", dst)
 
