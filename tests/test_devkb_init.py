@@ -81,3 +81,16 @@ def test_the_file_pack_lists_what_depends_on_a_file_and_the_tests_reaching_it(tm
     assert "## Functions other files call (2 of 3)" in text and "`RuntimeStore.add_edge` — 2 file(s): `app/routes.py:6" in text
     assert "`app/routes.py`" in text and "tests/test_store.py" in text
     assert "The graph has no code" in Packer(_api(tmp_path / "x", monkeypatch)).file("nowhere.py")
+
+
+def test_init_warns_when_agents_could_not_start_the_devkb_command(monkeypatch, capsys):
+    import shutil
+    import sys as _sys
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    assert "not on your PATH" in init.server_command_problem()
+    venv = Path(_sys.prefix)
+    monkeypatch.setattr(shutil, "which", lambda name: str(venv / "bin" / "devkb"))
+    monkeypatch.setattr(_sys, "base_prefix", "/usr")
+    assert "only on the PATH of this virtual environment" in init.server_command_problem()
+    monkeypatch.setattr(shutil, "which", lambda name: "/home/u/.local/bin/devkb")
+    assert init.server_command_problem() is None

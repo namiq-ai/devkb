@@ -72,10 +72,13 @@ add a repository: [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
 ## 3. Set up
 
 ```bash
-pip install "devkb[mcp]"
+uv tool install "devkb[mcp]"      # or: pipx install "devkb[mcp]"
 cd your-repo
 devkb init --hooks
 ```
+
+Install it as a tool, as above, so the `devkb` command is on your PATH: agents start the server from there, and a
+devkb installed only inside a virtual environment never starts (`devkb init` warns if that is the case).
 
 This builds the graph into `.devkb/`, adds a short devkb section to `AGENTS.md` and `CLAUDE.md`, registers the MCP
 server in `.mcp.json`, and rebuilds the graph after each commit. Your own content in those files is kept;

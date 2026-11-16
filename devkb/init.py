@@ -154,6 +154,23 @@ def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool) -> list[str
     return p.changes
 
 
+def server_command_problem() -> str | None:
+    """Why agents could not start the `devkb` command that `.mcp.json` names, or None. Claude Code, Cursor and Codex
+    start it from the user's normal PATH, so a devkb installed only inside a virtual environment never starts and the
+    agent silently has no devkb tools (found dogfooding, 2026-11-15)."""
+    import shutil  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+    found = shutil.which("devkb")
+    fix = 'install it as a tool so it is on your PATH everywhere: `uv tool install "devkb[mcp]"` (or `pipx install "devkb[mcp]"`)'
+    if found is None:
+        return f"the `devkb` command is not on your PATH, so agents cannot start the devkb server; {fix}"
+    in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
+    if in_venv and Path(found).resolve().is_relative_to(Path(sys.prefix).resolve()):
+        return (f"`devkb` is only on the PATH of this virtual environment ({sys.prefix}); agents start it from your "
+                f"normal PATH and will not find it; {fix}")
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="devkb init", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", default=".")
@@ -166,6 +183,9 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(a.project).resolve()
     changes = run(root, None if a.remove else a.toolset, a.hooks, a.dry_run)
     print(("would " if a.dry_run else "") + ("\n".join(changes) if changes else "nothing to change"))
+    problem = None if a.remove else server_command_problem()
+    if problem:
+        print(f"WARNING: {problem}", file=sys.stderr)
     if not (a.remove or a.no_build or a.dry_run):
         from devkb import cli  # noqa: PLC0415
         return cli.main(["build", "--project", str(root)])
