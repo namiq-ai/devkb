@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "devkb": {
+      "command": "uvx",
+      "args": ["--from", "devkb[mcp]>=0.2.1", "devkb", "mcp", "--project", "${CLAUDE_PROJECT_DIR}", "--toolset", "lean-pack"]
+    }
+  }
+}

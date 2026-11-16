@@ -25,6 +25,28 @@ from mcp.server.fastmcp import FastMCP  # noqa: E402
 from mcp.types import ToolAnnotations  # noqa: E402
 
 from devkb.process_api import ProcessAPI, project_for  # noqa: E402
+from devkb.service import GraphNotBuilt  # noqa: E402
+
+
+class _LazyAPI:
+    """The process API, loaded on first use. A plugin starts the server before any graph exists (its session-start
+    hook builds one in the background); until then every tool says how to get one instead of the server failing."""
+
+    def __init__(self, project: str, devkb_dir: Path | None) -> None:
+        self._args, self._api = (project, devkb_dir), None
+
+    def get(self) -> ProcessAPI:
+        if self._api is None:
+            self._api = ProcessAPI(self._args[0], devkb_dir=self._args[1])
+        return self._api
+
+    def call(self, name: str, **kw) -> dict:
+        try:
+            return self.get().call(name, **kw)
+        except GraphNotBuilt as e:
+            return {"error": "no graph yet", "detail": str(e),
+                    "next": "the graph is being built in the background on first use; ask again in a minute, or run "
+                            "`devkb build --project .` and wait for it"}
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, destructiveHint=False, openWorldHint=False)
 CORE = ["sdlc_context", "trace", "find_docs", "callers", "tests_for", "tests_to_run", "impact", "owner", "review_pack",
@@ -108,7 +130,10 @@ def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
     def pack(kind: str, subject: str, path: str = "", role: str = "") -> str:
         """Whole answer in one call, with proof lines and coverage. kind: file (subject=path), refactor or change (a function), error (message), pr, ticket."""
         from devkb.packs import Packer  # noqa: PLC0415
-        p = Packer(api)
+        try:
+            p = Packer(api.get() if isinstance(api, _LazyAPI) else api)
+        except GraphNotBuilt:
+            return "No devkb graph yet: it is being built in the background; ask again in a minute."
         run = {"file": lambda: p.file(subject), "refactor": lambda: p.refactor(subject, role, path),
                "change": lambda: p.change(subject, path), "error": lambda: p.error(subject),
                "pr": lambda: p.pr(subject), "ticket": lambda: p.ticket(subject)}.get(kind)
@@ -207,7 +232,7 @@ def main() -> int:
         ns.project = project_for(Path.cwd())
     if not ns.project:
         ap.error("--project or DEVKB_PROJECT is required (and the working directory is in no registered project)")
-    api = ProcessAPI(ns.project, devkb_dir=Path(ns.devkb_dir) if ns.devkb_dir else None)
+    api = _LazyAPI(ns.project, Path(ns.devkb_dir) if ns.devkb_dir else None)
     build(api, ns.toolset).run(transport="stdio")
     return 0
 

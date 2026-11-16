@@ -93,6 +93,12 @@ devkb pack --project . file path/to/file.py     # before editing a file
 
 **Claude Code**: nothing more to do. `devkb init` registered the server in `.mcp.json` and pointed `CLAUDE.md` at the
 instructions. Start `claude` in the repository, approve the `devkb` server when asked, and check it with `/mcp`.
+Or skip `pip` and `devkb init` and install the plugin, which brings the server, its instructions and a hook that builds
+the graph in the background (needs [uv](https://docs.astral.sh/uv/)):
+
+```
+/plugin install devkb --marketplace namiq-ai/devkb
+```
 
 **Cursor**: add `.cursor/mcp.json` to the repository, then enable `devkb` under Settings → MCP:
 

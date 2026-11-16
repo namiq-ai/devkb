@@ -1,0 +1,12 @@
+{
+  "name": "namiq",
+  "owner": {"name": "Hung T. Le", "url": "https://github.com/namiq-ai"},
+  "description": "devkb: a knowledge graph of your repository for coding agents",
+  "plugins": [
+    {
+      "name": "devkb",
+      "source": "./plugins/devkb",
+      "description": "Who calls a function, the tests to run, the route handlers behind an error: one call, with proof lines. Local only."
+    }
+  ]
+}
