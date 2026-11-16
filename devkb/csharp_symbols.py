@@ -915,6 +915,7 @@ class _Index:
         self.by_key: dict[str, list[dict]] = {}        # overloads share a key
         self.type_gparams: dict[tuple, set[str]] = {}
         self.type_cons: dict[tuple, dict[str, str]] = {}    # a type's generic parameters' constraints
+        self._type_view: dict[tuple, dict | None] = {}      # type_sym(): partial declarations merged
         self.implicit: set[str] = set()                 # types declaring a conversion operator (any argument may fit)
         self.enums: set[str] = set()
         for s in symbols:
@@ -1189,10 +1190,26 @@ class _Index:
         return None
 
     def type_sym(self, tq: tuple[str, ...]) -> dict | None:
-        for t in self.types.get(tq[-1], []):
-            if t["qparts"] == tq:
-                return t
-        return None
+        """One view of type `tq` across all its partial declarations (files): type parameters, base types, fields and
+        properties merged. (Round 4 first took the first declaration only and lost Polly's `ResilienceContextPool
+        .Shared`, declared in the other file.)"""
+        cached = self._type_view.get(tq)
+        if cached is not None or tq in self._type_view:
+            return cached
+        parts = [t for t in self.types.get(tq[-1], []) if t["qparts"] == tq]
+        if not parts:
+            self._type_view[tq] = None
+            return None
+        view = {"tgparams_list": next((t["tgparams_list"] for t in parts if t.get("tgparams_list")), []),
+                "bases_full": [], "ffull": {}, "fields": {}}
+        for t in parts:
+            for b in t.get("bases_full") or []:
+                if b not in view["bases_full"]:
+                    view["bases_full"].append(b)
+            view["ffull"].update(t.get("ffull") or {})
+            view["fields"].update(t.get("fields") or {})
+        self._type_view[tq] = view
+        return view
 
     def chain(self, rt, near: tuple[str, ...]):
         """(type, binding) for the receiver type tree `rt` and each type it derives from, nearest first: the
@@ -1677,7 +1694,18 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                         if t and t[0] in ("void", "Void"):
                             t = None
                     rets.add(t)
-                res = rets.pop() if len(rets) == 1 else None
+                if len(rets) == 1:
+                    res = rets.pop()
+                elif None not in rets and len({t[0] for t in rets}) == 1:
+                    # overloads agree on the type and differ only in how much of its arguments is bound (F1: a
+                    # generic overload binds `TResult`, its non-generic sibling cannot; Polly `HandleResult(...).Or()`)
+                    gnames: set[str] = set()
+                    for o in ovs:
+                        gnames |= set(o.get("gparams") or ()) | index.type_gparams.get(o.get("type_q"), set())
+                    unbound = lambda t: sum(1 for x in t[1] if x is None or (not x[1] and x[0] in gnames))  # noqa: E731
+                    res = min(rets, key=lambda t: (unbound(t), str(t)))
+                else:
+                    res = None
                 if a_.items:
                     skip = 1 if callee.get("ext") and not explicit else 0
                     for i, (mi, _ri, ai, bi) in enumerate(a_.items):

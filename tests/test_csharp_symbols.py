@@ -907,3 +907,31 @@ public class ItemsController : ControllerBase
 ''')
     assert got["NotFound();"] == {"-external"}, "MVC's NotFound, inherited from ControllerBase"
     assert got["expression.IsParameterExpression();"] == {"G5.ExprExt.IsParameterExpression"}
+
+
+def test_a_partial_types_members_are_seen_from_every_file(tmp_path):
+    (tmp_path / "P1.cs").write_text('''namespace PP;
+public abstract partial class Pool { public static Pool Shared { get; } = null; public Ctx Get(int t) => null; }
+public class Ctx { }
+''')
+    (tmp_path / "P2.cs").write_text('''namespace PP;
+public abstract partial class Pool { private sealed class SharedPool : Pool { } }
+public class Use { public void Go() { Pool.Shared.Get(1); } }
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    assert ("PP.Use.Go", "PP.Pool.Get") in {(_short(c["caller"]), _short(c["callee"])) for c in calls}
+
+
+def test_overloads_that_agree_on_the_result_type_keep_it(tmp_path):
+    got = _sites(tmp_path, "OV.cs", '''namespace OV;
+using System;
+public class Builder<TResult> { public Builder<TResult> Or<TException>() => this; }
+public class Policy
+{
+    public static Builder<TResult> HandleResult<TResult>(TResult result) => null;
+    public static Builder<TResult> HandleResult<TResult>(Func<TResult, bool> pick) => null;
+}
+public class Use { public void Go(int failure) { Policy.HandleResult(failure).Or<Exception>(); } }
+''')
+    line = "public class Use { public void Go(int failure) { Policy.HandleResult(failure).Or<Exception>(); } }"
+    assert {"OV.Policy.HandleResult", "OV.Builder.Or"} <= got[line]
