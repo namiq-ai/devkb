@@ -18,5 +18,7 @@ jobs:
         run: uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[dev]"
       - name: Tests
         run: .venv/bin/python -m pytest tests -q
+      - name: Every language beyond Python, built on its 3 pinned dogfood repositories
+        run: .venv/bin/python -m devkb.bench.languages check
       - name: Every result in the paper, recomputed from the raw runs
         run: make verify

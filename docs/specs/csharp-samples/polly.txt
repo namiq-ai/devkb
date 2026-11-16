@@ -1,0 +1,60 @@
+ 1. Polly.Registry.RegistryPipelineComponentBuilder.CreateBuilder -> src/Polly.Core/Utils/Pipeline/PipelineComponentFactory.cs::Polly.Utils.Pipeline.PipelineComponentFactory.WithDisposableCallbacks
+    call src/Polly.Core/Registry/RegistryPipelineComponentBuilder.cs:57: var innerComponent = PipelineComponentFactory.WithDisposableCallbacks(builder.BuildPipelineComponent(), context.DisposeCallba
+    def  15: public static PipelineComponent WithDisposableCallbacks(PipelineComponent component, List<Action> callbacks)
+ 2. Polly.ResiliencePipelineBuilder.Build -> src/Polly.Core/ResiliencePipelineBuilderBase.cs::Polly.ResiliencePipelineBuilderBase.BuildPipelineComponent
+    call src/Polly.Core/ResiliencePipelineBuilder.cs:20: public ResiliencePipeline Build() => new(BuildPipelineComponent(), DisposeBehavior.Allow, ContextPool);
+    def  118: internal PipelineComponent BuildPipelineComponent()
+ 3. Snippets.Docs.Migration.PolicyWrap_V7 -> src/Polly/Policy.HandleSyntax.cs::Polly.Policy.Handle
+    call src/Snippets/Docs/Migration.Wrap.cs:9: IAsyncPolicy retryPolicy = Policy.Handle<Exception>().WaitAndRetryAsync(3, _ => TimeSpan.FromSeconds(1));
+    def  10: public static PolicyBuilder Handle<TException>()
+ 4. Polly.Core.Tests.CircuitBreaker.Controller.CircuitStateControllerTests.OnActionPreExecute_HalfOpen_OnHalfOpenedNotCompleted_WaitsForCompletion -> test/Polly.Core.Tests/CircuitBreaker/Controller/CircuitStateControllerTests.cs::Polly.Core.Tests.CircuitBreaker.Controller.CircuitStateControllerTests.AdvanceTime
+    call test/Polly.Core.Tests/CircuitBreaker/Controller/CircuitStateControllerTests.cs:375: AdvanceTime(_options.BreakDuration);
+    def  722: private void AdvanceTime(TimeSpan timespan) => _timeProvider.Advance(timespan);
+ 5. Polly.Core.Tests.Fallback.FallbackResilienceStrategyTests.ExecuteOutcomeAsync_UnhandledException_Ok -> test/Polly.Core.Tests/Fallback/FallbackResilienceStrategyTests.cs::Polly.Core.Tests.Fallback.FallbackResilienceStrategyTests.SetHandler
+    call test/Polly.Core.Tests/Fallback/FallbackResilienceStrategyTests.cs:128: SetHandler(outcome => outcome.Exception is InvalidOperationException, () => { fallbackActionCalled = true; return Outcome.Fro
+    def  138: private void SetHandler(
+ 6. Polly.Core.Tests.Hedging.HedgingResiliencePipelineBuilderExtensionsTests.AddHedging_IntegrationTestWithRealDelay -> src/Polly.Core/PredicateResult.cs::Polly.PredicateResult.True
+    call test/Polly.Core.Tests/Hedging/HedgingResiliencePipelineBuilderExtensionsTests.cs:72: "error" => PredicateResult.True(),
+    def  12: public static ValueTask<bool> True() => new(true);
+ 7. Polly.Core.Tests.Hedging.HedgingResilienceStrategyTests.ExecuteAsync_AllAttemptsFailAndTheOriginalCallIsTheSlowest_EnsureOriginalCallsResultReturned -> test/Polly.Core.Tests/Hedging/HedgingResilienceStrategyTests.cs::Polly.Core.Tests.Hedging.HedgingResilienceStrategyTests.ExecuteAsync_AllAttemptsFailAndTheOriginalCallIsTheSlowest_EnsureOriginalCallsResultReturned.Execute
+    call test/Polly.Core.Tests/Hedging/HedgingResilienceStrategyTests.cs:558: ConfigureHedging(async context => Outcome.FromResult(await Execute(context.CancellationToken)));
+    def  543: async ValueTask<string> Execute(CancellationToken token)
+ 8. Polly.Core.Tests.Registry.ResiliencePipelineRegistryTests.Dispose_EnsureDisposed -> test/Polly.Core.Tests/Registry/StrategyId.cs::Polly.Core.Tests.Registry.StrategyId.Create
+    call test/Polly.Core.Tests/Registry/ResiliencePipelineRegistryTests.cs:412: var pipeline1 = registry.GetOrAddPipeline(StrategyId.Create("A"), builder => { builder.AddTimeout(TimeSpan.FromSeconds(1)); }
+    def  7: public static StrategyId Create<T>(string builderName, string instanceName = "")
+ 9. Polly.Core.Tests.Retry.RetryDelayGeneratorArgumentsTests.Ctor_Ok -> src/Polly.Core/Retry/RetryDelayGeneratorArguments.cs::Polly.Retry.RetryDelayGeneratorArguments.ctor
+    call test/Polly.Core.Tests/Retry/RetryDelayGeneratorArgumentsTests.cs:14: var args = new RetryDelayGeneratorArguments<int>(context, Outcome.FromResult(1), 2);
+    def  20: public RetryDelayGeneratorArguments(ResilienceContext context, Outcome<TResult> outcome, int attemptNumber)
+10. Polly.Core.Tests.Simmy.Behavior.ChaosBehaviorStrategyTests.Given_enabled_and_randomly_within_threshold_should_inject_behavior -> test/Polly.Core.Tests/Simmy/Behavior/ChaosBehaviorStrategyTests.cs::Polly.Core.Tests.Simmy.Behavior.ChaosBehaviorStrategyTests.CreateSut
+    call test/Polly.Core.Tests/Simmy/Behavior/ChaosBehaviorStrategyTests.cs:46: var sut = CreateSut();
+    def  158: private ResiliencePipeline CreateSut() => new ChaosBehaviorStrategy(_options, _telemetry).AsPipeline();
+11. Polly.Core.Tests.Utils.CancellationTokenSourcePoolTests.ArgValidation_Ok -> src/Polly.Core/Utils/CancellationTokenSourcePool.cs::Polly.Utils.CancellationTokenSourcePool.Create
+    call test/Polly.Core.Tests/Utils/CancellationTokenSourcePoolTests.cs:17: var pool = CancellationTokenSourcePool.Create(TimeProvider.System);
+    def  7: public static CancellationTokenSourcePool Create(TimeProvider timeProvider)
+12. Polly.Extensions.Tests.Telemetry.TelemetryListenerImplTests.OnTelemetryEvent_Ok -> test/Polly.Extensions.Tests/Telemetry/TelemetryListenerImplTests.cs::Polly.Extensions.Tests.Telemetry.TelemetryListenerImplTests.ReportEvent
+    call test/Polly.Extensions.Tests/Telemetry/TelemetryListenerImplTests.cs:344: ReportEvent(telemetry, null, instanceName: null);
+    def  577: private static void ReportEvent(
+13. Polly.Specs.Caching.CacheSpecs.Should_return_value_from_cache_and_not_execute_delegate_if_cache_holds_value__default_for_reference_type -> test/Polly.Specs/Helpers/ResultClass.cs::Polly.Specs.Helpers.ResultClass.ctor
+    call test/Polly.Specs/Caching/CacheSpecs.cs:579: ResultClass valueToReturnFromExecution = new ResultClass(ResultPrimitive.Good);
+    def  8: public ResultClass(ResultPrimitive resultCode)
+14. Polly.Specs.CircuitBreaker.AdvancedCircuitBreakerSpecs.Should_initialise_to_closed_state -> src/Polly/Policy.HandleSyntax.cs::Polly.Policy.Handle
+    call test/Polly.Specs/CircuitBreaker/AdvancedCircuitBreakerSpecs.cs:134: CircuitBreakerPolicy breaker = Policy
+    def  10: public static PolicyBuilder Handle<TException>()
+15. Polly.Specs.CircuitBreaker.CircuitBreakerTResultSpecs.Should_call_onreset_when_manually_resetting_circuit -> src/Polly/Policy.HandleSyntax.cs::Polly.Policy.HandleResult
+    call test/Polly.Specs/CircuitBreaker/CircuitBreakerTResultSpecs.cs:1122: CircuitBreakerPolicy<ResultPrimitive> breaker = Policy
+    def  53: public static PolicyBuilder<TResult> HandleResult<TResult>(Func<TResult, bool> resultPredicate) =>
+16. Polly.Specs.CircuitBreaker.CircuitBreakerTResultSpecs.Should_call_onbreak_with_the_correct_timespan -> src/Polly/Policy.HandleSyntax.cs::Polly.Policy.HandleResult
+    call test/Polly.Specs/CircuitBreaker/CircuitBreakerTResultSpecs.cs:1178: CircuitBreakerPolicy<ResultPrimitive> breaker = Policy
+    def  53: public static PolicyBuilder<TResult> HandleResult<TResult>(Func<TResult, bool> resultPredicate) =>
+17. Polly.Specs.CircuitBreaker.CircuitBreakerTResultSpecs.Should_initialise_LastHandledResult_and_LastResult_to_default_on_creation -> src/Polly/Policy.HandleSyntax.cs::Polly.Policy.HandleResult
+    call test/Polly.Specs/CircuitBreaker/CircuitBreakerTResultSpecs.cs:1352: CircuitBreakerPolicy<ResultPrimitive> breaker = Policy
+    def  53: public static PolicyBuilder<TResult> HandleResult<TResult>(Func<TResult, bool> resultPredicate) =>
+18. Polly.Specs.Retry.RetrySpecs.Should_report_faulting_from_faulting_last_retry_execution_when_user_delegate_does_not_observe_cancellation_raised_during_last_retry -> test/Polly.Specs/Helpers/PolicyExtensions.cs::Polly.Specs.Helpers.PolicyExtensions.RaiseExceptionAndOrCancellation
+    call test/Polly.Specs/Retry/RetrySpecs.cs:774: Should.Throw<DivideByZeroException>(() => policy.RaiseExceptionAndOrCancellation<DivideByZeroException>(scenario, cancellatio
+    def  52: public static void RaiseExceptionAndOrCancellation<TException>(this Policy policy, ExceptionAndOrCancellationScenario scenari
+19. Polly.Specs.Retry.WaitAndRetryAsyncSpecs.Should_execute_all_tries_when_faulting_and_cancellationToken_not_cancelled -> src/Polly/Policy.HandleSyntax.cs::Polly.Policy.Handle
+    call test/Polly.Specs/Retry/WaitAndRetryAsyncSpecs.cs:889: var policy = Policy
+    def  10: public static PolicyBuilder Handle<TException>()
+20. Polly.Specs.Retry.WaitAndRetryAsyncSpecs.Should_throw_when_onretry_exception_timespan_int_context_is_null_with_sleep_duration_provider -> src/Polly/Policy.HandleSyntax.cs::Polly.Policy.Handle
+    call test/Polly.Specs/Retry/WaitAndRetryAsyncSpecs.cs:89: Action policy = () => Policy
+    def  10: public static PolicyBuilder Handle<TException>()

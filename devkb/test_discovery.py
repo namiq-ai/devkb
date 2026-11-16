@@ -20,6 +20,9 @@ from pathlib import Path
 
 _PY_TEST = re.compile(r"(^|/)(test_[^/]+|[^/]+_test)\.py$")
 _JS_TEST = re.compile(r"(^|/)[^/]+\.(test|spec)\.[cm]?[jt]sx?$")
+# C#: a file in a test project (`Foo.Tests/`, `FooTests/`, `tests/`, `test/`) or named `*Test.cs` / `*Tests.cs`.
+_CS_TEST = re.compile(r"(^|/)([^/]*\.Tests?|[^/]*Tests|[Tt]ests?|[^/]*\.(Unit|Integration)Tests?)/(?:[^/]+/)*[^/]+\.cs$"
+                      r"|(^|/)[^/]+Tests?\.cs$")
 # A path segment that means "not this project's own tests".
 _SKIP = re.compile(r"(^|/)(node_modules|\.impl-worktrees|\.claude|vendor|output)/")
 _JS_CASE = re.compile(
@@ -40,7 +43,7 @@ def list_test_files(repo_root: Path, tests_dir: Path | None = None) -> list[str]
     for rel in proc.stdout.splitlines():
         if not rel or _SKIP.search(rel):
             continue
-        if _PY_TEST.search(rel) or _JS_TEST.search(rel):
+        if _PY_TEST.search(rel) or _JS_TEST.search(rel) or _CS_TEST.search(rel):
             found.append(rel)
     if tests_dir is not None and tests_dir.is_dir():
         for path in tests_dir.rglob("*.py"):
@@ -70,6 +73,9 @@ def tests_in_file(repo_root: Path, rel: str) -> list[tuple[str, int]]:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
             and node.name.startswith("test_")
         )
+    if rel.endswith(".cs"):
+        from devkb.csharp_symbols import tests_in_text  # noqa: PLC0415
+        return tests_in_text(text)
     out = []
     for match in _JS_CASE.finditer(text):
         out.append((match.group(2), text.count("\n", 0, match.start()) + 1))

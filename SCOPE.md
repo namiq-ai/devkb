@@ -27,7 +27,7 @@ Two things, in one repository, because each is only credible with the other:
    sessions on identical tasks, larger than many reported tooling effects; the protocol is the remedy.
 2. **An open dataset**: 1,020 confirmatory runs, 120 ablation runs, 240 process-study runs and 461 exploratory runs,
    with cost, tokens, turns, tool calls and score per run; full answers for the public repositories.
-3. **devkb**: a governed schema (20 node types, 30 relations), extractors for Python and TypeScript repositories,
+3. **devkb**: a governed schema (20 node types, 30 relations), extractors for Python, TypeScript and C# repositories,
    packs, a 24-tool MCP server and a 7-tool lean set, and a coverage statement on every list answer.
 4. **Graph auditing as a practice**: measuring each relation of a code or process graph against truth computed from
    source, with the tools to do it (`devkb audit`, `devkb/edge_truth.py`).

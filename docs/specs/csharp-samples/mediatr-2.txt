@@ -1,0 +1,120 @@
+ 1. ['Program', 'Main'] -> samples/MediatR.Examples/Runner.cs::MediatR.Examples.WrappingWriter.ctor
+    call samples/MediatR.Examples.AspNetCore/Program.cs:14: var writer = new WrappingWriter(Console.Out);
+    def  323: public WrappingWriter(TextWriter innerWriter)
+ 2. ['Program', 'BuildMediator'] -> src/MediatR/Mediator.cs::MediatR.Mediator.ctor
+    call samples/MediatR.Examples.DryIoc/Program.cs:33: container.Register<IMediator, Mediator>(made: Made.Of(() => new Mediator(Arg.Of<IServiceProvider>())));
+    def  29: public Mediator(IServiceProvider serviceProvider)
+ 3. ['Program', 'ResolveRequestExceptionAction'] -> samples/MediatR.Examples.Windsor/Program.cs::MediatR.Examples.Windsor.Program.CreateArraysOutOfResolvedTypeAndEnumerableInterfaceTypes
+    call samples/MediatR.Examples.Windsor/Program.cs:155: Array resultArray = CreateArraysOutOfResolvedTypeAndEnumerableInterfaceTypes(type, resolvedType, serviceFactory, enumerableExcepti
+    def  160: private static Array CreateArraysOutOfResolvedTypeAndEnumerableInterfaceTypes(Type type, object resolvedType, ServiceFactory servi
+ 4. ['AccessDeniedExceptionHandler', 'Handle'] -> samples/MediatR.Examples/Pong.cs::MediatR.Examples.Pong
+    call samples/MediatR.Examples/ExceptionHandler/ExceptionsHandlers.cs:62: state.SetHandled(new Pong());
+    def  3: public class Pong
+ 5. ['ServerExceptionHandler', 'Handle'] -> src/MediatR/Pipeline/RequestExceptionHandlerState.cs::MediatR.Pipeline.RequestExceptionHandlerState.SetHandled
+    call samples/MediatR.Examples/ExceptionHandler/ExceptionsHandlers.cs:81: state.SetHandled(new Pong());
+    def  23: public void SetHandled(TResponse response)
+ 6. ['LicenseAccessor', 'ResolveLicenseKey'] -> src/MediatR/Licensing/LicenseAccessor.cs::MediatR.Licensing.LicenseAccessor.NormalizeLicenseKey
+    call src/MediatR/Licensing/LicenseAccessor.cs:102: ?? NormalizeLicenseKey(Environment.GetEnvironmentVariable(MediatRLicenseKeyEnvVariable))
+    def  107: private static string? NormalizeLicenseKey(string? key) =>
+ 7. ['ServiceRegistrar', 'ConnectImplementationsToTypesClosing'] -> src/MediatR/Registration/ServiceRegistrar.cs::MediatR.Registration.ServiceRegistrar.CanBeCastTo
+    call src/MediatR/Registration/ServiceRegistrar.cs:139: var exactMatches = concretions.Where(x => x.CanBeCastTo(@interface)).ToList();
+    def  330: private static bool CanBeCastTo(this Type pluggedType, Type pluginType)
+ 8. ['ServiceRegistrar', 'TryCollectConstraintCandidates'] -> src/MediatR/Registration/ServiceRegistrar.cs::MediatR.Registration.ServiceRegistrar.MergeCandidates
+    call src/MediatR/Registration/ServiceRegistrar.cs:494: MergeCandidates(candidates, found);
+    def  501: private static void MergeCandidates(Dictionary<Type, HashSet<Type>> into, Dictionary<Type, HashSet<Type>> from)
+ 9. ['ServiceRegistrar', 'ExpandBindingsFromConstraints'] -> src/MediatR/Registration/ServiceRegistrar.cs::MediatR.Registration.ServiceRegistrar.TryCollectConstraintCandidates
+    call src/MediatR/Registration/ServiceRegistrar.cs:567: if (TryCollectConstraintCandidates(constraint, candidate, bindings, collected))
+    def  466: private static bool TryCollectConstraintCandidates(
+10. ['ServiceRegistrar', 'ExpandBindingsFromConstraints'] -> src/MediatR/Registration/ServiceRegistrar.cs::MediatR.Registration.ServiceRegistrar.CombineCandidates
+    call src/MediatR/Registration/ServiceRegistrar.cs:586: return CombineCandidates(behaviorParams, bindings, candidates);
+    def  593: private static IEnumerable<Dictionary<Type, Type>> CombineCandidates(
+11. ['ServiceRegistrar', 'RegisterClosedImplementations'] -> src/MediatR/Registration/ServiceRegistrar.cs::MediatR.Registration.ServiceRegistrar.ExpandBindingsFromConstraints
+    call src/MediatR/Registration/ServiceRegistrar.cs:711: foreach (var complete in ExpandBindingsFromConstraints(implParams, bindings))
+    def  550: private static IEnumerable<Dictionary<Type, Type>> ExpandBindingsFromConstraints(
+12. ['ServiceRegistrar', 'RequiresExplicitClosing'] -> src/MediatR/Registration/ServiceRegistrar.cs::MediatR.Registration.ServiceRegistrar.CanBeClosedFromServiceType
+    call src/MediatR/Registration/ServiceRegistrar.cs:734: && CanBeClosedFromServiceType(serviceDescriptor.ImplementationType, openServiceType));
+    def  424: private static bool CanBeClosedFromServiceType(Type openImplementationType, Type openServiceType)
+13. ['ServiceRegistrar', 'AddRequiredServices'] -> src/MediatR/Registration/ServiceRegistrar.cs::MediatR.Registration.ServiceRegistrar.RegisterBehaviorIfImplementationsExist
+    call src/MediatR/Registration/ServiceRegistrar.cs:813: RegisterBehaviorIfImplementationsExist(services, typeof(RequestExceptionActionProcessorBehavior<,>), typeof(IRequestExceptionActio
+    def  850: private static void RegisterBehaviorIfImplementationsExist(IServiceCollection services, Type behaviorType, Type subBehaviorType)
+14. ['ServiceRegistrar', 'AddRequiredServices'] -> src/MediatR/Registration/ServiceRegistrar.cs::MediatR.Registration.ServiceRegistrar.RegisterOpenGenericServices
+    call src/MediatR/Registration/ServiceRegistrar.cs:831: RegisterOpenGenericServices(services, autoRegisteredPreProcessors, typeof(IRequestPreProcessor<>), requests, serviceConfiguration.
+    def  754: private static void RegisterOpenGenericServices(
+15. ['OpenBehaviorClosingStrategyTests', 'Should_apply_nested_generic_behavior_once_for_scanned_requests_by_default'] -> test/MediatR.DependencyInjectionTests/OpenBehaviorClosingStrategyTests.cs::MediatR.DependencyInjectionTests.OpenBehaviorClosingStrategyTests.CreateServices
+    call test/MediatR.DependencyInjectionTests/OpenBehaviorClosingStrategyTests.cs:169: var provider = Containers[container](CreateServices(typeof(NestedListBehavior<,>)));
+    def  148: private static IServiceCollection CreateServices(Type openBehaviorType, OpenBehaviorClosingStrategy? strategy = null) =>
+16. ['OpenBehaviorClosingStrategyTests', 'Should_apply_nested_generic_behavior_once_for_scanned_requests_when_closing_in_container'] -> test/MediatR.DependencyInjectionTests/OpenBehaviorClosingStrategyTests.cs::MediatR.DependencyInjectionTests.OpenBehaviorClosingStrategyTests.ClosingListPing
+    call test/MediatR.DependencyInjectionTests/OpenBehaviorClosingStrategyTests.cs:214: await provider.GetRequiredService<IMediator>().Send(new ClosingListPing(provider.GetRequiredService<Log>()));
+    def  56: public class ClosingListPing(Log log) : IRequest<List<Pong>>
+17. ['ExceptionTests', 'Should_throw_argument_exception_for_send_when_request_is_null'] -> test/MediatR.Tests/TestContainer.cs::MediatR.Tests.TestContainer.Create
+    call test/MediatR.Tests/ExceptionTests.cs:136: var container = TestContainer.Create(cfg =>
+    def  10: public static IServiceProvider Create(Action<ServiceCollection> config)
+18. ['ExceptionTests', 'Should_throw_exception_for_non_request_send'] -> test/MediatR.Tests/TestContainer.cs::MediatR.Tests.TestContainer.Create
+    call test/MediatR.Tests/ExceptionTests.cs:264: var container = TestContainer.Create(cfg =>
+    def  10: public static IServiceProvider Create(Action<ServiceCollection> config)
+19. ['ExceptionTests', 'Should_throw_for_send'] -> test/MediatR.Tests/ExceptionTests.cs::MediatR.Tests.ExceptionTests.Ping
+    call test/MediatR.Tests/ExceptionTests.cs:82: await Should.ThrowAsync<InvalidOperationException>(async () => await _mediator.Send(new Ping()));
+    def  14: public class Ping : IRequest<Pong>
+20. ['GenericRequestHandlerTests', 'ShouldResolveAllCombinationsOfGenericHandler'] -> test/MediatR.Tests/MicrosoftExtensionsDI/BaseGenericRequestHandlerTests.cs::MediatR.Tests.MicrosoftExtensionsDI.BaseGenericRequestHandlerTests.GenerateCombinations
+    call test/MediatR.Tests/GenericRequestHandlerTests.cs:37: var combinations = GenerateCombinations(testClasses, numberOfInterfaces);
+    def  157: protected List<Type[]> GenerateCombinations(Type[] types, int interfaces)
+21. ['LicenseAccessorTests', 'NestedPlatformNotSupportedException_LogsClientRedistributionInfo'] -> test/MediatR.Tests/Licensing/LicenseAccessorTests.cs::MediatR.Tests.Licensing.LicenseAccessorTests.WithAccessor
+    call test/MediatR.Tests/Licensing/LicenseAccessorTests.cs:137: var logs = WithAccessor(accessor =>
+    def  216: private static IReadOnlyList<FakeLogRecord> WithAccessor(Action<LicenseAccessor> act)
+22. ['LicenseAccessorTests', 'AggregatedPlatformNotSupportedException_LogsClientRedistributionInfo'] -> test/MediatR.Tests/Licensing/LicenseAccessorTests.cs::MediatR.Tests.Licensing.LicenseAccessorTests.LogValidationFailure
+    call test/MediatR.Tests/Licensing/LicenseAccessorTests.cs:152: var logs = LogValidationFailure(exception);
+    def  213: private static IReadOnlyList<FakeLogRecord> LogValidationFailure(Exception exception) =>
+23. ['LicenseAccessorTests', 'WrongIssuer_LogsNotALuckyPennyKey_WithoutExceptionDetails'] -> test/MediatR.Tests/Licensing/LicenseAccessorTests.cs::MediatR.Tests.Licensing.LicenseAccessorTests.LogValidationFailure
+    call test/MediatR.Tests/Licensing/LicenseAccessorTests.cs:173: var logs = LogValidationFailure(new SecurityTokenInvalidIssuerException("IDX10205"));
+    def  213: private static IReadOnlyList<FakeLogRecord> LogValidationFailure(Exception exception) =>
+24. ['LicenseKeyEnvironmentVariableTests', 'StaticKey_StripsWhitespace'] -> src/MediatR/Licensing/LicenseAccessor.cs::MediatR.Licensing.LicenseAccessor.ResolveLicenseKey
+    call test/MediatR.Tests/Licensing/LicenseKeyEnvironmentVariableTests.cs:44: LicenseAccessor.ResolveLicenseKey(null, key).ShouldBe(CleanKey));
+    def  100: internal static string? ResolveLicenseKey(params string?[] explicitKeys) =>
+25. ['LicenseKeyEnvironmentVariableTests', 'ConfigurationKey_TakesPrecedence_OverStaticKey'] -> src/MediatR/Licensing/LicenseAccessor.cs::MediatR.Licensing.LicenseAccessor.ResolveLicenseKey
+    call test/MediatR.Tests/Licensing/LicenseKeyEnvironmentVariableTests.cs:94: LicenseAccessor.ResolveLicenseKey(configKey, "static-license-key").ShouldBe(configKey));
+    def  100: internal static string? ResolveLicenseKey(params string?[] explicitKeys) =>
+26. ['LicenseValidatorTests', 'Should_return_invalid_when_expired'] -> src/MediatR/Licensing/LicenseValidator.cs::MediatR.Licensing.LicenseValidator.Validate
+    call test/MediatR.Tests/Licensing/LicenseValidatorTests.cs:110: licenseValidator.Validate(license);
+    def  25: public void Validate(License license)
+27. ['LicenseValidatorTests', 'Should_reject_perpetual_license_when_build_date_after_expiration'] -> src/MediatR/Licensing/LicenseValidator.cs::MediatR.Licensing.LicenseValidator.ctor
+    call test/MediatR.Tests/Licensing/LicenseValidatorTests.cs:156: var licenseValidator = new LicenseValidator(factory, buildDate);
+    def  15: public LicenseValidator(ILoggerFactory loggerFactory) : this(loggerFactory, BuildInfo.BuildDate)
+28. ['LicenseValidatorTests', 'Should_return_invalid_when_no_claims'] -> src/MediatR/Licensing/LicenseValidator.cs::MediatR.Licensing.LicenseValidator.Validate
+    call test/MediatR.Tests/Licensing/LicenseValidatorTests.cs:27: licenseValidator.Validate(license);
+    def  25: public void Validate(License license)
+29. ['LicenseValidatorTests', 'Should_warn_within_grace_period_after_term_end'] -> test/MediatR.Tests/Licensing/LicenseValidatorTests.cs::MediatR.Tests.Licensing.LicenseValidatorTests.TermLicense
+    call test/MediatR.Tests/Licensing/LicenseValidatorTests.cs:326: var logMessages = Validate(TermLicense(termEndDaysFromNow: -5, expDaysFromNow: 25));
+    def  284: private static License TermLicense(int termEndDaysFromNow, int? expDaysFromNow, bool perpetual = false)
+30. ['LicenseValidatorTests', 'Should_use_term_end_for_perpetual_cutoff'] -> test/MediatR.Tests/Licensing/LicenseValidatorTests.cs::MediatR.Tests.Licensing.LicenseValidatorTests.Validate
+    call test/MediatR.Tests/Licensing/LicenseValidatorTests.cs:362: var logMessages = Validate(
+    def  311: private static IReadOnlyList<FakeLogRecord> Validate(License license, DateTimeOffset? buildDate = null)
+31. ['NotificationPublisherTests', 'ShouldSubstitutePublisherInstance'] -> test/MediatR.Tests/MicrosoftExtensionsDI/Handlers.cs::MediatR.Extensions.Microsoft.DependencyInjection.Tests.Pinged
+    call test/MediatR.Tests/MicrosoftExtensionsDI/NotificationPublisherTests.cs:67: await mediator.Publish(new Pinged());
+    def  40: public class Pinged : INotification
+32. ['PipelineTests', 'Should_apply_open_behavior_with_nested_generic_response_type'] -> test/MediatR.Tests/MicrosoftExtensionsDI/Handlers.cs::MediatR.Extensions.Microsoft.DependencyInjection.Tests.Logger
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:1103: var output = new Logger();
+    def  87: public class Logger
+33. ['PipelineTests', 'Should_skip_open_behavior_when_request_constraint_uses_invariant_generic_interface'] -> test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs::MediatR.Extensions.Microsoft.DependencyInjection.Tests.PipelineTests.InvariantTxCommand
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:1228: await mediator.Send(new InvariantTxCommand());
+    def  1128: public class InvariantTxCommand : IInvariantTxCommand<TxAppDbContext> { }
+34. ['PingPongExceptionHandlerForType', 'Handle'] -> src/MediatR/Pipeline/RequestExceptionHandlerState.cs::MediatR.Pipeline.RequestExceptionHandlerState.SetHandled
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:337: state.SetHandled(new Pong { Message = exception.Message + " Handled by Specific Type" });
+    def  23: public void SetHandled(TResponse response)
+35. ['PipelineTests', 'Should_wrap_generics_with_behavior'] -> test/MediatR.Tests/MicrosoftExtensionsDI/Handlers.cs::MediatR.Extensions.Microsoft.DependencyInjection.Tests.Logger
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:426: var output = new Logger();
+    def  87: public class Logger
+36. ['PipelineTests', 'Should_throw_when_adding_non_open_behavior'] -> src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs::Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:647: Should.Throw<InvalidOperationException>(() => new MediatRServiceConfiguration().AddOpenBehavior(typeof(NotAnOpenBehavior)));
+    def  13: public class MediatRServiceConfiguration
+37. ['PipelineTests', 'Should_throw_when_adding_non_open_stream_behavior'] -> src/MediatR/MicrosoftExtensionsDI/MediatrServiceConfiguration.cs::Microsoft.Extensions.DependencyInjection.MediatRServiceConfiguration
+    call test/MediatR.Tests/MicrosoftExtensionsDI/PipelineTests.cs:653: Should.Throw<InvalidOperationException>(() => new MediatRServiceConfiguration().AddOpenBehavior(typeof(NotAnOpenStreamBehavior)));
+    def  13: public class MediatRServiceConfiguration
+38. ['SendTests', 'Should_resolve_main_handler'] -> src/MediatR/ISender.cs::MediatR.ISender.Send
+    call test/MediatR.Tests/SendTests.cs:217: var response = await _mediator.Send(new Ping { Message = "Ping" });
+    def  19: Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default);
+39. ['SendTests', 'Should_resolve_main_handler_by_given_interface'] -> src/MediatR/ISender.cs::MediatR.ISender.Send
+    call test/MediatR.Tests/SendTests.cs:264: await _mediator.Send(requests[0]);
+    def  19: Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default);
+40. ['StreamPipelineTests', 'Should_handle_concrete_and_open_generics'] -> test/MediatR.Tests/TestContainer.cs::MediatR.Tests.TestContainer.Create
+    call test/MediatR.Tests/StreamPipelineTests.cs:322: var container = TestContainer.Create(cfg =>
+    def  10: public static IServiceProvider Create(Action<ServiceCollection> config)

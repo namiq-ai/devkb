@@ -1,0 +1,12 @@
+# Dogfood repositories per language beyond Python (Python's are bench/repos.yaml, with tasks and truth).
+# Rule: every language devkb adds is checked on at least 3 real public repositories (decided 2026-11-16).
+# `python -m devkb.bench.languages check` clones each at its pinned commit, builds the graph, and fails if the
+# language's symbols, calls or test cases fall below the minimums (about 80% of what was measured when added).
+# Precision samples, checked by hand against the source, are in docs/specs/ (C#: csharp-precision-sample.md).
+languages:
+  csharp:
+    source: ast-csharp
+    repos:
+      - {id: mediatr, url: https://github.com/jbogard/MediatR.git, commit: 1fad4c7a35c8dd4e733a0f8d43e28eddc1aa5f5b, min_symbols: 1250, min_calls: 530, min_tests: 195}
+      - {id: fluentvalidation, url: https://github.com/FluentValidation/FluentValidation.git, commit: 5903fa65863ec66dabf10646b9c09b33130a03e8, min_symbols: 1740, min_calls: 2620, min_tests: 670}
+      - {id: polly, url: https://github.com/App-vNext/Polly.git, commit: 3bac1c877ac5b94f0c09cbf4efe4c15fafce639d, min_symbols: 4430, min_calls: 4230, min_tests: 2100}

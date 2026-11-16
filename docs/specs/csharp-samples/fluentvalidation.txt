@@ -1,0 +1,60 @@
+ 1. FluentValidation.Tests.AccessorCacheTests.BenchmarkValidator.ctor -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.RuleFor
+    call src/FluentValidation.Tests/AccessorCacheTests.cs:137: RuleFor(x => x.Surname).NotNull();
+    def  210: public IRuleBuilderInitial<T, TProperty> RuleFor<TProperty>(Expression<Func<T, TProperty>> expression) {
+ 2. FluentValidation.Tests.CascadingFailuresTester.Cascade_mode_can_be_set_after_validator_instantiated_async -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/CascadingFailuresTester.cs:440: results.Errors.Count.ShouldEqual(1);
+    def  26: public static void ShouldEqual(this object actual, object expected)
+ 3. FluentValidation.Tests.ComplexValidationTester.AddressValidator.ctor -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.RuleFor
+    call src/FluentValidation.Tests/ComplexValidationTester.cs:257: RuleFor(x => x.Postcode).NotNull();
+    def  210: public IRuleBuilderInitial<T, TProperty> RuleFor<TProperty>(Expression<Func<T, TProperty>> expression) {
+ 4. FluentValidation.Tests.ConditionTests.Validation_should_fail_when_condition_matches -> src/FluentValidation.Tests/ConditionTests.cs::FluentValidation.Tests.ConditionTests.TestConditionValidator.ctor
+    call src/FluentValidation.Tests/ConditionTests.cs:44: var validator = new TestConditionValidator();
+    def  335: public TestConditionValidator() {
+ 5. FluentValidation.Tests.CustomValidatorTester.New_Custom_Returns_single_failure -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.Validate
+    call src/FluentValidation.Tests/CustomValidatorTester.cs:40: var result = validator.Validate(new Person());
+    def  98: public ValidationResult Validate(T instance)
+ 6. FluentValidation.Tests.EqualValidatorTests.When_validation_fails_the_error_should_be_set -> src/FluentValidation.Tests/Person.cs::FluentValidation.Tests.Person.ctor
+    call src/FluentValidation.Tests/EqualValidatorTests.cs:52: var result = validator.Validate(new Person() {Forename = "Bar"});
+    def  37: public Person() {
+ 7. FluentValidation.Tests.LanguageManagerTests.Falls_back_to_default_localization_key_when_error_code_key_not_found -> src/FluentValidation.Tests/Person.cs::FluentValidation.Tests.Person.ctor
+    call src/FluentValidation.Tests/LanguageManagerTests.cs:296: var result = validator.Validate(new Person());
+    def  37: public Person() {
+ 8. FluentValidation.Tests.RegularExpressionValidatorTests.Can_access_expression_in_message_lambda_regex -> src/FluentValidation.Tests/TestValidator.cs::FluentValidation.Tests.TestValidator.ctor
+    call src/FluentValidation.Tests/RegularExpressionValidatorTests.cs:152: var v = new TestValidator();
+    def  24: public TestValidator() {
+ 9. FluentValidation.Tests.RegularExpressionValidatorTests.Uses_case_insensitive_regex_options -> src/FluentValidation.Tests/TestValidator.cs::FluentValidation.Tests.TestValidator.ctor
+    call src/FluentValidation.Tests/RegularExpressionValidatorTests.cs:181: var validator = new TestValidator(v => v.RuleFor(x => x.Surname).Matches("^abc$", RegexOptions.IgnoreCase));
+    def  24: public TestValidator() {
+10. FluentValidation.Tests.SharedConditionTests.Shared_When_is_applied_to_grouped_rules_when_initial_predicate_is_true -> src/FluentValidation.Tests/SharedConditionTests.cs::FluentValidation.Tests.SharedConditionTests.SharedConditionValidator.ctor
+    call src/FluentValidation.Tests/SharedConditionTests.cs:253: var validator = new SharedConditionValidator();
+    def  31: public SharedConditionValidator() {
+11. FluentValidation.Tests.SharedConditionTests.Nested_conditions_with_CustomAsync_rule -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.RuleFor
+    call src/FluentValidation.Tests/SharedConditionTests.cs:582: validator.RuleFor(x=>x).CustomAsync(async (x,ctx,c) => ctx.AddFailure(new ValidationFailure("Custom", "The validation failed"
+    def  210: public IRuleBuilderInitial<T, TProperty> RuleFor<TProperty>(Expression<Func<T, TProperty>> expression) {
+12. FluentValidation.Tests.SharedConditionTests.SharedAsyncConditionValidator.ctor -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.WhenAsync
+    call src/FluentValidation.Tests/SharedConditionTests.cs:61: WhenAsync(async (x,c) => x.Id > 0,
+    def  302: public IConditionBuilder WhenAsync(Func<T, CancellationToken, Task<bool>> predicate, Action action) {
+13. FluentValidation.Tests.ValidatorSelectorTests.Can_use_property_with_include -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.Include
+    call src/FluentValidation.Tests/ValidatorSelectorTests.cs:115: validator.Include(validator2);
+    def  345: public void Include(IValidator<T> rulesToInclude) {
+14. FluentValidation.Tests.ValidatorSelectorTests.Executes_correct_rule_when_using_property_with_include -> src/FluentValidation.Tests/TestValidator.cs::FluentValidation.Tests.TestValidator.ctor
+    call src/FluentValidation.Tests/ValidatorSelectorTests.cs:123: var validator = new TestValidator();
+    def  24: public TestValidator() {
+15. FluentValidation.Tests.ValidatorSelectorTests.Only_validates_child_property_for_collection -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.RuleFor
+    call src/FluentValidation.Tests/ValidatorSelectorTests.cs:211: validator.RuleFor(x => x.Address.Country.Name).NotEmpty();
+    def  210: public IRuleBuilderInitial<T, TProperty> RuleFor<TProperty>(Expression<Func<T, TProperty>> expression) {
+16. FluentValidation.Tests.ValidatorSelectorTests.Validates_property_using_expression -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/ValidatorSelectorTests.cs:57: result.Errors.Count.ShouldEqual(1);
+    def  26: public static void ShouldEqual(this object actual, object expected)
+17. FluentValidation.AbstractValidator.ValidateInternalAsync -> src/FluentValidation/Results/ValidationResult.cs::FluentValidation.Results.ValidationResult.ctor
+    call src/FluentValidation/AbstractValidator.cs:142: var result = new ValidationResult(context.Failures);
+    def  59: public ValidationResult() {
+18. FluentValidation.DefaultValidatorExtensions.Matches -> src/FluentValidation/Syntax.cs::FluentValidation.IRuleBuilder.SetValidator
+    call src/FluentValidation/DefaultValidatorExtensions.cs:186: => ruleBuilder.SetValidator(new RegularExpressionValidator<T>(expression));
+    def  44: IRuleBuilderOptions<T, TProperty> SetValidator(IPropertyValidator<T, TProperty> validator);
+19. FluentValidation.Validators.ChildValidatorAdaptor.CreateNewValidationContextForChildValidator -> src/FluentValidation/Validators/ChildValidatorAdaptor.cs::FluentValidation.Validators.ChildValidatorAdaptor.GetSelector
+    call src/FluentValidation/Validators/ChildValidatorAdaptor.cs:94: var selector = GetSelector(context, value);
+    def  103: private protected virtual IValidatorSelector GetSelector(ValidationContext<T> context, TProperty value) {
+20. FluentValidation.Validators.CreditCardValidator.GetDefaultMessageTemplate -> src/FluentValidation/Validators/PropertyValidator.cs::FluentValidation.Validators.PropertyValidator.Localized
+    call src/FluentValidation/Validators/CreditCardValidator.cs:32: return Localized(errorCode, Name);
+    def  47: protected string Localized(string errorCode, string fallbackKey) {
