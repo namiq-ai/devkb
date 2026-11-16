@@ -1,0 +1,181 @@
+{
+ "summary": {
+  "tasks": 12,
+  "mean_score": 1.0,
+  "by_kind": {
+   "err_to_handler": 1.0,
+   "impact": 1.0,
+   "refactor": 1.0
+  },
+  "complete_but_wrong": [],
+  "truth_missing_callers": {}
+ },
+ "tasks": [
+  {
+   "task": "lnbits-ERR-decode_key",
+   "kind": "err_to_handler",
+   "score": 1.0,
+   "parts": {
+    "raiser": 1.0,
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 378
+  },
+  {
+   "task": "lnbits-ERR-onchain_key_status",
+   "kind": "err_to_handler",
+   "score": 1.0,
+   "parts": {
+    "raiser": 1.0,
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 414
+  },
+  {
+   "task": "lnbits-ERR-validate_identity",
+   "kind": "err_to_handler",
+   "score": 1.0,
+   "parts": {
+    "raiser": 1.0,
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 372
+  },
+  {
+   "task": "lnbits-ERR-check_users_limit",
+   "kind": "err_to_handler",
+   "score": 1.0,
+   "parts": {
+    "raiser": 1.0,
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 752
+  },
+  {
+   "task": "lnbits-IMP-generate_filter_params_openapi",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 392
+  },
+  {
+   "task": "lnbits-IMP-explorer_client",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 493
+  },
+  {
+   "task": "lnbits-IMP-is_wasm_extension_id",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 492
+  },
+  {
+   "task": "lnbits-IMP-get_wallet_addresses",
+   "kind": "impact",
+   "score": 1.0,
+   "parts": {
+    "handlers": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 409
+  },
+  {
+   "task": "lnbits-WIDE-update_wallet_balance",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 314
+  },
+  {
+   "task": "lnbits-WIDE-get_wallets",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 230
+  },
+  {
+   "task": "lnbits-WIDE-create_account",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": true,
+   "words": 225
+  },
+  {
+   "task": "lnbits-WIDE-pay_offer",
+   "kind": "refactor",
+   "score": 1.0,
+   "parts": {
+    "files": 1.0,
+    "tests": 1.0
+   },
+   "complete": false,
+   "words": 235
+  }
+ ],
+ "truth_check": [
+  {
+   "task": "lnbits-WIDE-update_wallet_balance",
+   "truth": 20,
+   "found": 20,
+   "missing": [],
+   "unconfirmed": []
+  },
+  {
+   "task": "lnbits-WIDE-get_wallets",
+   "truth": 10,
+   "found": 10,
+   "missing": [],
+   "unconfirmed": []
+  },
+  {
+   "task": "lnbits-WIDE-create_account",
+   "truth": 11,
+   "found": 11,
+   "missing": [],
+   "unconfirmed": []
+  },
+  {
+   "task": "lnbits-WIDE-pay_offer",
+   "truth": 9,
+   "found": 9,
+   "missing": [],
+   "unconfirmed": []
+  }
+ ]
+}

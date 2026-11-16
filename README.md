@@ -113,7 +113,9 @@ Codex and Cursor read the instructions in `AGENTS.md`; Claude Code reads them th
 What agents get by default (`--toolset lean-pack`): a `pack` tool that returns a whole answer in one call, and the
 seven single-question tools. The instructions tell them to ask for a pack when a question follows a chain (a file
 before editing, a change, an error) and to search as usual for a one-hop lookup, which is where the benchmark found
-the saving and where it did not.
+the saving and where it did not. Measured with agents asking for the pack themselves (lnbits and Dispatch, 400 runs):
+53% cheaper than plain search with the highest quality of any arm, against 42% for the seven tools alone
+([`bench/results/2026-11-15-lean-pack`](bench/results/2026-11-15-lean-pack/)).
 
 ## 4. Licence and citation
 
