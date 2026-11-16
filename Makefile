@@ -22,3 +22,10 @@ verify:
 paper:
 	cd study/paper && pdflatex -interaction=nonstopmode paper.tex > /dev/null && bibtex paper > /dev/null && \
 	  pdflatex -interaction=nonstopmode paper.tex > /dev/null && pdflatex -interaction=nonstopmode paper.tex | grep "Output written"
+
+# C/C++ corpus check (ADR-DEVKB-008 §7, DKB-006): clones five pinned repositories to $(DEVKB_CPP_CORPUS)
+# (default ~/.cache/devkb/cpp-corpus), measures caller precision/recall against an independent truth, the Complete
+# rule, build time and the dependency list. Needs network on first run; deliberately not part of gate-1 or gate-2.
+.PHONY: cpp-check
+cpp-check:
+	$(PY) -m devkb.bench.cpp_corpus $(ARGS)

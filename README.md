@@ -32,7 +32,8 @@ Everything runs locally: devkb reads files and runs `git`, never your code (unle
 | C# | ✅ Supported | classes, structs, interfaces, records, methods, constructors, properties, local and extension methods, calls (same type and bases, `this`/`base`, typed receivers, static `Type.M()`, `new T()`, extension methods chosen by receiver type and argument count), xUnit/NUnit/MSTest tests; every pack. Checked on MediatR, FluentValidation, Polly, Jellyfin and EF Core (1.8M lines in ~2 min). Not: calls on a call's result (`a.B().C()`), overloads by argument *type*, outside types' hierarchies (`StreamReader` → `TextReader`) |
 | Odoo XML | 🟡 Partial | templates and menus |
 | Bash / shell | ⬜ Not yet | files and history only |
-| C, C++, Java, Rust, Go, others | ⬜ Not yet | files and history only |
+| C, C++ | 🟡 Partial | definitions, calls, tests, `throw`/`assert`/log-macro messages. Limits: no preprocessor expansion, no overload resolution, no type inference; an answer says Incomplete where a call could not be attributed |
+| Java, Rust, Go, others | ⬜ Not yet | files and history only |
 
 "Files and history" is the language-independent layer every repository gets: files, commits, pull requests and
 tickets.

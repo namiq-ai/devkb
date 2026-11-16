@@ -111,6 +111,19 @@ def manifest_payload(
     return payload
 
 
+def _cpp_report(ctx, graphs) -> dict:
+    """What the C/C++ passes could not read: the symbols pass's own report plus the test inventory's. Empty when the
+    repository has no C/C++ file, so a Python-only manifest is unchanged."""
+    report: dict = {}
+    try:
+        report.update((json.loads((ctx.devkb_dir / "symbols-manifest.json").read_text()).get("cpp")) or {})
+    except (OSError, ValueError):
+        pass
+    for g in graphs:
+        report.update(g.meta.get("cpp") or {})
+    return report
+
+
 def build(code: str, allow_foreign_checkout: bool = False, github: bool | None = None,
           github_transport=None) -> tuple[DevKBGraph, Path]:
     """`github`: True for --github, False for --no-github, None to follow devkb.json (ADR-DEVKB-007: off by default).
@@ -220,10 +233,11 @@ def build(code: str, allow_foreign_checkout: bool = False, github: bool | None =
 
     nodes_path.write_text("\n".join(json.dumps(n) for n in data["nodes"]) + ("\n" if data["nodes"] else ""))
     edges_path.write_text("\n".join(json.dumps(e) for e in data["edges"]) + ("\n" if data["edges"] else ""))
-    manifest_path.write_text(json.dumps(
-        manifest_payload(ctx.code, ctx.repo_root, graph.node_count(), graph.edge_count(), github_report),
-        indent=2,
-    ))
+    payload = manifest_payload(ctx.code, ctx.repo_root, graph.node_count(), graph.edge_count(), github_report)
+    cpp_report = _cpp_report(ctx, graphs)
+    if cpp_report:
+        payload["cpp"] = cpp_report   # ADR-DEVKB-008 §2: skipped (oversized/unreadable) files, ambiguous test macros
+    manifest_path.write_text(json.dumps(payload, indent=2))
 
     return graph, ctx.devkb_dir
 

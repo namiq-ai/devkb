@@ -16,7 +16,10 @@ from __future__ import annotations
 import ast
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+
+from devkb import cpp_symbols
 
 _PY_TEST = re.compile(r"(^|/)(test_[^/]+|[^/]+_test)\.py$")
 _JS_TEST = re.compile(r"(^|/)[^/]+\.(test|spec)\.[cm]?[jt]sx?$")
@@ -62,6 +65,8 @@ def tests_in_file(repo_root: Path, rel: str) -> list[tuple[str, int]]:
         text = path.read_text(errors="replace")
     except OSError:
         return []
+    if cpp_symbols.is_cxx_path(rel):
+        return [(c.name, c.line) for c in cxx_cases(cpp_symbols.mask_source(text))[0]]
     if rel.endswith(".py"):
         try:
             tree = ast.parse(text, filename=rel)
@@ -80,3 +85,107 @@ def tests_in_file(repo_root: Path, rel: str) -> list[tuple[str, int]]:
     for match in _JS_CASE.finditer(text):
         out.append((match.group(2), text.count("\n", 0, match.start()) + 1))
     return out
+
+
+# ── C and C++ (ADR-DEVKB-008 §5, DKB-004) ───────────────────────────────────────────
+# The one place a macro is tied to a framework (AD-8). `tier` is the TL's D3 ordering; `proof` is the include that
+# must be present for the macro to count (None: the macro form is enough); `name` is how the case name is read.
+CXX_FRAMEWORKS: dict[str, dict] = {
+    "gtest": {"tier": 1, "macros": ("TEST", "TEST_F", "TEST_P", "TYPED_TEST", "TYPED_TEST_P"), "proof": None, "name": "suite.name"},
+    "catch2": {"tier": 1, "macros": ("TEST_CASE", "SCENARIO", "TEMPLATE_TEST_CASE"), "proof": ("catch2/", "catch.hpp"), "name": "literal"},
+    "doctest": {"tier": 1, "macros": ("TEST_CASE", "SCENARIO"), "proof": ("doctest/", "doctest.h"), "name": "literal"},
+    "boost-test": {"tier": 2, "macros": ("BOOST_AUTO_TEST_CASE", "BOOST_FIXTURE_TEST_CASE", "BOOST_AUTO_TEST_CASE_TEMPLATE"),
+                   "proof": None, "name": "first"},
+    "unity": {"tier": 2, "macros": ("RUN_TEST",), "proof": ("unity.h",), "name": "run"},
+    "ztest": {"tier": 2, "macros": ("ZTEST", "ZTEST_F", "ZTEST_USER", "ZTEST_USER_F", "ztest_unit_test"), "proof": ("ztest.h",),
+              "name": "suite.name"},
+}
+_CXX_MACRO_NAMES = sorted({m for f in CXX_FRAMEWORKS.values() for m in f["macros"]}, key=len, reverse=True)
+_CXX_RAW = re.compile(r"\b(?:" + "|".join(_CXX_MACRO_NAMES) + r")\b")
+_CXX_MACRO = re.compile(r"\b(" + "|".join(_CXX_MACRO_NAMES) + r")\s*\(")
+
+
+@dataclass
+class CxxCase:
+    name: str
+    line: int
+    framework: str
+    macro: str
+    body: bool       # a brace-bodied macro (the case is its own symbol); False: the case names a function
+
+
+def _has_include(includes: list[str], proofs: tuple[str, ...]) -> bool:
+    return any(p in inc if p.endswith("/") else inc.rsplit("/", 1)[-1] == p for inc in includes for p in proofs)
+
+
+def cxx_cases(masked: cpp_symbols.Masked) -> tuple[list[CxxCase], int]:
+    """(cases, number skipped as ambiguous) from one C/C++ file's masked text. Detection runs on masked text, so a
+    macro in a comment, string or `#if 0` yields nothing. A macro two frameworks share (`TEST_CASE`) is assigned only
+    when the file's includes prove exactly one; otherwise it is skipped and counted."""
+    code, out, ambiguous = masked.code, [], 0
+    for m in _CXX_MACRO.finditer(code):
+        macro = m.group(1)
+        o = m.end() - 1
+        cl = cpp_symbols._match_close(code, o, "(", ")")
+        if cl is None:
+            continue
+        args = cpp_symbols._split_top(code[o + 1:cl])
+        line = masked.line(m.start())
+        cands = [f for f, spec in CXX_FRAMEWORKS.items() if macro in spec["macros"]]
+        ok = [f for f in cands if CXX_FRAMEWORKS[f]["proof"] is None or _has_include(masked.includes, CXX_FRAMEWORKS[f]["proof"])]
+        if len(ok) != 1:
+            if len(cands) > 1 and re.match(r"\s*\{", code[cl + 1:cl + 40]):
+                ambiguous += 1
+            continue
+        fw = ok[0]
+        kind = CXX_FRAMEWORKS[fw]["name"]
+        if kind != "run" and macro != "ztest_unit_test" and not re.match(r"\s*\{", code[cl + 1:cl + 40]):
+            continue                # a macro use that is not a case body
+        if kind == "suite.name":
+            if macro == "ztest_unit_test":
+                fn = args[0].strip()
+                if re.match(r"^\w+$", fn):
+                    out.append(CxxCase(fn, _def_line(masked, fn) or line, fw, macro, False))
+                continue
+            if len(args) != 2 or not all(re.match(r"^\s*\w+\s*$", a) for a in args):
+                continue
+            out.append(CxxCase(f"{args[0].strip()}.{args[1].strip()}", line, fw, macro, True))
+        elif kind == "first":
+            if args and re.match(r"^\s*\w+\s*$", args[0]):
+                out.append(CxxCase(args[0].strip(), line, fw, macro, True))
+        elif kind == "literal":
+            q = re.search(r"\"", code[o + 1:cl])
+            lit = masked.literals.get(o + 1 + q.start()) if q else None
+            if lit:
+                out.append(CxxCase(lit, line, fw, macro, True))
+        elif kind == "run":
+            fn = args[0].strip() if args else ""
+            if re.match(r"^\w+$", fn):
+                out.append(CxxCase(fn, _def_line(masked, fn) or line, fw, macro, False))
+    return out, ambiguous
+
+
+def _def_line(masked: cpp_symbols.Masked, fn: str) -> int | None:
+    m = re.search(r"(?m)^[ \t]*(?:static\s+|extern\s+)?(?:void|int)\s+" + re.escape(fn) + r"\s*\([^;{)]*\)\s*\{?", masked.code)
+    return masked.line(m.start()) if m else None
+
+
+def list_cxx_test_files(repo_root: Path) -> list[tuple[str, cpp_symbols.Masked, list[CxxCase], int]]:
+    """Every tracked C/C++ file holding a test case: (path, masked text, cases, ambiguous count). A path named like a
+    test is only a hint; a case needs the macro. Vendored and generated paths are skipped."""
+    found = []
+    for rel in cpp_symbols.list_files(repo_root):
+        path = repo_root / rel
+        try:
+            if path.stat().st_size > cpp_symbols.MAX_FILE_BYTES:
+                continue
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        if not _CXX_RAW.search(text):
+            continue
+        masked = cpp_symbols.mask_source(text)
+        cases, ambiguous = cxx_cases(masked)
+        if cases or ambiguous:
+            found.append((rel, masked, cases, ambiguous))
+    return found

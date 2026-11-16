@@ -1,0 +1,70 @@
+{
+  "comment": "Pins for the C/C++ corpus check (ADR-DEVKB-008 \u00a77). Clones are shallow, go to DEVKB_CPP_CORPUS (default ~/.cache/devkb/cpp-corpus) and are refused unless HEAD is the pinned commit. Recall floors are QA's first measurement minus 0.02; floors move up only. First measurement: devkb/bench/cpp_corpus_first_measurement.json.",
+  "reference_machine": {
+    "cpu": "12 logical cores, x86_64 Linux 7.0 (as run by the author; QA must restate the reference machine)",
+    "disk": "local NVMe-class",
+    "status": "open: QA states the reference machine"
+  },
+  "repos": [
+    {
+      "name": "cJSON",
+      "url": "https://github.com/DaveGamble/cJSON.git",
+      "commit": "6d9f2443ab071f86e5d9b43025a40929ec41c46c"
+    },
+    {
+      "name": "fmt",
+      "url": "https://github.com/fmtlib/fmt.git",
+      "commit": "57f1b5930dc2906875534a15c209e1c39eda59ad"
+    },
+    {
+      "name": "leveldb",
+      "url": "https://github.com/google/leveldb.git",
+      "commit": "29465588d3dfdc80fba5e198037582b8fdb5dd60"
+    },
+    {
+      "name": "autoas",
+      "url": "https://github.com/autoas/as.git",
+      "commit": "cc3709675ac30f7539c0710dfec6d579a5235841"
+    },
+    {
+      "name": "zephyr",
+      "url": "https://github.com/zephyrproject-rtos/zephyr.git",
+      "commit": "7cd4b562b30a9bcd76a7288ad90d5e71dd6f87d2"
+    }
+  ],
+  "floors": {
+    "cJSON": {
+      "precision": 0.95,
+      "recall": 0.95
+    },
+    "fmt": {
+      "precision": 0.95,
+      "recall": 0.62
+    },
+    "leveldb": {
+      "precision": 0.95,
+      "recall": 0.78
+    },
+    "autoas": {
+      "precision": 0.95,
+      "recall": 0.96
+    },
+    "zephyr": {
+      "precision": 0.95,
+      "recall": 0.94
+    }
+  },
+  "dependency_exemptions": {
+    "mcp": "optional extra `mcp` (pyproject.toml [project.optional-dependencies]); imported by devkb/mcp_server.py only",
+    "scipy": "optional extra `study`; imported by the benchmark analysis only",
+    "readiness_gate": "factory script imported lazily inside a function at process_api.py, absent outside the factory"
+  },
+  "budgets": {
+    "default_seconds": 5,
+    "cJSON": 5,
+    "fmt": 20,
+    "leveldb": 20,
+    "autoas": 60,
+    "zephyr": 120
+  }
+}

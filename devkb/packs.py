@@ -28,10 +28,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from devkb.cpp_symbols import CXX_LIMITS_TEXT, is_cxx_path  # noqa: E402
 from devkb.process_api import ProcessAPI, is_test_path  # noqa: E402
 from devkb.service import GraphNotBuilt  # noqa: E402
 
 MAX_DEPTH = 6
+
+
+_REASON_TEXT = {
+    "dynamic-dispatch": "a virtual or overriding method may be reached through a base-class pointer",
+    "implicit-call": "constructors, destructors and operators are invoked without a call in the text",
+    "unread-file": "a C/C++ file was too large or unreadable and was not read",
+}
 
 
 class Packer:
@@ -83,9 +91,27 @@ class Packer:
                    else "None of the files below has changed since; the line numbers are current."))
 
     def coverage(self, syms: list[int], shown: set[str]) -> str:
+        """The coverage statement; for a C/C++ symbol, the limit statement follows it, Complete or not (ADR-DEVKB-008 §4)."""
+        text = self._coverage_text(syms, shown)
+        if any(is_cxx_path(self.api._key(x).split("::")[0]) for x in syms):
+            c = self.api._coverage(syms, shown)
+            if c.get("unattributed_errors"):
+                text += (f" {c['unattributed_errors']} `throw` or `assert` site(s) in these functions carry a message that is "
+                         "not a literal, so their text is not searchable.")
+            text += "\n\n" + CXX_LIMITS_TEXT
+        return text
+
+    def _coverage_text(self, syms: list[int], shown: set[str]) -> str:
         c = self.api._coverage(syms, shown)
+        cxx = any(is_cxx_path(self.api._key(x).split("::")[0]) for x in syms)
         if c.get("complete"):
+            if cxx:
+                return ("**Complete.** Every call site of these names visible in the source text was attributed to a target; "
+                        "this does not rule out a caller at run time.")
             return "**Complete.** Every call site under these names was attributed to its target; nothing else calls them."
+        if c.get("reasons") and not c.get("unresolved_calls"):
+            return ("**Incomplete: the graph cannot follow every call to these names** ("
+                    + ", ".join(f"`{r}`: {_REASON_TEXT[r]}" for r in c["reasons"]) + ").")
         names = {self.api._key(x).split("::")[-1].split(".")[-1] for x in syms}
         name = next(iter(names)) if len(names) == 1 else ""
         listed = c.get("search_files", [])
@@ -93,6 +119,8 @@ class Packer:
         files = ", ".join(f"`{f}`" for f in listed) or "(files not recorded)"
         shared = f" {c['shared_by']} symbols share the name, so most may be calls to the others." if c.get("shared_by") else ""
         head = f"**Incomplete: {c['unresolved_calls']} call site(s) under this name could not be attributed.**{shared} "
+        if c.get("reasons"):
+            head += "Also: " + ", ".join(f"`{r}` ({_REASON_TEXT[r]})" for r in c["reasons"]) + ". "
         if c.get("in_listed_files"):
             return head + "They are in files already listed above; check those files' other calls under this name."
         if total <= len(listed):

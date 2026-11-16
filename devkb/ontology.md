@@ -82,7 +82,7 @@ STORY → EPIC, malformed evidence pack, one evidence id recorded with two confi
 | `CALLS_API` | Symbol (frontend, TS) → Symbol (backend route handler) | a frontend route-call site (incl. object-literal methods, e.g. `const api = { x: () => get(...) }`) resolved against a real backend `Endpoint`'s route | BL-4b |
 | `PART_OF` *(new usage)* | File → Component | `discovery/`'s own `Module.service` property, promoted to a real edge | BL-8 |
 | `REALIZES` | Component → Subsystem | `pms.config.json`'s `subsystems[].path`, longest-prefix match against the Component's own path -- skipped, not guessed, when nothing matches | BL-8 |
-| `RAISES` | Symbol → ErrorSignature | `ast.Raise`; `HTTPException(status_code=N, ...)` gets `N` extracted onto `ErrorSignature.status_code` when literal, skipped when dynamic | BL-9 |
+| `RAISES` | Symbol → ErrorSignature | `ast.Raise`; `HTTPException(status_code=N, ...)` gets `N` extracted onto `ErrorSignature.status_code` when literal, skipped when dynamic. C/C++ (ADR-DEVKB-008 D4): a literal message in `throw T("lit")` or `assert(cond && "lit")`; a non-literal message adds to `Symbol.unattributed_errors` and creates no signature; error-return codes are excluded | BL-9, DKB-005 |
 | `LOGS` | Symbol → ErrorSignature | `logger.error/warning/critical/exception(...)` calls | BL-9 |
 | `REGISTERED_ON` | Symbol (middleware) → Endpoint (wildcard marker, `* <router_prefix>`) | `app.add_middleware(X)`/`router.add_middleware(X)` call-site detection | BL-10 |
 | `SIMILAR_TO` | Ticket ↔ Ticket | any nonzero overlap of **evidence-bearing** touched files, carrying `shared_file_count`/`overlap_score`/`weighted_score` (`Edge.extra`) -- still no significance threshold at build time; ranking and capping are query-time concerns and `devkb/query.py` now performs them. A file touched by >10% of tickets is bookkeeping rather than subject matter and is excluded from evidence entirely (computed, reported at build; see `ticket_similarity.hub_files`) | BL-11 |
@@ -171,6 +171,12 @@ and by the packs:
 | `unresolved_calls` | call sites under this Symbol's short name that the resolver could not attribute to any Symbol |
 | `unresolved_files` | the files holding them, most calls first, at most 20 |
 | `unresolved_file_count` | how many files hold them in all, so a list cut at 20 (or a pack's 10) never reads as complete |
+| `incomplete_reasons` | C/C++ only (ADR-DEVKB-008 §4): a sorted subset of `dynamic-dispatch` (a virtual, overriding or overridden method), `implicit-call` (constructor, destructor, operator) and `unread-file` (a C/C++ file was too large or unreadable). Any reason makes the Symbol Incomplete |
+| `unattributed_errors` | C/C++ only: `throw` and `assert` sites in the body whose message is not a literal, so no `ErrorSignature` was made |
+| `kind` (C/C++) | `function`, `method`, `class` (class, struct, union), `enum`, `test` (one per test-case macro body) |
+| `qualified_name`, `namespace` (C/C++) | class chain joined with `.` (`Block.Iter.Next`, `Table.~Table`); the namespace chain joined with `::`, or absent |
+| `overload_count`, `overload_lines` (C/C++) | overloads share one node; `overload_count` ≥ 1 and the definition lines, at most 20 |
+| `framework` | on a C/C++ `kind="test"` Symbol and on its `TestCase`: `gtest`, `catch2`, `doctest`, `boost-test`, `unity`, `ztest` |
 | `module_callers` | files that call this Symbol outside any function: at import time (`app_dirs = get_app_dirs()`) or in a class body. A signature change breaks them, so the refactor pack and the `callers` tool list them (`module_level_files`); they are not functions, so no call chain passes through them |
 
 When the calls a coverage statement counts are all in files the answer already lists, it says so (`in_listed_files`)

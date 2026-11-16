@@ -84,12 +84,16 @@ def is_generated_path(path: str) -> bool:
 
 
 _TEST_TREE = re.compile(r"(^|/)(tests?/[^/].*\.py|conftest\.py)$")
+# ADR-DEVKB-008 §5: C/C++ test code is a file named like a test, or any C/C++ file under test/, tests/ or unittests/.
+_CXX_TEST = re.compile(
+    r"(^|/)(?:(?:test_[^/]+|[^/]+_tests?)\.(?:c|h|cc|cpp|cxx|hh|hpp|hxx)|(?:tests?|unittests)/[^/].*\.(?:c|h|cc|cpp|cxx|hh|hpp|hxx))$",
+    re.IGNORECASE)
 
 
 def is_test_path(path: str) -> bool:
     """Test code: a test module by name, or any Python file in a tests/ or test/ tree (fixtures, helpers, conftest),
     since a change that breaks those breaks the test run just the same."""
-    return bool(_PY_TEST.search(path) or _JS_TEST.search(path) or _CS_TEST.search(path) or _TEST_TREE.search(path))
+    return bool(_PY_TEST.search(path) or _JS_TEST.search(path) or _CS_TEST.search(path) or _TEST_TREE.search(path) or _CXX_TEST.search(path))
 
 
 def _lines(block: str) -> list[str]:
@@ -313,7 +317,12 @@ class ProcessAPI:
         files: dict[str, None] = {}
         n = 0
         file_total = 0
+        reasons: set[str] = set()
+        unattributed = 0
         for s in syms:
+            # ADR-DEVKB-008 §4: a C/C++ symbol is Complete only with no unresolved call and no incomplete reason.
+            reasons.update(self.idx.props[s].get("incomplete_reasons") or ())
+            unattributed += int(self.idx.props[s].get("unattributed_errors") or 0)
             name = self._key(s).split("::")[-1].split(".")[-1]
             if name in names:
                 continue
@@ -325,14 +334,17 @@ class ProcessAPI:
             for f in listed:
                 if not shown or f not in shown:
                     files[f] = None
-        if not n:
-            return {"complete": True}
+        extra = {"unattributed_errors": unattributed} if unattributed else {}
+        if reasons:
+            extra["reasons"] = sorted(reasons)
+        if not n and not reasons:
+            return {"complete": True, **extra}
         shared = max(names.values(), default=1)
         # search_files is the first 10 by call count; search_file_count says how many files hold such calls in all.
         more = {"search_file_count": file_total} if file_total > min(len(files), 10) else {}
         if not files and any(self.idx.props[s].get("unresolved_files") for s in syms):
             more["in_listed_files"] = True  # every such call is in a file the answer already lists
-        return {"complete": False, "unresolved_calls": n, "search_files": list(files)[:10], **more,
+        return {"complete": False, "unresolved_calls": n, "search_files": list(files)[:10], **more, **extra,
                 **({"shared_by": shared, "note": f"{shared} symbols share this name; most of these calls may be to the others"}
                    if shared > 3 else {})}
 

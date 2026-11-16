@@ -45,7 +45,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from devkb import csharp_symbols, ts_symbols  # noqa: E402
+from devkb import cpp_graph, csharp_symbols, ts_symbols  # noqa: E402
 from devkb.extractors.tickets_git import _run  # noqa: E402
 from devkb.gitutil import git_head  # noqa: E402
 from devkb.model import DevKBGraph  # noqa: E402
@@ -1299,6 +1299,9 @@ def extract(repo_root: Path) -> DevKBGraph:
             evidence_ref=f"{file_path}::{symbol_qn} calls {method} {path}",
         )
 
+    # ── ADR-DEVKB-008: C and C++ (one call; every C/C++ rule lives in cpp_graph) ──
+    cpp_graph.add_to_graph(g, repo_root, _error_signature_key)
+
     return g
 
 
@@ -1369,6 +1372,7 @@ def build(code: str) -> tuple[DevKBGraph, Path]:
         "git_head": git_head(ctx.repo_root),
         "node_count": graph.node_count(),
         "edge_count": graph.edge_count(),
+        **({"cpp": graph.meta["cpp"]} if graph.meta.get("cpp") else {}),
     }, indent=2))
 
     return graph, ctx.devkb_dir
