@@ -1,5 +1,7 @@
 # devkb
 
+[![PyPI](https://img.shields.io/pypi/v/devkb)](https://pypi.org/project/devkb/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24267143.svg)](https://doi.org/10.5281/zenodo.24267143)
 
 **A knowledge graph of your repository for software development agents.** Agents answer "what calls this, what breaks, which tests"
@@ -77,12 +79,12 @@ cd your-repo
 devkb init --hooks
 ```
 
-Install it as a tool, as above, so the `devkb` command is on your PATH: agents start the server from there, and a
-devkb installed only inside a virtual environment never starts (`devkb init` warns if that is the case).
-
 This builds the graph into `.devkb/`, adds a short devkb section to `AGENTS.md` and `CLAUDE.md`, registers the MCP
 server in `.mcp.json`, and rebuilds the graph after each commit. Your own content in those files is kept;
 `devkb init --remove` undoes it.
+
+Install devkb as a tool, as above, so the `devkb` command is on your PATH: agents start the server from there, and a
+devkb installed only inside a virtual environment never starts (`devkb init` warns if that is the case).
 
 Ask it directly:
 
@@ -96,7 +98,7 @@ devkb pack --project . file path/to/file.py     # before editing a file
 
 **Claude Code**: nothing more to do. `devkb init` registered the server in `.mcp.json` and pointed `CLAUDE.md` at the
 instructions. Start `claude` in the repository, approve the `devkb` server when asked, and check it with `/mcp`.
-Or skip `pip` and `devkb init` and install the plugin, which brings the server, its instructions and a hook that builds
+Or skip the install and `devkb init` and use the plugin, which brings the server, its instructions and a hook that builds
 the graph in the background (needs [uv](https://docs.astral.sh/uv/)):
 
 ```
@@ -125,6 +127,9 @@ before editing, a change, an error) and to search as usual for a one-hop lookup,
 the saving and where it did not. Measured with agents asking for the pack themselves (lnbits and Dispatch, 400 runs):
 53% cheaper than plain search with the highest quality of any arm, against 42% for the seven tools alone
 ([`bench/results/2026-11-15-lean-pack`](bench/results/2026-11-15-lean-pack/)).
+
+Tried it on your repository? Tell us what happened, good or bad, in
+[issue #25](https://github.com/namiq-ai/devkb/issues/25).
 
 ## 4. Licence and citation
 
