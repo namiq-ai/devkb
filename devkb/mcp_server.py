@@ -68,6 +68,8 @@ TOOLSETS = {"core": CORE, "workflow": WORKFLOW + ["review_pack", "tests_to_run",
             # Packs over MCP: one call returns a whole answer (the measured "pack" arm put it in the prompt; here the
             # agent asks for it). `lean-pack` is the arm that measures that; `lean` stays as measured.
             "lean-pack": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config", "pack"] + READ,
+            # Navigation only: definitions, file outlines and whole-answer packs. Three tool definitions instead of fourteen.
+            "nav": ["symbol", "outline", "pack"],
             "dev": ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config",
                     "explain_area", "feature_brief", "find_code", "pack"] + READ,
             "all": CORE + WORKFLOW + DOCS + READ + ["pack"]}
@@ -150,7 +152,7 @@ def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
 
     @tool
     def symbol(query: str, source: bool = False, kind: str = "", under: str = "", limit: int = 8, lines: int = 80) -> str:
-        """Where a name is defined (name, A.b, path::name, glob, re:regex, prefix, words; typos tolerated): exact lines and signature; source=True prints the body."""
+        """Where names are defined (name, A.b, path::name, glob, re:regex; typos tolerated; several names comma-separated in one call): exact lines and signature; source=True prints bodies."""
         return _read("symbol", query=query, source=source, kind=kind, under=under, limit=limit, lines=lines)
 
     @tool

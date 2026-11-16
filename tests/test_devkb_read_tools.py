@@ -266,3 +266,11 @@ def test_no_reply_exceeds_the_byte_budget_and_the_cut_is_counted(api):
     text = read_tools.render_symbol(sym(api, "long_function", source=True, lines=200))
     assert len(text.encode()) <= read_tools.BUDGET + 120 and ("output cut" in text or len(text.encode()) <= read_tools.BUDGET)
     assert read_tools.fit_text("x\n" * 4000).endswith("narrow with under=PATH)")
+
+
+def test_symbol_batch_and_nav_toolset():
+    from devkb.mcp_server import TOOLSETS
+    from devkb.read_tools import render_symbol
+    assert TOOLSETS["nav"] == ["symbol", "outline", "pack"]
+    text = render_symbol({"batch": [{"query": "a", "matches": [], "n": 0, "how": None}, {"query": "b", "matches": [], "n": 0, "how": None}]})
+    assert 'no symbol named "a"' in text and 'no symbol named "b"' in text

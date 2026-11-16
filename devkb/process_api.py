@@ -316,7 +316,12 @@ class ProcessAPI:
 
     def symbol(self, query: str = "", name: str = "", source: bool = False, kind: str = "", under: str = "", limit: int = 8,
                lines: int = 80) -> dict:
-        return self._read().symbol(query or name, source=source, kind=kind, under=under, limit=limit, lines=lines)
+        q = (query or name).strip()
+        if "," in q and not q.startswith("re:") and not any(c in q for c in "*?[("):
+            names = [x.strip() for x in q.split(",") if x.strip()][:8]      # one call, several names (SPEC-DKB-003 follow-up: batching)
+            if len(names) > 1:
+                return {"batch": [self._read().symbol(n, source=source, kind=kind, under=under, limit=min(limit, 3), lines=lines) for n in names]}
+        return self._read().symbol(q, source=source, kind=kind, under=under, limit=limit, lines=lines)
 
     def outline(self, path: str, limit: int = 200) -> dict:
         return self._read().outline(path, limit=limit)

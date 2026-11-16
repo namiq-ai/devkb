@@ -417,6 +417,9 @@ def _span(m: dict) -> str:
 
 
 def render_symbol(r: dict) -> str:
+    if r.get("batch"):
+        share = BUDGET // len(r["batch"])
+        return "\n\n".join(fit_text(render_symbol(x), share) for x in r["batch"])
     if r.get("error"):
         return r["error"]
     if not r["matches"]:
