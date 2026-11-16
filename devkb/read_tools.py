@@ -33,7 +33,8 @@ LANG = {".py": "Python", ".pyi": "Python", ".ts": "TypeScript", ".tsx": "TypeScr
 APPROX_WINDOW = 40        # lines shown from the start of a symbol whose end is unknown
 START_ONLY = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".xml")   # extractors that do not store an end line
 DOC_SUFFIX = (".md", ".markdown", ".rst", ".txt", ".adoc")
-NOT_CODE = (".md", ".markdown", ".rst", ".txt", ".adoc", ".lock", ".json", ".svg", ".min.js", ".map", ".csv", ".ipynb")
+NOT_CODE = (".md", ".markdown", ".rst", ".txt", ".adoc", ".lock", ".json", ".svg", ".min.js", ".map", ".csv", ".ipynb",
+            ".jsonl", ".ndjson", ".tsv", ".log")   # data files too (dogfood D4, #40: benchmark transcripts drowned `uses`)
 REGEXY = re.compile(r"[\^$+()\[\]{}|\\]|\.\*|\.\+")
 KINDS = {"function", "method", "class", "enum", "struct", "interface", "test"}
 IMPORT_RE = {

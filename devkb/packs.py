@@ -64,8 +64,9 @@ class Packer:
         start, end = int(p.get("line_start") or 1), int(p.get("line_end") or p.get("line_start") or 1)
         lines = self._file(rel)
         rx = re.compile(r"\b" + re.escape(name) + r"\s*\(")
+        decl = re.compile(r"^\s*(?:async\s+)?def\s+" + re.escape(name) + r"\s*\(")   # a recursive method's own `def`
         for n in range(start, min(end, len(lines)) + 1):
-            if rx.search(lines[n - 1]):
+            if rx.search(lines[n - 1]) and not decl.match(lines[n - 1]):
                 return f"{rel}:{n}: {lines[n - 1].strip()[:140]}"
         return f"{rel}:{start}: (def {key.split('::')[-1]})"
 
@@ -118,7 +119,9 @@ class Packer:
         total = max(c.get("search_file_count") or 0, len(listed))
         files = ", ".join(f"`{f}`" for f in listed) or "(files not recorded)"
         shared = f" {c['shared_by']} symbols share the name, so most may be calls to the others." if c.get("shared_by") else ""
-        head = f"**Incomplete: {c['unresolved_calls']} call site(s) under this name could not be attributed.**{shared} "
+        # (counted per calling function: several calls from one function count once; dogfood D2, #40)
+        head = (f"**Incomplete: calls under this name from {c['unresolved_calls']} function(s) could not be "
+                f"attributed.**{shared} ")
         if c.get("reasons"):
             head += "Also: " + ", ".join(f"`{r}` ({_REASON_TEXT[r]})" for r in c["reasons"]) + ". "
         if c.get("in_listed_files"):

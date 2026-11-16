@@ -489,11 +489,16 @@ def _annotation_class(ann: ast.expr | None) -> str | None:
     return _class_ref(ann)
 
 
+def _looks_like_class(name: str) -> bool:
+    """Capitalised after any leading underscores: `Index`, and a private `_Index` (dogfood D1, #40)."""
+    return name.lstrip("_")[:1].isupper()
+
+
 def _class_ref(node: ast.expr) -> str | None:
-    """`Cls` or `module.Cls` when the name looks like a class (capitalised), else None."""
-    if isinstance(node, ast.Name) and node.id[:1].isupper():
+    """`Cls` or `module.Cls` when the name looks like a class (capitalised, private ones included), else None."""
+    if isinstance(node, ast.Name) and _looks_like_class(node.id):
         return node.id
-    if isinstance(node, ast.Attribute) and node.attr[:1].isupper() and isinstance(node.value, ast.Name):
+    if isinstance(node, ast.Attribute) and _looks_like_class(node.attr) and isinstance(node.value, ast.Name):
         return f"{node.value.id}.{node.attr}"
     return None
 
@@ -574,7 +579,7 @@ def _typed_calls(tree: ast.Module) -> list[tuple[str, str, str]]:
             if isinstance(recv, ast.Name) and recv.id in ("self", "cls") and enclosing:
                 cls = "self:" + enclosing  # ODSF-313: resolved on the enclosing class, then its bases
             elif isinstance(recv, ast.Name):
-                cls = env.get(recv.id) or (recv.id if recv.id[:1].isupper() else None)  # `Cls.static()` too
+                cls = env.get(recv.id) or (recv.id if _looks_like_class(recv.id) else None)  # `Cls.static()` too
             elif isinstance(recv, ast.Attribute) and isinstance(recv.value, ast.Name) and recv.value.id == "self":
                 cls = self_types.get(recv.attr)
             elif isinstance(recv, ast.Call):
