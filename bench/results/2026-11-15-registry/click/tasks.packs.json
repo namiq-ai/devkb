@@ -27,6 +27,66 @@
   }
  },
  {
+  "id": "click-WIDE-option",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `option` (defined in src/click/decorators.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "examples/aliases/aliases.py",
+    "examples/completion/completion.py",
+    "examples/complex/complex/cli.py",
+    "examples/imagepipe/imagepipe.py",
+    "examples/naval/naval.py",
+    "examples/repo/repo.py",
+    "examples/termui/termui.py",
+    "examples/validation/validation.py",
+    "src/click/decorators.py",
+    "tests/test_abort_interrupt.py",
+    "tests/test_arguments.py",
+    "tests/test_basic.py",
+    "tests/test_chain.py",
+    "tests/test_commands.py",
+    "tests/test_context.py",
+    "tests/test_defaults.py",
+    "tests/test_formatting.py",
+    "tests/test_normalization.py",
+    "tests/test_options.py",
+    "tests/test_shell_completion.py",
+    "tests/test_stream_lifecycle.py",
+    "tests/test_termui.py",
+    "tests/test_testing.py",
+    "tests/typing/typing_options.py",
+    "tests/typing/typing_simple_example.py"
+   ],
+   "test_files": [
+    "tests/test_abort_interrupt.py",
+    "tests/test_arguments.py",
+    "tests/test_basic.py",
+    "tests/test_chain.py",
+    "tests/test_commands.py",
+    "tests/test_context.py",
+    "tests/test_defaults.py",
+    "tests/test_formatting.py",
+    "tests/test_normalization.py",
+    "tests/test_options.py",
+    "tests/test_shell_completion.py",
+    "tests/test_stream_lifecycle.py",
+    "tests/test_termui.py",
+    "tests/test_testing.py",
+    "tests/typing/typing_options.py",
+    "tests/typing/typing_simple_example.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/click/decorators.py::option`\n\nBuilt from the dev-process graph at commit `e38188e9e2`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/click/decorators.py:348: def option(`.\n\n## Files with a direct caller (25, tests included)\n- `examples/aliases/aliases.py` (+1 more) \u2014 `examples/aliases/aliases.py:139: (def alias)`\n- `examples/completion/completion.py` \u2014 `examples/completion/completion.py:14: (def ls)`\n- `examples/complex/complex/cli.py` \u2014 `examples/complex/complex/cli.py:56: (def cli)`\n- `examples/imagepipe/imagepipe.py` (+8 more) \u2014 `examples/imagepipe/imagepipe.py:212: (def blur_cmd)`\n- `examples/naval/naval.py` (+1 more) \u2014 `examples/naval/naval.py:62: (def mine_set)`\n- `examples/repo/repo.py` (+4 more) \u2014 `examples/repo/repo.py:44: (def cli)`\n- `examples/termui/termui.py` \u2014 `examples/termui/termui.py:38: (def progress)`\n- `examples/validation/validation.py` \u2014 `examples/validation/validation.py:34: (def cli)`\n- `src/click/decorators.py` (+4 more) \u2014 `src/click/decorators.py:397: return option(*param_decls, **kwargs)`\n- `tests/test_abort_interrupt.py` (+1 more) \u2014 `tests/test_abort_interrupt.py:57: @click.option(\"--name\", prompt=\"Name\")`\n- `tests/test_arguments.py` (+13 more) \u2014 `tests/test_arguments.py:664: @click.option(\"--count\", default=1, help=\"number of greetings\")`\n- `tests/test_basic.py` (+40 more) \u2014 `tests/test_basic.py:344: @click.option(\"--flag\", type=bool)`\n- `tests/test_chain.py` (+4 more) \u2014 `tests/test_chain.py:74: @click.option(\"--format\")`\n- `tests/test_commands.py` (+24 more) \u2014 `tests/test_commands.py:617: @click.option(\"+p\", is_flag=True)`\n- `tests/test_context.py` (+7 more) \u2014 `tests/test_context.py:237: @click.option(\"--my-opt\")`\n- `tests/test_defaults.py` (+32 more) \u2014 `tests/test_defaults.py:29: @click.option(\"--foo\", default=default, type=type)`\n- `tests/test_formatting.py` (+2 more) \u2014 `tests/test_formatting.py:303: option(foo)`\n- `tests/test_normalization.py` (+3 more) \u2014 `tests/test_normalization.py:20: @click.option(`\n- `tests/test_options.py` (+162 more) \u2014 `tests/test_options.py:1420: @click.option(\"--warnings/--no-warnings\", \" /-W\", default=True)`\n- `tests/test_shell_completion.py` (+1 more) \u2014 `tests/test_shell_completion.py:584: @click.option(`\n- `tests/test_stream_lifecycle.py` (+1 more) \u2014 `tests/test_stream_lifecycle.py:213: @click.option(\"--name\", prompt=\"Your name\")`\n- `tests/test_termui.py` (+20 more) \u2014 `tests/test_termui.py:259: @click.option(`\n- `tests/test_testing.py` (+7 more) \u2014 `tests/test_testing.py:441: @click.option(\"--foo\", default=\"bar\")`\n- `tests/typing/typing_options.py` \u2014 `tests/typing/typing_options.py:11: (def hello)`\n- `tests/typing/typing_simple_example.py` \u2014 `tests/typing/typing_simple_example.py:11: (def hello)`\n\n## Test files among them (16)\n- `tests/test_abort_interrupt.py`\n- `tests/test_arguments.py`\n- `tests/test_basic.py`\n- `tests/test_chain.py`\n- `tests/test_commands.py`\n- `tests/test_context.py`\n- `tests/test_defaults.py`\n- `tests/test_formatting.py`\n- `tests/test_normalization.py`\n- `tests/test_options.py`\n- `tests/test_shell_completion.py`\n- `tests/test_stream_lifecycle.py`\n- `tests/test_termui.py`\n- `tests/test_testing.py`\n- `tests/typing/typing_options.py`\n- `tests/typing/typing_simple_example.py`\n\n## Coverage\n**Incomplete: 1 call site(s) under this name could not be attributed.** They are in files already listed above; check those files' other calls under this name.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "option",
+   "role": "",
+   "path": "src/click/decorators.py"
+  }
+ },
+ {
   "id": "click-WIDE-term_len",
   "kind": "refactor",
   "skill": "devkb-refactor",
@@ -51,27 +111,137 @@
   }
  },
  {
-  "id": "click-WIDE-_split_opt",
+  "id": "click-WIDE-help_option",
   "kind": "refactor",
   "skill": "devkb-refactor",
-  "prompt": "You will change the signature of `_split_opt` (defined in src/click/parser.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "prompt": "You will change the signature of `help_option` (defined in src/click/decorators.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
   "truth": {
    "caller_files": [
     "src/click/core.py",
-    "src/click/formatting.py",
-    "src/click/parser.py",
-    "tests/test_options.py"
+    "tests/test_context.py",
+    "tests/test_formatting.py",
+    "tests/test_options.py",
+    "tests/typing/typing_help_option.py"
    ],
    "test_files": [
-    "tests/test_options.py"
+    "tests/test_context.py",
+    "tests/test_formatting.py",
+    "tests/test_options.py",
+    "tests/typing/typing_help_option.py"
    ]
   },
-  "pack": "# Graph pack: changing the signature of `src/click/parser.py::_split_opt`\n\nBuilt from the dev-process graph at commit `e38188e9e2`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/click/parser.py:111: def _split_opt(opt: str) -> tuple[str, str]:`.\n\n## Files with a direct caller (4, tests included)\n- `src/click/core.py` (+3 more) \u2014 `src/click/core.py:2132: if _split_opt(cmd_name)[0]:`\n- `src/click/formatting.py` \u2014 `src/click/formatting.py:321: prefix = _split_opt(opt)[0]`\n- `src/click/parser.py` (+1 more) \u2014 `src/click/parser.py:142: prefix, value = _split_opt(opt)`\n- `tests/test_options.py` \u2014 `tests/test_options.py:117: assert _split_opt(opt.spec)[1].replace(\"-\", \"_\").lower() == opt.name`\n\n## Test files among them (1)\n- `tests/test_options.py`\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack": "# Graph pack: changing the signature of `src/click/decorators.py::help_option`\n\nBuilt from the dev-process graph at commit `e38188e9e2`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/click/decorators.py:597: def help_option(*param_decls: str, **kwargs: t.Any) -> t.Callable[[FC], FC]:`.\n\n## Files with a direct caller (5, tests included)\n- `src/click/core.py` \u2014 `src/click/core.py:1245: help_option(*help_option_names, _HELP_OPTION_STORAGE_NAME)(self)`\n- `tests/test_context.py` (+1 more) \u2014 `tests/test_context.py:485: @help_option()`\n- `tests/test_formatting.py` (+1 more) \u2014 `tests/test_formatting.py:322: @click.help_option()`\n- `tests/test_options.py` (+1 more) \u2014 `tests/test_options.py:1397: @click.help_option(*name_specs, **option_attrs)`\n- `tests/typing/typing_help_option.py` \u2014 `tests/typing/typing_help_option.py:8: (def hello)`\n\n## Test files among them (4)\n- `tests/test_context.py`\n- `tests/test_formatting.py`\n- `tests/test_options.py`\n- `tests/typing/typing_help_option.py`\n\n(The defining file `src/click/decorators.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
   "pack_inputs": {
    "kind": "refactor",
-   "name": "_split_opt",
+   "name": "help_option",
    "role": "",
-   "path": "src/click/parser.py"
+   "path": "src/click/decorators.py"
+  }
+ },
+ {
+  "id": "click-WIDE-make_pass_decorator",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `make_pass_decorator` (defined in src/click/decorators.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "examples/aliases/aliases.py",
+    "examples/complex/complex/cli.py",
+    "examples/repo/repo.py",
+    "tests/test_context.py"
+   ],
+   "test_files": [
+    "tests/test_context.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/click/decorators.py::make_pass_decorator`\n\nBuilt from the dev-process graph at commit `e38188e9e2`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/click/decorators.py:47: def make_pass_decorator(`.\n\n## Files with a direct caller (4, tests included)\n- `examples/aliases/aliases.py` \u2014 called at module level, outside any function\n- `examples/complex/complex/cli.py` \u2014 called at module level, outside any function\n- `examples/repo/repo.py` \u2014 called at module level, outside any function\n- `tests/test_context.py` (+4 more) \u2014 `tests/test_context.py:22: pass_foo = click.make_pass_decorator(Foo, ensure=True)`\n\n## Test files among them (1)\n- `tests/test_context.py`\n\n(The defining file `src/click/decorators.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "make_pass_decorator",
+   "role": "",
+   "path": "src/click/decorators.py"
+  }
+ },
+ {
+  "id": "click-WIDE-confirm",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `confirm` (defined in src/click/termui.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/click/core.py",
+    "tests/test_utils/test_confirm.py",
+    "tests/test_utils/test_echo.py",
+    "tests/test_utils/test_prompt.py"
+   ],
+   "test_files": [
+    "tests/test_utils/test_confirm.py",
+    "tests/test_utils/test_echo.py",
+    "tests/test_utils/test_prompt.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/click/termui.py::confirm`\n\nBuilt from the dev-process graph at commit `e38188e9e2`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/click/termui.py:289: def confirm(`.\n\n## Files with a direct caller (4, tests included)\n- `src/click/core.py` \u2014 `src/click/core.py:3710: return confirm(self.prompt, default)`\n- `tests/test_utils/test_confirm.py` (+2 more) \u2014 `tests/test_utils/test_confirm.py:7: if click.confirm(\"Foo\"):`\n- `tests/test_utils/test_echo.py` \u2014 `tests/test_utils/test_echo.py:134: click.confirm(\"Prompt to stdin\")`\n- `tests/test_utils/test_prompt.py` \u2014 `tests/test_utils/test_prompt.py:71: (def test_full_prompt_passed_to_readline)`\n\n## Test files among them (3)\n- `tests/test_utils/test_confirm.py`\n- `tests/test_utils/test_echo.py`\n- `tests/test_utils/test_prompt.py`\n\n(The defining file `src/click/termui.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "confirm",
+   "role": "",
+   "path": "src/click/termui.py"
+  }
+ },
+ {
+  "id": "click-WIDE-prompt",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `prompt` (defined in src/click/termui.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "src/click/core.py",
+    "tests/test_termui.py",
+    "tests/test_utils/test_echo.py",
+    "tests/test_utils/test_prompt.py",
+    "tests/typing/typing_path.py",
+    "tests/typing/typing_prompt.py"
+   ],
+   "test_files": [
+    "tests/test_termui.py",
+    "tests/test_utils/test_echo.py",
+    "tests/test_utils/test_prompt.py",
+    "tests/typing/typing_path.py",
+    "tests/typing/typing_prompt.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/click/termui.py::prompt`\n\nBuilt from the dev-process graph at commit `e38188e9e2`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/click/termui.py:168: def prompt(`.\n\n## Files with a direct caller (6, tests included)\n- `src/click/core.py` \u2014 `src/click/core.py:3718: return prompt(`\n- `tests/test_termui.py` (+1 more) \u2014 `tests/test_termui.py:1959: \"\"\"``click.prompt(..., err=True)`` routes its error message to`\n- `tests/test_utils/test_echo.py` \u2014 `tests/test_utils/test_echo.py:108: click.prompt(\"Prompt to stdin\")`\n- `tests/test_utils/test_prompt.py` (+6 more) \u2014 `tests/test_utils/test_prompt.py:71: (def test_full_prompt_passed_to_readline)`\n- `tests/typing/typing_path.py` \u2014 called at module level, outside any function\n- `tests/typing/typing_prompt.py` \u2014 called at module level, outside any function\n\n## Test files among them (5)\n- `tests/test_termui.py`\n- `tests/test_utils/test_echo.py`\n- `tests/test_utils/test_prompt.py`\n- `tests/typing/typing_path.py`\n- `tests/typing/typing_prompt.py`\n\n(The defining file `src/click/termui.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "prompt",
+   "role": "",
+   "path": "src/click/termui.py"
+  }
+ },
+ {
+  "id": "click-WIDE-echo_via_pager",
+  "kind": "refactor",
+  "skill": "devkb-refactor",
+  "prompt": "You will change the signature of `echo_via_pager` (defined in src/click/termui.py). Before editing, scope the change: list every file that contains a direct caller (tests included), and the test files among them. Answer with one JSON object: {\"caller_files\": [...], \"test_files\": [...]}.",
+  "truth": {
+   "caller_files": [
+    "examples/termui/termui.py",
+    "tests/test_termui.py",
+    "tests/test_testing.py",
+    "tests/test_utils/test_echo_via_pager.py"
+   ],
+   "test_files": [
+    "tests/test_termui.py",
+    "tests/test_testing.py",
+    "tests/test_utils/test_echo_via_pager.py"
+   ]
+  },
+  "pack": "# Graph pack: changing the signature of `src/click/termui.py::echo_via_pager`\n\nBuilt from the dev-process graph at commit `e38188e9e2`. None of the files below has changed since; the line numbers are current.\n\nDefined at `src/click/termui.py:367: def echo_via_pager(`.\n\n## Files with a direct caller (4, tests included)\n- `examples/termui/termui.py` \u2014 `examples/termui/termui.py:28: click.echo_via_pager(\"\\n\".join(lines))`\n- `tests/test_termui.py` (+7 more) \u2014 `tests/test_termui.py:1192: click.echo_via_pager(\"hello\")`\n- `tests/test_testing.py` (+1 more) \u2014 `tests/test_testing.py:307: click.echo_via_pager(\"Hello, Click!\")`\n- `tests/test_utils/test_echo_via_pager.py` (+2 more) \u2014 `tests/test_utils/test_echo_via_pager.py:176: click.echo_via_pager(test_input)`\n\n## Test files among them (3)\n- `tests/test_termui.py`\n- `tests/test_testing.py`\n- `tests/test_utils/test_echo_via_pager.py`\n\n(The defining file `src/click/termui.py` is not counted as a caller.)\n\n## Coverage\n**Complete.** Every call site under these names was attributed to its target; nothing else calls them.\n\n---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the answer is incomplete.",
+  "pack_inputs": {
+   "kind": "refactor",
+   "name": "echo_via_pager",
+   "role": "",
+   "path": "src/click/termui.py"
   }
  }
 ]
