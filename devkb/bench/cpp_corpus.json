@@ -1,5 +1,5 @@
 {
-  "comment": "Pins for the C/C++ corpus check (ADR-DEVKB-008 \u00a77). Clones are shallow, go to DEVKB_CPP_CORPUS (default ~/.cache/devkb/cpp-corpus) and are refused unless HEAD is the pinned commit. Recall floors are QA's first measurement minus 0.02; floors move up only. First measurement: devkb/bench/cpp_corpus_first_measurement.json.",
+  "comment": "Pins for the C/C++ corpus check (ADR-DEVKB-008 \u00a77). Clones are shallow, go to DEVKB_CPP_CORPUS (default ~/.cache/devkb/cpp-corpus) and are refused unless HEAD is the pinned commit. Recall floors are QA's first measurement minus 0.02; floors move up only. First measurement: devkb/bench/cpp_corpus_first_measurement.json. ADR-DEVKB-009: `by_language` floors are QA's first per-language measurement minus 0.02 (precision 0.95); `by_source.extern-c` is the precision floor of the `extern-c` edges. First per-language measurement, 2026-11-16 (regex truth, `devkb.bench.cpp_truth`): cJSON c R 0.9677; fmt c 1.0 / cpp 0.60; leveldb c 1.0 / cpp 0.569; autoas c 0.8202 / cpp 0.65; zephyr c 0.8058 / cpp 0.5714.",
   "reference_machine": {
     "cpu": "12 logical cores, x86_64 Linux 7.0 (as run by the author; QA must restate the reference machine)",
     "disk": "local NVMe-class",
@@ -35,23 +35,84 @@
   "floors": {
     "cJSON": {
       "precision": 0.95,
-      "recall": 0.95
+      "recall": 0.95,
+      "by_language": {
+        "c": {
+          "precision": 0.95,
+          "recall": 0.9477
+        }
+      }
     },
     "fmt": {
       "precision": 0.95,
-      "recall": 0.62
+      "recall": 0.62,
+      "by_language": {
+        "c": {
+          "precision": 0.95,
+          "recall": 0.98
+        },
+        "cpp": {
+          "precision": 0.95,
+          "recall": 0.58
+        }
+      }
     },
     "leveldb": {
       "precision": 0.95,
-      "recall": 0.78
+      "recall": 0.78,
+      "by_language": {
+        "c": {
+          "precision": 0.95,
+          "recall": 0.98
+        },
+        "cpp": {
+          "precision": 0.95,
+          "recall": 0.549
+        }
+      },
+      "by_source": {
+        "extern-c": {
+          "precision": 0.95
+        }
+      }
     },
     "autoas": {
       "precision": 0.95,
-      "recall": 0.96
+      "recall": 0.96,
+      "by_language": {
+        "c": {
+          "precision": 0.95,
+          "recall": 0.8002
+        },
+        "cpp": {
+          "precision": 0.95,
+          "recall": 0.63
+        }
+      },
+      "by_source": {
+        "extern-c": {
+          "precision": 0.95
+        }
+      }
     },
     "zephyr": {
       "precision": 0.95,
-      "recall": 0.94
+      "recall": 0.94,
+      "by_language": {
+        "c": {
+          "precision": 0.95,
+          "recall": 0.7858
+        },
+        "cpp": {
+          "precision": 0.95,
+          "recall": 0.5514
+        }
+      },
+      "by_source": {
+        "extern-c": {
+          "precision": 0.95
+        }
+      }
     }
   },
   "dependency_exemptions": {

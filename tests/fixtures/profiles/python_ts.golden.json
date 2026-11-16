@@ -1,0 +1,243 @@
+{
+ "edges": [
+  {
+   "from_uid": "devkb:symbol:672318389d615840",
+   "properties": {
+    "confidence": 0.7,
+    "evidence_ref": "app.py::main calls Store",
+    "source": "ast-cross-file-import"
+   },
+   "to_uid": "devkb:symbol:3296d3e69c891911",
+   "verb": "CALLS"
+  },
+  {
+   "from_uid": "devkb:symbol:672318389d615840",
+   "properties": {
+    "confidence": 0.6,
+    "evidence_ref": "app.py::main calls save on a Store",
+    "source": "ast-typed-receiver"
+   },
+   "to_uid": "devkb:symbol:13c511fff6d7f2f5",
+   "verb": "CALLS"
+  },
+  {
+   "from_uid": "devkb:symbol:672318389d615840",
+   "properties": {
+    "confidence": 0.7,
+    "evidence_ref": "app.py::main calls load",
+    "source": "ast-cross-file-import"
+   },
+   "to_uid": "devkb:symbol:740a7ff7b99537c7",
+   "verb": "CALLS"
+  },
+  {
+   "from_uid": "devkb:symbol:13c511fff6d7f2f5",
+   "properties": {
+    "confidence": 0.8,
+    "evidence_ref": "src/store.py::Store.save calls helper",
+    "source": "ast-same-file"
+   },
+   "to_uid": "devkb:symbol:526aac1f773fb5b1",
+   "verb": "CALLS"
+  },
+  {
+   "from_uid": "devkb:symbol:526aac1f773fb5b1",
+   "properties": {
+    "confidence": 0.8,
+    "evidence_ref": "src/store.py::helper calls load",
+    "source": "ast-same-file"
+   },
+   "to_uid": "devkb:symbol:740a7ff7b99537c7",
+   "verb": "CALLS"
+  },
+  {
+   "from_uid": "devkb:symbol:672318389d615840",
+   "properties": {
+    "confidence": 1.0,
+    "evidence_ref": "app.py:4",
+    "source": "ast"
+   },
+   "to_uid": "devkb:file:22308064bf9fdd85",
+   "verb": "DEFINED_IN"
+  },
+  {
+   "from_uid": "devkb:symbol:cc9f4cff608abba8",
+   "properties": {
+    "confidence": 1.0,
+    "evidence_ref": "src/calc.ts:4",
+    "source": "ast-ts"
+   },
+   "to_uid": "devkb:file:20aa09f6b1075fbc",
+   "verb": "DEFINED_IN"
+  },
+  {
+   "from_uid": "devkb:symbol:00f4b0b4c79d4c93",
+   "properties": {
+    "confidence": 1.0,
+    "evidence_ref": "src/calc.ts:1",
+    "source": "ast-ts"
+   },
+   "to_uid": "devkb:file:20aa09f6b1075fbc",
+   "verb": "DEFINED_IN"
+  },
+  {
+   "from_uid": "devkb:symbol:3296d3e69c891911",
+   "properties": {
+    "confidence": 1.0,
+    "evidence_ref": "src/store.py:10",
+    "source": "ast"
+   },
+   "to_uid": "devkb:file:e46d8c203f043c6a",
+   "verb": "DEFINED_IN"
+  },
+  {
+   "from_uid": "devkb:symbol:13c511fff6d7f2f5",
+   "properties": {
+    "confidence": 1.0,
+    "evidence_ref": "src/store.py:11",
+    "source": "ast"
+   },
+   "to_uid": "devkb:file:e46d8c203f043c6a",
+   "verb": "DEFINED_IN"
+  },
+  {
+   "from_uid": "devkb:symbol:526aac1f773fb5b1",
+   "properties": {
+    "confidence": 1.0,
+    "evidence_ref": "src/store.py:15",
+    "source": "ast"
+   },
+   "to_uid": "devkb:file:e46d8c203f043c6a",
+   "verb": "DEFINED_IN"
+  },
+  {
+   "from_uid": "devkb:symbol:740a7ff7b99537c7",
+   "properties": {
+    "confidence": 1.0,
+    "evidence_ref": "src/store.py:4",
+    "source": "ast"
+   },
+   "to_uid": "devkb:file:e46d8c203f043c6a",
+   "verb": "DEFINED_IN"
+  }
+ ],
+ "nodes": [
+  {
+   "natural_key": "app.py",
+   "properties": {},
+   "source": "ast",
+   "type": "File",
+   "uid": "devkb:file:22308064bf9fdd85"
+  },
+  {
+   "natural_key": "app.py::main",
+   "properties": {
+    "complexity": 0,
+    "decorators": [],
+    "is_public": true,
+    "kind": "function",
+    "line_end": 7,
+    "line_start": 4
+   },
+   "source": "ast",
+   "type": "Symbol",
+   "uid": "devkb:symbol:672318389d615840"
+  },
+  {
+   "natural_key": "src/store.py",
+   "properties": {},
+   "source": "ast",
+   "type": "File",
+   "uid": "devkb:file:e46d8c203f043c6a"
+  },
+  {
+   "natural_key": "src/store.py::load",
+   "properties": {
+    "complexity": 0,
+    "decorators": [],
+    "docstring_summary": "Read a file.",
+    "is_public": true,
+    "kind": "function",
+    "line_end": 7,
+    "line_start": 4
+   },
+   "source": "ast",
+   "type": "Symbol",
+   "uid": "devkb:symbol:740a7ff7b99537c7"
+  },
+  {
+   "natural_key": "src/store.py::Store",
+   "properties": {
+    "decorators": [],
+    "is_public": true,
+    "kind": "class",
+    "line_end": 12,
+    "line_start": 10
+   },
+   "source": "ast",
+   "type": "Symbol",
+   "uid": "devkb:symbol:3296d3e69c891911"
+  },
+  {
+   "natural_key": "src/store.py::Store.save",
+   "properties": {
+    "complexity": 0,
+    "decorators": [],
+    "is_public": true,
+    "kind": "method",
+    "line_end": 12,
+    "line_start": 11
+   },
+   "source": "ast",
+   "type": "Symbol",
+   "uid": "devkb:symbol:13c511fff6d7f2f5"
+  },
+  {
+   "natural_key": "src/store.py::helper",
+   "properties": {
+    "complexity": 0,
+    "decorators": [],
+    "is_public": true,
+    "kind": "function",
+    "line_end": 16,
+    "line_start": 15
+   },
+   "source": "ast",
+   "type": "Symbol",
+   "uid": "devkb:symbol:526aac1f773fb5b1"
+  },
+  {
+   "natural_key": "src/calc.ts",
+   "properties": {},
+   "source": "ast-ts",
+   "type": "File",
+   "uid": "devkb:file:20aa09f6b1075fbc"
+  },
+  {
+   "natural_key": "src/calc.ts::add",
+   "properties": {
+    "decorators": [],
+    "is_public": true,
+    "kind": "function",
+    "line_end": 1,
+    "line_start": 1
+   },
+   "source": "ast-ts",
+   "type": "Symbol",
+   "uid": "devkb:symbol:00f4b0b4c79d4c93"
+  },
+  {
+   "natural_key": "src/calc.ts::Calc",
+   "properties": {
+    "decorators": [],
+    "is_public": true,
+    "kind": "class",
+    "line_end": 4,
+    "line_start": 4
+   },
+   "source": "ast-ts",
+   "type": "Symbol",
+   "uid": "devkb:symbol:cc9f4cff608abba8"
+  }
+ ]
+}

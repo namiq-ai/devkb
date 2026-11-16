@@ -28,17 +28,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from devkb.cpp_symbols import CXX_LIMITS_TEXT, is_cxx_path  # noqa: E402
+from devkb.cpp_symbols import C_LIMITS_TEXT, CXX_LIMITS_TEXT, is_cxx_path  # noqa: E402
 from devkb.process_api import ProcessAPI, is_test_path  # noqa: E402
 from devkb.service import GraphNotBuilt  # noqa: E402
 
 MAX_DEPTH = 6
 
 
+_KIND_TEXT = {"c-abi": "C ABI", "jni": "JNI", "pyinit": "Python module init", "pyc-method": "CPython method table",
+              "pybind11": "pybind11"}
 _REASON_TEXT = {
     "dynamic-dispatch": "a virtual or overriding method may be reached through a base-class pointer",
     "implicit-call": "constructors, destructors and operators are invoked without a call in the text",
     "unread-file": "a C/C++ file was too large or unreadable and was not read",
+    "indirect-reference": "the function's name is used without a call (a function-pointer table, an ops struct, a callback), so who calls it is not visible",
+    "dynamic-import": "a name is looked up at run time (`dlsym`, `getattr` on a library handle), so the callee is not known",
+    "ambiguous-abi-name": "two definitions bear the same name on the wire, so a call from another language cannot be attributed",
+    "lambda-binding": "a pybind11 binding to a lambda has no function in the source to link to",
 }
 
 
@@ -75,6 +81,11 @@ class Packer:
         lines = self._file(rel)
         return f"{rel}:{start}: {lines[start - 1].strip()[:140] if 0 < start <= len(lines) else ''}"
 
+    def _via(self, caller: int, callee: int) -> str:
+        """` (via ctypes)` when the call crosses a language: the mechanism that linked it (ADR-DEVKB-009)."""
+        m = self.idx.boundary.get((caller, callee))
+        return f" (via {m})" if m else ""
+
     def _name(self, sym: int) -> str:
         return self.api._key(sym).split("::")[-1].split(".")[-1]
 
@@ -98,12 +109,26 @@ class Packer:
             if c.get("unattributed_errors"):
                 text += (f" {c['unattributed_errors']} `throw` or `assert` site(s) in these functions carry a message that is "
                          "not a literal, so their text is not searchable.")
-            text += "\n\n" + CXX_LIMITS_TEXT
+            profile = c.get("profile")
+            text += "\n\n" + (C_LIMITS_TEXT if profile == "c" else CXX_LIMITS_TEXT if profile == "cpp" else C_LIMITS_TEXT + " " + CXX_LIMITS_TEXT)
         return text
 
     def _coverage_text(self, syms: list[int], shown: set[str]) -> str:
         c = self.api._coverage(syms, shown)
         cxx = any(is_cxx_path(self.api._key(x).split("::")[0]) for x in syms)
+        text = self._coverage_core(c, syms, shown, cxx)
+        if c.get("qualified"):
+            kinds = c["boundary_kind"] if isinstance(c["boundary_kind"], list) else [c["boundary_kind"]]
+            note = f"Callers may exist in languages not read ({', '.join(_KIND_TEXT.get(k, k) for k in kinds)})."
+            if c.get("dynamic_lookups"):
+                note += (f" {c['dynamic_lookups']} dynamic lookup(s) in this repository (`dlsym`, `getattr` on a library handle) "
+                         "are not followed, so a caller may hide behind one.")
+            if c.get("complete"):
+                return f"**Complete for the languages read** ({', '.join(c['languages_read'])}). {note}"
+            return f"{text} {note}"
+        return text
+
+    def _coverage_core(self, c: dict, syms: list[int], shown: set[str], cxx: bool) -> str:
         if c.get("complete"):
             if cxx:
                 return ("**Complete.** Every call site of these names visible in the source text was attributed to a target; "
@@ -272,7 +297,7 @@ class Packer:
         for i, outside in used[:cap]:
             f, c = next(iter(sorted(outside.items())))
             more = f" and {len(outside) - 1} more file(s)" if len(outside) > 1 else ""
-            out.append(f"- `{self.api._key(i).split('::', 1)[1]}` — {len(outside)} file(s): `{self.call_site(c, self._name(i))}`{more}")
+            out.append(f"- `{self.api._key(i).split('::', 1)[1]}` — {len(outside)} file(s): `{self.call_site(c, self._name(i))}`{self._via(c, i)}{more}")
         if len(used) > cap:
             out.append(f"- … {len(used) - cap} more")
         if not used:
@@ -281,8 +306,26 @@ class Packer:
         out += ["", f"## Tests that exercise it, directly or through callers ({len(tests)})"] + self._tests_section(tests)
         if tests:
             out += ["", f"Run: `{self._run(list(tests))}`"]
+        out += self._config_section(path, syms)
         out += ["", "## Coverage", self.coverage(sorted(syms, key=self.api._key)[:40], set(dependants) | set(tests))]
         return "\n".join(out + ["", HOW_TO_USE])
+
+    def _config_section(self, path: str, syms: list[int]) -> list[str]:
+        """Kconfig and devicetree options this file reads, each with the file that declares it (ADR-DEVKB-009 §3)."""
+        file_i = self.idx.by_key.get(("File", path))
+        reads: dict[int, None] = {}
+        for src in ([file_i] if file_i is not None else []) + list(syms):
+            for k in self.idx.out.get("READS", {}).get(src, []):
+                if self.api._key(k).startswith(("kconfig:", "devicetree:")):
+                    reads[k] = None
+        if not reads:
+            return []
+        rows = []
+        for k in sorted(reads, key=self.api._key):
+            decl = sorted(self.api._key(f) for f in self.idx.sources("DECLARES", k))
+            rows.append(f"- `{self.api._key(k)}` — " + (f"declared in {', '.join(f'`{d}`' for d in decl[:3])}" if decl
+                                                       else "not declared in the repository"))
+        return ["", f"## Configuration it reads ({len(rows)})"] + rows[:40] + ([f"- … {len(rows) - 40} more"] if len(rows) > 40 else [])
 
     def refactor(self, name: str, role: str = "", path: str = "") -> str:
         i, err = self.api._resolve(f"{path}::{name}" if path and "::" not in name else name)
@@ -311,7 +354,7 @@ class Packer:
                 continue
             c = by_file[f][0]
             more = f" (+{len(by_file[f]) - 1} more)" if len(by_file[f]) > 1 else ""
-            out.append(f"- `{f}`{more} — `{self.call_site(c, self._name(i))}`")
+            out.append(f"- `{f}`{more} — `{self.call_site(c, self._name(i))}`{self._via(c, i)}")
         out += ["", f"## Test files among them ({len(tests)})"] + ([f"- `{f}`" for f in tests] or ["- none"])
         if role:
             out += ["", f"## Files role {role} must not edit ({len(blocked)})"] + ([f"- `{f}`" for f in blocked] or ["- none"])

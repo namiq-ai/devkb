@@ -29,3 +29,8 @@ paper:
 .PHONY: cpp-check
 cpp-check:
 	$(PY) -m devkb.bench.cpp_corpus $(ARGS)
+
+# Cross-language boundaries on the labelled fixtures (ADR-DEVKB-009, SPEC-DKB-002 story 7): offline, precision 1.0 per mechanism.
+.PHONY: boundaries-check
+boundaries-check:
+	$(PY) bench/boundaries/check.py tests/fixtures/boundaries

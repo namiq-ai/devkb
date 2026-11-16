@@ -31,7 +31,15 @@ CXX_LIMITS_TEXT = (
     "C/C++ limits: no preprocessor expansion (macro-generated definitions and calls are not seen), "
     "no overload resolution (overloads share one node), no type inference (a call through `auto`, an alias or an "
     "untyped receiver is not attributed); vendored and generated paths are not read; error-return codes "
-    "(`return -EINVAL`, `return Status::Corruption(...)`) are not attributed."
+    "(`return -EINVAL`, `return Status::Corruption(...)`) are not attributed; pybind11 class bindings (`py::class_`) are not read."
+)
+
+# The C profile's limits (ADR-DEVKB-009 §2): what a C pack cannot see. No overloads or receivers here: C has none.
+C_LIMITS_TEXT = (
+    "C limits: no preprocessor expansion (macro-generated definitions and calls are not seen); a call through a "
+    "function pointer or an ops table is not followed (the table entry is an indirect reference); a `static` function "
+    "is resolved inside its own file only; vendored and generated paths are not read; error-return codes "
+    "(`return -EINVAL`) are not attributed."
 )
 
 _SKIP_SEGMENTS = {"third_party", "thirdparty", "vendor", "external", "build"}
@@ -87,6 +95,8 @@ class Masked:
     defines: list[tuple[str, str, int]]   # (name, body, 1-based line)
     includes: list[str]
     line_starts: list[int] = field(default_factory=list)
+    guards: list[tuple[int, int]] = field(default_factory=list)   # spans inside `#ifdef __cplusplus` (SPEC-DKB-002 R2)
+    conds: list[tuple[int, str]] = field(default_factory=list)    # (line, text) of `#if/#ifdef/#ifndef/#elif` (SPEC-DKB-002 R15)
 
     def line(self, offset: int) -> int:
         return bisect_right(self.line_starts, offset)
@@ -114,6 +124,9 @@ def mask_source(text: str) -> Masked:
     defines: list[tuple[str, str, int]] = []
     spans: list[tuple[int, int]] = []
     stack: list[bool] = []
+    gstack: list[int | None] = []      # per open conditional: start of a positive `__cplusplus` region, else None
+    guards: list[tuple[int, int]] = []
+    conds: list[tuple[int, str]] = []
     skipping: int | None = None
     skip_from = 0
     line_starts = [0] + [m.end() for m in re.finditer("\n", code)]
@@ -123,9 +136,19 @@ def mask_source(text: str) -> Masked:
         word = kw.group(1) if kw else ""
         if word in ("if", "ifdef", "ifndef"):
             stack.append(True)
+            positive = word != "ifndef" and re.search(r"\b__cplusplus\b", body) and not re.search(r"!\s*(?:defined\b|\()?\s*\(?\s*__cplusplus", body)
+            gstack.append(d.end() if positive else None)
+        if word in ("if", "ifdef", "ifndef", "elif") and skipping is None:
+            conds.append((bisect_right(line_starts, d.start()), body))
+        if word in ("if", "ifdef", "ifndef"):
             if skipping is None and word == "if" and re.match(r"\s*#\s*if\s*\(?\s*0\s*\)?\s*$", body.split("\\\n")[0]):
                 skipping, skip_from = len(stack), d.end()
         elif word in ("else", "elif", "endif"):
+            if gstack and gstack[-1] is not None:
+                guards.append((gstack[-1], d.start()))
+                gstack[-1] = None
+            if word == "endif" and gstack:
+                gstack.pop()
             if skipping == len(stack):
                 spans.append((skip_from, d.start()))
                 skipping = None
@@ -158,17 +181,111 @@ def mask_source(text: str) -> Masked:
             pos = b
         out.append(code[pos:])
         code = "".join(out)
-    return Masked(code, literals, defines, includes, line_starts)
+    code = _blank_dialect(code)
+    return Masked(code, literals, defines, includes, line_starts, guards, conds)
+
+
+# ── dialect keywords (ADR-DEVKB-009 §2, SPEC-DKB-002 R6): the one closed table, read without any compiler ─────────
+# A keyword is added only with a line of tests/fixtures/profiles/dialect that uses it (a test fails for an unused entry).
+DIALECT_KEYWORDS = ("__interrupt", "__irq", "__ramfunc", "__root", "__weak", "__packed")    # plain words: blanked
+DIALECT_PAREN = ("__attribute__", "__asm__", "__svc")                                        # word + (...): blanked whole
+_DIALECT_WORD = re.compile(r"\b(?:" + "|".join(DIALECT_KEYWORDS) + r")\b")
+_DIALECT_PAREN = re.compile(r"\b(?:" + "|".join(DIALECT_PAREN) + r")\b(?:\s*(?:volatile|__volatile__)\b)?\s*(?=\()")
+
+
+def _blank_dialect(code: str) -> str:
+    """Blank dialect keywords (same length, same newlines) so they are read neither as a call nor as part of a definition."""
+    if "__" not in code:
+        return code
+    code = _DIALECT_WORD.sub(lambda m: " " * len(m.group(0)), code)
+    out: list[str] = []
+    pos = 0
+    for m in _DIALECT_PAREN.finditer(code):
+        if m.start() < pos:
+            continue
+        close = _match_close(code, m.end(), "(", ")")
+        if close is None:
+            continue
+        out.append(code[pos:m.start()])
+        out.append(_blank(code[m.start():close + 1]))
+        pos = close + 1
+    if not out:
+        return code
+    out.append(code[pos:])
+    return "".join(out)
+
+
+# ── language of a file (ADR-DEVKB-009 §2) ──────────────────────────────────────
+_CPP_CONSTRUCT = re.compile(
+    r"\bnamespace\s*(?:[A-Za-z_][\w:]*|\{)|\btemplate\s*<"
+    r"|\b(?:class|struct)\b[^;{}()]*\{[^{}]*?\b(?:public|private|protected)\s*:(?!:)"
+)
+_EXTERN_STR = re.compile(r"\bextern\s*\"")
+CPP_EXTS = (".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx")
+
+
+def header_facts(m: Masked) -> tuple[bool, bool]:
+    """(a C++ construct outside every `#ifdef __cplusplus` region, an `extern "C"` inside one): the two facts a `.h` is read by."""
+    code = m.code
+    guarded = False
+    for a, b in m.guards:
+        for em in _EXTERN_STR.finditer(code, a, b):
+            if m.literals.get(em.end() - 1) == "C":
+                guarded = True
+    outside = code
+    for a, b in m.guards:
+        outside = outside[:a] + _blank(outside[a:b]) + outside[b:]
+    construct = bool(_CPP_CONSTRUCT.search(outside))
+    if not construct:
+        construct = any(m.literals.get(em.end() - 1) == "C" for em in _EXTERN_STR.finditer(outside))
+    return construct, guarded
+
+
+_CALL_NAME = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
+
+
+def c_declared_names(m: Masked) -> set[str]:
+    """Names written before a `(` inside an `extern "C" { ... }` block of a guarded header: functions declared with C linkage.
+
+    A C++ file that includes the header and defines one of them without writing `extern "C"` again still defines a
+    function with C linkage (the first declaration decides); the scanner reads this to label such a definition."""
+    names: set[str] = set()
+    for a, b in m.guards:
+        for em in _EXTERN_STR.finditer(m.code, a, b):
+            if m.literals.get(em.end() - 1) != "C":
+                continue
+            after = em.end() + len(m.literals[em.end() - 1]) + 1        # past the closing quote of "C"
+            brace = re.compile(r"\s*\{").match(m.code, after)
+            end = _match_close(m.code, brace.end() - 1, "{", "}") if brace else None
+            names.update(_CALL_NAME.findall(m.code, after, end if end is not None else b))
+    return names
+
+
+def header_language(facts: tuple[bool, bool], includer_languages: list[str]) -> tuple[str, bool]:
+    """`.h` rule of ADR-DEVKB-009 §2: (language, consumed_by_cpp). Constructs first, then the guard, then the includers, else C."""
+    construct, guarded = facts
+    if construct:
+        return "cpp", False
+    if guarded:
+        return "c", True
+    if includer_languages and all(lang == "cpp" for lang in includer_languages):
+        return "cpp", False
+    return "c", False
+
+
+def file_language(path: str, m: Masked | None = None, includer_languages: list[str] | None = None) -> tuple[str, bool]:
+    """(language, consumed_by_cpp) of one path; a `.h` needs its masked text, and its includers when known."""
+    low = path.lower()
+    if low.endswith(".c"):
+        return "c", False
+    if low.endswith(".h"):
+        return header_language(header_facts(m) if m is not None else (False, False), includer_languages or [])
+    return "cpp", False
 
 
 def looks_cpp(code: str, path: str) -> bool:
-    """`.c` is C; a `.h` is C++ when its masked text holds `class`, `namespace`, `template` or `::` (ADR §2)."""
-    low = path.lower()
-    if low.endswith(".c"):
-        return False
-    if low.endswith(".h"):
-        return bool(re.search(r"\b(?:class|namespace|template)\b|::", code))
-    return True
+    """Kept for callers of the old name: the language of `path` read alone, without includers."""
+    return file_language(path, mask_source(code) if path.lower().endswith(".h") else None)[0] == "cpp"
 
 
 # ── records ────────────────────────────────────────────────────────────────────
@@ -192,6 +309,7 @@ class Def:
     macro_line: int = 0
     body: tuple[int, int] = (0, 0)  # offsets inside the masked code
     index: int = -1
+    linkage: str = ""               # functions and methods: internal | c | cpp (ADR-DEVKB-009 §2)
 
 
 @dataclass
@@ -239,6 +357,11 @@ class FileRecords:
     includes: list[str]
     masked: Masked | None = None
     scanner: object = None
+    consumed_by_cpp: bool = False        # a C header with an `extern "C"` guard (ADR-DEVKB-009 §2)
+
+    @property
+    def language(self) -> str:
+        return "cpp" if self.cpp else "c"
 
 
 # ── scanning helpers ───────────────────────────────────────────────────────────
@@ -393,10 +516,10 @@ def _norm_name(text: str) -> str:
 
 # ── the file scanner ───────────────────────────────────────────────────────────
 class _Scope:
-    __slots__ = ("ns", "anon", "classes", "access", "rec")
+    __slots__ = ("ns", "anon", "classes", "access", "rec", "ext_c")
 
-    def __init__(self, ns=(), anon=False, classes=(), access="public", rec=None):
-        self.ns, self.anon, self.classes, self.access, self.rec = ns, anon, classes, access, rec
+    def __init__(self, ns=(), anon=False, classes=(), access="public", rec=None, ext_c=False):
+        self.ns, self.anon, self.classes, self.access, self.rec, self.ext_c = ns, anon, classes, access, rec, ext_c
 
 
 class _Scanner:
@@ -444,15 +567,15 @@ class _Scanner:
                 nm = re.match(r"\s*(" + _IDENT + r"(?:\s*::\s*" + _IDENT + r")*)", rest)
                 if nm:
                     chain = tuple(re.sub(r"\s", "", nm.group(1)).split("::"))
-                    self.walk(k + 1, close, _Scope(scope.ns + chain, scope.anon, scope.classes, "public", None))
+                    self.walk(k + 1, close, _Scope(scope.ns + chain, scope.anon, scope.classes, "public", None, scope.ext_c))
                 else:
-                    self.walk(k + 1, close, _Scope(scope.ns, True, scope.classes, "public", None))
+                    self.walk(k + 1, close, _Scope(scope.ns, True, scope.classes, "public", None, scope.ext_c))
                 return None
             if _EXTERN_C.match(h):
-                self.walk(k + 1, close, scope)
+                self.walk(k + 1, close, _Scope(scope.ns, scope.anon, scope.classes, scope.access, scope.rec, True))
                 return None
         elif _EXTERN_C.match(h):
-            self.walk(k + 1, close, scope)
+            self.walk(k + 1, close, _Scope(scope.ns, scope.anon, scope.classes, scope.access, scope.rec, True))
             return None
         hs = re.sub(r"^\s*extern\s*\"[^\"]*\"", lambda mm: " " * len(mm.group(0)), h)
         em = _ENUM_HEAD.match(hs) if "enum" in hs else None
@@ -585,8 +708,16 @@ class _Scanner:
         virtual = "virtual" in words or bool(re.search(r"\b(?:override|final)\b", trailing))
         pub = not is_static and not scope.anon and (not in_class or scope.access == "public")
         line = self.m.line(start + m.start("last"))
+        if chain:
+            linkage = "cpp"
+        elif is_static or scope.anon:
+            linkage = "internal"
+        elif not self.cpp:
+            linkage = "c"
+        else:
+            linkage = "c" if scope.ext_c or re.match(r"\s*extern\s*\"", h) else "cpp"
         d = self.add_def(Def(qn, short, kind, "::".join(scope.ns), line, self.m.line(close), is_public=pub, virtual=virtual,
-                             class_chain=chain, body=(k + 1, close)))
+                             class_chain=chain, body=(k + 1, close), linkage=linkage))
         if in_class and scope.rec is not None and not qparts:
             scope.rec.methods[short] = scope.rec.methods.get(short, False) or virtual
         d.params = hs[open_i + 1:cl]
@@ -803,16 +934,18 @@ _IND = re.compile(
 )
 
 
-def extract_file(path: str, text: str) -> FileRecords:
+def extract_file(path: str, text: str, includer_languages: list[str] | None = None) -> FileRecords:
+    """Pass 1 for one file. `includer_languages` (languages of the files that include a `.h`) is the header rule's input."""
     m = mask_source(text)
-    cpp = looks_cpp(m.code, path)
+    language, consumed = file_language(path, m, includer_languages)
+    cpp = language == "cpp"
     ns_seen = set(re.findall(r"\bnamespace\s+(" + _IDENT + r")", m.code)) if cpp else set()
     sc = _Scanner(path, m, cpp, ns_seen)
     sc.walk(0, len(m.code), _Scope())
     # Pass 1 ends here: definitions only. Calls, errors and indirect references need the repository's symbol names
     # (a call to a name no symbol bears is never linked or counted), so `scan_bodies` runs once all files are read.
     return FileRecords(path, cpp, sc.defs, sc.classes, sc.calls, sc.errors, [],
-                       {n for n, _b, _l in m.defines}, ns_seen, m.includes, m, sc)
+                       {n for n, _b, _l in m.defines}, ns_seen, m.includes, m, sc, consumed)
 
 
 def scan_bodies(rec: FileRecords, names: set[str], function_names: set[str]) -> None:
@@ -878,6 +1011,7 @@ class Symbolic:
     class_chain: tuple[str, ...]
     def_indexes: list[int]
     framework: str | None = None
+    linkage: str = ""
 
 
 def finalize(rec: FileRecords) -> dict[str, Symbolic]:
@@ -896,13 +1030,15 @@ def finalize(rec: FileRecords) -> dict[str, Symbolic]:
         s = out.get(qn)
         if s is None:
             out[qn] = Symbolic(qn, d.short, d.kind, d.namespace, d.line, d.line_end, [d.line], d.is_public, d.virtual,
-                               d.class_chain, [d.index])
+                               d.class_chain, [d.index], None, d.linkage)
         else:
             s.overload_lines.append(d.line)
             s.line_end = max(s.line_end, d.line_end)
             s.is_public = s.is_public or d.is_public
             s.virtual = s.virtual or d.virtual
             s.def_indexes.append(d.index)
+            if d.linkage == "c" or not s.linkage:
+                s.linkage = d.linkage
     for s in out.values():
         s.overload_lines = sorted(set(s.overload_lines))[:20]
     return out

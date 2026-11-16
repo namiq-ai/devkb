@@ -1,0 +1,53 @@
+{
+  "comment": "Labelled truth for the boundary fixtures (SPEC-DKB-002 story 7). Synthetic code only. A negative case must produce no edge from its caller; a dynamic case must be counted as a dynamic-import reason on its symbol.",
+  "fixtures": {
+    "defect": {
+      "edges": [{"caller": "use.py::go", "callee": "calc.c::add_ints", "mechanism": "ctypes"}],
+      "negatives": []
+    },
+    "extern_c": {
+      "edges": [
+        {"caller": "app.cpp::app_main", "callee": "lib.c::lib_add", "mechanism": "extern-c"},
+        {"caller": "main.c::c_main", "callee": "cb.cpp::cb_run", "mechanism": "extern-c"}
+      ],
+      "negatives": [
+        {"kind": "ambiguous", "caller": "dupcaller.c::use_dup"},
+        {"kind": "not-a-c-name", "caller": "app2.cpp::probe"},
+        {"kind": "not-in-repository", "caller": "app2.cpp::probe"},
+        {"kind": "dynamic", "symbol": "plug.c::by_variable"},
+        {"kind": "dynamic", "symbol": "plug.c::by_literal"}
+      ]
+    },
+    "ctypes": {
+      "edges": [
+        {"caller": "use.py::go", "callee": "calc.c::add_ints", "mechanism": "ctypes"},
+        {"caller": "use_cffi.py::go_cffi", "callee": "calc.c::add_ints", "mechanism": "cffi"}
+      ],
+      "negatives": [
+        {"kind": "not-a-handle", "caller": "use.py::not_a_handle"},
+        {"kind": "static", "caller": "use.py::hidden"},
+        {"kind": "ambiguous", "caller": "use.py::twice"},
+        {"kind": "dynamic", "symbol": "use.py::dynamic"}
+      ]
+    },
+    "pyc_api": {
+      "edges": [
+        {"caller": "use.py::go", "callee": "calc.c::py_add", "mechanism": "pyc-api"},
+        {"caller": "alias.py::go_alias", "callee": "calc.c::py_add", "mechanism": "pyc-api"},
+        {"caller": "from_import.py::go_from", "callee": "calc.c::py_add", "mechanism": "pyc-api"}
+      ],
+      "negatives": [
+        {"kind": "not-in-repository", "caller": "other.py::go_other"},
+        {"kind": "ambiguous", "caller": "twice.py::go_twice"}
+      ]
+    },
+    "pybind11": {
+      "edges": [{"caller": "use.py::go", "callee": "bind.cpp::add_ints", "mechanism": "pybind11"}],
+      "negatives": [
+        {"kind": "lambda", "caller": "use.py::go_sub"},
+        {"kind": "overload", "caller": "use.py::go_mul"},
+        {"kind": "ambiguous", "caller": "use.py::go_twin"}
+      ]
+    }
+  }
+}

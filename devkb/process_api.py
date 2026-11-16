@@ -360,6 +360,7 @@ class ProcessAPI:
         extra = {"unattributed_errors": unattributed} if unattributed else {}
         if reasons:
             extra["reasons"] = sorted(reasons)
+        extra.update(self._profile_and_boundary(syms))
         if not n and not reasons:
             return {"complete": True, **extra}
         shared = max(names.values(), default=1)
@@ -370,6 +371,43 @@ class ProcessAPI:
         return {"complete": False, "unresolved_calls": n, "search_files": list(files)[:10], **more, **extra,
                 **({"shared_by": shared, "note": f"{shared} symbols share this name; most of these calls may be to the others"}
                    if shared > 3 else {})}
+
+    _EXT_LANG = {".py": "python", ".ts": "typescript", ".tsx": "typescript", ".cs": "csharp"}
+
+    def languages_read(self) -> list[str]:
+        """Languages of the source files the build read (ADR-DEVKB-009 §3): what a qualified Complete is complete for."""
+        cached = self.__dict__.get("_languages_read")
+        if cached is None:
+            found: set[str] = set()
+            for (typ, key), i in self.idx.by_key.items():
+                if typ != "File":
+                    continue
+                lang = self.idx.props[i].get("language") or self._EXT_LANG.get(Path(key).suffix.lower())
+                if lang:
+                    found.add(lang)
+            cached = self.__dict__["_languages_read"] = sorted(found)
+        return cached
+
+    def dynamic_lookups(self) -> int:
+        """Symbols that look a name up at run time (`dlsym`, `getattr(lib, name)`): calls into C the graph cannot follow."""
+        cached = self.__dict__.get("_dynamic_lookups")
+        if cached is None:
+            cached = self.__dict__["_dynamic_lookups"] = sum(
+                1 for props in self.idx.props if "dynamic-import" in (props.get("incomplete_reasons") or ()))
+        return cached
+
+    def _profile_and_boundary(self, syms) -> dict:
+        """ADR-DEVKB-009 §2-3: which language profile judged these symbols, and the qualifier of an exported one."""
+        langs = {self.idx.props[s].get("language") for s in syms} - {None}
+        out: dict = {}
+        if langs:
+            out["profile"] = next(iter(langs)) if len(langs) == 1 else "mixed"
+        kinds = sorted({self.idx.props[s].get("boundary_kind") for s in syms if self.idx.props[s].get("abi_exported")} - {None})
+        if kinds:
+            out.update(qualified=True, languages_read=self.languages_read(), boundary_kind=kinds[0] if len(kinds) == 1 else kinds)
+            if self.dynamic_lookups():
+                out["dynamic_lookups"] = self.dynamic_lookups()
+        return out
 
     def callers(self, symbol: str, depth: int = 1, limit: int = 25) -> dict:
         i, err = self._resolve(symbol)
