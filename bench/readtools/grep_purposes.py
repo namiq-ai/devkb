@@ -9,7 +9,8 @@ same weighted by the model calls still to come, since text that stays in context
 import collections, json, re, sys
 
 E, NODES = sys.argv[1], sys.argv[2]
-RUNS = ["plain-r1", "plain-r2", "devkb-r1", "devkb-r2", "devkb-r3", "devkb-r4", "spec-r1", "spec-r2", "impl"]
+import os
+RUNS = os.environ["RUNS"].split(",") if os.environ.get("RUNS") else ["plain-r1", "plain-r2", "devkb-r1", "devkb-r2", "devkb-r3", "devkb-r4", "spec-r1", "spec-r2", "impl"]
 names = set()
 for l in open(NODES):
     n = json.loads(l)
