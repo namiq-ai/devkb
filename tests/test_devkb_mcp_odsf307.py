@@ -83,3 +83,22 @@ def test_pack_is_a_tool_in_dev_and_lean_pack_and_lean_stays_as_measured():
     assert "pack" in module.TOOLSETS["dev"] and "pack" in module.TOOLSETS["lean-pack"]
     assert module.TOOLSETS["lean"] == ["rca_trace", "impact", "callers", "tests_for", "tests_to_run", "review_pack", "config"]
     assert module.TOOLSETS["lean-pack"] == module.TOOLSETS["lean"] + ["pack"]
+
+
+def test_the_server_starts_without_a_graph_and_says_how_to_get_one(tmp_path):
+    pytest.importorskip("mcp.server.fastmcp")
+    import asyncio
+    import importlib.util
+    import subprocess as sp
+
+    sp.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "a.py").write_text("def f():\n    return 1\n")
+    spec = importlib.util.spec_from_file_location("devkb_mcp_server", _REPO_ROOT / "devkb" / "mcp_server.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    server = module.build(module._LazyAPI(str(tmp_path), None), "lean-pack")
+    out = asyncio.run(server.call_tool("callers", {"symbol": "f"}))
+    text = (out[0] if isinstance(out, tuple) else out)[0].text
+    assert "no graph yet" in text
+    out = asyncio.run(server.call_tool("pack", {"kind": "refactor", "subject": "f"}))
+    assert "No devkb graph yet" in (out[0] if isinstance(out, tuple) else out)[0].text
