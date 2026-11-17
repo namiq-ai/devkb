@@ -158,6 +158,7 @@ class ProcessAPI:
             self.ctx = resolve(code)
         self.root: Path = Path(os.environ["DEVKB_REPO"]).resolve() if os.environ.get("DEVKB_REPO") else self.ctx.repo_root
         store = devkb_dir or (Path(os.environ["DEVKB_DIR"]) if os.environ.get("DEVKB_DIR") else self.ctx.devkb_dir)
+        self.store: Path = store
         self.idx: CompactIndex = load_index(self.ctx.code, self.root, store, use_cache)
         self.stale = Staleness(self.root, self.idx.git_head)
         self.testpaths = pytest_testpaths(self.root)   # where the project says its tests are (#71)

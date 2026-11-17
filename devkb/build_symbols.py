@@ -939,8 +939,19 @@ class _Visitor(ast.NodeVisitor):
         self.stack.pop()
 
 
+SKIP_PRINT_LIMIT = 20   # warnings printed one per file; past this, extract() prints a count
+
+
+def _skip(path: Path, reason: str, skipped: dict[str, str] | None) -> None:
+    """A Python file the build cannot read: named on stderr and recorded, never dropped silently (#106, #109)."""
+    if skipped is not None:
+        skipped[str(path)] = reason
+    if skipped is None or len(skipped) <= SKIP_PRINT_LIMIT:
+        print(f"devkb: skipped {path}: {reason}", file=sys.stderr)
+
+
 def _parse_python_file(
-    path: Path,
+    path: Path, skipped: dict[str, str] | None = None,
 ) -> tuple[list[dict], list[tuple[str, str | None, str]], list[tuple[str, str | None]],
            list[tuple[str, str, str]], str | None, list[tuple[str, str, str | None, int | None]],
            list[tuple[str, str, str | None]], list[tuple[str, str]], str, list[str],
@@ -949,12 +960,20 @@ def _parse_python_file(
     """Returns (symbols, calls, imports, routes, module_docstring, raises,
     logs, middleware_registrations, router_prefix, daemon_entries,
     import_descriptors, path_literals, typed_calls, value_refs) for one file. An unparseable file yields all-empty,
-    not a crash."""
+    not a crash, and is named (and recorded in `skipped`, path -> reason)."""
+    empty = [], [], [], [], None, [], [], [], "", [], [], [], [], []
     try:
         text = path.read_text(errors="replace")
         tree = ast.parse(text, filename=str(path))
-    except (SyntaxError, OSError, ValueError, RecursionError):
-        return [], [], [], [], None, [], [], [], "", [], [], [], [], []
+    except SyntaxError as exc:
+        _skip(path, f"syntax error at line {exc.lineno}: {exc.msg}", skipped)
+        return empty
+    except RecursionError:      # Python 3.11's parser overflows where 3.12's tree walk would (#109)
+        _skip(path, "nested too deeply to read", skipped)
+        return empty
+    except (OSError, ValueError) as exc:
+        _skip(path, f"could not be read ({type(exc).__name__})", skipped)
+        return empty
     try:
         v = _Visitor()
         v.router_prefix = _router_prefix(tree)
@@ -966,8 +985,8 @@ def _parse_python_file(
                 _py_literals(tree), _typed_calls(tree), _safe_value_refs(tree))
     except RecursionError:
         # a generated file nested deeper than the tree walks can follow: skip it, say so, keep the rest (#106)
-        print(f"devkb: skipped {path}: nested too deeply to read", file=sys.stderr)
-        return [], [], [], [], None, [], [], [], "", [], [], [], [], []
+        _skip(path, "nested too deeply to read", skipped)
+        return empty
 
 
 def _safe_value_refs(tree: ast.Module) -> list[tuple[str, str | None, str, int]]:
@@ -1000,9 +1019,10 @@ def extract(repo_root: Path) -> DevKBGraph:
     reexports: dict[str, dict[str, tuple[str, str]]] = {}  # every parsed file's from-imports, symbols or not
     module_callers: dict[str, set[str]] = {}  # called Symbol -> files that call it outside any function
 
+    skipped: dict[str, str] = {}   # absolute path -> why the file could not be read (#109)
     for rel_path in _list_python_files(repo_root):
         (symbols, calls, imports, routes, module_doc, raises, logs, middleware, router_prefix,
-         daemon_entries, descriptors, literals, typed_calls, value_refs) = _parse_python_file(repo_root / rel_path)
+         daemon_entries, descriptors, literals, typed_calls, value_refs) = _parse_python_file(repo_root / rel_path, skipped)
         # `@typing.overload` signatures and the implementation share one qualified name, and so one Symbol key: keep
         # one entry (the last, the implementation), or every lookup by name sees several and resolves nothing
         # (click's `prompt`: all 13 call sites were left unattributed).
@@ -1404,6 +1424,11 @@ def extract(repo_root: Path) -> DevKBGraph:
     # ── ADR-DEVKB-008: C and C++ (one call; every C/C++ rule lives in cpp_graph) ──
     cpp_graph.add_to_graph(g, repo_root, _error_signature_key)
 
+    if skipped:   # named in the manifest, so `outline` can say why a file has no symbols (#109)
+        g.meta["skipped_files"] = {Path(p).relative_to(repo_root).as_posix(): why for p, why in sorted(skipped.items())}
+        if len(skipped) > SKIP_PRINT_LIMIT:
+            print(f"devkb: skipped {len(skipped)} Python files in all ({len(skipped) - SKIP_PRINT_LIMIT} not listed "
+                  f"above); every one is named in symbols-manifest.json", file=sys.stderr)
     return g
 
 
@@ -1475,6 +1500,7 @@ def build(code: str) -> tuple[DevKBGraph, Path]:
         "node_count": graph.node_count(),
         "edge_count": graph.edge_count(),
         **({"cpp": graph.meta["cpp"]} if graph.meta.get("cpp") else {}),
+        **({"skipped_files": graph.meta["skipped_files"]} if graph.meta.get("skipped_files") else {}),
     }, indent=2))
 
     return graph, ctx.devkb_dir
