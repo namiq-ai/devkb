@@ -234,7 +234,9 @@ def server_command_problem() -> str | None:
     if found is None:
         return f"the `devkb` command is not on your PATH, so agents cannot start the devkb server; {fix}"
     in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
-    if in_venv and Path(found).resolve().is_relative_to(Path(sys.prefix).resolve()):
+    # The directory on PATH decides, not where the command's symlink leads: `uv tool install` and pipx put a shim on
+    # PATH that resolves into the tool's own venv, which is where init then runs from (#73).
+    if in_venv and Path(found).parent.resolve().is_relative_to(Path(sys.prefix).resolve()):
         return (f"`devkb` is only on the PATH of this virtual environment ({sys.prefix}); agents start it from your "
                 f"normal PATH and will not find it; {fix}")
     return None
