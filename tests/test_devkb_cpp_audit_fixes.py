@@ -102,3 +102,22 @@ def test_a_function_defined_inside_an_else_branch_keeps_its_body(tmp_path):
     syms, edges = S.symbols(g), S.calls(g)
     assert syms["a.c::w"].props["line_end"] == 15
     assert ("a.c::w", "a.c::out") in edges and ("a.c::after", "a.c::b") in edges and ("a.c::w", "a.c::b") not in edges
+
+
+# #65: a declaration whose type ends in `>`, `*` or `&` is not a call to a function of the declared name
+def test_template_pointer_and_reference_declarations_are_not_calls(tmp_path):
+    src = ("int compute(int x) { return x; }\nint other(int x) { return x; }\nint third(int x) { return x; }\n"
+           "void f() {\n  std::vector<int> compute(3);\n  Foo *other(nullptr);\n  const ns::Bar<T>& third(x);\n}\n")
+    g = S.build(tmp_path, {"a.cpp": src})
+    assert not [e for e in S.calls(g) if e[0] == "a.cpp::f"]
+
+
+def test_comparisons_and_arithmetic_before_a_call_are_still_calls(tmp_path):
+    src = ("int compute(int x) { return x; }\n"
+           "int f(int a) {\n  int x = a * compute(3);\n  if (a > compute(1)) x++;\n  x = a & compute(2);\n  return x;\n}\n"
+           "int g(int a) {\n  return a * compute(3);\n}\n")
+    g = S.build(tmp_path, {"a.cpp": src})
+    assert {("a.cpp::f", "a.cpp::compute"), ("a.cpp::g", "a.cpp::compute")} <= S.calls(g)
+    r = cs.extract_file("a.cpp", src)
+    cs.scan_bodies(r, {"compute"}, {"compute"})
+    assert sorted(c.line for c in r.calls if c.name == "compute") == [3, 4, 5, 9]

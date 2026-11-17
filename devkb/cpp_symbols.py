@@ -864,6 +864,8 @@ class _Scanner:
                     word = text[j + 1:k + 1]
                     if word not in _CALL_AFTER:
                         continue  # `Foo x(1)`, `new Foo(...)`: a declaration or an implicit constructor call
+                elif prev in ">*&" and self.cpp and _DECL_PREFIX.match(text, _stmt_start(text, k), a):
+                    continue      # `std::vector<int> x(3)`, `Foo *x(p)`, `const Bar& x(y)`: a declaration, not a call (#65)
                 form, qualifier, recv, rl = "bare", "", None, None
             self.calls.append(Call(d.index, name, form, qualifier, recv, rl, line_of(lo + cm.start())))
         self.errors_in(d, lo, text)
@@ -926,6 +928,18 @@ class _Scanner:
 
 
 _CALL_RE = re.compile(r"([A-Za-z_]\w*)\s*(?:<[\w\s:,*]*(?:<[\w\s:,*]*>[\w\s:,*]*)*>\s*)?\(")
+
+
+# a statement prefix that is nothing but a type, so the name after it is declared, not called (#65): `std::vector<int>`, `Foo *`
+_DECL_PREFIX = re.compile(
+    r"(?!.*<<)\s*(?:(?:const|static|volatile|constexpr|thread_local|mutable|register|unsigned|signed|struct|class|union|enum|typename)\s+)*"
+    r"(?!(?:" + "|".join(sorted(_CALL_AFTER)) + r")\b)(?:::\s*)?" + _IDENT + r"\s*(?:" + _TARGS + r")?"
+    r"(?:\s*::\s*" + _IDENT + r"\s*(?:" + _TARGS + r")?)*\s*(?:const\b\s*)?(?:[*&]\s*(?:const\b\s*)?)*\Z", re.S)
+
+
+def _stmt_start(text: str, k: int) -> int:
+    """Offset just after the last `;`, `{` or `}` before `k` (the start of the statement `k` is in)."""
+    return max(text.rfind(";", 0, k), text.rfind("{", 0, k), text.rfind("}", 0, k)) + 1
 
 
 def _qualifier_before(text: str, a: int) -> tuple[str, int]:
