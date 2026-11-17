@@ -935,3 +935,30 @@ public class Use { public void Go(int failure) { Policy.HandleResult(failure).Or
 ''')
     line = "public class Use { public void Go(int failure) { Policy.HandleResult(failure).Or<Exception>(); } }"
     assert {"OV.Policy.HandleResult", "OV.Builder.Or"} <= got[line]
+
+
+def test_var_from_a_call_chain_ending_in_a_property_and_switch_arm_patterns(tmp_path):
+    got = _sites(tmp_path, "VP.cs", '''namespace VP;
+public class Complex { public void Touch() { } }
+public class Prop { public Complex ComplexType { get; } }
+public class Model { public Prop Single() => null; }
+public class Expr { }
+public class ArrayExpr : Expr { }
+public class Use
+{
+    public void Visit(ArrayExpr e) { }
+    public object Go(Model model, Expr x)
+    {
+        var complexType = model.Single().ComplexType;
+        complexType.Touch();
+        return x switch
+        {
+            ArrayExpr a => Pick(a),
+            _ => null
+        };
+    }
+    public object Pick(ArrayExpr a) => a;
+}
+''')
+    assert got["complexType.Touch();"] == {"VP.Complex.Touch"}
+    assert got["ArrayExpr a => Pick(a),"] == {"VP.Use.Pick"}

@@ -592,7 +592,9 @@ _GENERIC_TYPE_END = re.compile(r"(?<![\w.])([A-Za-z_][\w.]*)\s*<([^<>()]*(?:<[^<
 _DECL_CAST = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*\(\s*([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\[\])?)\s*\)\s*[\w@(]")
 _DECL_AS = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*[^;=]*?\bas\s+([A-Za-z_][\w.]*(?:<[^;()]*?>)?)\s*;")
 _DECL_PATTERN = re.compile(r"\b(?:is|case)\s+(?:not\s+)?([A-Za-z_][\w.]*(?:<[^()]*?>)?)\s+@?([A-Za-z_]\w*)\b"
-                           r"(?!\s*[(<.])")
+                           r"(?!\s*[(<.])"
+                           # a switch-expression arm: `ArrayConstantExpression e => ...` (EF Core), `T e when c => ...`
+                           r"|(?:^|[{,(]\s*)([A-Z][\w.]*(?:<[^()]*?>)?)\s+@?([a-z_]\w*)\s*(?:when\b[^=]*)?=>", re.M)
 
 
 def _member_head(h: str) -> dict | None:
@@ -1321,8 +1323,10 @@ def _locals_full(body: str) -> dict[str, tuple]:
         t = _pt(text) if text else None
         if t and t[0] not in _NOT_CALL and m.group("n") not in _NOT_CALL:
             out.setdefault(m.group("n"), t)
-    for rx, ti, ni in ((_DECL_CAST, 2, 1), (_DECL_AS, 2, 1), (_DECL_PATTERN, 1, 2)):
+    for rx, ti, ni in ((_DECL_CAST, 2, 1), (_DECL_AS, 2, 1), (_DECL_PATTERN, 1, 2), (_DECL_PATTERN, 3, 4)):
         for m in rx.finditer(body):
+            if not m.group(ti):
+                continue
             t = _pt(m.group(ti))
             if t and t[0] not in _NOT_CALL and t[0] not in ("null", "var", "not", "and", "or") \
                     and m.group(ni) not in _NOT_CALL:
@@ -1363,6 +1367,7 @@ def _why(m, before: str, parts: list[str], rtype: str | None, name: str, index: 
 
 _VAR_BEFORE = re.compile(r"\bvar\s+@?(?P<n>[A-Za-z_]\w*)\s*=\s*(?P<aw>await\s+)?$")
 _FOREACH_BEFORE = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[A-Za-z_]\w*)\s+in\s+(?P<aw>await\s+)?$")
+_AFTER_PROPS = re.compile(r"^((?:\s*!?\s*\??\.\s*@?[A-Za-z_]\w*)+)\s*;")
 _AFTER_STMT = re.compile(r"^\s*(?:\.\s*ConfigureAwait\s*\([^()]*\)\s*)?;")
 _AFTER_FOREACH = re.compile(r"^\s*(?:\.\s*ConfigureAwait\s*\([^()]*\)\s*)?\)")
 _FOREACH_LOCAL = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[A-Za-z_]\w*)\s+in\s+@?(?P<src>[A-Za-z_]\w*)\s*\)")
@@ -1433,7 +1438,9 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             correct edge (found on EF Core)."""
             for a0, b0, x, t, declared in reversed(scoped):
                 if x == nm and a0 <= pos < b0:
-                    return t if (declared or not declared_only) else None   # (None: untyped, still shadows)
+                    # (None: untyped, still shadows); a type parameter is its constraint here too (EF Core: the
+                    # lambda's `e` of type `TExtension : RelationalOptionsExtension`)
+                    return constrained(t) if (declared or not declared_only) else None
             if nm in types:
                 return None if declared_only and nm in inferred else constrained(types[nm])
             return constrained(index.field_full(tq, nm)) if tq else None
@@ -1751,8 +1758,11 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                 head = body[max(0, expr_start - _LOOKBACK): expr_start]
                 tail = body[a_.close + 1: a_.close + 80]
                 vm = _VAR_BEFORE.search(head)
-                if vm and _AFTER_STMT.match(tail):
+                pm = _AFTER_PROPS.match(tail) if vm and not _AFTER_STMT.match(tail) else None
+                if vm and (_AFTER_STMT.match(tail) or pm):
                     t = _unwrap(res) if vm.group("aw") else res
+                    if t and pm:                                  # `var x = a.B().C;`: the value is a property of it
+                        t = walk(t, [p_ for p_ in re.sub(r"[\s!?@]", "", pm.group(1)).split(".") if p_])
                     if t:
                         types[vm.group("n")] = t
                         inferred.add(vm.group("n"))

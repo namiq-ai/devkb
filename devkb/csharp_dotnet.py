@@ -422,3 +422,7 @@ MEMBERS.update({
     "ISetup": {"Returns", "ReturnsAsync", "Throws", "ThrowsAsync", "Callback", "CallBase", "Verifiable", "Raises"},
     "IReturnsResult": {"Callback", "Verifiable", "Raises"},
 })
+
+MEMBERS.update({"Encoding": {"GetBytes", "GetString", "GetByteCount", "GetCharCount", "GetChars", "GetMaxByteCount",
+                             "GetMaxCharCount", "GetPreamble", "GetEncoder", "GetDecoder"}})
+BASES.update({"Encoding": set()})
