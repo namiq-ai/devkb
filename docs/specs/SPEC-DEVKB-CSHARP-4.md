@@ -131,7 +131,7 @@ Acceptance criteria (from #40, plus the measured items):
 | 3 recall rises on EF Core and FluentValidation, falls on none; precision ≥ 0.98 | FluentValidation 0.841 → 0.870, Polly 0.851 → 0.866, MediatR, Jellyfin unchanged, **EF Core unchanged (0.933 → 0.933): not met**; precision 1.000 on all five. Owner's decision: release with this criterion stated unmet. On the corrected sample EF Core's base already reaches 0.933 |
 | 4 sampled added edges correct, removals explained | 82/82 added edges correct (2 + 4 × 20); every sampled removal a base error or a move to the declaration the compiler binds (`csharp-4-precision.md`) |
 | 5 random sample ≥ 19/20 | 100/100 (20 per repository) |
-| 6 agent value report on the release | `bench/exercises/csharp/DEVKB-VALUE-0.2.7.md` (run on the version installed from PyPI) |
+| 6 agent value report on the release: precision ≥ 0.85, recall ≥ 0.96 | on 0.2.7 installed from PyPI: recall 0.96 (met), **precision 0.82 (not met)**; median cost −53% against plain (0.2.6: −40%). An ablation with the read tools denied scored 0.80, so the drop is not attributable to them; with 2 runs per question it is within run-to-run variation (`bench/exercises/csharp/DEVKB-VALUE-0.2.7.md`) |
 | 7 EF Core build within 20%; verify; standard library | 164.7 s against 142 s (+16%); `make verify` passes; no dependency added |
 | 8 README and SCOPE | README's C# row rewritten |
 
