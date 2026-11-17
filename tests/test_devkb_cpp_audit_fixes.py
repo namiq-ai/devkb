@@ -173,3 +173,53 @@ def test_a_conversion_operator_and_a_parenthesised_name_keep_their_definitions()
     r = cs.extract_file("t.cpp", "struct R { operator long long() const { return 1; } };\n"
                                  "int(fileno)(int s) {\n  return s;\n}\n")
     assert [(d.qn, d.line, d.line_end) for d in r.defs] == [("R", 1, 1), ("R.long", 1, 1), ("fileno", 2, 4)]
+
+
+# #93: classes of one name in several namespaces (autoas vring::Base, vring::spmc::Base, vring::spsc::Base) are told
+# apart as C++ lookup does, from the namespace the name is written in, outward
+NS_FILES = {
+    "inc/ring/base.hpp": "namespace as { namespace ring {\nclass Base {\n public:\n  int spinLock(int* p);\n  int size();\n};\n} }\n",
+    "inc/ring/x/base.hpp": ("#include \"ring/base.hpp\"\nnamespace as { namespace ring { namespace x {\n"
+                           "class Base : public ring::Base {\n public:\n  int size();\n};\n} } }\n"),
+    "inc/ring/y/base.hpp": ("#include \"ring/base.hpp\"\nnamespace as { namespace ring { namespace y {\n"
+                           "class Base : public ring::Base {\n public:\n  int size();\n};\n} } }\n"),
+    "inc/ring/x/reader.hpp": ("#include \"ring/x/base.hpp\"\nnamespace as { namespace ring { namespace x {\n"
+                             "class Reader : public Base {\n public:\n  int put(int i);\n  void reset();\n};\n} } }\n"),
+    "inc/ring/y/reader.hpp": ("#include \"ring/y/base.hpp\"\nnamespace as { namespace ring { namespace y {\n"
+                             "class Reader : public Base {\n public:\n  int put(int i);\n  void reset();\n};\n} } }\n"),
+    "src/ring/base.cpp": ("#include \"ring/base.hpp\"\nnamespace as { namespace ring {\n"
+                          "int Base::spinLock(int* p) { return *p; }\nint Base::size() { return 1; }\n} }\n"),
+    "src/ring/x/base.cpp": "#include \"ring/x/base.hpp\"\nnamespace as { namespace ring { namespace x {\nint Base::size() { return 2; }\n} } }\n",
+    "src/ring/y/base.cpp": "#include \"ring/y/base.hpp\"\nnamespace as { namespace ring { namespace y {\nint Base::size() { return 3; }\n} } }\n",
+    "src/ring/x/reader.cpp": ("#include \"ring/x/reader.hpp\"\nnamespace as { namespace ring { namespace x {\n"
+                              "void Reader::reset() {}\n"
+                              "int Reader::put(int i) {\n  reset();\n  int n = size();\n  return spinLock(&i) + n;\n}\n} } }\n"),
+    "src/ring/y/reader.cpp": ("#include \"ring/y/reader.hpp\"\nnamespace as { namespace ring { namespace y {\n"
+                              "void Reader::reset() {}\n"
+                              "int Reader::put(int i) {\n  reset();\n  return size() + i;\n}\n} } }\n"),
+}
+
+
+def test_same_named_classes_of_different_namespaces_are_told_apart(tmp_path):
+    g = S.build(tmp_path, NS_FILES)
+    out = {}
+    for s, d in S.calls(g):
+        out.setdefault(s, set()).add(d)
+    assert out["src/ring/x/reader.cpp::Reader.put"] == {
+        "src/ring/x/reader.cpp::Reader.reset", "src/ring/x/base.cpp::Base.size", "src/ring/base.cpp::Base.spinLock"}
+    assert out["src/ring/y/reader.cpp::Reader.put"] == {"src/ring/y/reader.cpp::Reader.reset", "src/ring/y/base.cpp::Base.size"}
+
+
+def test_a_using_declaration_or_a_namespace_qualified_definition_keeps_the_name_ambiguous(tmp_path):
+    files = dict(NS_FILES)
+    # `using x::Base;` somewhere: the name may stand for another namespace's class, so no namespace tie-break for it
+    files["src/other.cpp"] = "namespace as { namespace z { using ring::x::Base; } }\n"
+    g = S.build(tmp_path, files)
+    put = {d for s, d in S.calls(g) if s == "src/ring/x/reader.cpp::Reader.put"}
+    assert not put & {"src/ring/x/base.cpp::Base.size", "src/ring/y/base.cpp::Base.size", "src/ring/base.cpp::Base.spinLock"}
+    files = dict(NS_FILES)
+    # `x::Reader::put` written from `ring`: the class's namespace is not read from the qualifier, so it is not guessed
+    files["src/ring/x/reader.cpp"] = ("#include \"ring/x/reader.hpp\"\nnamespace as { namespace ring {\n"
+                                      "void x::Reader::reset() {}\nint x::Reader::put(int i) {\n  reset();\n  return size() + i;\n}\n} }\n")
+    g = S.build(tmp_path / "b", files)
+    assert not [e for e in S.calls(g) if e[0].startswith("src/ring/x/reader.cpp::")]

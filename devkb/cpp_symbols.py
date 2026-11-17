@@ -323,6 +323,7 @@ class Def:
     body: tuple[int, int] = (0, 0)  # offsets inside the masked code
     index: int = -1
     linkage: str = ""               # functions and methods: internal | c | cpp (ADR-DEVKB-009 §2)
+    class_ns: str | None = None     # methods: the namespace the class is looked up from; None when a qualifier named one (#93)
 
 
 @dataclass
@@ -333,6 +334,7 @@ class ClassRec:
     bases: list[str] = field(default_factory=list)
     members: dict[str, tuple[str, str] | None] = field(default_factory=dict)
     methods: dict[str, bool] = field(default_factory=dict)   # declared or defined method name -> virtual?
+    namespace: str = ""             # the enclosing namespace, `a::b` (#93)
 
 
 @dataclass
@@ -585,6 +587,8 @@ class _Scanner:
         self.classes: list[ClassRec] = []
         self.calls: list[Call] = []
         self.errors: list[ErrorSite] = []
+        self.ns_paths: set[str] = set()      # every named namespace this file opens, as `a::b` (#93)
+        self.aliases: set[str] = set()       # names a using-declaration, alias or typedef introduces (#93)
 
     # statement walker -------------------------------------------------------
     def walk(self, lo: int, hi: int, scope: _Scope) -> None:
@@ -635,6 +639,8 @@ class _Scanner:
                 nm = re.match(r"\s*(" + _IDENT + r"(?:\s*::\s*" + _IDENT + r")*)", rest)
                 if nm:
                     chain = tuple(re.sub(r"\s", "", nm.group(1)).split("::"))
+                    for i in range(1, len(chain) + 1):
+                        self.ns_paths.add("::".join(scope.ns + chain[:i]))
                     self.walk(k + 1, close, _Scope(scope.ns + chain, scope.anon, scope.classes, "public", None, scope.ext_c))
                 else:
                     self.walk(k + 1, close, _Scope(scope.ns, True, scope.classes, "public", None, scope.ext_c))
@@ -677,7 +683,7 @@ class _Scanner:
                     pos = start + hs.rfind(name, 0, len(hs) - len(bases_text)) if name in head else start + hs.find(name)
                     chain = scope.classes + (name,)
                     qn = ".".join(chain)
-                    rec = ClassRec(qn, kw, self.m.line(pos))
+                    rec = ClassRec(qn, kw, self.m.line(pos), namespace="::".join(scope.ns))
                     for b in _split_top(re.sub(r"\b(?:public|private|protected|virtual)\b", " ", re.sub(_TARGS, "", bases_text))):
                         b = re.sub(r"\s", "", b).lstrip(":")
                         if b and re.match(r"^[\w:]+$", b):
@@ -779,7 +785,9 @@ class _Scanner:
             return True
         if not self.cpp and qparts:
             return False
-        qparts = [p for p in qparts if p not in self.ns_seen and p not in scope.ns]
+        kept = [p for p in qparts if p not in self.ns_seen and p not in scope.ns]
+        class_ns = "::".join(scope.ns) if len(kept) == len(qparts) else None   # `ns::K::f`: K's namespace is not read here
+        qparts = kept
         chain = scope.classes + tuple(qparts)
         qn = ".".join(chain + (short,))
         kind = "method" if chain else "function"
@@ -798,7 +806,7 @@ class _Scanner:
         else:
             linkage = "c" if scope.ext_c or re.match(r"\s*extern\s*\"", h) else "cpp"
         d = self.add_def(Def(qn, short, kind, "::".join(scope.ns), line, self.m.line(close), is_public=pub, virtual=virtual,
-                             class_chain=chain, body=(k + 1, close), linkage=linkage))
+                             class_chain=chain, body=(k + 1, close), linkage=linkage, class_ns=class_ns))
         if in_class and scope.rec is not None and not qparts:
             scope.rec.methods[short] = scope.rec.methods.get(short, False) or virtual
         d.params = hs[open_i + 1:cl]
@@ -1029,6 +1037,12 @@ _IND = re.compile(
 )
 
 
+# `using ns::K;`, `using K = ...;`, `typedef ... K;`: a name that may stand for a class of another namespace (#93)
+_ALIAS = re.compile(r"\busing\s+(?!namespace\b)(?:typename\s+)?(?:" + _IDENT + r"\s*::\s*)+(" + _IDENT + r")\s*;|\busing\s+(" + _IDENT
+                    + r")\s*=")
+_TYPEDEF = re.compile(r"\btypedef\b[^;{}]*?\b(" + _IDENT + r")\s*(?:\[[^\]]*\]\s*)*;|\}\s*(" + _IDENT + r")\s*;")
+
+
 def extract_file(path: str, text: str, includer_languages: list[str] | None = None) -> FileRecords:
     """Pass 1 for one file. `includer_languages` (languages of the files that include a `.h`) is the header rule's input."""
     m = mask_source(text)
@@ -1037,6 +1051,8 @@ def extract_file(path: str, text: str, includer_languages: list[str] | None = No
     ns_seen = set(re.findall(r"\bnamespace\s+(" + _IDENT + r")", m.code)) if cpp else set()
     sc = _Scanner(path, m, cpp, ns_seen)
     sc.walk(0, len(m.code), _Scope())
+    if cpp:
+        sc.aliases = {a or b for a, b in _ALIAS.findall(m.code) + _TYPEDEF.findall(m.code)}
     # Pass 1 ends here: definitions only. Calls, errors and indirect references need the repository's symbol names
     # (a call to a name no symbol bears is never linked or counted), so `scan_bodies` runs once all files are read.
     return FileRecords(path, cpp, sc.defs, sc.classes, sc.calls, sc.errors, [],
@@ -1109,6 +1125,7 @@ class Symbolic:
     def_indexes: list[int]
     framework: str | None = None
     linkage: str = ""
+    class_ns: str | None = None     # see Def.class_ns; None when overloads disagree
 
 
 def finalize(rec: FileRecords) -> dict[str, Symbolic]:
@@ -1127,7 +1144,7 @@ def finalize(rec: FileRecords) -> dict[str, Symbolic]:
         s = out.get(qn)
         if s is None:
             out[qn] = Symbolic(qn, d.short, d.kind, d.namespace, d.line, d.line_end, [d.line], d.is_public, d.virtual,
-                               d.class_chain, [d.index], None, d.linkage)
+                               d.class_chain, [d.index], None, d.linkage, d.class_ns)
         else:
             s.overload_lines.append(d.line)
             s.line_end = max(s.line_end, d.line_end)
@@ -1136,6 +1153,8 @@ def finalize(rec: FileRecords) -> dict[str, Symbolic]:
             s.def_indexes.append(d.index)
             if d.linkage == "c" or not s.linkage:
                 s.linkage = d.linkage
+            if s.class_ns != d.class_ns:
+                s.class_ns = None
     for s in out.values():
         s.overload_lines = sorted(set(s.overload_lines))[:20]
     return out
