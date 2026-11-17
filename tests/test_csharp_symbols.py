@@ -995,3 +995,260 @@ public interface IRule<T, TProperty> : IRule<T> { void AddValidator(int v); }
 public class Builder<T, TProperty> { public IRule<T, TProperty> Rule { get; } public void Go() { Rule.AddValidator(1); } }
 ''', caller="Go")
     assert got["public class Builder<T, TProperty> { public IRule<T, TProperty> Rule { get; } public void Go() { Rule.AddValidator(1); } }"] == {"AR.IRule.AddValidator"}
+
+
+# ── 0.2.8 quality audit (#57-#61) ─────────────────────────────────────────────────────────────────────────────
+
+def _edges_of(tmp_path, files: dict[str, str]):
+    """(symbol names, {(caller, callee)}) from extract() over a repository of `files`."""
+    for rel, text in files.items():
+        (tmp_path / rel).write_text(text)
+    for cmd in (["init", "-q"], ["add", "-A", "-f"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+        subprocess.run(["git", *cmd], cwd=tmp_path, check=True)
+    symbols, calls = csharp_symbols.extract(tmp_path)
+    return {_short(s["key"]) for s in symbols}, {(_short(c["caller"]), _short(c["callee"])) for c in calls}
+
+
+def test_a_verbatim_string_of_one_quote_is_not_a_raw_string(tmp_path):
+    # #57: `@` and four quotes is a verbatim string holding one quote; read as a raw string it blanked the file
+    names, edges = _edges_of(tmp_path, {"V.cs": '''namespace V { class A {
+  void M() { var q = @""""; Helper(); }
+  void Helper() { }
+  void Other() { Helper(); }
+} }
+'''})
+    assert {"V.A.M", "V.A.Helper", "V.A.Other"} <= names
+    assert {("V.A.M", "V.A.Helper"), ("V.A.Other", "V.A.Helper")} <= edges
+    assert csharp_symbols.mask('x = @"""" + @"a""b"; y();').endswith("y();")
+
+
+def test_a_local_function_calls_its_sibling_local_function(tmp_path):
+    """#58: a call from one local function to a sibling (or to one of an enclosing local function) binds to it,
+    not to the type's method of the same name."""
+    _, edges = _edges_of(tmp_path, {"L.cs": '''namespace L { class A {
+  void M() {
+    int B() => 1;
+    int C() { return B(); }
+    int D() { int E() => B() + C(); return E(); }
+    C();
+  }
+  int B() => 2;
+  void N() { B(); }
+} }
+'''})
+    assert ("L.A.M.C", "L.A.M.B") in edges and ("L.A.M.C", "L.A.B") not in edges
+    assert {("L.A.M.D.E", "L.A.M.B"), ("L.A.M.D.E", "L.A.M.C"), ("L.A.M.D", "L.A.M.D.E"), ("L.A.M", "L.A.M.C")} <= edges
+    assert ("L.A.N", "L.A.B") in edges and not any(callee == "L.A.B" for caller, callee in edges if caller != "L.A.N")
+
+
+def test_identifiers_starting_with_a_non_ascii_letter_keep_it(tmp_path):
+    """#59: `Älpha` and `Ölpha` are two names; read as `[A-Za-z_]\\w*` both were keyed `lpha`."""
+    names, edges = _edges_of(tmp_path, {"U.cs": '''namespace U { class Ärger {
+  void Älpha() { }
+  void Ölpha() { }
+  void Go() { Älpha(); var é = new Ärger(); é.Ölpha(); }
+} }
+'''})
+    assert {"U.Ärger", "U.Ärger.Älpha", "U.Ärger.Ölpha"} <= names and "U.Ärger.lpha" not in names
+    assert {("U.Ärger.Go", "U.Ärger.Älpha"), ("U.Ärger.Go", "U.Ärger.Ölpha")} <= edges
+
+
+def test_extraction_stays_linear_in_unresolved_calls_to_a_common_name(tmp_path):
+    """#60: N types each define `Get()` and call `x.Get()` on receivers it cannot type. Per-file counts were rebuilt
+    per definition, and `_why` built a set of every `Get` per call site: N=3000 took ~8 s; linear, well under 1 s."""
+    import time
+    n = 3000
+    for i in range(n):
+        (tmp_path / f"C{i}.cs").write_text(f"namespace N{i} {{ class C{i} {{ public int Get() => 1; "
+                                           f"void Use(dynamic_ x) {{ x.Get(); y.Get(); z.Get(); }} }} }}\n")
+    for cmd in (["init", "-q"], ["add", "-A", "-f"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+        subprocess.run(["git", *cmd], cwd=tmp_path, check=True)
+    t = time.perf_counter()
+    symbols, _ = csharp_symbols.extract(tmp_path)
+    took = time.perf_counter() - t
+    gets = [s for s in symbols if s["name"] == "Get"]
+    assert len(gets) == n and all(s["unresolved_calls"] == n and s["unresolved_file_count"] == n for s in gets)
+    assert gets[0]["unresolved_files"] == sorted(f"C{i}.cs" for i in range(n))[:20]
+    assert took < 3.0, f"{took:.1f} s for {n} files: quadratic again"
+
+
+def test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method(tmp_path):
+    """#61: one method of 8000 lines `b.Property(x => x.P).HasColumn(y => y.Q);` (an EF Core model snapshot's shape).
+    Every lambda parameter went on one list scanned whole per lookup: ~5 s; linear, about 1 s."""
+    import time
+    lines = "\n".join(f"    b.Property(x => x.P{i}).HasColumn(y => y.Q{i});" for i in range(8000))
+    text = ("namespace N { class B { public B Property(System.Func<int,int> f) => this; "
+            "public B HasColumn(System.Func<int,int> f) => this; }\nclass A { void M(B b) {\n" + lines + "\n} } }\n")
+    t = time.perf_counter()
+    _, edges = _edges_of(tmp_path, {"A.cs": text})
+    took = time.perf_counter() - t
+    assert edges == {("N.A.M", "N.B.Property"), ("N.A.M", "N.B.HasColumn")}
+    assert took < 2.5, f"{took:.1f} s for 8000 lines: quadratic again"
+
+
+def test_a_lambda_parameter_shadows_only_within_its_lambda(tmp_path):
+    """#61 kept the lookup's meaning: the innermost (latest) lambda parameter whose span holds the position wins, and
+    outside every span the local of the same name is seen again."""
+    got = _sites(tmp_path, "S61.cs", '''namespace S61;
+public class P { public void Pm() { } }
+public class Q { public void Qm() { } }
+public class R { public void Rm() { } }
+public static class Run { public static void With(System.Action<Q> a) { } public static void Wide(System.Action<R> a) { } }
+public class Use
+{
+    public void Go(P x)
+    {
+        Run.Wide(x => { Run.With(x => x.Qm()); x.Rm(); });
+        x.Pm();
+    }
+}
+''')
+    assert got["Run.Wide(x => { Run.With(x => x.Qm()); x.Rm(); });"] >= {"S61.Q.Qm", "S61.R.Rm"}
+    assert "S61.P.Pm" not in got["Run.Wide(x => { Run.With(x => x.Qm()); x.Rm(); });"]
+    assert got["x.Pm();"] == {"S61.P.Pm"}
+
+
+
+def test_an_attribute_holding_braces_does_not_hide_the_member_after_it(tmp_path):
+    """#78: `[InlineData(new int[] { 1, 2 }, 3)]`: the attribute's `{` was read as a block at type level, so the test
+    method after it was neither a symbol nor a test and its calls were lost."""
+    text = '''namespace T78 {
+public static class Calc { public static int Sum(int[] a) => 0; }
+public class CalcTests {
+  [Theory][InlineData(new int[] { 1, 2 }, 3)] public void Sums(int[] a, int s) { Calc.Sum(a); }
+  [Fact] public void After() { Calc.Sum(null); }
+}
+[Obsolete(nameof(X), new[] { "a" })] public class Marked { public void M() { Calc.Sum(null); } }
+}
+'''
+    names, edges = _edges_of(tmp_path, {"T78.cs": text})
+    assert {"T78.CalcTests.Sums", "T78.CalcTests.After", "T78.Marked", "T78.Marked.M"} <= names
+    assert {("T78.CalcTests.Sums", "T78.Calc.Sum"), ("T78.CalcTests.After", "T78.Calc.Sum"),
+            ("T78.Marked.M", "T78.Calc.Sum")} <= edges
+    assert [n for n, _ in csharp_symbols.tests_in_text(text)] == ["After", "Sums"]
+
+
+
+def test_explicit_interface_implementations_are_recorded_with_their_calls(tmp_path):
+    """#79: `void IRunner.Run()` was rejected (a name after `.`), so the member and every call inside it were lost.
+    The member keeps its interface name (`A.IRunner.Run`); a call `Run()` never binds to it, as in C#."""
+    names, edges = _edges_of(tmp_path, {"I79.cs": '''namespace I79 {
+interface IRunner { void Run(); }
+class A : IRunner, System.IDisposable, System.Collections.Generic.IEnumerable<int> {
+  void IRunner.Run(){ Helper(); }
+  void IDisposable.Dispose(){ Cleanup(); }
+  public void Dispose() { }
+  IEnumerator<int> IEnumerable<int>.GetEnumerator() { return Make(); }
+  int IRunner.Count { get { return Helper2(); } }
+  void Helper(){} void Cleanup(){} IEnumerator<int> Make() => null; int Helper2() => 1;
+  void Go() { Run(); Dispose(); }
+  void Run() { }
+}
+}
+'''})
+    assert {"I79.A.IRunner.Run", "I79.A.IDisposable.Dispose", "I79.A.IEnumerable.GetEnumerator",
+            "I79.A.IRunner.Count"} <= names
+    assert {("I79.A.IRunner.Run", "I79.A.Helper"), ("I79.A.IDisposable.Dispose", "I79.A.Cleanup"),
+            ("I79.A.IEnumerable.GetEnumerator", "I79.A.Make"), ("I79.A.IRunner.Count", "I79.A.Helper2")} <= edges
+    assert ("I79.A.Go", "I79.A.Run") in edges and ("I79.A.Go", "I79.A.Dispose") in edges
+    assert not any(callee.startswith(("I79.A.IRunner.", "I79.A.IDisposable.")) for _, callee in edges)
+
+
+
+def test_if_else_branches_with_unbalanced_braces_do_not_nest_the_rest_of_the_class(tmp_path):
+    """#80: two signature variants under `#if`/`#else` open one `{` each but share one `}`; the rest of the class was
+    nested in the first method (`A.M.Foo`). Read as one configuration would: the first branch alone."""
+    names, edges = _edges_of(tmp_path, {"P80.cs": '''namespace P80 { class A {
+#if X
+void M(int a) {
+#else
+void M(int a, int b) {
+#endif
+  Foo();
+}
+void Foo(){} void Bar(){ Foo(); }
+#if Y
+void Kept() { Foo(); }
+#else
+void Also() { Bar(); }
+#endif
+} }
+'''})
+    assert {"P80.A.M", "P80.A.Foo", "P80.A.Bar", "P80.A.Kept", "P80.A.Also"} <= names
+    assert not any(n.startswith("P80.A.M.") for n in names)
+    assert {("P80.A.Bar", "P80.A.Foo"), ("P80.A.M", "P80.A.Foo"), ("P80.A.Kept", "P80.A.Foo"),
+            ("P80.A.Also", "P80.A.Bar")} <= edges
+
+
+
+def test_a_finalizer_is_not_the_constructor(tmp_path):
+    """#81: `~Res()` was recorded as `Res.ctor`, so `new Res()` linked to the finalizer."""
+    names, edges = _edges_of(tmp_path, {"F81.cs": '''namespace F81 {
+class Res { ~Res(){ Release(); } void Release(){} }
+class User { void Go(){ new Res(); } }
+class Both { public Both() { Init(); } ~Both() { Release(); } void Init(){} void Release(){} }
+class Make { void Go(){ new Both(); } }
+}
+'''})
+    assert "F81.Res.~Res" in names and "F81.Res.ctor" not in names
+    assert ("F81.Res.~Res", "F81.Res.Release") in edges
+    assert not any(callee.endswith(("~Res", "~Both")) for caller, callee in edges if caller != callee)
+    assert ("F81.User.Go", "F81.Res.ctor") not in edges
+    assert {("F81.Both.ctor", "F81.Both.Init"), ("F81.Both.~Both", "F81.Both.Release"),
+            ("F81.Make.Go", "F81.Both.ctor")} <= edges
+    assert ("F81.Both.ctor", "F81.Both.Release") not in edges
+
+
+
+def test_overloads_do_not_share_their_local_functions(tmp_path):
+    """#82: local functions were looked up by the owner's qualified name, which overloads share: `M(string)`'s
+    `Validate()` bound to the local function of `M(int)`."""
+    names, edges = _edges_of(tmp_path, {"O82.cs": '''namespace O82 { class A {
+  void M(int a){ void Validate(){ Check(); } Validate(); }
+  void M(string s){ Validate(); }
+  void Validate(){}
+  void Check(){}
+} }
+'''})
+    calls = csharp_symbols.extract(tmp_path)[1]
+    m_calls = {(c["line"], _short(c["callee"])) for c in calls if _short(c["caller"]) == "O82.A.M"}
+    assert (2, "O82.A.M.Validate") in m_calls and (3, "O82.A.Validate") in m_calls
+    assert ("O82.A.M.Validate", "O82.A.Check") in edges
+
+
+
+def test_a_utf16_file_is_read(tmp_path):
+    """#83: a file saved as UTF-16 (Visual Studio's "Unicode") with a byte-order mark yielded nothing, silently."""
+    src = 'namespace U83 { class A { void Go() { Helper(); } void Helper() { } } }\n'
+    (tmp_path / "Le.cs").write_bytes(src.encode("utf-16"))                 # little-endian with a BOM
+    (tmp_path / "Be.cs").write_bytes(b"\xfe\xff" + src.replace("U83", "B83").encode("utf-16-be"))
+    (tmp_path / "U8.cs").write_bytes(b"\xef\xbb\xbf" + src.replace("U83", "E83").encode("utf-8"))
+    names, edges = _edges_of(tmp_path, {})
+    for ns in ("U83", "B83", "E83"):
+        assert {f"{ns}.A.Go", f"{ns}.A.Helper"} <= names
+        assert (f"{ns}.A.Go", f"{ns}.A.Helper") in edges
+    tests = '[Fact] public void Works() { }'.join(("namespace U83 { class T { ", " } }\n"))
+    (tmp_path / "T.cs").write_bytes(tests.encode("utf-16"))
+    assert test_discovery.tests_in_file(tmp_path, "T.cs") == [("Works", 1)]
+
+
+def test_an_explicit_implementation_after_an_attribute_does_not_call_itself(tmp_path):
+    """#79, measured on EF Core: an expression body's start was counted from the header with its attributes removed,
+    so it began that many characters early, inside the header; `IG.Get(` there read as a call to the interface."""
+    names, edges = _edges_of(tmp_path, {"E79.cs": '''namespace E79 {
+interface IG { int Get(int a); int Put(int a); }
+class B { public virtual int Get(int a) => 0; public virtual int Put(int a) => 0; }
+class A : B, IG {
+  [System.Diagnostics.DebuggerStepThrough]
+  int IG.Get(int a) => base.Get(a);
+  [System.Diagnostics.DebuggerStepThrough]
+  int IG.Put(int a) => new System.Func<int>(() => { return base.Put(a); })();
+}
+}
+'''})
+    assert {"E79.A.IG.Get", "E79.A.IG.Put"} <= names
+    assert not any(callee.startswith("E79.IG.") for _, callee in edges)
+    sc = csharp_symbols.scan_file("E79.cs", (tmp_path / "E79.cs").read_text())
+    for s in sc["symbols"]:
+        if s["name"] in ("IG.Get", "IG.Put"):
+            assert [sc["masked"][a:a + 2] for a, _ in s["body"]] == ["=>"], s["name"]

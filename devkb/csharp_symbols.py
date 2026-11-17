@@ -60,7 +60,8 @@ def _string_end(text: str, i: int) -> int | None:
         k += 1
     if k >= n or text[k] != '"' or (k > i and not text[i] in "$@"):
         return None
-    if text.startswith('"""', k):                                  # raw string: N quotes ... N quotes
+    # raw string: N quotes ... N quotes. Never verbatim: `@""""` is a verbatim string holding one quote (#57)
+    if not verbatim and text.startswith('"""', k):
         q = k
         while q < n and text[q] == '"':
             q += 1
@@ -126,6 +127,7 @@ def mask(text: str) -> str:
     text = text.replace("\ufeff", " ")                           # a byte-order mark is not code
     chars = list(text)
     n, i, line_start = len(text), 0, True
+    conds: list[tuple[str, int, int]] = []                        # (`if`/`elif`/`else`/`endif`, start, end) directives
     while i < n:
         m = _MASK_NEXT.search(text, i)                         # jump to the next character that can start something
         if m is None:
@@ -140,6 +142,8 @@ def mask(text: str) -> str:
         if line_start and c == "#":
             end = text.find("\n", i)
             end = n if end < 0 else end
+            if dm := _COND.match(text, i, end):
+                conds.append((dm.group(1), i, end))
             _blank(chars, i, end)
             i = end
             continue
@@ -168,14 +172,44 @@ def mask(text: str) -> str:
             i = end
         else:
             i += 1
+    if conds:
+        _first_branch_only(chars, conds)
     return "".join(chars)
+
+
+_COND = re.compile(r"#[ \t]*(if|elif|else|endif)\b")
+
+
+def _first_branch_only(chars: list[str], conds: list[tuple[str, int, int]]) -> None:
+    """Blank the `#elif`/`#else` branches of every `#if` whose branches do not each balance their braces (#80).
+
+    `#if X void M(int a) { #else void M(int a, int b) { #endif ... }`: both variants open a `{` that one `}` closes, and
+    the rest of the type nested in M. Read as one configuration would, the first branch alone. A conditional whose
+    branches each balance (whole members per branch) keeps them all, as before; innermost conditionals go first."""
+    stack: list[list[list[int]]] = []                           # per open `#if`: its branches' [start, end]
+    for word, start, end in conds:
+        if word == "if":
+            stack.append([[end, -1]])
+        elif not stack:
+            continue
+        elif word in ("elif", "else"):
+            stack[-1][-1][1] = start
+            stack[-1].append([end, -1])
+        else:
+            branches = stack.pop()
+            branches[-1][1] = start
+            if len(branches) > 1:
+                deltas = [("".join(chars[a:b]).count("{") - "".join(chars[a:b]).count("}")) for a, b in branches]
+                if any(deltas):
+                    for a, b in branches[1:]:
+                        _blank(chars, a, b)
 
 
 # ── headers ──────────────────────────────────────────────────────────────────
 
 _ATTRS = re.compile(r"^\s*(\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]\s*)+")
-_ATTR_NAME = re.compile(r"(?:^|[\[,]\s*)(?:[A-Za-z_][\w.]*\.)?([A-Za-z_]\w*?)(?:Attribute)?\s*(?=[(\],])")
-_TYPE_HEAD = re.compile(r"\b(class|struct|interface|enum|record(?:\s+(?:class|struct))?)\s+@?([A-Za-z_]\w*)")
+_ATTR_NAME = re.compile(r"(?:^|[\[,]\s*)(?:[^\W\d][\w.]*\.)?([^\W\d]\w*?)(?:Attribute)?\s*(?=[(\],])")
+_TYPE_HEAD = re.compile(r"\b(class|struct|interface|enum|record(?:\s+(?:class|struct))?)\s+@?([^\W\d]\w*)")
 _NS_HEAD = re.compile(r"^\s*namespace\s+([\w.]+)\s*$")
 
 
@@ -274,11 +308,11 @@ def _base_names(h: str) -> list[str]:
     h = re.sub(r"\([^()]*\)", "", _strip_generics(h))
     if ":" not in h:
         return []
-    return [p.strip().split(".")[-1] for p in h.split(":", 1)[1].split(",") if re.match(r"^\s*[A-Za-z_][\w.]*\s*$", p)]
+    return [p.strip().split(".")[-1] for p in h.split(":", 1)[1].split(",") if re.match(r"^\s*[^\W\d][\w.]*\s*$", p)]
 
 
 _PARAM = re.compile(r"(?:^|,)\s*(?:\[[^\]]*\]\s*)?(?:(?:this|ref|out|in|params|scoped|readonly)\s+)*"
-                    r"([A-Za-z_][\w.]*)\s*(?:<[^()]*?>)?\s*(?:\[\s*\])?\??\s+@?([A-Za-z_]\w*)")
+                    r"([^\W\d][\w.]*)\s*(?:<[^()]*?>)?\s*(?:\[\s*\])?\??\s+@?([^\W\d]\w*)")
 
 
 def _params(p: str) -> dict[str, str]:
@@ -287,7 +321,7 @@ def _params(p: str) -> dict[str, str]:
     return {name: typ.split(".")[-1] for typ, name in _PARAM.findall(p)}
 
 
-_ATTR_ANY = re.compile(r"\[\s*[A-Za-z_][^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]")   # an attribute starts with a name; `[]` is an array
+_ATTR_ANY = re.compile(r"\[\s*[^\W\d][^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]")   # an attribute starts with a name; `[]` is an array
 
 
 def _top_parts(p: str) -> list[str]:
@@ -320,7 +354,7 @@ def _arity(params: str, ext: bool) -> tuple[int, int | None]:
 
 def _this_type(params: str) -> str | None:
     first = _top_parts(params)[:1]
-    m = re.match(r"\s*this\s+(?:(?:ref|in|scoped|readonly)\s+)*([A-Za-z_][\w.]*)", first[0]) if first else None
+    m = re.match(r"\s*this\s+(?:(?:ref|in|scoped|readonly)\s+)*([^\W\d][\w.]*)", first[0]) if first else None
     return m.group(1).split(".")[-1] if m else None
 
 
@@ -365,12 +399,12 @@ def _pt(text: str | None):
     arr = 0
     while t.endswith("[]"):
         t, arr = t[:-2], arr + 1
-    m = re.match(r"^([A-Za-z_][\w.]*)(?:<(.*)>)?$", t)
+    m = re.match(r"^([^\W\d][\w.]*)(?:<(.*)>)?$", t)
     if m:
         args = tuple(_pt(a) for a in _split_top(m.group(2))) if m.group(2) else ()
         out = (m.group(1).split(".")[-1], args)
     else:
-        mm = re.match(r"^([A-Za-z_][\w.]*)", t)                 # unbalanced generics: the outer name is enough
+        mm = re.match(r"^([^\W\d][\w.]*)", t)                 # unbalanced generics: the outer name is enough
         if not mm:
             return None
         out = (mm.group(1).split(".")[-1], ())
@@ -454,7 +488,7 @@ def _args(body: str, raw: str, k: int) -> _Args:
                 if top_lt:
                     return _Args(None, None, j, False)
                 items = [(body[a + 1:b], raw[a + 1:b], a + 1, b) for a, b in zip(cuts, cuts[1:])]
-                named = any(re.match(r"\s*@?[A-Za-z_]\w*\s*:(?!:)", it[0]) for it in items)
+                named = any(re.match(r"\s*@?[^\W\d]\w*\s*:(?!:)", it[0]) for it in items)
                 return _Args(len(items), items, j, named)
         elif depth == 1:
             if c == ",":
@@ -464,7 +498,7 @@ def _args(body: str, raw: str, k: int) -> _Args:
     return _Args(None, None, None, False)
 
 
-_LAMBDA = re.compile(r"^\s*(?:static\s+)?(?:async\s+)?(?:\(\s*(?P<ps>[^()]*)\)|@?(?P<p>[A-Za-z_]\w*))\s*=>")
+_LAMBDA = re.compile(r"^\s*(?:static\s+)?(?:async\s+)?(?:\(\s*(?P<ps>[^()]*)\)|@?(?P<p>[^\W\d]\w*))\s*=>")
 
 
 def _arg_type(mtext: str, rtext: str, type_of):
@@ -484,10 +518,10 @@ def _arg_type(mtext: str, rtext: str, type_of):
         return ("bool", ())
     if _LAMBDA.match(mt):
         return ("#lambda", ())
-    m = re.match(r"^new\s+([A-Za-z_][\w.]*(?:<[^()]*>)?)\s*(?:\([^()]*\)|\{[^{}]*\})$", mt)
+    m = re.match(r"^new\s+([^\W\d][\w.]*(?:<[^()]*>)?)\s*(?:\([^()]*\)|\{[^{}]*\})$", mt)
     if m:
         return _pt(m.group(1))
-    m = re.match(r"^@?([A-Za-z_]\w*)$", mt)
+    m = re.match(r"^@?([^\W\d]\w*)$", mt)
     if m and m.group(1) not in ("null", "default", "this", "base"):
         return type_of(m.group(1))
     return None
@@ -527,7 +561,7 @@ def _elem(t):
 def _local_fn_sig(h: str, k: int, ptext: str) -> dict:
     """A local function's signature, as `_member_head` records a method's: arity, parameter and return types."""
     bare = _ATTR_ANY.sub(" ", ptext)
-    head = re.sub(r"@?[A-Za-z_]\w*$", "", _strip_end_generics(h[:k]))
+    head = re.sub(r"@?[^\W\d]\w*$", "", _strip_end_generics(h[:k]))
     head = re.sub(r"\b(static|async|unsafe|extern)\b", " ", head)
     gm = re.search(r"<([^<>]*)>\s*$", h[:k].rstrip())
     glist = [g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()] if gm else []
@@ -539,7 +573,7 @@ _MODIFIER_WORDS = frozenset("public private protected internal static readonly s
                             "async unsafe extern new partial volatile required file const".split())
 
 
-_WHERE = re.compile(r"\bwhere\s+@?([A-Za-z_]\w*)\s*:\s*([A-Za-z_][\w.]*)")
+_WHERE = re.compile(r"\bwhere\s+@?([^\W\d]\w*)\s*:\s*([^\W\d][\w.]*)")
 
 
 def _constraints(h: str) -> dict[str, str]:
@@ -585,13 +619,13 @@ def _open_of(body: str, q: int) -> int | None:
     return None
 
 
-_CAST = re.compile(r"^\s*\(\s*([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\[\])?\??)\s*\)\s*[\w@(]")
-_AS = re.compile(r"\bas\s+([A-Za-z_][\w.]*(?:<[^()]*>)?)\s*$")
-_GENERIC_TYPE_END = re.compile(r"(?<![\w.])([A-Za-z_][\w.]*)\s*<([^<>()]*(?:<[^<>()]*>[^<>()]*)*)>$")
+_CAST = re.compile(r"^\s*\(\s*([^\W\d][\w.]*(?:<[^()]*>)?(?:\[\])?\??)\s*\)\s*[\w@(]")
+_AS = re.compile(r"\bas\s+([^\W\d][\w.]*(?:<[^()]*>)?)\s*$")
+_GENERIC_TYPE_END = re.compile(r"(?<![\w.])([^\W\d][\w.]*)\s*<([^<>()]*(?:<[^<>()]*>[^<>()]*)*)>$")
 # declarations whose type the source writes (F8): `var x = (T)y;`, `var x = y as T;`, `y is T x`, `case T x`
-_DECL_CAST = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*\(\s*([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\s*\[\s*\])*)\s*\)\s*[\w@(]")
-_DECL_AS = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*[^;=]*?\bas\s+([A-Za-z_][\w.]*(?:<[^;()]*?>)?)\s*;")
-_DECL_PATTERN = re.compile(r"\b(?:is|case)\s+(?:not\s+)?([A-Za-z_][\w.]*(?:<[^()]*?>)?)\s+@?([A-Za-z_]\w*)\b"
+_DECL_CAST = re.compile(r"\bvar\s+@?([^\W\d]\w*)\s*=\s*\(\s*([^\W\d][\w.]*(?:<[^()]*>)?(?:\s*\[\s*\])*)\s*\)\s*[\w@(]")
+_DECL_AS = re.compile(r"\bvar\s+@?([^\W\d]\w*)\s*=\s*[^;=]*?\bas\s+([^\W\d][\w.]*(?:<[^;()]*?>)?)\s*;")
+_DECL_PATTERN = re.compile(r"\b(?:is|case)\s+(?:not\s+)?([^\W\d][\w.]*(?:<[^()]*?>)?)\s+@?([^\W\d]\w*)\b"
                            r"(?!\s*[(<.])"
                            # a switch-expression arm: `ArrayConstantExpression e => ...` (EF Core), `T e when c => ...`
                            r"|(?:^|[{,(]\s*)([A-Z][\w.]*(?:<[^()]*?>)?)\s+@?([a-z_]\w*)\s*(?:when\b[^=]*)?=>", re.M)
@@ -616,19 +650,26 @@ def _member_head(h: str) -> dict | None:
         before = _strip_generics(h[:k]).rstrip()
         if re.search(r"\boperator\s*\S+$", before) or re.search(r"\b(implicit|explicit)\s+operator\b", before):
             return {"name": "operator", "kind": "method", "params": h[k + 1:close], "static_ext": False}
-        m = re.search(r"@?([A-Za-z_]\w*)$", before)
+        m = re.search(r"@?([^\W\d]\w*)$", before)
         if not m or m.group(1) in _NOT_CALL or m.group(1) in _MODIFIER_WORDS:
             return None                       # `private (int A, string B) _field;`: a tuple type, not a method `private`
         rest = before[: m.start()].strip()
+        name, ret_text = m.group(1), re.sub(r"@?[^\W\d]\w*$", "", _strip_end_generics(h[:k]))
+        qm = _EXPLICIT_IFACE.search(rest)
+        if qm and rest[: qm.start(1)].strip():
+            # `void IRunner.Run()`: an explicit interface implementation, keyed with its interface's name so it
+            # stays apart from a `Run()` of the type's own, which a call by simple name means (#79)
+            name, rest, ret_text = f"{qm.group(2)}.{name}", rest[: qm.start(1)].strip(), _drop_qualifier(ret_text)
         if rest and not re.search(r"[\w>\]?)]$", rest) and rest[-1:] not in "~":
             return None
+        if rest.endswith("~"):
+            name = "~" + name                 # `~Res()`: the finalizer, not the constructor `new Res()` means (#81)
         params = h[k + 1:close]
         bare = _ATTR_ANY.sub(" ", params)                           # `[Attr] this Type x` is still an extension
         ext = bool(re.match(r"\s*this\s", bare)) and bool(re.search(r"\bstatic\b", h[:k]))
         gm = re.search(r"<([^<>]*)>\s*$", h[:k].rstrip())
         glist = [g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()] if gm else []
-        ret_text = re.sub(r"@?[A-Za-z_]\w*$", "", _strip_end_generics(h[:k]))
-        return {"name": m.group(1), "kind": "method", "params": params, "static_ext": ext, "ret": _ret_type(rest),
+        return {"name": name, "kind": "method", "params": params, "static_ext": ext, "ret": _ret_type(rest),
                 "ret_full": _last_type_token(ret_text) if rest else None, "pfull": _pfull(params), "gcons": gcons,
                 "gparams_list": glist,
                 "static": bool(re.search(r"\bstatic\b", h[:k])),
@@ -636,11 +677,28 @@ def _member_head(h: str) -> dict | None:
                 "gparams": {g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set()}
     if "[" in h and re.search(r"\bthis\s*\[", h):
         return {"name": "this[]", "kind": "method", "params": "", "static_ext": False}
-    m = re.search(r"([A-Za-z_][\w.<>\[\],? ]*?)\s+@?([A-Za-z_]\w*)$", _strip_generics(h))
+    em = re.search(r"^(.*\S)\s+((?:[^\W\d]\w*\.)*(I[A-Z]\w*))\.@?([^\W\d]\w*)$", _strip_generics(h))
+    if em and re.search(r"[\w>\]?)]$", em.group(1)):                # `int IRunner.Count { get ... }` (#79)
+        return {"name": f"{em.group(3)}.{em.group(4)}", "kind": "property", "params": "", "static_ext": False,
+                "ret": _ret_type(em.group(1)), "ret_full": _last_type_token(_drop_qualifier(
+                    re.sub(r"\s*@?[^\W\d]\w*$", "", h)))}
+    m = re.search(r"([^\W\d][\w.<>\[\],? ]*?)\s+@?([^\W\d]\w*)$", _strip_generics(h))
     if not m or m.group(2) in _NOT_CALL:
         return None
     return {"name": m.group(2), "kind": "property", "params": "", "static_ext": False, "ret": _ret_type(m.group(1)),
-            "ret_full": _last_type_token(re.sub(r"\s*@?[A-Za-z_]\w*$", "", h))}
+            "ret_full": _last_type_token(re.sub(r"\s*@?[^\W\d]\w*$", "", h))}
+
+
+# the interface an explicit implementation names before its member: `IRunner.`, `System.IDisposable.` (generics gone)
+_EXPLICIT_IFACE = re.compile(r"(?:^|\s)((?:[^\W\d]\w*\.)*(I[A-Z]\w*))\.$")
+
+
+def _drop_qualifier(s: str) -> str:
+    """`s` (a header up to a member's name) without the `IName<...>.` that ends it."""
+    s = s.rstrip()
+    if s.endswith("."):
+        s = re.sub(r"[\w.]*$", "", _strip_end_generics(s[:-1]))
+    return s
 
 
 def _ret_type(rest: str) -> str | None:
@@ -648,7 +706,7 @@ def _ret_type(rest: str) -> str | None:
     if not words:
         return None
     t = words[-1].rstrip("?").replace("[]", "")
-    return t.split(".")[-1] if re.match(r"^[A-Za-z_][\w.]*$", t) else None
+    return t.split(".")[-1] if re.match(r"^[^\W\d][\w.]*$", t) else None
 
 
 def _close(s: str, k: int) -> int | None:
@@ -663,8 +721,8 @@ def _close(s: str, k: int) -> int | None:
     return None
 
 
-_FIELD = re.compile(r"(?:^|\s)(?P<t>[A-Za-z_][\w.]*(?:<[^;=]*>)?)\??(?P<arr>\[\])?\s+@?(?P<n>[A-Za-z_]\w*)\s*(?:=|$)")
-_LOCAL_FN = re.compile(r"^(?:(?:static|async|unsafe|extern)\s+)*[A-Za-z_][\w.<>\[\],?\s]*?\s+@?([A-Za-z_]\w*)\s*"
+_FIELD = re.compile(r"(?:^|\s)(?P<t>[^\W\d][\w.]*(?:<[^;=]*>)?)\??(?P<arr>\[\])?\s+@?(?P<n>[^\W\d]\w*)\s*(?:=|$)")
+_LOCAL_FN = re.compile(r"^(?:(?:static|async|unsafe|extern)\s+)*[^\W\d][\w.<>\[\],?\s]*?\s+@?([^\W\d]\w*)\s*"
                        r"(?:<[^()]*>)?\s*\(")
 
 
@@ -694,7 +752,8 @@ def scan_file(rel: str, text: str) -> dict:
         return None
 
     def add(kind: str, name: str, q: tuple[str, ...], start: int, end: int, **kw) -> dict:
-        s = {"kind": kind, "name": name, "qparts": q, "line_start": line(start), "line_end": line(end), **kw}
+        s = {"kind": kind, "name": name, "qparts": q, "line_start": line(start), "line_end": line(end),
+             "ix": len(symbols), **kw}                       # ix: its place in this file's symbols
         symbols.append(s)
         return s
 
@@ -705,6 +764,21 @@ def scan_file(rel: str, text: str) -> dict:
             continue
         raw = masked[last:i]
         top = stack[-1]
+        if c == "{" and top["kind"] in ("file", "ns", "type") and raw.count("[") > raw.count("]"):
+            # `[InlineData(new int[] { 1, 2 }, 3)]`: a brace inside an open attribute is part of its argument, not a
+            # scope; its `}` and any `;` inside it belong to the header too (#78)
+            depth, close = 0, None
+            for j in range(i, n):
+                if masked[j] == "{":
+                    depth += 1
+                elif masked[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        close = j
+                        break
+            if close is not None:                # never closed: read as before (and no rescan per later `{`)
+                i = close + 1
+                continue
         head_start = last + (len(raw) - len(raw.lstrip()))
         attrs, header = _split_attrs(raw)
         if c == "{":
@@ -733,7 +807,7 @@ def scan_file(rel: str, text: str) -> dict:
                     mh = _member_head(header[:arrow])
                     if mh:
                         f = _member_frame(mh, attrs, header[:arrow], top, head_start, i, add)
-                        top["pending"] = (f["sym"], last + arrow)
+                        top["pending"] = (f["sym"], i - len(header) + arrow)   # header: raw's tail, attributes gone
                         frame = {"kind": "block", "q": top["q"], "start": i, "member": f["sym"]}
             elif top["kind"] == "member" and top.get("property"):
                 frame = {"kind": "block", "q": top["q"], "start": i, "member": top["sym"]}   # an accessor body
@@ -748,6 +822,7 @@ def scan_file(rel: str, text: str) -> dict:
                     ptext = h[k + 1:close] if close else ""
                     s = add("function", lm.group(1), owner["qparts"] + (lm.group(1),), head_start, i,
                             params=_params(ptext), body=[], type_q=owner.get("type_q"), attrs=set(),
+                            owner_ix=owner["ix"],
                             **_local_fn_sig(h, k, ptext))
                     frame = {"kind": "member", "q": top["q"], "sym": s, "start": i}
                 else:
@@ -784,7 +859,9 @@ def scan_file(rel: str, text: str) -> dict:
                     mh = _member_head(header[:arrow])
                     if mh:
                         f = _member_frame(mh, attrs, header[:arrow], top, head_start, i, add)
-                        f["sym"]["body"].append((last + arrow, i))
+                        # from the arrow: `header` is raw without its leading attributes (and the blanked doc
+                        # comment before them), so `last + arrow` began inside the header and read its name as a call
+                        f["sym"]["body"].append((i - len(header) + arrow, i))
                 elif "(" in header and assign is None:
                     mh = _member_head(header)                       # interface, abstract, extern or partial member
                     if mh:
@@ -808,7 +885,7 @@ def scan_file(rel: str, text: str) -> dict:
                     close = _close(h, k)
                     ptext = h[k + 1:close] if close else ""
                     add("function", lm.group(1), owner["qparts"] + (lm.group(1),), head_start, i,
-                        params=_params(ptext), body=[(last, i)],
+                        params=_params(ptext), body=[(last, i)], owner_ix=owner["ix"],
                         type_q=owner.get("type_q"), attrs=set(), **_local_fn_sig(h, k, ptext))
             last = i + 1
         i += 1
@@ -820,7 +897,7 @@ def scan_file(rel: str, text: str) -> dict:
 
 
 # `using BaseItemDto = MediaBrowser.Controller.Entities.BaseItem;` (Jellyfin): the alias names another type
-_ALIAS = re.compile(r"^[ \t]*(?:global\s+)?using\s+@?([A-Za-z_]\w*)\s*=\s*([^;=]+);", re.M)
+_ALIAS = re.compile(r"^[ \t]*(?:global\s+)?using\s+@?([^\W\d]\w*)\s*=\s*([^;=]+);", re.M)
 
 
 def _dealias(t, aliases: dict):
@@ -888,7 +965,7 @@ def _member_frame(mh: dict, attrs: set[str], header: str, top: dict, start: int,
             static=mh.get("static", False), ret_full=mh.get("ret_full"), pfull=mh.get("pfull"),
             gcons=mh.get("gcons") or {}, gparams_list=mh.get("gparams_list") or [],
             is_test=bool(attrs & TEST_ATTRS))
-    if mh["kind"] == "property" and mh.get("ret"):
+    if mh["kind"] == "property" and mh.get("ret") and "." not in mh["name"]:
         tsym["fields"][mh["name"]] = mh["ret"]
         if mh.get("ret_full"):
             tsym.setdefault("ffull", {})[mh["name"]] = mh["ret_full"]
@@ -920,6 +997,7 @@ class _Index:
         self._type_view: dict[tuple, dict | None] = {}      # type_sym(): partial declarations merged
         self.implicit: set[str] = set()                 # types declaring a conversion operator (any argument may fit)
         self.enums: set[str] = set()
+        self._several: dict[tuple[str, str], bool] = {}
         for s in symbols:
             self.by_key.setdefault(s["key"], []).append(s)
             if s["kind"] in ("class", "enum"):
@@ -942,6 +1020,14 @@ class _Index:
                     self.members.setdefault((s["type_q"], s["name"]), []).append(s)
                 if s.get("ext"):
                     self.ext.setdefault(s["name"], []).append(s)
+
+    def several(self, table: str, name: str) -> bool:
+        """Whether more than one key is named `name` in `table` ("by_name" or "ext"). Cached: a set built per call
+        site was (definitions x call sites) on a repository with many same-named methods (#60)."""
+        k = (table, name)
+        if k not in self._several:
+            self._several[k] = len({c["key"] for c in getattr(self, table).get(name, [])}) > 1
+        return self._several[k]
 
     @staticmethod
     def _one(cands: list[dict]) -> dict | None:
@@ -1295,12 +1381,23 @@ class _Index:
             [t for t in self.types.get(tq[-1], []) if t["qparts"] == tq])
 
 
-_CALL = re.compile(r"(?P<new>\bnew\s+)?(?P<chain>@?[A-Za-z_]\w*(?:\s*\??\.\s*@?[A-Za-z_]\w*)*)\s*"
+_CALL = re.compile(r"(?P<new>\bnew\s+)?(?P<chain>@?[^\W\d]\w*(?:\s*\??\.\s*@?[^\W\d]\w*)*)\s*"
                    r"(?:<[^<>();{}]*(?:<[^<>();{}]*>[^<>();{}]*)*>)?\s*\(")
 _LOCAL = re.compile(r"(?:^|[;{(\s,])(?!(?:using|await|return|yield|throw|new|else|case|in|is|as|out|ref|const|"
                     r"static|readonly|fixed|unsafe|checked|lock|foreach|for|while|if|scoped)\s)"
-                    r"(?:var|(?P<t>[A-Za-z_][\w.]*(?:<[^;=(){}]*>)?)\??(?P<arr>\[\])?)\s+@?(?P<n>[A-Za-z_]\w*)\b(?!\s*[(<])"   # `T Name(`: a local function, not a variable
-                    r"\s*(?:=\s*new\s+(?P<nt>[A-Za-z_][\w.]*(?:<[^;=(){}]*?>)?)\s*[({])?")
+                    r"(?:var|(?P<t>[^\W\d][\w.]*(?:<[^;=(){}]*>)?)\??(?P<arr>\[\])?)\s+@?(?P<n>[^\W\d]\w*)\b(?!\s*[(<])"   # `T Name(`: a local function, not a variable
+                    r"\s*(?:=\s*new\s+(?P<nt>[^\W\d][\w.]*(?:<[^;=(){}]*?>)?)\s*[({])?")
+
+
+def _last_word(s: str) -> str | None:
+    """The identifier `s` ends with (as `re.search(r"[^\W\d]\w*$", s)` reads it), or None. A backward scan: the
+    regex tries every position of the window, once per call site (#61)."""
+    j = len(s)
+    while j and (s[j - 1].isalnum() or s[j - 1] == "_"):
+        j -= 1
+    while j < len(s) and s[j].isdecimal():
+        j += 1
+    return s[j:] or None
 
 
 def _new_ends_statement(body: str, k: int) -> bool:
@@ -1368,21 +1465,21 @@ def _why(m, before: str, parts: list[str], rtype: str | None, name: str, index: 
         return "chained"                                         # `a.B().C()`: the receiver is a call's result
     if len(parts) == 1:
         return "bare-not-in-type"                                # inherited from an outside base, or `using static`
-    if len(index.ext.get(name, [])) > 1 and len({c["key"] for c in index.ext[name]}) > 1:
+    if index.several("ext", name):
         return "extension-ambiguous"                             # several extension methods share the name
     if rtype:
         return "receiver-type-lacks-member"
-    if len({c["key"] for c in index.by_name.get(name, [])}) > 1:
+    if index.several("by_name", name):
         return "receiver-unknown-ambiguous"                      # receiver's type unknown, several targets
     return "receiver-unknown-single"
 
 
-_VAR_BEFORE = re.compile(r"\bvar\s+@?(?P<n>[A-Za-z_]\w*)\s*=\s*(?P<aw>await\s+)?$")
-_FOREACH_BEFORE = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[A-Za-z_]\w*)\s+in\s+(?P<aw>await\s+)?$")
-_AFTER_PROPS = re.compile(r"^((?:\s*!?\s*\??\.\s*@?[A-Za-z_]\w*)+)\s*;")
+_VAR_BEFORE = re.compile(r"\bvar\s+@?(?P<n>[^\W\d]\w*)\s*=\s*(?P<aw>await\s+)?$")
+_FOREACH_BEFORE = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[^\W\d]\w*)\s+in\s+(?P<aw>await\s+)?$")
+_AFTER_PROPS = re.compile(r"^((?:\s*!?\s*\??\.\s*@?[^\W\d]\w*)+)\s*;")
 _AFTER_STMT = re.compile(r"^\s*(?:\.\s*ConfigureAwait\s*\([^()]*\)\s*)?;")
 _AFTER_FOREACH = re.compile(r"^\s*(?:\.\s*ConfigureAwait\s*\([^()]*\)\s*)?\)")
-_FOREACH_LOCAL = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[A-Za-z_]\w*)\s+in\s+@?(?P<src>[A-Za-z_]\w*)\s*\)")
+_FOREACH_LOCAL = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[^\W\d]\w*)\s+in\s+@?(?P<src>[^\W\d]\w*)\s*\)")
 
 
 def _awaited(body: str, q: int, results: dict):
@@ -1433,7 +1530,14 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                 types.setdefault(fm.group("n"), el)
                 inferred.add(fm.group("n"))
         results: dict[int, tuple] = {}                            # close paren -> (result type, expression start)
-        scoped: list[tuple] = []                                  # (from, to, name, type, declared): lambda parameters
+        # lambda parameters, by name: [(from, to, type, declared, the largest `to` so far)]. By name, and a lookup
+        # stops where no earlier span reaches its position: one list scanned whole was quadratic in long fluent
+        # methods (EF Core model snapshots, #61)
+        scoped: dict[str, list[tuple]] = {}
+
+        def scope(a0: int, b0: int, nm: str, t, declared: bool) -> None:
+            entries = scoped.setdefault(nm, [])
+            entries.append((a0, b0, t, declared, max(b0, entries[-1][4]) if entries else b0))
 
         cons = {}
         for k in range(1, len(tq) + 1):                           # enclosing types' constraints, then the method's
@@ -1448,8 +1552,10 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             """`nm`'s type at `pos`. With `declared_only` (to rule an argument out), only a type the source writes:
             an inferred one (a call's result, a delegate's parameter) may be off, and a wrong ruling-out loses a
             correct edge (found on EF Core)."""
-            for a0, b0, x, t, declared in reversed(scoped):
-                if x == nm and a0 <= pos < b0:
+            for a0, b0, t, declared, reach in reversed(scoped.get(nm, ())):
+                if reach <= pos:
+                    break                                         # no earlier span reaches `pos`
+                if a0 <= pos < b0:
                     # (None: untyped, still shadows); a type parameter is its constraint here too (EF Core: the
                     # lambda's `e` of type `TExtension : RelationalOptionsExtension`)
                     return constrained(t) if (declared or not declared_only) else None
@@ -1472,7 +1578,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
 
         # `new T { ... }` (no argument list): its value, recorded where the initializer closes, so a chained
         # `.M()` after it is typed (Jellyfin: `var o = new DtoOptions { Fields = f }.AddClientFields(User);`)
-        for nm_ in re.finditer(r"\bnew\s+([A-Za-z_][\w.]*(?:<[^<>(){};]*>)?)\s*\{", body):
+        for nm_ in re.finditer(r"\bnew\s+([^\W\d][\w.]*(?:<[^<>(){};]*>)?)\s*\{", body):
             close = brace_close(nm_.end() - 1)
             if close is not None:
                 results[close] = (_dealias(_pt(nm_.group(1)), aliases), nm_.start())
@@ -1487,7 +1593,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                     j -= 1
                 r = results.get(j)
                 return r[0] if r else None
-            cm = re.search(r"(?<![\w.])(this\.)?@?([A-Za-z_]\w*)((?:\s*\??\.\s*@?[A-Za-z_]\w*)*)$", lhs)
+            cm = re.search(r"(?<![\w.])(this\.)?@?([^\W\d]\w*)((?:\s*\??\.\s*@?[^\W\d]\w*)*)$", lhs)
             if not cm:
                 return None
             props = [p_ for p_ in re.sub(r"[\s?@]", "", cm.group(3)).split(".") if p_]
@@ -1517,8 +1623,8 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             return t
 
         # F4: `from x in src` / `join y in src2`: x and y are elements of their source, for the rest of the query
-        for qm in re.finditer(r"\b(?:from|join)\s+(?:([A-Za-z_][\w.]*(?:<[^<>()]*>)?)\s+)?@?([A-Za-z_]\w*)\s+in\s+"
-                              r"(this\.)?@?([A-Za-z_]\w*)((?:\s*\??\.\s*@?[A-Za-z_]\w*)*)", body):
+        for qm in re.finditer(r"\b(?:from|join)\s+(?:([^\W\d][\w.]*(?:<[^<>()]*>)?)\s+)?@?([^\W\d]\w*)\s+in\s+"
+                              r"(this\.)?@?([^\W\d]\w*)((?:\s*\??\.\s*@?[^\W\d]\w*)*)", body):
             if qm.group(1) in ("var",):
                 continue
             end_q = body.find(";", qm.end())
@@ -1529,7 +1635,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             else:
                 props = [p_ for p_ in re.sub(r"[\s?@]", "", qm.group(5)).split(".") if p_]
                 el, declared = _elem(walk(type_of(qm.group(4), qm.start()), props)), False
-            scoped.append((qm.start(), end_q, qm.group(2), el, declared))
+            scope(qm.start(), end_q, qm.group(2), el, declared)
 
         for m in _CALL.finditer(body):
             at = start + m.start()
@@ -1538,8 +1644,8 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             off = max(0, m.start() - _LOOKBACK)
             window = body[off: m.start()]
             pre = window.rstrip()
-            word = re.search(r"([A-Za-z_]\w*)$", pre)
-            if not m.group("new") and ((word and word.group(1) not in _KEEP_BEFORE and not pre.endswith("."))
+            word = _last_word(pre)
+            if not m.group("new") and ((word and word not in _KEEP_BEFORE and not pre.endswith("."))
                                        or (pre.endswith(">") and not pre.endswith("=>") and not pre.endswith("->"))):
                 continue                                          # `T Name(...)`: a declaration, not a call
             chain = re.sub(r"\s+|\?", "", m.group("chain")).replace("@", "")
@@ -1563,7 +1669,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                         for part in (_split_top(lm.group("ps")) if lm.group("ps") is not None else [lm.group("p")]):
                             toks = _split_top(part.strip(), " ")
                             declared = _dealias(_pt("".join(toks[:-1])), aliases) if len(toks) > 1 else None
-                            scoped.append((ai, bi, toks[-1].lstrip("@"), declared, declared is not None))
+                            scope(ai, bi, toks[-1].lstrip("@"), declared, declared is not None)
             expr_start = m.start()
             chained = False
             generic_static = None                                 # F6: `Type<A>.M(...)`
@@ -1746,7 +1852,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                         if len(cand) == 1 and (lt := cand.pop()):
                             for nm, t in zip(names, lt):
                                 if t:
-                                    scoped.append((ai, bi, nm.lstrip("@"), t, False))
+                                    scope(ai, bi, nm.lstrip("@"), t, False)
             if callee is None and rt is not None and not m.group("new"):
                 # an outside method on a typed receiver: LINQ over a known element type, or a fluent builder
                 el = _elem(rt)
@@ -1754,7 +1860,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                     for mi, _ri, ai, bi in a_.items:
                         lm = _LAMBDA.match(mi)
                         if lm and lm.group("p"):
-                            scoped.append((ai, bi, lm.group("p").lstrip("@"), el, False))
+                            scope(ai, bi, lm.group("p").lstrip("@"), el, False)
                 if el is not None and name in dotnet.LINQ_SAME:
                     res = ("IEnumerable", (el,))
                 elif el is not None and name in dotnet.LINQ_ELEMENT:
@@ -1810,6 +1916,17 @@ def list_files(repo_root: Path) -> list[str]:
     return sorted(f for f in proc.stdout.splitlines() if f and not _SKIP.search(f))
 
 
+def read_source(path: Path) -> str:
+    """A C# file's text, decoded by its byte-order mark: Visual Studio's "Unicode" encoding is UTF-16, which read as
+    UTF-8 yielded nothing, silently (#83). Without a mark, UTF-8. A UTF-8 mark is kept (`mask` blanks it)."""
+    data = path.read_bytes()
+    if data[:4] in (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff"):
+        return data.decode("utf-32", errors="replace")
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return data.decode("utf-16", errors="replace")
+    return data.decode("utf-8", errors="replace")
+
+
 def extract(repo_root: Path, stats: dict | None = None) -> tuple[list[dict], list[dict]]:
     """(symbols, calls) for every tracked C# file. Symbols carry rel, key, qparts, kind, name, line_start, line_end;
     calls are {caller, callee, rel, line, text, confidence}, deduplicated per caller and callee."""
@@ -1819,7 +1936,7 @@ def extract(repo_root: Path, stats: dict | None = None) -> tuple[list[dict], lis
         try:
             if path.stat().st_size > _MAX_BYTES:
                 continue
-            text = path.read_text(errors="replace")
+            text = read_source(path)
         except OSError:
             continue
         scans[rel] = scan_file(rel, text)
@@ -1832,15 +1949,31 @@ def extract(repo_root: Path, stats: dict | None = None) -> tuple[list[dict], lis
     index = _Index(symbols)
     calls: dict[tuple[str, str], dict] = {}
     unresolved: dict[str, set[tuple[str, str]]] = {}
-    local_fns: dict[tuple[str, ...], dict[str, dict]] = {}     # owner's qparts -> its local functions (one pass, not n²)
+    # (file, owner's place in it) -> its local functions, one pass. Not the owner's qualified name: overloads share
+    # that, and one overload's call never means another's local function (#82)
+    local_fns: dict[tuple[str, int], dict[str, dict]] = {}
     for x in symbols:
         if x["kind"] == "function":
-            local_fns.setdefault(x["qparts"][:-1], {})[x["name"]] = x
+            local_fns.setdefault((x["rel"], x["owner_ix"]), {})[x["name"]] = x
     for s in symbols:
         if not s.get("body"):
             continue
         sc = scans[s["rel"]]
-        locals_fns = local_fns.get(s["qparts"], {})
+        locals_fns = local_fns.get((s["rel"], s["ix"]), {})
+        if s["kind"] == "function":
+            # a local function also sees its siblings and those of every enclosing local function, up to the member
+            # that holds them; the nearest scope wins (#58)
+            o, scopes = sc["symbols"][s["owner_ix"]], []
+            while True:
+                scopes.append(local_fns.get((s["rel"], o["ix"]), {}))
+                if o["kind"] != "function":
+                    break
+                o = sc["symbols"][o["owner_ix"]]
+            seen: dict[str, dict] = {}
+            for d in reversed(scopes):
+                seen.update(d)
+            seen.update(locals_fns)
+            locals_fns = seen
         for callee, conf, line, text, why in _calls_in(s, sc["masked"], sc["nl"], index, locals_fns, sc["raw"],
                                                        sc.get("aliases")):
             if stats is not None:
@@ -1854,14 +1987,16 @@ def extract(repo_root: Path, stats: dict | None = None) -> tuple[list[dict], lis
                 "caller": s["key"], "callee": callee["key"], "rel": s["rel"], "line": line, "text": text,
                 "confidence": conf})
             call["confidence"] = max(call["confidence"], conf)
+    summary: dict[str, tuple] = {}           # per name, once: per symbol it was (definitions x call sites) (#60)
     for s in symbols:
         if s["kind"] in ("method", "function") and s["name"] in unresolved:
-            files: dict[str, int] = {}
-            for rel, _caller in unresolved[s["name"]]:
-                files[rel] = files.get(rel, 0) + 1
-            s["unresolved_calls"] = sum(files.values())
-            s["unresolved_files"] = sorted(files, key=lambda f: (-files[f], f))[:20]
-            s["unresolved_file_count"] = len(files)
+            if s["name"] not in summary:
+                files: dict[str, int] = {}
+                for rel, _caller in unresolved[s["name"]]:
+                    files[rel] = files.get(rel, 0) + 1
+                summary[s["name"]] = (sum(files.values()), sorted(files, key=lambda f: (-files[f], f))[:20], len(files))
+            n_calls, top, n_files = summary[s["name"]]
+            s["unresolved_calls"], s["unresolved_files"], s["unresolved_file_count"] = n_calls, list(top), n_files
     return symbols, list(calls.values())
 
 
