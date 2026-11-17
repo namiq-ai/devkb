@@ -85,7 +85,7 @@ def run_one(task: dict, arm: str, cfg_dir: Path, tools_extra: list[str] | None =
 
 # ── scoring ──────────────────────────────────────────────────────────────────
 def norm(x: str) -> str:
-    x = str(x).strip().strip("`").lstrip("./")
+    x = re.sub(r"^(?:\./|/)+", "", str(x).strip().strip("`"))   # a `./` prefix, not the characters (#86: `.github/`)
     if "::" in x:
         path, name = x.split("::", 1)
         return f"{path}::{name.split('.')[-1].split('(')[0].strip()}"
