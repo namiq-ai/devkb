@@ -39,6 +39,18 @@ The new read tools on Zephyr, command line (cold): symbol 3.1 s, outline 1.6 s, 
 The growth is the output of SPEC-DKB-002 (language profiles): declarations of C/C++ symbols, reads of configuration keys (Kconfig, `CONFIG_*`) and the header and Kconfig files they sit in. It is a deliberate cost of a new feature, not an accident; the call graph is unchanged. Python and the small C++ repositories show no change because they carry few declarations and no Kconfig.
 Open: the build is +17% on Zephyr (146 s here on a busy machine, 95.5 s on a quiet one; the budget is 120 s); the graph load makes every cold command-line query on a very large repository slower. A cheaper `DECLARES` encoding (one edge per declaration kind) or lazy loading of the edge file would address it; not done.
 
+## Follow-up: where the Zephyr build time went, and the first fix (2026-11-17)
+
+A profile of the Zephyr build on v0.2.6 and on `main` (cProfile; the totals include its overhead: 210 s and 245 s) puts the existing work (symbol extraction 31 s, body scan 31 s, resolution 15 s) unchanged, and the added ~35 profiled seconds in new work: writing the config keys 5.8 s (4.6 s of it reading Kconfig and devicetree files line by line), parsing 699 Python files for ctypes and cffi boundaries 5.0 s, the C/C++ boundary extractor 4.0 s and its config reads 1.5 s, completeness checks +1.3 s, edge writes +1.3 s, and about 12 s for writing and hashing the 140k extra edges and 55k extra nodes.
+
+The first fix reads less, and builds exactly the same graph:
+- a Python file is parsed only when it names a library handle (`CDLL`, `PyDLL`, `WinDLL`, `OleDLL`, `LoadLibrary`, `dlopen`) or an extension module some C or C++ file exports (the resolver drops every other record);
+- the C/C++ boundary extractor runs its `dlsym`, `PyMethodDef` and config-read scans only on files that contain the word;
+- a Kconfig line is matched only when it contains `config` or `choice`, a devicetree line only when it has `:` and `{`.
+
+Equality: with `PYTHONHASHSEED=0`, `symbols-nodes`, `symbols-edges`, `nodes` and `edges` of the patched build are byte-identical to `main`'s on Zephyr (251,805 nodes, 482,710 edges). Without a fixed seed, about 1,300 `STEP` edges from the flow tracing (`touch-point-bfs`) differ between any two builds, patched or not; that variation exists on `main` and is not part of this change.
+Time, alternating the two on the same machine, four builds each: `main` 148.8 to 150.7 s (median 149.5 s), patched 138.6 to 140.5 s (median 139.1 s), **-7%**; peak memory 1,692 against 1,669 MB. Against v0.2.6 (about 125 s earlier on this machine) the build is now about +11% where it was +17 to +21%; the rest is the writing and hashing of the extra edges, which only a smaller encoding (declarations as a property, an ADR) would remove.
+
 ## The skill configuration and tool search
 
 Claude Code defers MCP tools behind a `ToolSearch` call; in 15 of 16 devkb runs it was the first call, a whole turn spent before the first lookup. The workflow benchmark's forced prompt even said "load them with ToolSearch if they are not yet loaded".

@@ -52,7 +52,7 @@ def extract(path: str, rec: FileRecords, syms: dict[str, Symbolic], qn_of_def: l
         if s.kind == "function" and s.linkage == "c":
             out.records.append(Record("export", s.short, "extern-c", path, s.line_start, _key(path, s), language=lang, kind="c-abi"))
     # dlsym: a lookup by a name the graph cannot follow (a literal one is also left unresolved in this slice)
-    for d in rec.defs:
+    for d in rec.defs if "dlsym" in code else ():
         qn = qn_of_def[d.index] if 0 <= d.index < len(qn_of_def) else None
         if d.kind == "macro" or qn is None:
             continue
@@ -61,7 +61,7 @@ def extract(path: str, rec: FileRecords, syms: dict[str, Symbolic], qn_of_def: l
                 out.records.append(Record("import", "", "extern-c", path, m.line(dm.start()), f"{path}::{qn}", dynamic=True, language=lang))
     # PyMethodDef tables
     inits = [s.short[len("PyInit_"):] for s in syms.values() if s.kind == "function" and s.short.startswith("PyInit_")]
-    for tm in _TABLE.finditer(code):
+    for tm in _TABLE.finditer(code) if "PyMethodDef" in code else ():
         close = _match_close(code, tm.end() - 1, "{", "}")
         if close is None:
             continue
@@ -123,6 +123,8 @@ def extract(path: str, rec: FileRecords, syms: dict[str, Symbolic], qn_of_def: l
 def _config_reads(rec: FileRecords, syms: dict[str, Symbolic], qn_of_def: list[str | None], out: FileBoundary) -> None:
     """`CONFIG_FOO` and `DT_NODELABEL(x)` in masked code and conditional directives: READS from the function, else the file."""
     m = rec.masked
+    if not ("CONFIG_" in m.code or "DT_NODELABEL" in m.code or any("CONFIG_" in b or "DT_NODELABEL" in b for _l, b in m.conds)):
+        return                                  # nothing to read: skip building the function table
     funcs = sorted((d.line, d.line_end, qn_of_def[d.index]) for d in rec.defs
                    if d.kind in ("function", "method") and 0 <= d.index < len(qn_of_def) and qn_of_def[d.index])
     starts = [f[0] for f in funcs]
@@ -181,12 +183,16 @@ def declarations(repo_root: Path) -> list[tuple[str, str, int]]:
             continue
         if kc:
             for i, line in enumerate(text.splitlines(), 1):
+                if "config" not in line and "choice" not in line:
+                    continue                    # the entry pattern needs one of these words
                 em = _KCONFIG_ENTRY.match(line)
                 if em:
                     found.append((rel, "kconfig:CONFIG_" + em.group(1), i))
         else:
             text = re.sub(r"/\*.*?\*/", lambda x: re.sub(r"[^\n]", " ", x.group(0)), text, flags=re.S)
             for i, line in enumerate(text.splitlines(), 1):
+                if ":" not in line or "{" not in line:
+                    continue                    # a label needs `name: node {`; comments are only ever removed, so this is a superset
                 lm = _DTS_LABEL.match(re.sub(r"//.*", "", line))
                 if lm:
                     found.append((rel, "devicetree:" + lm.group(1), i))
