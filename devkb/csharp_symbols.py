@@ -1390,7 +1390,7 @@ _LOCAL = re.compile(r"(?:^|[;{(\s,])(?!(?:using|await|return|yield|throw|new|els
 
 
 def _last_word(s: str) -> str | None:
-    """The identifier `s` ends with (as `re.search(r"[^\W\d]\w*$", s)` reads it), or None. A backward scan: the
+    r"""The identifier `s` ends with (as `re.search(r"[^\W\d]\w*$", s)` reads it), or None. A backward scan: the
     regex tries every position of the window, once per call site (#61)."""
     j = len(s)
     while j and (s[j - 1].isalnum() or s[j - 1] == "_"):
