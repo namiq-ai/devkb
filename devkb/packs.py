@@ -76,6 +76,12 @@ class Packer:
                 return f"{rel}:{n}: {lines[n - 1].strip()[:140]}"
         return f"{rel}:{start}: (def {key.split('::')[-1]})"
 
+    def ref_line(self, site: str) -> str:
+        """`path:line: code` for a `path:line` site."""
+        rel, n = site.rsplit(":", 1)
+        lines = self._file(rel)
+        return f"{site}: {lines[int(n) - 1].strip()[:140] if 0 < int(n) <= len(lines) else ''}"
+
     def def_line(self, sym: int) -> str:
         key = self.api._key(sym)
         rel, start = key.split("::")[0], int(self.idx.props[sym].get("line_start") or 1)
@@ -105,6 +111,12 @@ class Packer:
     def coverage(self, syms: list[int], shown: set[str]) -> str:
         """The coverage statement; for a C/C++ symbol, the limit statement follows it, Complete or not (ADR-DEVKB-008 §4)."""
         text = self._coverage_text(syms, shown)
+        refs = [(x, r) for x in syms for r in self.idx.props[x].get("value_refs") or ()]
+        if refs:                                         # #69: the line that hides the callers, not only that some do
+            total = sum(int(self.idx.props[x].get("value_ref_count") or 0) for x in {x for x, _ in refs})
+            text += (f" Named without a call at {total} site(s), each a way to call it the graph cannot follow; search "
+                     "from these: " + "; ".join(f"`{self.ref_line(r)}` (`{self._name(x)}`)" for x, r in refs[:8])
+                     + (f"; … {total - 8} more" if total > 8 else "") + ".")
         if any(is_cxx_path(self.api._key(x).split("::")[0]) for x in syms):
             c = self.api._coverage(syms, shown)
             if c.get("unattributed_errors"):

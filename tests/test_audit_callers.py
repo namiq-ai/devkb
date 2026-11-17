@@ -29,6 +29,38 @@ FILES = {
         "def use():\n"
         "    return Index().walk(3)\n"
     ),
+    "pkg/work.py": (
+        "from concurrent.futures import ThreadPoolExecutor\n"
+        "\n"
+        "\n"
+        "class Worker:\n"
+        "    def _moved_files(self, rev):\n"
+        "        return rev\n"
+        "\n"
+        "    def run(self, rev):\n"
+        "        with ThreadPoolExecutor() as pool:\n"
+        "            return pool.submit(self._moved_files, rev).result()\n"
+        "\n"
+        "\n"
+        "def key_of(x):\n"
+        "    return x\n"
+        "\n"
+        "\n"
+        "def order(xs, key_of_local=None):\n"
+        "    return sorted(xs, key=key_of)\n"
+        "\n"
+        "\n"
+        "def plain():\n"
+        "    return 1\n"
+        "\n"
+        "\n"
+        "def shadowed(plain):\n"
+        "    return [plain, plain()]\n"
+        "\n"
+        "\n"
+        "def use():\n"
+        "    return plain()\n"
+    ),
 }
 
 
@@ -62,3 +94,20 @@ def test_a_recursive_method_counts_its_other_callers_only(api):  # #70
 def test_the_refactor_pack_does_not_list_a_recursive_call_as_a_caller(api):  # #70
     text = Packer(api).refactor("field_type")
     assert "## Files with a direct caller (0" in text and "calls itself" in text, text
+
+
+@pytest.mark.parametrize("name, line", [("_moved_files", 10), ("key_of", 18)])
+def test_a_function_passed_as_a_value_makes_the_refactor_pack_incomplete_and_names_the_line(api, name, line):  # #69
+    text = Packer(api).refactor(name)
+    assert "**Complete.**" not in text and "**Incomplete" in text, text
+    assert f"`pkg/work.py:{line}:" in text and "without a call" in text, text
+
+
+def test_a_function_only_called_stays_complete_and_a_parameter_of_the_same_name_is_not_a_reference(api):  # #69
+    text = Packer(api).refactor("plain")
+    assert "**Complete.**" in text and "without a call" not in text, text
+
+
+def test_symbol_says_a_function_with_no_caller_is_named_without_a_call(api):  # #69
+    r = api.call("symbol", query="_moved_files")
+    assert "callers 0 (+ named without a call at 1 site(s))" in RENDER["symbol"](r)
