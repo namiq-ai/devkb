@@ -63,11 +63,11 @@ def extract(ctx: ProjectContext, graph: DevKBGraph) -> DevKBGraph:
         try:
             text = py.read_text(errors="replace")
             tree = ast.parse(text, filename=str(py))
-        except (SyntaxError, OSError, ValueError):
+            imported = _imports(tree)
+            tests = _test_functions(tree)
+        except (SyntaxError, OSError, ValueError, RecursionError):
             continue
         rel = str(py.relative_to(ctx.repo_root))
-        imported = _imports(tree)
-        tests = _test_functions(tree)
         if not tests:
             continue
 

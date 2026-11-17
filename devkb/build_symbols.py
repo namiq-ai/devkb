@@ -186,9 +186,8 @@ def _odoo_xml_symbols(repo_root: Path) -> dict[str, list[dict]]:
 
 
 def _first_line(docstring: str | None) -> str | None:
-    if not docstring:
-        return None
-    return docstring.strip().splitlines()[0].strip()
+    lines = (docstring or "").strip().splitlines()
+    return lines[0].strip() if lines else None        # a whitespace-only docstring has no summary (#105)
 
 
 EXPR = "<expr>"
@@ -956,14 +955,19 @@ def _parse_python_file(
         tree = ast.parse(text, filename=str(path))
     except (SyntaxError, OSError, ValueError, RecursionError):
         return [], [], [], [], None, [], [], [], "", [], [], [], [], []
-    v = _Visitor()
-    v.router_prefix = _router_prefix(tree)
-    v.visit(tree)
-    v.calls.extend((MODULE_CALLER, receiver, callee) for receiver, callee in _module_level_calls(tree))
-    module_docstring = ast.get_docstring(tree)
-    return (v.symbols, v.calls, _imports(tree), v.routes, module_docstring, v.raises, v.logs,
-            _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree), _py_literals(tree),
-            _typed_calls(tree), _safe_value_refs(tree))
+    try:
+        v = _Visitor()
+        v.router_prefix = _router_prefix(tree)
+        v.visit(tree)
+        v.calls.extend((MODULE_CALLER, receiver, callee) for receiver, callee in _module_level_calls(tree))
+        module_docstring = ast.get_docstring(tree)
+        return (v.symbols, v.calls, _imports(tree), v.routes, module_docstring, v.raises, v.logs,
+                _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree),
+                _py_literals(tree), _typed_calls(tree), _safe_value_refs(tree))
+    except RecursionError:
+        # a generated file nested deeper than the tree walks can follow: skip it, say so, keep the rest (#106)
+        print(f"devkb: skipped {path}: nested too deeply to read", file=sys.stderr)
+        return [], [], [], [], None, [], [], [], "", [], [], [], [], []
 
 
 def _safe_value_refs(tree: ast.Module) -> list[tuple[str, str | None, str, int]]:

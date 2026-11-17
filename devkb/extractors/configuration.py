@@ -107,7 +107,10 @@ def python_reads(text: str) -> list[tuple[str, str]]:
     except (SyntaxError, ValueError, RecursionError):
         return []
     v = _Reads()
-    v.visit(tree)
+    try:
+        v.visit(tree)
+    except RecursionError:      # a file nested deeper than the walk can follow: no reads from it (#106)
+        return []
     return v.found
 
 
