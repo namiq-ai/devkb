@@ -1070,3 +1070,39 @@ def test_extraction_stays_linear_in_unresolved_calls_to_a_common_name(tmp_path):
     assert len(gets) == n and all(s["unresolved_calls"] == n and s["unresolved_file_count"] == n for s in gets)
     assert gets[0]["unresolved_files"] == sorted(f"C{i}.cs" for i in range(n))[:20]
     assert took < 3.0, f"{took:.1f} s for {n} files: quadratic again"
+
+
+def test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method(tmp_path):
+    """#61: one method of 8000 lines `b.Property(x => x.P).HasColumn(y => y.Q);` (an EF Core model snapshot's shape).
+    Every lambda parameter went on one list scanned whole per lookup: ~5 s; linear, about 1 s."""
+    import time
+    lines = "\n".join(f"    b.Property(x => x.P{i}).HasColumn(y => y.Q{i});" for i in range(8000))
+    text = ("namespace N { class B { public B Property(System.Func<int,int> f) => this; "
+            "public B HasColumn(System.Func<int,int> f) => this; }\nclass A { void M(B b) {\n" + lines + "\n} } }\n")
+    t = time.perf_counter()
+    _, edges = _edges_of(tmp_path, {"A.cs": text})
+    took = time.perf_counter() - t
+    assert edges == {("N.A.M", "N.B.Property"), ("N.A.M", "N.B.HasColumn")}
+    assert took < 2.5, f"{took:.1f} s for 8000 lines: quadratic again"
+
+
+def test_a_lambda_parameter_shadows_only_within_its_lambda(tmp_path):
+    """#61 kept the lookup's meaning: the innermost (latest) lambda parameter whose span holds the position wins, and
+    outside every span the local of the same name is seen again."""
+    got = _sites(tmp_path, "S61.cs", '''namespace S61;
+public class P { public void Pm() { } }
+public class Q { public void Qm() { } }
+public class R { public void Rm() { } }
+public static class Run { public static void With(System.Action<Q> a) { } public static void Wide(System.Action<R> a) { } }
+public class Use
+{
+    public void Go(P x)
+    {
+        Run.Wide(x => { Run.With(x => x.Qm()); x.Rm(); });
+        x.Pm();
+    }
+}
+''')
+    assert got["Run.Wide(x => { Run.With(x => x.Qm()); x.Rm(); });"] >= {"S61.Q.Qm", "S61.R.Rm"}
+    assert "S61.P.Pm" not in got["Run.Wide(x => { Run.With(x => x.Qm()); x.Rm(); });"]
+    assert got["x.Pm();"] == {"S61.P.Pm"}

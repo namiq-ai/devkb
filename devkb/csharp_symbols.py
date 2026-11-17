@@ -1313,6 +1313,17 @@ _LOCAL = re.compile(r"(?:^|[;{(\s,])(?!(?:using|await|return|yield|throw|new|els
                     r"\s*(?:=\s*new\s+(?P<nt>[^\W\d][\w.]*(?:<[^;=(){}]*?>)?)\s*[({])?")
 
 
+def _last_word(s: str) -> str | None:
+    """The identifier `s` ends with (as `re.search(r"[^\W\d]\w*$", s)` reads it), or None. A backward scan: the
+    regex tries every position of the window, once per call site (#61)."""
+    j = len(s)
+    while j and (s[j - 1].isalnum() or s[j - 1] == "_"):
+        j -= 1
+    while j < len(s) and s[j].isdecimal():
+        j += 1
+    return s[j:] or None
+
+
 def _new_ends_statement(body: str, k: int) -> bool:
     """Whether the `new T(...)` / `new T { ... }` whose `(` or `{` is at body[k] is the whole value: after its
     argument list and initializer comes `;` (or `,`/`)` in a `using` or `for` header), not `.Member`."""
@@ -1443,7 +1454,14 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                 types.setdefault(fm.group("n"), el)
                 inferred.add(fm.group("n"))
         results: dict[int, tuple] = {}                            # close paren -> (result type, expression start)
-        scoped: list[tuple] = []                                  # (from, to, name, type, declared): lambda parameters
+        # lambda parameters, by name: [(from, to, type, declared, the largest `to` so far)]. By name, and a lookup
+        # stops where no earlier span reaches its position: one list scanned whole was quadratic in long fluent
+        # methods (EF Core model snapshots, #61)
+        scoped: dict[str, list[tuple]] = {}
+
+        def scope(a0: int, b0: int, nm: str, t, declared: bool) -> None:
+            entries = scoped.setdefault(nm, [])
+            entries.append((a0, b0, t, declared, max(b0, entries[-1][4]) if entries else b0))
 
         cons = {}
         for k in range(1, len(tq) + 1):                           # enclosing types' constraints, then the method's
@@ -1458,8 +1476,10 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             """`nm`'s type at `pos`. With `declared_only` (to rule an argument out), only a type the source writes:
             an inferred one (a call's result, a delegate's parameter) may be off, and a wrong ruling-out loses a
             correct edge (found on EF Core)."""
-            for a0, b0, x, t, declared in reversed(scoped):
-                if x == nm and a0 <= pos < b0:
+            for a0, b0, t, declared, reach in reversed(scoped.get(nm, ())):
+                if reach <= pos:
+                    break                                         # no earlier span reaches `pos`
+                if a0 <= pos < b0:
                     # (None: untyped, still shadows); a type parameter is its constraint here too (EF Core: the
                     # lambda's `e` of type `TExtension : RelationalOptionsExtension`)
                     return constrained(t) if (declared or not declared_only) else None
@@ -1539,7 +1559,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             else:
                 props = [p_ for p_ in re.sub(r"[\s?@]", "", qm.group(5)).split(".") if p_]
                 el, declared = _elem(walk(type_of(qm.group(4), qm.start()), props)), False
-            scoped.append((qm.start(), end_q, qm.group(2), el, declared))
+            scope(qm.start(), end_q, qm.group(2), el, declared)
 
         for m in _CALL.finditer(body):
             at = start + m.start()
@@ -1548,8 +1568,8 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             off = max(0, m.start() - _LOOKBACK)
             window = body[off: m.start()]
             pre = window.rstrip()
-            word = re.search(r"([^\W\d]\w*)$", pre)
-            if not m.group("new") and ((word and word.group(1) not in _KEEP_BEFORE and not pre.endswith("."))
+            word = _last_word(pre)
+            if not m.group("new") and ((word and word not in _KEEP_BEFORE and not pre.endswith("."))
                                        or (pre.endswith(">") and not pre.endswith("=>") and not pre.endswith("->"))):
                 continue                                          # `T Name(...)`: a declaration, not a call
             chain = re.sub(r"\s+|\?", "", m.group("chain")).replace("@", "")
@@ -1573,7 +1593,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                         for part in (_split_top(lm.group("ps")) if lm.group("ps") is not None else [lm.group("p")]):
                             toks = _split_top(part.strip(), " ")
                             declared = _dealias(_pt("".join(toks[:-1])), aliases) if len(toks) > 1 else None
-                            scoped.append((ai, bi, toks[-1].lstrip("@"), declared, declared is not None))
+                            scope(ai, bi, toks[-1].lstrip("@"), declared, declared is not None)
             expr_start = m.start()
             chained = False
             generic_static = None                                 # F6: `Type<A>.M(...)`
@@ -1756,7 +1776,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                         if len(cand) == 1 and (lt := cand.pop()):
                             for nm, t in zip(names, lt):
                                 if t:
-                                    scoped.append((ai, bi, nm.lstrip("@"), t, False))
+                                    scope(ai, bi, nm.lstrip("@"), t, False)
             if callee is None and rt is not None and not m.group("new"):
                 # an outside method on a typed receiver: LINQ over a known element type, or a fluent builder
                 el = _elem(rt)
@@ -1764,7 +1784,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                     for mi, _ri, ai, bi in a_.items:
                         lm = _LAMBDA.match(mi)
                         if lm and lm.group("p"):
-                            scoped.append((ai, bi, lm.group("p").lstrip("@"), el, False))
+                            scope(ai, bi, lm.group("p").lstrip("@"), el, False)
                 if el is not None and name in dotnet.LINQ_SAME:
                     res = ("IEnumerable", (el,))
                 elif el is not None and name in dotnet.LINQ_ELEMENT:
