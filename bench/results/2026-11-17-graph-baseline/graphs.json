@@ -1,0 +1,528 @@
+{
+ "label": "baseline-2026-11-17",
+ "code": "641e06712eb0caae4c850d792a70f5b79e94fd60",
+ "python": "Python 3.12.16",
+ "repos": {
+  "click": {
+   "commit": "e38188e9e205005d5af5f9e59df51904c984586a",
+   "commits_in_clone": 3413,
+   "files": 179,
+   "build_secs": 11.2,
+   "graph_mb": 6.4,
+   "nodes": 4774,
+   "edges": 10330,
+   "node_types": {
+    "Commit": 995,
+    "File": 241,
+    "PullRequest": 43,
+    "TestCase": 628,
+    "ConfigKey": 6,
+    "Symbol": 2044,
+    "ErrorSignature": 85,
+    "WorkUnit": 693,
+    "Spec": 38,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 3430,
+    "DEFINED_IN": 2672,
+    "GROUPS": 995,
+    "LOGS": 9,
+    "MERGES": 43,
+    "RAISES": 146,
+    "READS": 12,
+    "TESTED_BY": 1378,
+    "TOUCHES": 1645
+   },
+   "symbol_languages": {
+    "python": 2044
+   },
+   "symbol_kinds": {
+    "class": 178,
+    "method": 472,
+    "function": 1394
+   }
+  },
+  "lattice-scan": {
+   "commit": "17e2aefd7f7b6b7c7d68a6a3538bc51cebf7c6f5",
+   "commits_in_clone": 229,
+   "files": 175,
+   "build_secs": 6.8,
+   "graph_mb": 4.8,
+   "nodes": 3147,
+   "edges": 7672,
+   "node_types": {
+    "Commit": 229,
+    "File": 179,
+    "PullRequest": 125,
+    "TestCase": 743,
+    "ConfigKey": 12,
+    "Component": 1,
+    "Symbol": 1733,
+    "ErrorSignature": 76,
+    "WorkUnit": 32,
+    "Spec": 3,
+    "Flow": 13,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 2669,
+    "DEFINED_IN": 2476,
+    "DEPLOYS": 1,
+    "GROUPS": 229,
+    "MERGES": 217,
+    "RAISES": 90,
+    "READS": 13,
+    "STEP": 503,
+    "TESTED_BY": 545,
+    "TOUCHES": 929
+   },
+   "symbol_languages": {
+    "python": 1733
+   },
+   "symbol_kinds": {
+    "function": 587,
+    "class": 192,
+    "method": 954
+   }
+  },
+  "lnbits": {
+   "commit": "c8d4701304888696768cbdb2424db4d8b227128e",
+   "commits_in_clone": 7401,
+   "files": 806,
+   "build_secs": 30.1,
+   "graph_mb": 20.6,
+   "nodes": 14126,
+   "edges": 35786,
+   "node_types": {
+    "Commit": 1418,
+    "File": 893,
+    "PullRequest": 1292,
+    "Ticket": 16,
+    "TestCase": 1585,
+    "ConfigKey": 145,
+    "Component": 23,
+    "Endpoint": 257,
+    "Symbol": 5730,
+    "ErrorSignature": 1247,
+    "WorkUnit": 1271,
+    "Spec": 2,
+    "Flow": 246,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 8754,
+    "CALLS_API": 1,
+    "CLOSES": 16,
+    "DECLARES": 165,
+    "DEFINED_IN": 7318,
+    "DEPLOYS": 23,
+    "GROUPS": 1418,
+    "LOGS": 488,
+    "MERGES": 1334,
+    "RAISES": 1406,
+    "READS": 25,
+    "REGISTERED_ON": 3,
+    "STEP": 4400,
+    "TESTED_BY": 2756,
+    "TOUCHES": 7679
+   },
+   "symbol_languages": {
+    "python": 5579,
+    "none": 151
+   },
+   "symbol_kinds": {
+    "function": 3482,
+    "class": 598,
+    "method": 1650
+   }
+  },
+  "mealie": {
+   "commit": "a083a4dd6e46a91d19666399cacac77a923bd32d",
+   "commits_in_clone": 5937,
+   "files": 1781,
+   "build_secs": 76.1,
+   "graph_mb": 26.2,
+   "nodes": 22937,
+   "edges": 47041,
+   "node_types": {
+    "Commit": 4473,
+    "File": 2315,
+    "PullRequest": 3775,
+    "Ticket": 4,
+    "TestCase": 2064,
+    "Component": 8,
+    "ConfigKey": 46,
+    "Endpoint": 292,
+    "Symbol": 5629,
+    "ErrorSignature": 295,
+    "WorkUnit": 3729,
+    "Flow": 306,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 6704,
+    "CLOSES": 4,
+    "DECLARES": 48,
+    "DEFINED_IN": 7703,
+    "DEPLOYS": 8,
+    "GROUPS": 4473,
+    "LOGS": 62,
+    "MERGES": 4433,
+    "RAISES": 411,
+    "READS": 6,
+    "REGISTERED_ON": 3,
+    "STEP": 1837,
+    "TESTED_BY": 2471,
+    "TOUCHES": 18878
+   },
+   "symbol_languages": {
+    "python": 4996,
+    "none": 633
+   },
+   "symbol_kinds": {
+    "function": 3188,
+    "class": 883,
+    "method": 1558
+   }
+  },
+  "dispatch": {
+   "commit": "dd2837e82a0bf5565b1b4b4b91ea30b7262d4061",
+   "commits_in_clone": 5279,
+   "files": 1569,
+   "build_secs": 31.4,
+   "graph_mb": 13.7,
+   "nodes": 11561,
+   "edges": 21135,
+   "node_types": {
+    "Commit": 1822,
+    "File": 1042,
+    "PullRequest": 1819,
+    "TestCase": 435,
+    "ConfigKey": 34,
+    "Component": 8,
+    "Endpoint": 290,
+    "Symbol": 4127,
+    "ErrorSignature": 429,
+    "WorkUnit": 1260,
+    "Flow": 294,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 3932,
+    "DECLARES": 54,
+    "DEFINED_IN": 4562,
+    "DEPLOYS": 8,
+    "GROUPS": 1822,
+    "LOGS": 455,
+    "MERGES": 1819,
+    "RAISES": 441,
+    "READS": 9,
+    "STEP": 3280,
+    "TESTED_BY": 695,
+    "TOUCHES": 4058
+   },
+   "symbol_languages": {
+    "python": 4005,
+    "none": 122
+   },
+   "symbol_kinds": {
+    "function": 2590,
+    "class": 973,
+    "method": 564
+   }
+  },
+  "prefect": {
+   "commit": "c12b3322560bee718479da8968e7af017df2ea33",
+   "commits_in_clone": 22492,
+   "files": 5542,
+   "build_secs": 207.0,
+   "graph_mb": 129.2,
+   "nodes": 91299,
+   "edges": 186592,
+   "node_types": {
+    "Commit": 7130,
+    "File": 7666,
+    "PullRequest": 7084,
+    "Ticket": 19,
+    "TestCase": 19120,
+    "Component": 21,
+    "ConfigKey": 90,
+    "Endpoint": 207,
+    "Symbol": 41056,
+    "ErrorSignature": 1712,
+    "WorkUnit": 6623,
+    "Spec": 2,
+    "Flow": 568,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 49117,
+    "CALLS_API": 7,
+    "CLOSES": 19,
+    "DECLARES": 44,
+    "DEFINED_IN": 60230,
+    "DEPLOYS": 21,
+    "GROUPS": 7130,
+    "LOGS": 310,
+    "MERGES": 7085,
+    "RAISES": 2965,
+    "READS": 93,
+    "REGISTERED_ON": 2,
+    "STEP": 5743,
+    "TESTED_BY": 19764,
+    "TOUCHES": 34062
+   },
+   "symbol_languages": {
+    "python": 38097,
+    "none": 2959
+   },
+   "symbol_kinds": {
+    "function": 17760,
+    "class": 6020,
+    "method": 17276
+   }
+  },
+  "cJSON": {
+   "commit": "6d9f2443ab071f86e5d9b43025a40929ec41c46c",
+   "commits_in_clone": 1,
+   "files": 229,
+   "build_secs": 1.0,
+   "graph_mb": 2.5,
+   "nodes": 1567,
+   "edges": 2540,
+   "node_types": {
+    "Commit": 1,
+    "File": 101,
+    "TestCase": 268,
+    "Symbol": 1184,
+    "ErrorSignature": 1,
+    "WorkUnit": 1,
+    "Flow": 10,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 1072,
+    "DEFINED_IN": 1452,
+    "GROUPS": 1,
+    "RAISES": 3,
+    "STEP": 12
+   },
+   "symbol_languages": {
+    "python": 14,
+    "c": 1170
+   },
+   "symbol_kinds": {
+    "class": 13,
+    "method": 12,
+    "function": 1111,
+    "enum": 5,
+    "test": 43
+   }
+  },
+  "fmt": {
+   "commit": "57f1b5930dc2906875534a15c209e1c39eda59ad",
+   "commits_in_clone": 1,
+   "files": 148,
+   "build_secs": 2.4,
+   "graph_mb": 5.7,
+   "nodes": 4046,
+   "edges": 6006,
+   "node_types": {
+    "Commit": 1,
+    "File": 148,
+    "TestCase": 690,
+    "ConfigKey": 1,
+    "Symbol": 3167,
+    "ErrorSignature": 26,
+    "WorkUnit": 1,
+    "Flow": 11,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 1929,
+    "DEFINED_IN": 3857,
+    "GROUPS": 1,
+    "RAISES": 39,
+    "READS": 1,
+    "STEP": 31,
+    "TOUCHES": 148
+   },
+   "symbol_languages": {
+    "python": 112,
+    "cpp": 3037,
+    "c": 18
+   },
+   "symbol_kinds": {
+    "class": 512,
+    "method": 1235,
+    "function": 692,
+    "enum": 63,
+    "test": 665
+   }
+  },
+  "leveldb": {
+   "commit": "29465588d3dfdc80fba5e198037582b8fdb5dd60",
+   "commits_in_clone": 1,
+   "files": 154,
+   "build_secs": 1.3,
+   "graph_mb": 3.8,
+   "nodes": 2222,
+   "edges": 4327,
+   "node_types": {
+    "Commit": 1,
+    "File": 154,
+    "TestCase": 232,
+    "Symbol": 1833,
+    "WorkUnit": 1,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 2107,
+    "DEFINED_IN": 2065,
+    "GROUPS": 1,
+    "TOUCHES": 154
+   },
+   "symbol_languages": {
+    "cpp": 1818,
+    "c": 15
+   },
+   "symbol_kinds": {
+    "function": 282,
+    "class": 207,
+    "method": 1095,
+    "enum": 18,
+    "test": 231
+   }
+  },
+  "autoas": {
+   "commit": "cc3709675ac30f7539c0710dfec6d579a5235841",
+   "commits_in_clone": 1,
+   "files": 1004,
+   "build_secs": 6.6,
+   "graph_mb": 10.4,
+   "nodes": 6443,
+   "edges": 10718,
+   "node_types": {
+    "Commit": 1,
+    "File": 660,
+    "TestCase": 3,
+    "ConfigKey": 17,
+    "Symbol": 5665,
+    "ErrorSignature": 74,
+    "WorkUnit": 1,
+    "Flow": 21,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 4686,
+    "DEFINED_IN": 5668,
+    "GROUPS": 1,
+    "LOGS": 47,
+    "RAISES": 122,
+    "READS": 26,
+    "STEP": 166,
+    "TESTED_BY": 2
+   },
+   "symbol_languages": {
+    "python": 1175,
+    "c": 2976,
+    "cpp": 1514
+   },
+   "symbol_kinds": {
+    "function": 3436,
+    "class": 926,
+    "method": 1233,
+    "enum": 70
+   }
+  },
+  "zephyr": {
+   "commit": "7cd4b562b30a9bcd76a7288ad90d5e71dd6f87d2",
+   "commits_in_clone": 1,
+   "files": 70856,
+   "build_secs": 140.8,
+   "graph_mb": 425.0,
+   "nodes": 251805,
+   "edges": 482710,
+   "node_types": {
+    "Commit": 1,
+    "File": 31294,
+    "TestCase": 10623,
+    "ConfigKey": 36719,
+    "Component": 4,
+    "Symbol": 147374,
+    "ErrorSignature": 25552,
+    "WorkUnit": 1,
+    "Flow": 236,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 149720,
+    "DECLARES": 82261,
+    "DEFINED_IN": 157999,
+    "DEPLOYS": 4,
+    "GROUPS": 1,
+    "LOGS": 36494,
+    "RAISES": 722,
+    "READS": 52152,
+    "STEP": 1967,
+    "TESTED_BY": 1390
+   },
+   "symbol_languages": {
+    "python": 9647,
+    "none": 140,
+    "c": 137342,
+    "cpp": 245
+   },
+   "symbol_kinds": {
+    "function": 115326,
+    "class": 16029,
+    "method": 4387,
+    "enum": 3079,
+    "test": 8553
+   }
+  },
+  "devkb": {
+   "commit": "b6a2c9ca10ea50063fda2b8552a038dd27f2b1df",
+   "commits_in_clone": 2,
+   "files": 155,
+   "build_secs": 5.9,
+   "graph_mb": 2.9,
+   "nodes": 2150,
+   "edges": 5218,
+   "node_types": {
+    "Commit": 209,
+    "File": 702,
+    "PullRequest": 49,
+    "TestCase": 202,
+    "Release": 11,
+    "ConfigKey": 15,
+    "Symbol": 778,
+    "ErrorSignature": 7,
+    "WorkUnit": 151,
+    "Flow": 25,
+    "Repository": 1
+   },
+   "edge_verbs": {
+    "CALLS": 1549,
+    "DEFINED_IN": 980,
+    "GROUPS": 209,
+    "MERGES": 142,
+    "RAISES": 7,
+    "READS": 24,
+    "STEP": 412,
+    "TAGS": 11,
+    "TESTED_BY": 219,
+    "TOUCHES": 1665
+   },
+   "symbol_languages": {
+    "python": 778
+   },
+   "symbol_kinds": {
+    "function": 475,
+    "class": 43,
+    "method": 260
+   }
+  }
+ }
+}
