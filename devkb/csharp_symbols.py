@@ -807,7 +807,7 @@ def scan_file(rel: str, text: str) -> dict:
                     mh = _member_head(header[:arrow])
                     if mh:
                         f = _member_frame(mh, attrs, header[:arrow], top, head_start, i, add)
-                        top["pending"] = (f["sym"], last + arrow)
+                        top["pending"] = (f["sym"], i - len(header) + arrow)   # header: raw's tail, attributes gone
                         frame = {"kind": "block", "q": top["q"], "start": i, "member": f["sym"]}
             elif top["kind"] == "member" and top.get("property"):
                 frame = {"kind": "block", "q": top["q"], "start": i, "member": top["sym"]}   # an accessor body
@@ -859,7 +859,9 @@ def scan_file(rel: str, text: str) -> dict:
                     mh = _member_head(header[:arrow])
                     if mh:
                         f = _member_frame(mh, attrs, header[:arrow], top, head_start, i, add)
-                        f["sym"]["body"].append((last + arrow, i))
+                        # from the arrow: `header` is raw without its leading attributes (and the blanked doc
+                        # comment before them), so `last + arrow` began inside the header and read its name as a call
+                        f["sym"]["body"].append((i - len(header) + arrow, i))
                 elif "(" in header and assign is None:
                     mh = _member_head(header)                       # interface, abstract, extern or partial member
                     if mh:

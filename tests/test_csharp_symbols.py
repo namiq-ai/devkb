@@ -1230,3 +1230,25 @@ def test_a_utf16_file_is_read(tmp_path):
     tests = '[Fact] public void Works() { }'.join(("namespace U83 { class T { ", " } }\n"))
     (tmp_path / "T.cs").write_bytes(tests.encode("utf-16"))
     assert test_discovery.tests_in_file(tmp_path, "T.cs") == [("Works", 1)]
+
+
+def test_an_explicit_implementation_after_an_attribute_does_not_call_itself(tmp_path):
+    """#79, measured on EF Core: an expression body's start was counted from the header with its attributes removed,
+    so it began that many characters early, inside the header; `IG.Get(` there read as a call to the interface."""
+    names, edges = _edges_of(tmp_path, {"E79.cs": '''namespace E79 {
+interface IG { int Get(int a); int Put(int a); }
+class B { public virtual int Get(int a) => 0; public virtual int Put(int a) => 0; }
+class A : B, IG {
+  [System.Diagnostics.DebuggerStepThrough]
+  int IG.Get(int a) => base.Get(a);
+  [System.Diagnostics.DebuggerStepThrough]
+  int IG.Put(int a) => new System.Func<int>(() => { return base.Put(a); })();
+}
+}
+'''})
+    assert {"E79.A.IG.Get", "E79.A.IG.Put"} <= names
+    assert not any(callee.startswith("E79.IG.") for _, callee in edges)
+    sc = csharp_symbols.scan_file("E79.cs", (tmp_path / "E79.cs").read_text())
+    for s in sc["symbols"]:
+        if s["name"] in ("IG.Get", "IG.Put"):
+            assert [sc["masked"][a:a + 2] for a, _ in s["body"]] == ["=>"], s["name"]
