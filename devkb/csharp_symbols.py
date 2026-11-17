@@ -175,8 +175,8 @@ def mask(text: str) -> str:
 # ── headers ──────────────────────────────────────────────────────────────────
 
 _ATTRS = re.compile(r"^\s*(\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]\s*)+")
-_ATTR_NAME = re.compile(r"(?:^|[\[,]\s*)(?:[A-Za-z_][\w.]*\.)?([A-Za-z_]\w*?)(?:Attribute)?\s*(?=[(\],])")
-_TYPE_HEAD = re.compile(r"\b(class|struct|interface|enum|record(?:\s+(?:class|struct))?)\s+@?([A-Za-z_]\w*)")
+_ATTR_NAME = re.compile(r"(?:^|[\[,]\s*)(?:[^\W\d][\w.]*\.)?([^\W\d]\w*?)(?:Attribute)?\s*(?=[(\],])")
+_TYPE_HEAD = re.compile(r"\b(class|struct|interface|enum|record(?:\s+(?:class|struct))?)\s+@?([^\W\d]\w*)")
 _NS_HEAD = re.compile(r"^\s*namespace\s+([\w.]+)\s*$")
 
 
@@ -275,11 +275,11 @@ def _base_names(h: str) -> list[str]:
     h = re.sub(r"\([^()]*\)", "", _strip_generics(h))
     if ":" not in h:
         return []
-    return [p.strip().split(".")[-1] for p in h.split(":", 1)[1].split(",") if re.match(r"^\s*[A-Za-z_][\w.]*\s*$", p)]
+    return [p.strip().split(".")[-1] for p in h.split(":", 1)[1].split(",") if re.match(r"^\s*[^\W\d][\w.]*\s*$", p)]
 
 
 _PARAM = re.compile(r"(?:^|,)\s*(?:\[[^\]]*\]\s*)?(?:(?:this|ref|out|in|params|scoped|readonly)\s+)*"
-                    r"([A-Za-z_][\w.]*)\s*(?:<[^()]*?>)?\s*(?:\[\s*\])?\??\s+@?([A-Za-z_]\w*)")
+                    r"([^\W\d][\w.]*)\s*(?:<[^()]*?>)?\s*(?:\[\s*\])?\??\s+@?([^\W\d]\w*)")
 
 
 def _params(p: str) -> dict[str, str]:
@@ -288,7 +288,7 @@ def _params(p: str) -> dict[str, str]:
     return {name: typ.split(".")[-1] for typ, name in _PARAM.findall(p)}
 
 
-_ATTR_ANY = re.compile(r"\[\s*[A-Za-z_][^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]")   # an attribute starts with a name; `[]` is an array
+_ATTR_ANY = re.compile(r"\[\s*[^\W\d][^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]")   # an attribute starts with a name; `[]` is an array
 
 
 def _top_parts(p: str) -> list[str]:
@@ -321,7 +321,7 @@ def _arity(params: str, ext: bool) -> tuple[int, int | None]:
 
 def _this_type(params: str) -> str | None:
     first = _top_parts(params)[:1]
-    m = re.match(r"\s*this\s+(?:(?:ref|in|scoped|readonly)\s+)*([A-Za-z_][\w.]*)", first[0]) if first else None
+    m = re.match(r"\s*this\s+(?:(?:ref|in|scoped|readonly)\s+)*([^\W\d][\w.]*)", first[0]) if first else None
     return m.group(1).split(".")[-1] if m else None
 
 
@@ -366,12 +366,12 @@ def _pt(text: str | None):
     arr = 0
     while t.endswith("[]"):
         t, arr = t[:-2], arr + 1
-    m = re.match(r"^([A-Za-z_][\w.]*)(?:<(.*)>)?$", t)
+    m = re.match(r"^([^\W\d][\w.]*)(?:<(.*)>)?$", t)
     if m:
         args = tuple(_pt(a) for a in _split_top(m.group(2))) if m.group(2) else ()
         out = (m.group(1).split(".")[-1], args)
     else:
-        mm = re.match(r"^([A-Za-z_][\w.]*)", t)                 # unbalanced generics: the outer name is enough
+        mm = re.match(r"^([^\W\d][\w.]*)", t)                 # unbalanced generics: the outer name is enough
         if not mm:
             return None
         out = (mm.group(1).split(".")[-1], ())
@@ -455,7 +455,7 @@ def _args(body: str, raw: str, k: int) -> _Args:
                 if top_lt:
                     return _Args(None, None, j, False)
                 items = [(body[a + 1:b], raw[a + 1:b], a + 1, b) for a, b in zip(cuts, cuts[1:])]
-                named = any(re.match(r"\s*@?[A-Za-z_]\w*\s*:(?!:)", it[0]) for it in items)
+                named = any(re.match(r"\s*@?[^\W\d]\w*\s*:(?!:)", it[0]) for it in items)
                 return _Args(len(items), items, j, named)
         elif depth == 1:
             if c == ",":
@@ -465,7 +465,7 @@ def _args(body: str, raw: str, k: int) -> _Args:
     return _Args(None, None, None, False)
 
 
-_LAMBDA = re.compile(r"^\s*(?:static\s+)?(?:async\s+)?(?:\(\s*(?P<ps>[^()]*)\)|@?(?P<p>[A-Za-z_]\w*))\s*=>")
+_LAMBDA = re.compile(r"^\s*(?:static\s+)?(?:async\s+)?(?:\(\s*(?P<ps>[^()]*)\)|@?(?P<p>[^\W\d]\w*))\s*=>")
 
 
 def _arg_type(mtext: str, rtext: str, type_of):
@@ -485,10 +485,10 @@ def _arg_type(mtext: str, rtext: str, type_of):
         return ("bool", ())
     if _LAMBDA.match(mt):
         return ("#lambda", ())
-    m = re.match(r"^new\s+([A-Za-z_][\w.]*(?:<[^()]*>)?)\s*(?:\([^()]*\)|\{[^{}]*\})$", mt)
+    m = re.match(r"^new\s+([^\W\d][\w.]*(?:<[^()]*>)?)\s*(?:\([^()]*\)|\{[^{}]*\})$", mt)
     if m:
         return _pt(m.group(1))
-    m = re.match(r"^@?([A-Za-z_]\w*)$", mt)
+    m = re.match(r"^@?([^\W\d]\w*)$", mt)
     if m and m.group(1) not in ("null", "default", "this", "base"):
         return type_of(m.group(1))
     return None
@@ -528,7 +528,7 @@ def _elem(t):
 def _local_fn_sig(h: str, k: int, ptext: str) -> dict:
     """A local function's signature, as `_member_head` records a method's: arity, parameter and return types."""
     bare = _ATTR_ANY.sub(" ", ptext)
-    head = re.sub(r"@?[A-Za-z_]\w*$", "", _strip_end_generics(h[:k]))
+    head = re.sub(r"@?[^\W\d]\w*$", "", _strip_end_generics(h[:k]))
     head = re.sub(r"\b(static|async|unsafe|extern)\b", " ", head)
     gm = re.search(r"<([^<>]*)>\s*$", h[:k].rstrip())
     glist = [g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()] if gm else []
@@ -540,7 +540,7 @@ _MODIFIER_WORDS = frozenset("public private protected internal static readonly s
                             "async unsafe extern new partial volatile required file const".split())
 
 
-_WHERE = re.compile(r"\bwhere\s+@?([A-Za-z_]\w*)\s*:\s*([A-Za-z_][\w.]*)")
+_WHERE = re.compile(r"\bwhere\s+@?([^\W\d]\w*)\s*:\s*([^\W\d][\w.]*)")
 
 
 def _constraints(h: str) -> dict[str, str]:
@@ -586,13 +586,13 @@ def _open_of(body: str, q: int) -> int | None:
     return None
 
 
-_CAST = re.compile(r"^\s*\(\s*([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\[\])?\??)\s*\)\s*[\w@(]")
-_AS = re.compile(r"\bas\s+([A-Za-z_][\w.]*(?:<[^()]*>)?)\s*$")
-_GENERIC_TYPE_END = re.compile(r"(?<![\w.])([A-Za-z_][\w.]*)\s*<([^<>()]*(?:<[^<>()]*>[^<>()]*)*)>$")
+_CAST = re.compile(r"^\s*\(\s*([^\W\d][\w.]*(?:<[^()]*>)?(?:\[\])?\??)\s*\)\s*[\w@(]")
+_AS = re.compile(r"\bas\s+([^\W\d][\w.]*(?:<[^()]*>)?)\s*$")
+_GENERIC_TYPE_END = re.compile(r"(?<![\w.])([^\W\d][\w.]*)\s*<([^<>()]*(?:<[^<>()]*>[^<>()]*)*)>$")
 # declarations whose type the source writes (F8): `var x = (T)y;`, `var x = y as T;`, `y is T x`, `case T x`
-_DECL_CAST = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*\(\s*([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\s*\[\s*\])*)\s*\)\s*[\w@(]")
-_DECL_AS = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*[^;=]*?\bas\s+([A-Za-z_][\w.]*(?:<[^;()]*?>)?)\s*;")
-_DECL_PATTERN = re.compile(r"\b(?:is|case)\s+(?:not\s+)?([A-Za-z_][\w.]*(?:<[^()]*?>)?)\s+@?([A-Za-z_]\w*)\b"
+_DECL_CAST = re.compile(r"\bvar\s+@?([^\W\d]\w*)\s*=\s*\(\s*([^\W\d][\w.]*(?:<[^()]*>)?(?:\s*\[\s*\])*)\s*\)\s*[\w@(]")
+_DECL_AS = re.compile(r"\bvar\s+@?([^\W\d]\w*)\s*=\s*[^;=]*?\bas\s+([^\W\d][\w.]*(?:<[^;()]*?>)?)\s*;")
+_DECL_PATTERN = re.compile(r"\b(?:is|case)\s+(?:not\s+)?([^\W\d][\w.]*(?:<[^()]*?>)?)\s+@?([^\W\d]\w*)\b"
                            r"(?!\s*[(<.])"
                            # a switch-expression arm: `ArrayConstantExpression e => ...` (EF Core), `T e when c => ...`
                            r"|(?:^|[{,(]\s*)([A-Z][\w.]*(?:<[^()]*?>)?)\s+@?([a-z_]\w*)\s*(?:when\b[^=]*)?=>", re.M)
@@ -617,7 +617,7 @@ def _member_head(h: str) -> dict | None:
         before = _strip_generics(h[:k]).rstrip()
         if re.search(r"\boperator\s*\S+$", before) or re.search(r"\b(implicit|explicit)\s+operator\b", before):
             return {"name": "operator", "kind": "method", "params": h[k + 1:close], "static_ext": False}
-        m = re.search(r"@?([A-Za-z_]\w*)$", before)
+        m = re.search(r"@?([^\W\d]\w*)$", before)
         if not m or m.group(1) in _NOT_CALL or m.group(1) in _MODIFIER_WORDS:
             return None                       # `private (int A, string B) _field;`: a tuple type, not a method `private`
         rest = before[: m.start()].strip()
@@ -628,7 +628,7 @@ def _member_head(h: str) -> dict | None:
         ext = bool(re.match(r"\s*this\s", bare)) and bool(re.search(r"\bstatic\b", h[:k]))
         gm = re.search(r"<([^<>]*)>\s*$", h[:k].rstrip())
         glist = [g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()] if gm else []
-        ret_text = re.sub(r"@?[A-Za-z_]\w*$", "", _strip_end_generics(h[:k]))
+        ret_text = re.sub(r"@?[^\W\d]\w*$", "", _strip_end_generics(h[:k]))
         return {"name": m.group(1), "kind": "method", "params": params, "static_ext": ext, "ret": _ret_type(rest),
                 "ret_full": _last_type_token(ret_text) if rest else None, "pfull": _pfull(params), "gcons": gcons,
                 "gparams_list": glist,
@@ -637,11 +637,11 @@ def _member_head(h: str) -> dict | None:
                 "gparams": {g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set()}
     if "[" in h and re.search(r"\bthis\s*\[", h):
         return {"name": "this[]", "kind": "method", "params": "", "static_ext": False}
-    m = re.search(r"([A-Za-z_][\w.<>\[\],? ]*?)\s+@?([A-Za-z_]\w*)$", _strip_generics(h))
+    m = re.search(r"([^\W\d][\w.<>\[\],? ]*?)\s+@?([^\W\d]\w*)$", _strip_generics(h))
     if not m or m.group(2) in _NOT_CALL:
         return None
     return {"name": m.group(2), "kind": "property", "params": "", "static_ext": False, "ret": _ret_type(m.group(1)),
-            "ret_full": _last_type_token(re.sub(r"\s*@?[A-Za-z_]\w*$", "", h))}
+            "ret_full": _last_type_token(re.sub(r"\s*@?[^\W\d]\w*$", "", h))}
 
 
 def _ret_type(rest: str) -> str | None:
@@ -649,7 +649,7 @@ def _ret_type(rest: str) -> str | None:
     if not words:
         return None
     t = words[-1].rstrip("?").replace("[]", "")
-    return t.split(".")[-1] if re.match(r"^[A-Za-z_][\w.]*$", t) else None
+    return t.split(".")[-1] if re.match(r"^[^\W\d][\w.]*$", t) else None
 
 
 def _close(s: str, k: int) -> int | None:
@@ -664,8 +664,8 @@ def _close(s: str, k: int) -> int | None:
     return None
 
 
-_FIELD = re.compile(r"(?:^|\s)(?P<t>[A-Za-z_][\w.]*(?:<[^;=]*>)?)\??(?P<arr>\[\])?\s+@?(?P<n>[A-Za-z_]\w*)\s*(?:=|$)")
-_LOCAL_FN = re.compile(r"^(?:(?:static|async|unsafe|extern)\s+)*[A-Za-z_][\w.<>\[\],?\s]*?\s+@?([A-Za-z_]\w*)\s*"
+_FIELD = re.compile(r"(?:^|\s)(?P<t>[^\W\d][\w.]*(?:<[^;=]*>)?)\??(?P<arr>\[\])?\s+@?(?P<n>[^\W\d]\w*)\s*(?:=|$)")
+_LOCAL_FN = re.compile(r"^(?:(?:static|async|unsafe|extern)\s+)*[^\W\d][\w.<>\[\],?\s]*?\s+@?([^\W\d]\w*)\s*"
                        r"(?:<[^()]*>)?\s*\(")
 
 
@@ -821,7 +821,7 @@ def scan_file(rel: str, text: str) -> dict:
 
 
 # `using BaseItemDto = MediaBrowser.Controller.Entities.BaseItem;` (Jellyfin): the alias names another type
-_ALIAS = re.compile(r"^[ \t]*(?:global\s+)?using\s+@?([A-Za-z_]\w*)\s*=\s*([^;=]+);", re.M)
+_ALIAS = re.compile(r"^[ \t]*(?:global\s+)?using\s+@?([^\W\d]\w*)\s*=\s*([^;=]+);", re.M)
 
 
 def _dealias(t, aliases: dict):
@@ -1296,12 +1296,12 @@ class _Index:
             [t for t in self.types.get(tq[-1], []) if t["qparts"] == tq])
 
 
-_CALL = re.compile(r"(?P<new>\bnew\s+)?(?P<chain>@?[A-Za-z_]\w*(?:\s*\??\.\s*@?[A-Za-z_]\w*)*)\s*"
+_CALL = re.compile(r"(?P<new>\bnew\s+)?(?P<chain>@?[^\W\d]\w*(?:\s*\??\.\s*@?[^\W\d]\w*)*)\s*"
                    r"(?:<[^<>();{}]*(?:<[^<>();{}]*>[^<>();{}]*)*>)?\s*\(")
 _LOCAL = re.compile(r"(?:^|[;{(\s,])(?!(?:using|await|return|yield|throw|new|else|case|in|is|as|out|ref|const|"
                     r"static|readonly|fixed|unsafe|checked|lock|foreach|for|while|if|scoped)\s)"
-                    r"(?:var|(?P<t>[A-Za-z_][\w.]*(?:<[^;=(){}]*>)?)\??(?P<arr>\[\])?)\s+@?(?P<n>[A-Za-z_]\w*)\b(?!\s*[(<])"   # `T Name(`: a local function, not a variable
-                    r"\s*(?:=\s*new\s+(?P<nt>[A-Za-z_][\w.]*(?:<[^;=(){}]*?>)?)\s*[({])?")
+                    r"(?:var|(?P<t>[^\W\d][\w.]*(?:<[^;=(){}]*>)?)\??(?P<arr>\[\])?)\s+@?(?P<n>[^\W\d]\w*)\b(?!\s*[(<])"   # `T Name(`: a local function, not a variable
+                    r"\s*(?:=\s*new\s+(?P<nt>[^\W\d][\w.]*(?:<[^;=(){}]*?>)?)\s*[({])?")
 
 
 def _new_ends_statement(body: str, k: int) -> bool:
@@ -1378,12 +1378,12 @@ def _why(m, before: str, parts: list[str], rtype: str | None, name: str, index: 
     return "receiver-unknown-single"
 
 
-_VAR_BEFORE = re.compile(r"\bvar\s+@?(?P<n>[A-Za-z_]\w*)\s*=\s*(?P<aw>await\s+)?$")
-_FOREACH_BEFORE = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[A-Za-z_]\w*)\s+in\s+(?P<aw>await\s+)?$")
-_AFTER_PROPS = re.compile(r"^((?:\s*!?\s*\??\.\s*@?[A-Za-z_]\w*)+)\s*;")
+_VAR_BEFORE = re.compile(r"\bvar\s+@?(?P<n>[^\W\d]\w*)\s*=\s*(?P<aw>await\s+)?$")
+_FOREACH_BEFORE = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[^\W\d]\w*)\s+in\s+(?P<aw>await\s+)?$")
+_AFTER_PROPS = re.compile(r"^((?:\s*!?\s*\??\.\s*@?[^\W\d]\w*)+)\s*;")
 _AFTER_STMT = re.compile(r"^\s*(?:\.\s*ConfigureAwait\s*\([^()]*\)\s*)?;")
 _AFTER_FOREACH = re.compile(r"^\s*(?:\.\s*ConfigureAwait\s*\([^()]*\)\s*)?\)")
-_FOREACH_LOCAL = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[A-Za-z_]\w*)\s+in\s+@?(?P<src>[A-Za-z_]\w*)\s*\)")
+_FOREACH_LOCAL = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[^\W\d]\w*)\s+in\s+@?(?P<src>[^\W\d]\w*)\s*\)")
 
 
 def _awaited(body: str, q: int, results: dict):
@@ -1473,7 +1473,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
 
         # `new T { ... }` (no argument list): its value, recorded where the initializer closes, so a chained
         # `.M()` after it is typed (Jellyfin: `var o = new DtoOptions { Fields = f }.AddClientFields(User);`)
-        for nm_ in re.finditer(r"\bnew\s+([A-Za-z_][\w.]*(?:<[^<>(){};]*>)?)\s*\{", body):
+        for nm_ in re.finditer(r"\bnew\s+([^\W\d][\w.]*(?:<[^<>(){};]*>)?)\s*\{", body):
             close = brace_close(nm_.end() - 1)
             if close is not None:
                 results[close] = (_dealias(_pt(nm_.group(1)), aliases), nm_.start())
@@ -1488,7 +1488,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                     j -= 1
                 r = results.get(j)
                 return r[0] if r else None
-            cm = re.search(r"(?<![\w.])(this\.)?@?([A-Za-z_]\w*)((?:\s*\??\.\s*@?[A-Za-z_]\w*)*)$", lhs)
+            cm = re.search(r"(?<![\w.])(this\.)?@?([^\W\d]\w*)((?:\s*\??\.\s*@?[^\W\d]\w*)*)$", lhs)
             if not cm:
                 return None
             props = [p_ for p_ in re.sub(r"[\s?@]", "", cm.group(3)).split(".") if p_]
@@ -1518,8 +1518,8 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             return t
 
         # F4: `from x in src` / `join y in src2`: x and y are elements of their source, for the rest of the query
-        for qm in re.finditer(r"\b(?:from|join)\s+(?:([A-Za-z_][\w.]*(?:<[^<>()]*>)?)\s+)?@?([A-Za-z_]\w*)\s+in\s+"
-                              r"(this\.)?@?([A-Za-z_]\w*)((?:\s*\??\.\s*@?[A-Za-z_]\w*)*)", body):
+        for qm in re.finditer(r"\b(?:from|join)\s+(?:([^\W\d][\w.]*(?:<[^<>()]*>)?)\s+)?@?([^\W\d]\w*)\s+in\s+"
+                              r"(this\.)?@?([^\W\d]\w*)((?:\s*\??\.\s*@?[^\W\d]\w*)*)", body):
             if qm.group(1) in ("var",):
                 continue
             end_q = body.find(";", qm.end())
@@ -1539,7 +1539,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             off = max(0, m.start() - _LOOKBACK)
             window = body[off: m.start()]
             pre = window.rstrip()
-            word = re.search(r"([A-Za-z_]\w*)$", pre)
+            word = re.search(r"([^\W\d]\w*)$", pre)
             if not m.group("new") and ((word and word.group(1) not in _KEEP_BEFORE and not pre.endswith("."))
                                        or (pre.endswith(">") and not pre.endswith("=>") and not pre.endswith("->"))):
                 continue                                          # `T Name(...)`: a declaration, not a call

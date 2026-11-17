@@ -1039,3 +1039,15 @@ def test_a_local_function_calls_its_sibling_local_function(tmp_path):
     assert ("L.A.M.C", "L.A.M.B") in edges and ("L.A.M.C", "L.A.B") not in edges
     assert {("L.A.M.D.E", "L.A.M.B"), ("L.A.M.D.E", "L.A.M.C"), ("L.A.M.D", "L.A.M.D.E"), ("L.A.M", "L.A.M.C")} <= edges
     assert ("L.A.N", "L.A.B") in edges and not any(callee == "L.A.B" for caller, callee in edges if caller != "L.A.N")
+
+
+def test_identifiers_starting_with_a_non_ascii_letter_keep_it(tmp_path):
+    """#59: `Älpha` and `Ölpha` are two names; read as `[A-Za-z_]\\w*` both were keyed `lpha`."""
+    names, edges = _edges_of(tmp_path, {"U.cs": '''namespace U { class Ärger {
+  void Älpha() { }
+  void Ölpha() { }
+  void Go() { Älpha(); var é = new Ärger(); é.Ölpha(); }
+} }
+'''})
+    assert {"U.Ärger", "U.Ärger.Älpha", "U.Ärger.Ölpha"} <= names and "U.Ärger.lpha" not in names
+    assert {("U.Ärger.Go", "U.Ärger.Älpha"), ("U.Ärger.Go", "U.Ärger.Ölpha")} <= edges
