@@ -50,5 +50,5 @@ The closing measure for Python and C: a labelled truth for every boundary fixtur
 ## References
 
 - parent — _bmad-output/initiative-language-profiles-and-boundaries/tickets/epic-cross-language-boundaries/epic-cross-language-boundaries.md
-- spec — docs/spec/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md
+- spec — docs/specs/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md
 - decision — docs/adr/ADR-DEVKB-009_language-profiles-and-boundaries.md

@@ -50,5 +50,5 @@ Proves `extern-c` against the compiler. `bench/cpp/quality.py` scores edges agai
 ## References
 
 - parent — _bmad-output/initiative-language-profiles-and-boundaries/tickets/epic-cross-language-boundaries/epic-cross-language-boundaries.md
-- spec — docs/spec/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md
+- spec — docs/specs/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md
 - decision — docs/adr/ADR-DEVKB-009_language-profiles-and-boundaries.md

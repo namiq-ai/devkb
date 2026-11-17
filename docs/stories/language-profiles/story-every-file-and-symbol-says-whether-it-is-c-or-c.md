@@ -46,5 +46,5 @@ Tracer for D7. The scanner already knows each file's path and whether a `.h` loo
 ## References
 
 - parent — _bmad-output/initiative-language-profiles-and-boundaries/tickets/epic-language-profiles/epic-language-profiles.md
-- spec — docs/spec/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md
+- spec — docs/specs/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md
 - decision — docs/adr/ADR-DEVKB-009_language-profiles-and-boundaries.md

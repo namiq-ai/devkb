@@ -64,7 +64,7 @@ prints `0` on main for a Python, TypeScript or C# repository (the property exist
 
 ## References
 
-- spec — docs/spec/SPEC-DKB-003_read-tools-for-every-language.md, Gaps GAP-7
+- spec — docs/specs/SPEC-DKB-003_read-tools-for-every-language.md, Gaps GAP-7
 - decision — docs/adr/ADR-DEVKB-010_read-tools.md, section 1; docs/adr/ADR-DEVKB-009_language-profiles-and-boundaries.md, section 2
 - sibling — _bmad-output/initiative-language-profiles-and-boundaries/tickets/epic-language-profiles/tickets/story-every-file-and-symbol-says-whether-it-is-c-or-c.md
 

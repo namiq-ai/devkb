@@ -64,7 +64,7 @@ reports 631 symbols, recall 0.58, precision 1.00, end line exact **12.9%**. The 
 
 ## References
 
-- spec — docs/spec/SPEC-DKB-003_read-tools-for-every-language.md, Gaps GAP-5
+- spec — docs/specs/SPEC-DKB-003_read-tools-for-every-language.md, Gaps GAP-5
 - decision — docs/adr/ADR-DEVKB-010_read-tools.md, sections 1 and 8
 - analysis — docs/analysis/read-tools-analysis.md, section 2 findings 2 and 3
 - initiative — _bmad-output/initiative-read-tools-for-every-language/ (story 2.1, story 2.6)

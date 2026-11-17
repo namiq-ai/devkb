@@ -50,7 +50,7 @@ C1, C2, C3, C4 of the initiative bind this epic.
 ## References
 
 - parent — `_bmad-output/initiative-language-profiles-and-boundaries/initiative-language-profiles-and-boundaries.md`, Requirements R1 to R7
-- spec — `docs/spec/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md`, §Language profiles
+- spec — `docs/specs/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md`, §Language profiles
 - decision — `docs/adr/ADR-DEVKB-009_language-profiles-and-boundaries.md`, D7
 
 ## Notes
