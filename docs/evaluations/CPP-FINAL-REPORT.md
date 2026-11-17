@@ -1,5 +1,9 @@
 # C and C++ support in devkb: design, implementation and benchmark
 
+> **0.2.8 (2026-11-18):** seven C/C++ extractor fixes from the 0.2.5 → 0.2.8 audit (#62–#66, #92, #93), measured
+> on the same corpus in `LANGUAGE-PROFILES-EVALUATION.md` (0.2.8 section): precision unchanged, no true call site
+> lost, 2,397 fake Zephyr symbols removed. The agent benchmarks below were not re-run.
+
 Standardised report. Every table that describes agent runs has the same columns: **Turns, Model calls, Grep, File load, devkb** (calls per run), then the quality columns of that table, then **Tokens** (context processed / output) and **Cost** in dollars as the last two. Regenerate with `make_report.py`.
 
 Exploratory: one model (Sonnet), one to two runs per arm, small corpora. Differences under about 30% in cost or under 0.05 in precision are noise.

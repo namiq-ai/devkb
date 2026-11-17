@@ -29,7 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from devkb.cpp_symbols import C_LIMITS_TEXT, CXX_LIMITS_TEXT, is_cxx_path  # noqa: E402
-from devkb.process_api import ProcessAPI, is_test_path  # noqa: E402
+from devkb.process_api import ProcessAPI  # noqa: E402
 from devkb.service import GraphNotBuilt  # noqa: E402
 
 MAX_DEPTH = 6
@@ -76,6 +76,12 @@ class Packer:
                 return f"{rel}:{n}: {lines[n - 1].strip()[:140]}"
         return f"{rel}:{start}: (def {key.split('::')[-1]})"
 
+    def ref_line(self, site: str) -> str:
+        """`path:line: code` for a `path:line` site."""
+        rel, n = site.rsplit(":", 1)
+        lines = self._file(rel)
+        return f"{site}: {lines[int(n) - 1].strip()[:140] if 0 < int(n) <= len(lines) else ''}"
+
     def def_line(self, sym: int) -> str:
         key = self.api._key(sym)
         rel, start = key.split("::")[0], int(self.idx.props[sym].get("line_start") or 1)
@@ -105,6 +111,12 @@ class Packer:
     def coverage(self, syms: list[int], shown: set[str]) -> str:
         """The coverage statement; for a C/C++ symbol, the limit statement follows it, Complete or not (ADR-DEVKB-008 §4)."""
         text = self._coverage_text(syms, shown)
+        refs = [(x, r) for x in syms for r in self.idx.props[x].get("value_refs") or ()]
+        if refs:                                         # #69: the line that hides the callers, not only that some do
+            total = sum(int(self.idx.props[x].get("value_ref_count") or 0) for x in {x for x, _ in refs})
+            text += (f" Named without a call at {total} site(s), each a way to call it the graph cannot follow; search "
+                     "from these: " + "; ".join(f"`{self.ref_line(r)}` (`{self._name(x)}`)" for x, r in refs[:8])
+                     + (f"; … {total - 8} more" if total > 8 else "") + ".")
         if any(is_cxx_path(self.api._key(x).split("::")[0]) for x in syms):
             c = self.api._coverage(syms, shown)
             if c.get("unattributed_errors"):
@@ -165,7 +177,7 @@ class Packer:
             nxt = set()
             for s in frontier:
                 for c in set(self.idx.sources("CALLS", s)) | set(self.idx.sources("CALLS_API", s)):
-                    if c in parent or c in start or is_test_path(self.api._key(c).split("::")[0]):
+                    if c in parent or c in start or self.api._is_test(self.api._key(c).split("::")[0]):
                         continue
                     parent[c] = s
                     nxt.add(c)
@@ -201,7 +213,7 @@ class Packer:
         for s in syms:
             for c in set(self.idx.sources("CALLS", s)):
                 rel = self.api._key(c).split("::")[0]
-                if is_test_path(rel):
+                if self.api._is_test(rel):
                     out.setdefault(rel, []).append((c, s))
         return out
 
@@ -280,7 +292,8 @@ class Packer:
         """Before editing a file: which of its functions other files depend on (each with the call that proves it),
         the tests that exercise it, and what the graph could not attribute. A file's contract is what is called from
         outside it, so those functions come first and its private helpers are only counted."""
-        path = path.strip().lstrip("./")
+        from devkb.read_tools import repo_path  # noqa: PLC0415
+        path = repo_path(path)  # not lstrip("./"), which took the dot off `.github/` (#86)
         syms = list(self.idx.sym_by_file.get(path, []))
         if not syms:
             return f"# Graph pack: file\n\nThe graph has no code in `{path}`. Search the code."
@@ -337,7 +350,7 @@ class Packer:
             i = cands[0] if len(cands) == 1 else None
         if i is None:
             return f"# Graph pack: refactor\n\nThe graph cannot resolve `{name}` unambiguously. Search the code."
-        callers = sorted(set(self.idx.sources("CALLS", i)), key=self.api._key)
+        callers = sorted(set(self.idx.sources("CALLS", i)) - {i}, key=self.api._key)  # a recursive call is not a caller (#70)
         by_file: dict[str, list[int]] = {}
         for c in callers:
             by_file.setdefault(self.api._key(c).split("::")[0], []).append(c)
@@ -347,7 +360,7 @@ class Packer:
         dnt = self.api._role_table().get(role, {}).get("dnt", []) if role else []
         files = sorted(set(by_file) | set(at_module))
         blocked = sorted(f for f in files if any(f.startswith(p) for p in dnt))
-        tests = sorted(f for f in files if is_test_path(f))
+        tests = sorted(f for f in files if self.api._is_test(f))
         out = [f"# Graph pack: changing the signature of `{self.api._key(i)}`" + (f" as role {role}" if role else ""), "",
                self.freshness(files), "", f"Defined at `{self.def_line(i)}`.", "",
                f"## Files with a direct caller ({len(files)}, tests included)"]
@@ -363,6 +376,8 @@ class Packer:
             out += ["", f"## Files role {role} must not edit ({len(blocked)})"] + ([f"- `{f}`" for f in blocked] or ["- none"])
         if own not in by_file:
             out += ["", f"(The defining file `{own}` is not counted as a caller.)"]
+        if self.api._calls_itself(i):
+            out += ["", f"(It calls itself at `{self.call_site(i, self._name(i))}`; that call is not counted as a caller.)"]
         out += ["", "## Coverage", self.coverage([i], set(files))]
         return "\n".join(out + ["", HOW_TO_USE])
 
@@ -376,7 +391,7 @@ class Packer:
             for key in r.get("changed_symbols", []):
                 path, _, qual = key.partition("::")
                 i = self.idx.node("Symbol", key)
-                if i is not None and "." not in qual and not is_test_path(path) and self.idx.props[i].get("kind") == "function":
+                if i is not None and "." not in qual and not self.api._is_test(path) and self.idx.props[i].get("kind") == "function":
                     changed.setdefault(i, self.idx.props[c].get("short_hash", self.api._key(c)[:10]))
         return changed
 

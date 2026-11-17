@@ -19,6 +19,7 @@ from devkb.model import DevKBGraph
 _SOURCE = "cpp-symbols"
 _RAISE_CONF = {"cpp-throw": 0.9, "cpp-assert": 0.8}
 _JNI = re.compile(r"^Java_\w+_\w+")
+_LEADING_STEPS = re.compile(r"^(?:\.{1,2}/|/)+")
 
 
 class _Includers:
@@ -40,7 +41,7 @@ class _Includers:
         near = posixpath.normpath(posixpath.join(posixpath.dirname(includer), inc))
         if near in self.headers:
             return [near]
-        norm = posixpath.normpath(inc).lstrip("./")
+        norm = _LEADING_STEPS.sub("", posixpath.normpath(inc))  # `../`, `./`, `/` steps, not dots: `.gen/x.h` (#86)
         return [c for c in cands if c == norm or c.endswith("/" + norm)]
 
     def add(self, includer: str, language: str, include: str) -> None:

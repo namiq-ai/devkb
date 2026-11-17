@@ -17,9 +17,11 @@ from __future__ import annotations
 import argparse
 import difflib
 import fnmatch
+import io
 import re
 import subprocess
 import sys
+import tokenize
 from collections import defaultdict
 from pathlib import Path
 
@@ -46,9 +48,13 @@ IMPORT_RE = {
 }
 
 
-def _is_test(path: str) -> bool:
-    from devkb.process_api import is_test_path  # noqa: PLC0415  (one rule for "test code" across devkb)
-    return is_test_path(path)
+def repo_path(path: str) -> str:
+    """A path as the graph keys it: without leading `./` and `/`. Not `lstrip("./")`, which strips characters and so
+    took the dot off `.github/...` (#54)."""
+    path = path.strip()
+    while path.startswith("./"):
+        path = path[2:]
+    return path.lstrip("/")
 
 
 def range_state(path: str, ls: int | None, le: int | None) -> str:
@@ -91,7 +97,7 @@ class ReadTools:
 
     def resolve_file(self, path: str) -> tuple[str | None, list[str]]:
         """A tracked path, or the one tracked file that ends with it; else the candidates."""
-        path = path.strip().lstrip("./")
+        path = repo_path(path)
         known = set(self.idx.sym_by_file) | {k for (t, k) in self.idx.by_key if t == "File"}
         if path in known:
             return path, []
@@ -117,7 +123,7 @@ class ReadTools:
         """Best tier score first; among equals production before tests, shallower qualified name, more callers, the
         spelling the query used, then path and line. Case alone never lifts test code above production code."""
         path = self.file[i]
-        return (-score, _is_test(path), self.qual[i].count("."), -self.api._caller_count(i), 0 if exact_case else 1, path,
+        return (-score, self.api._is_test(path), self.qual[i].count("."), -self.api._caller_count(i), 0 if exact_case else 1, path,
                 self.idx.props[i].get("line_start") or 0)
 
     def resolve(self, query: str, kind: str = "", under: str = "", limit: int = 8, tests: bool = True) -> dict:
@@ -129,7 +135,7 @@ class ReadTools:
         if "::" in q:
             left, right = q.rsplit("::", 1)
             if "/" in left or re.search(r"\.[A-Za-z0-9]{1,5}$", left):
-                want_file, q = left.lstrip("./"), right
+                want_file, q = repo_path(left), right
         q = q.replace("::", ".").replace("#", ".")
         ql = q.lower()
         rx = None
@@ -142,7 +148,7 @@ class ReadTools:
                 if (not kind or self.idx.props[i].get("kind") == kind)
                 and (not under or self.file[i].startswith(under))
                 and (not want_file or self.file[i] == want_file or self.file[i].endswith("/" + want_file))
-                and (tests or not _is_test(self.file[i]))]
+                and (tests or not self.api._is_test(self.file[i]))]
         poolset = set(pool)
 
         def collect(pred, score_of):
@@ -204,6 +210,10 @@ class ReadTools:
             p = self.idx.props[i]; f = self.file[i]; ls, le = p.get("line_start"), p.get("line_end")
             rows.append({"i": i, "k": self.idx.keys[i], "kind": p.get("kind"), "ls": ls, "le": le, "range": range_state(f, ls, le),
                          "doc": (p.get("docstring_summary") or "")[:90], "callers": self.api._caller_count(i),
+                         "self_call": self.api._calls_itself(i), "value_refs": int(p.get("value_ref_count") or 0),
+                         # calls under this name the resolver left unattributed: the count above is a lower bound (#87)
+                         "unresolved": int(p.get("unresolved_calls") or 0),
+                         "shared_by": len(self.idx.short.get(self.short[i], [])),
                          "how": how if how != "similar" else f"similar {hit[i] / 60:.2f}"})
         return {"query": query, "how": how, "n": len(order), "matches": rows}
 
@@ -257,7 +267,7 @@ class ReadTools:
         return m["k"].split("::", 1)[1]
 
     # ── outline ───────────────────────────────────────────────────────────
-    def outline(self, path: str, limit: int = 200) -> dict:
+    def outline(self, path: str, limit: int = 200, offset: int = 0) -> dict:
         f, cands = self.resolve_file(path)
         if f is None:
             d = path.strip().strip("/")
@@ -283,14 +293,55 @@ class ReadTools:
                     imports.append(f"{n}: {text.strip()[:110]}")
                 if len(imports) >= 25:
                     break
-        out = {"path": f, "n": len(rows), "symbols": rows[:limit], "imports": imports, "lines": len(self.lines(f))}
-        if len(rows) > limit:
-            out["omitted"] = len(rows) - limit
+        offset = max(0, int(offset or 0))  # symbols to skip: the next page of a file too large for one reply (#91)
+        out = {"path": f, "n": len(rows), "symbols": rows[offset:offset + limit], "imports": [] if offset else imports,
+               "lines": len(self.lines(f)), "offset": offset}
+        if len(rows) > offset + limit:
+            out["omitted"] = len(rows) - offset - limit
         if not rows:
             out["note"] = "no symbols indexed for this file (a language devkb does not read, or a file with no definitions)"
         return out
 
     # ── uses ──────────────────────────────────────────────────────────────
+    def _prose(self, f: str) -> tuple[set[int], dict[int, int]]:
+        """A Python file's docstring lines and, per line, the column its comment starts at: where a word match is prose."""
+        doc: set[int] = set(); comment: dict[int, int] = {}
+        if not f.endswith(".py"):
+            return doc, comment
+        try:
+            first = True
+            for t in tokenize.generate_tokens(io.StringIO("\n".join(self.lines(f)) + "\n").readline):
+                if t.type == tokenize.COMMENT:
+                    comment[t.start[0]] = t.start[1]
+                elif t.type == tokenize.STRING and first:  # a string standing alone as a statement: a docstring
+                    doc.update(range(t.start[0], t.end[0] + 1))
+                if t.type not in (tokenize.COMMENT, tokenize.NL):
+                    first = t.type in (tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT)
+        except (tokenize.TokenError, SyntaxError, IndentationError):
+            pass
+        return doc, comment
+
+    def _hit_rank(self, f: str, ln: int, text: str, name: str, mode: str, prose) -> int:
+        """0 a call, 1 other code, 2 a comment or docstring: the per-file cap keeps code before prose (#89)."""
+        doc, comment = prose
+        line = text
+        if f.endswith(".py"):
+            if ln in doc:
+                return 2
+            raw = self.lines(f)[ln - 1] if 0 < ln <= len(self.lines(f)) else text
+            line = raw[:comment[ln]] if ln in comment else raw
+        else:
+            stripped = text.lstrip()
+            if stripped.startswith(("//", "/*", "*", "#", "<!--")):
+                return 2
+            line = text.split("//", 1)[0]
+        if mode != "word":  # plain text: code or prose only
+            return 1 if name in line else 2
+        word = re.escape(name.rsplit(".", 1)[-1])
+        if not re.search(rf"\b{word}\b", line):
+            return 2
+        return 0 if re.search(rf"(?<!def )(?<!class )(?<!function )(?<!func )\b{word}\s*\(", line) else 1  # a definition is code, not a call
+
     def _enclosing(self, f: str):
         spans = []
         for i in self.idx.sym_by_file.get(f, ()):
@@ -315,7 +366,11 @@ class ReadTools:
         else:
             args = ["-F", "-e", q]
             mode = "text"
-        spec = [":(glob)" + (under.rstrip("/") + "/**" if under else "**")] if under else []
+        under = repo_path(under).rstrip("/") if under else ""
+        if under and (self.root / under).is_file():  # a file path narrows to that file, not to a directory under it (#90)
+            spec = [":(literal)" + under]
+        else:
+            spec = [":(glob)" + under + "/**"] if under else []
         excl = [] if docs else [f":(exclude,glob)**/*{s}" for s in NOT_CODE]
         cmd = ["git", "grep", "-n", "-I", "--no-color", "--max-count=60", *args, "--", *(spec or ["."]), *excl]
         try:
@@ -335,11 +390,15 @@ class ReadTools:
             r = self.resolve(q, limit=4)
             if r.get("how") in ("exact", "suffix") and r["matches"]:
                 defs = [{"k": m["k"], "kind": m["kind"], "ls": m["ls"], "le": m["le"], "range": m["range"]} for m in r["matches"]]
-        ranked = sorted(by_file.items(), key=lambda kv: (_is_test(kv[0]), -len(kv[1]), kv[0]))
+        ranked = sorted(by_file.items(), key=lambda kv: (self.api._is_test(kv[0]), -len(kv[1]), kv[0]))
         out_files = []; shown = 0
         for f, hs in ranked[:files]:
             spans = self._enclosing(f); rows = []
-            for ln, text in hs[:per_file]:
+            keep = hs[:per_file]
+            if mode != "regex" and len(hs) > per_file:  # code before comments and docstrings within the cap (#89)
+                prose = self._prose(f)
+                keep = sorted(sorted(hs, key=lambda h: (self._hit_rank(f, h[0], h[1], q, mode, prose), h[0]))[:per_file])
+            for ln, text in keep:
                 if shown >= hits:
                     break
                 best = None
@@ -353,7 +412,7 @@ class ReadTools:
                     inner = (prev[-1][2], True) if prev else None
                 rows.append({"line": ln, "text": text.strip()[:110], "in": inner[0] if inner else None, "approx": bool(inner and inner[1])})
                 shown += 1
-            out_files.append({"f": f, "n": len(hs), "test": _is_test(f), "hits": rows})
+            out_files.append({"f": f, "n": len(hs), "test": self.api._is_test(f), "hits": rows})
         return {"name": q, "mode": mode, "definitions": defs, "n_hits": total, "n_files": len(by_file), "files": out_files,
                 "omitted_files": max(0, len(ranked) - files), "capped": total >= 6000,
                 "note": "text matches, not resolved references: a match inside a string or comment is still listed"}
@@ -377,6 +436,9 @@ class ReadTools:
                                   capture_output=True, text=True, timeout=25)
         except (OSError, subprocess.TimeoutExpired) as e:
             return {"error": f"search failed: {e}"}
+        if proc.returncode not in (0, 1):                # 1 is "no match"; anything else, e.g. a rejected regex, is not (#55)
+            return {"query": q, "error": f'search_docs could not search for "{q}": '
+                                         f'{(proc.stderr or "git grep failed").strip()[:200]}'}
         by_file: dict[str, list[tuple[int, str]]] = defaultdict(list)
         for line in proc.stdout.splitlines()[:4000]:
             m = re.match(r"([^:]+):(\d+):(.*)", line)
@@ -433,7 +495,13 @@ def render_symbol(r: dict) -> str:
     for n, m in enumerate(r["matches"], 1):
         f, q = m["k"].split("::", 1)
         out.append(f"{n}. {f}  {m['kind']}  {_span(m)}  {m.get('sig', '')}")
-        tail = (f'"{m["doc"]}"   ' if m.get("doc") else "") + (f"callers {m['callers']}   " if m["callers"] else "") + f"how {m['how']}"
+        also = (" (+ itself)" if m.get("self_call") else "") + \
+            (f" (+ named without a call at {m['value_refs']} site(s))" if m.get("value_refs") else "")  # #70, #69
+        if m.get("unresolved"):  # the count is a lower bound, as the packs' Coverage says (#87)
+            shared = f"; {m['shared_by']} symbols share the name" if (m.get("shared_by") or 0) > 1 else ""
+            also = f"+{also} (calls under this name from {m['unresolved']} more function(s) not attributed{shared})"
+        tail = (f'"{m["doc"]}"   ' if m.get("doc") else "") + (f"callers {m['callers']}{also}   " if m["callers"] or also else "") \
+            + f"how {m['how']}"
         out.append(f"   {q}   {tail}")
         if m.get("moved") is not None:
             out.append(f"   adjusted: the graph recorded this elsewhere; found {m['moved']:+d} line(s) away" if isinstance(m["moved"], int) else f"   moved: {m['moved']}")
@@ -460,13 +528,30 @@ def render_outline(r: dict) -> str:
         return fit_text(f"{r['path']}/  {r['n']} symbols in {r['n_files']} files\n" + "\n".join(f"  {x['f']}  {x['n']} symbols" for x in r["files"])) + _stale(r)
     suffix = "." + r["path"].rsplit(".", 1)[-1] if "." in r["path"] else ""
     rng = "start-only" if suffix in START_ONLY else "exact"
-    out = [f"{r['path']}  {LANG.get(suffix, 'unknown language')} {r['n']} symbols  range={rng}  ({r['lines']} lines)"]
+    offset = r.get("offset") or 0
+    out = [f"{r['path']}  {LANG.get(suffix, 'unknown language')} {r['n']} symbols  range={rng}  ({r['lines']} lines)"
+           + (f"  from symbol {offset + 1}" if offset else "")]
     out += [f"  {i}" for i in r["imports"][:30]]
+    rows = []
     for s in r["symbols"]:
         span = f"L{s['ls']}-{s['le']}" if s["range"] == "exact" else f"L{s['ls']}"
-        out.append("  " * (s["depth"] + 1) + f"{s['kind']} {s['name']}  {span}" + (f'  "{s["doc"]}"' if s["doc"] else ""))
-    if r.get("omitted"):
-        out.append(f"({r['omitted']} more symbols)")
+        rows.append("  " * (s["depth"] + 1) + f"{s['kind']} {s['name']}  {span}" + (f'  "{s["doc"]}"' if s["doc"] else ""))
+    # Cut whole symbols, not lines, and name where the next page starts, so every member can be listed (#91).
+    size = len("\n".join(out).encode())
+    room = BUDGET - 200
+    shown = 0
+    for line in rows:
+        size += len(line.encode()) + 1
+        if size > room:
+            break
+        shown += 1
+    out += rows[:shown]
+    rest = r["n"] - offset - shown
+    if rest > 0:
+        nxt = offset + shown
+        why = f"output cut at {BUDGET} bytes" if shown < len(rows) else "symbol limit reached"
+        out.append(f"({why}: symbols {offset + 1}-{nxt} of {r['n']} shown, {rest} more; "
+                   f"the rest: outline with offset={nxt} (shell: --offset {nxt}))")
     if r.get("note"):
         out.append(f"no indexed symbols in {r['path']}; indexed languages: Python, TypeScript, JavaScript, C#, C, C++, Odoo XML")
     return fit_text("\n".join(out)) + _stale(r)
@@ -523,12 +608,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, default=8)
     ap.add_argument("--lines", type=int, default=MAX_SOURCE, help="symbol --source: lines to print (default 80, at most 200)")
     ap.add_argument("--docs", action="store_true", help="uses: include documentation files")
+    ap.add_argument("--offset", type=int, default=0, help="outline: skip this many symbols (the next page of a large file)")
     a = ap.parse_args(argv)
     from devkb.process_api import ProcessAPI  # noqa: PLC0415
     api = ProcessAPI(a.project, telemetry=False)
     tool = {"symbol": "symbol", "outline": "outline", "uses": "uses", "docs": "search_docs"}[a.cmd]
     kw = {"symbol": dict(query=a.query, source=a.source, kind=a.kind, under=a.under, limit=a.limit, lines=a.lines),
-          "outline": dict(path=a.query), "uses": dict(name=a.query, under=a.under, docs=a.docs),
+          "outline": dict(path=a.query, offset=a.offset), "uses": dict(name=a.query, under=a.under, docs=a.docs),
           "search_docs": dict(query=a.query, under=a.under)}[tool]
     print(RENDER[tool](api.call(tool, **kw)))
     return 0

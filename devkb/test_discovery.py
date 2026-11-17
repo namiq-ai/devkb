@@ -33,6 +33,43 @@ _JS_CASE = re.compile(
 )
 
 
+def pytest_testpaths(repo_root: Path) -> tuple[str, ...]:
+    """The `testpaths` of the project's pytest configuration, () when it has none. The file pytest itself would use:
+    pytest.ini, then pyproject.toml with [tool.pytest.ini_options], tox.ini with [pytest], setup.cfg with [tool:pytest].
+    With testpaths set, a module named `test_*.py` outside them and outside any tests/ tree is source code, not a
+    test (`devkb/test_discovery.py`, #71)."""
+    import configparser  # noqa: PLC0415
+
+    def ini(path: Path, section: str) -> tuple[str, ...] | None:
+        cp = configparser.ConfigParser(interpolation=None)
+        try:
+            cp.read(path, encoding="utf-8")
+        except (configparser.Error, UnicodeDecodeError, OSError):
+            return None
+        if not cp.has_section(section):
+            return None
+        return tuple(cp.get(section, "testpaths", fallback="").split())
+
+    if (repo_root / "pytest.ini").is_file():           # pytest uses pytest.ini even without a [pytest] section
+        return ini(repo_root / "pytest.ini", "pytest") or ()
+    pyproject = repo_root / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            import tomllib  # noqa: PLC0415
+            opts = tomllib.loads(pyproject.read_text(encoding="utf-8")).get("tool", {}).get("pytest", {}).get("ini_options")
+        except (ImportError, ValueError, OSError):      # Python 3.10 has no TOML reader: the file name decides, as before
+            opts = None
+        if opts is not None:
+            tp = opts.get("testpaths") or []
+            return tuple(tp.split() if isinstance(tp, str) else tp)
+    for name, section in (("tox.ini", "pytest"), ("setup.cfg", "tool:pytest")):
+        if (repo_root / name).is_file():
+            found = ini(repo_root / name, section)
+            if found is not None:
+                return found
+    return ()
+
+
 def list_test_files(repo_root: Path, tests_dir: Path | None = None) -> list[str]:
     """Repo-relative paths of every tracked test file, sorted.
 
@@ -62,7 +99,11 @@ def tests_in_file(repo_root: Path, rel: str) -> list[tuple[str, int]]:
     not hide the rest of a project's tests."""
     path = repo_root / rel
     try:
-        text = path.read_text(errors="replace")
+        if rel.endswith(".cs"):
+            from devkb.csharp_symbols import read_source  # noqa: PLC0415
+            text = read_source(path)                      # UTF-16 with a byte-order mark too (#83)
+        else:
+            text = path.read_text(errors="replace")
     except OSError:
         return []
     if cpp_symbols.is_cxx_path(rel):

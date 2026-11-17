@@ -5,7 +5,9 @@ d="${CLAUDE_PROJECT_DIR:-$PWD}"
 git -C "$d" rev-parse --git-dir >/dev/null 2>&1 || exit 0          # not a git repository: nothing to do
 # Keep .devkb/ out of `git status` without touching any tracked file: git's local exclude list.
 ex="$(git -C "$d" rev-parse --git-path info/exclude)"; case "$ex" in /*) ;; *) ex="$d/$ex" ;; esac
-mkdir -p "$(dirname "$ex")" && { grep -qx '.devkb/' "$ex" 2>/dev/null || echo '.devkb/' >> "$ex"; }
+# A last line without its newline is ended first, so `*.log` does not become `*.log.devkb/` (#74).
+mkdir -p "$(dirname "$ex")" && { grep -qx '.devkb/' "$ex" 2>/dev/null || {
+  [ -s "$ex" ] && [ -n "$(tail -c 1 "$ex")" ] && echo >> "$ex"; echo '.devkb/' >> "$ex"; }; }
 head="$(git -C "$d" rev-parse HEAD 2>/dev/null)"
 built="$(sed -n 's/.*"git_head": *"\([0-9a-f]*\)".*/\1/p' "$d/.devkb/manifest.json" 2>/dev/null)"
 if [ ! -f "$d/.devkb/nodes.jsonl" ] || [ -n "$head" -a "$head" != "$built" ]; then
@@ -13,7 +15,9 @@ if [ ! -f "$d/.devkb/nodes.jsonl" ] || [ -n "$head" -a "$head" != "$built" ]; th
   lock="$d/.devkb/.building"
   if [ ! -e "$lock" ] || [ -n "$(find "$lock" -mmin +30 2>/dev/null)" ]; then
     touch "$lock"
-    (nohup sh -c "uvx --from 'devkb[mcp]>=0.2.1' devkb build --project '$d' >'$d/.devkb/build.log' 2>&1; rm -f '$lock'" >/dev/null 2>&1 &)
+    # The paths are positional arguments, never pasted into the script: a quote in them neither breaks nor runs (#72).
+    (nohup sh -c 'uvx --from "devkb[mcp]>=0.2.1" devkb build --project "$1" >"$1/.devkb/build.log" 2>&1; rm -f "$2"' \
+      sh "$d" "$lock" >/dev/null 2>&1 &)
   fi
 fi
 exit 0

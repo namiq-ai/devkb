@@ -128,3 +128,22 @@ def test_a_dotted_name_tells_two_classes_with_the_same_method_apart():
     assert api._by_name("add") == [0, 1], "a bare name stays ambiguous"
     assert api._by_name("Store.add") == [0] and api._by_name("Other.add") == [1]
     assert api._by_name("Nope.add") == [0, 1], "an unknown qualifier does not hide the candidates"
+
+
+def test_init_does_not_warn_when_devkb_is_a_tool_shim_into_its_own_venv(tmp_path, monkeypatch):
+    """`uv tool install` / pipx put a symlink on PATH that resolves into the tool's venv, and `devkb init` then runs
+    from that venv: the command is on the user's PATH everywhere, so no venv-only warning (#73)."""
+    import shutil
+    import sys as _sys
+    tool_venv = tmp_path / "uv" / "tools" / "devkb"
+    (tool_venv / "bin").mkdir(parents=True)
+    (tool_venv / "bin" / "devkb").write_text("#!/bin/sh\n")
+    shim = tmp_path / "local" / "bin" / "devkb"
+    shim.parent.mkdir(parents=True)
+    shim.symlink_to(tool_venv / "bin" / "devkb")
+    monkeypatch.setattr(_sys, "prefix", str(tool_venv))
+    monkeypatch.setattr(_sys, "base_prefix", "/usr")
+    monkeypatch.setattr(shutil, "which", lambda name: str(shim))
+    assert init.server_command_problem() is None
+    monkeypatch.setattr(shutil, "which", lambda name: str(tool_venv / "bin" / "devkb"))  # an activated venv still warns
+    assert "only on the PATH of this virtual environment" in init.server_command_problem()

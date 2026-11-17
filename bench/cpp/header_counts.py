@@ -83,7 +83,7 @@ def main(argv: list[str]) -> int:
             if near in headers:
                 hit = [near]
             else:
-                norm = posixpath.normpath(inc).lstrip("./")
+                norm = re.sub(r"^(?:\.\.?/|/)+", "", posixpath.normpath(inc))   # whole `./`, `../`, `/` steps (#86)
                 hit = [h for h in by_base.get(inc.rsplit("/", 1)[-1], []) if h == norm or h.endswith("/" + norm)]
             for h in hit:
                 includers.setdefault(h, []).append(kind)

@@ -56,3 +56,29 @@ record is the owner's decision.
   inclusion graph: written, syntax-checked, not executed (no `libclang`).
 - The header-language agreement with the compiler's includers (`make cpp-check ARGS="--truth-dir DIR"`): same reason.
 - The `extern-c` precision floor 0.95 against compiler truth: the regex-truth precision is 1.0 on leveldb, autoas and Zephyr.
+
+## 0.2.8: the audit's C/C++ fixes on the same corpus (2026-11-18)
+
+Seven fixes from the 0.2.5 → 0.2.8 audit (`docs/analysis/devkb-for-auditing.md`): a name split into a fake type and
+local (#62), a brace-initialised member read as the constructor body (#63), unbalanced braces across `#ifdef` branches
+swallowing the rest of the file (#64), template/pointer declarations read as calls (#65), a quadratic function-table
+path (#66), a function-pointer table read as a function named `void` (#92), same-named classes of different
+namespaces told apart (#93). `make cpp-check`, `main` (`4369145`) → 0.2.8, same pinned checkouts:
+
+| Repository | Precision | Recall (100 sampled targets) | Edges | Complete misses | Build |
+|---|---|---|---|---|---|
+| cJSON | 1.0 → 1.0 | 0.968 → 0.968 | 1,068 → 1,068 | 0 → 0 | 0.4 s → 0.4 s |
+| fmt | 0.983 → 0.983 | 0.64 → 0.64 | 1,826 → 1,825 | 0 → 0 | 1.4 s → 1.4 s |
+| leveldb | 1.0 → 1.0 | 0.80 → 0.80 | 2,107 → 2,159 | 0 → 0 | 0.6 s → 0.6 s |
+| autoas | 1.0 → 1.0 | 0.983 → 0.964 | 3,490 → 3,554 | 0 → 0 | 5.2 s → 5.5 s |
+| Zephyr | 1.0 → 1.0 | 0.962 → 0.978 | 136,497 → 138,942 | 0 → 0 | 99.7 s → 95.3 s |
+
+- **No true call site lost an edge.** Removed edges were checked against the source: false edges of a function that
+  had swallowed the rest of its file (autoas `CanTp_ReSend`, 8), of fake bodies (Zephyr), and casts read as a function
+  named `int` (fmt). Zephyr lost 2,397 fake symbols (`DEVICE_API`, `__aligned`, `void`, …).
+- **The autoas recall change is the sample, not lost edges.** #64 recovered 14 functions, which reshuffled the 100
+  sampled targets; the new sample exposed same-named classes in different namespaces, fixed by #93. Any symbol added
+  or removed reshuffles this sample, so recall moves without an edge changing (fmt/cpp went 0.60 → 0.85 between two
+  branch states with no fmt edge gained). A fixed target list would make the floor a regression test; noted for the
+  corpus check.
+- Known wrong edges left: fmt's 8 (self-edges where a method calls the global function of the same name, #95).
