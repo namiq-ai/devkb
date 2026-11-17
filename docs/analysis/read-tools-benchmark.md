@@ -4,6 +4,14 @@ Last run: 2026-11-16 on `main` at `fa6c892` (read tools #39, language profiles #
 Tools under test: `symbol`, `outline`, `uses`, `search_docs` (SPEC-DKB-003), served by the plugin's `lean-pack` toolset (12 tools; `symbol`, `outline` and `pack` load with the prompt).
 Model: Sonnet in every arm. 16 runs per arm and configuration: directions, not proofs.
 
+**0.2.8 (2026-11-18), not re-run:** this benchmark ran on `fa6c892`, the code 0.2.8 builds on. 0.2.8 changes what some
+read tools answer, from the audit (`devkb-for-auditing.md`): paths under dot-directories resolve (#54); a rejected
+`search_docs` pattern is an error, not "no match" (#55); `symbol`'s caller count leaves out a self-call (#70) and says
+when it is partial (#87); `uses` ranks code before comments within its per-file cap (#89) and accepts a file for
+`--under` (#90); `outline` pages with `offset` (#91). None of the 16 questions here touches a dot-directory, a rejected
+pattern or a recursive function; the `uses` ranking can change which hits fill the cap on N5/N6 (the two `uses` questions). Turn and cost effects
+are expected to be unchanged; this is a statement of what was not measured, not a result.
+
 ## Summary (devkb as shipped, against plain)
 
 | Question set | Turns | Cost per run | Score |

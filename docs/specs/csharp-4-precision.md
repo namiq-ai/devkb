@@ -63,3 +63,28 @@ Generic type inference beyond explicit arguments and direct unification (no cons
 lambdas' return types); overload betterness only where certain argument types decide it; member names of .NET and
 third-party types without signatures (a collection-expression argument is the only signature-shaped exception);
 `dynamic` calls are not edges by design.
+
+## 0.2.8: the audit's C# fixes (2026-11-18)
+
+Eleven C# fixes from the 0.2.5 → 0.2.8 audit (`docs/analysis/devkb-for-auditing.md`): a verbatim string `@""""` hiding
+the rest of the file (#57), sibling local functions (#58), identifiers starting with a non-ASCII letter (#59), two
+quadratic paths (#60, #61), attributes holding braces hiding the next member (#78), explicit interface implementations
+dropped with their calls (#79), `#if/#else` branches with unbalanced braces (#80), a finalizer read as the constructor
+(#81), overloads sharing local functions (#82), UTF-16 files (#83). Measured on the same pinned repositories, `main`
+(`4369145`) → 0.2.8, each changed edge sampled against the source:
+
+| | MediatR | FluentValidation | Polly | Jellyfin | EF Core |
+|---|---|---|---|---|---|
+| edges | 776 → 777 | 4,629 → 4,677 | 6,839 → 6,851 | 13,555 → 13,571 | 138,317 → 139,690 |
+| removed | 0 | 0 | 1 (wrong: `new Sentinel()` → its finalizer) | 0 | 11 (9 wrong edges; 2 real calls lost, #94) |
+| added, sampled and correct | 1/1 | 11/11 | 13/13 | 11/11 | 30/30 |
+| tests | 246 → 246 | 842 → 843 | 2,647 → 2,647 | 1,544 → 1,550 | 20,252 → 20,267 |
+
+EF Core's additions are mostly explicit interface implementations (1,210), test methods behind brace-holding attributes
+(41) and local functions (130); 32 false members from collection initialisers read as declarations are gone. The two
+lost calls sit in a constructor's `: base(...)` initializer, which the extractor never reads; they were found only
+through an offset bug that #79's work fixed (#94). EF Core build: 176.7 s and 177.0 s on `main`, 165.6–168.8 s on 0.2.8.
+
+**About B1 (round 4):** round 4 removed explicit interface implementations from the benchmark truth as "truth noise";
+the audit then found the extractor dropped them entirely (#79). Excluding a class of cases from the oracle hid the
+product's gap in that class.

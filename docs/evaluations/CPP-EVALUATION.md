@@ -1,5 +1,9 @@
 # C/C++ support: design to benchmark
 
+> **0.2.8 (2026-11-18):** seven C/C++ extractor fixes from the 0.2.5 → 0.2.8 audit (#62–#66, #92, #93), measured
+> on the same corpus in `LANGUAGE-PROFILES-EVALUATION.md` (0.2.8 section): precision unchanged, no true call site
+> lost, 2,397 fake Zephyr symbols removed. The agent benchmarks below were not re-run.
+
 Written 2026-11-16. Exploratory: one to two runs per arm, one model (Sonnet), so differences under about 30% in cost are
 noise. The scoring scripts are in `bench/cpp/`; the run transcripts are kept by the maintainers.
 

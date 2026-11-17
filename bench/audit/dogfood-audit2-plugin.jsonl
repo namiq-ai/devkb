@@ -1,0 +1,23 @@
+{"cmd": "outline devkb/mcp_server.py", "purpose": "map MCP server: tool list, _LazyAPI, main", "verdict": "right", "followup": "none", "note": "nested tool functions inside build() listed with ranges; matched source"}
+{"cmd": "symbol _LazyAPI --source", "purpose": "read lazy API body", "verdict": "right", "followup": "none", "note": "exact body, correct lines"}
+{"cmd": "uses _LazyAPI", "purpose": "where the lazy API is used (pack special-case, main, tests)", "verdict": "right", "followup": "none", "note": "all 5 sites incl. tests, with enclosing function"}
+{"cmd": "symbol server_command_problem", "purpose": "locate init warning logic", "verdict": "right", "followup": "none", "note": ""}
+{"cmd": "uses server_command_problem", "purpose": "callers and tests of the PATH check", "verdict": "right", "followup": "none", "note": "matches git grep exactly"}
+{"cmd": "outline devkb/test_discovery.py", "purpose": "find tests_in_file / list_test_files ranges", "verdict": "right", "followup": "none", "note": ""}
+{"cmd": "outline devkb/bench/languages.py", "purpose": "bench structure", "verdict": "right", "followup": "none", "note": ""}
+{"cmd": "outline plugins/devkb/hooks/session-start.sh", "purpose": "what is in the hook script", "verdict": "unsupported", "followup": "read file", "note": "honest: 'unknown language 0 symbols'"}
+{"cmd": "uses DEVKB_DIR", "purpose": "does devkb build honor DEVKB_DIR (bench writes graph there)", "verdict": "right", "followup": "none", "note": "found project_context._from_root, answering the question"}
+{"cmd": "uses nodes.jsonl --under devkb", "purpose": "is the graph written atomically / who reads it", "verdict": "right", "followup": "read build.py", "note": "list correct; question itself needed reading"}
+{"cmd": "symbol GraphNotBuilt", "purpose": "what exception the lazy API catches", "verdict": "right", "followup": "none", "note": "shows it subclasses FileNotFoundError"}
+{"cmd": "uses GraphNotBuilt --under devkb", "purpose": "where no-graph is raised and caught", "verdict": "right", "followup": "none", "note": ""}
+{"cmd": "symbol csharp_symbols.add_to_graph --source", "purpose": "read the C# graph entry called by build_symbols", "verdict": "misleading", "followup": "retried with path::name", "note": "'No symbol named'; closest-names suggested only cpp_graph.add_to_graph although devkb/csharp_symbols.py::add_to_graph exists exactly"}
+{"cmd": "symbol devkb/csharp_symbols.py::add_to_graph --source", "purpose": "same, path form", "verdict": "right", "followup": "none", "note": ""}
+{"cmd": "pack --project . change server_command_problem", "purpose": "everything that reaches the init warning", "verdict": "incomplete-silent", "followup": "git grep / read cli.py", "note": "says Complete with only init.main; misses cli.main dispatch via the 'init': 'devkb.init' module-string table"}
+{"cmd": "pack --project . refactor counts", "purpose": "callers/tests of bench counts()", "verdict": "right", "followup": "grep tests to confirm none", "note": "correctly: one caller, no tests"}
+{"cmd": "uses CLAUDE_PROJECT_DIR", "purpose": "every consumer of the project dir var (hook, .mcp.json)", "verdict": "incomplete-silent", "followup": "git grep", "note": "found .sh and .py and test but not plugins/devkb/.mcp.json (JSON not scanned); only a blanket 'not complete' header"}
+{"cmd": "uses info/exclude", "purpose": "who writes git's exclude file", "verdict": "right", "followup": "none", "note": "text search does cover .sh files"}
+{"cmd": "outline plugins/devkb/.mcp.json", "purpose": "what the plugin's MCP config launches", "verdict": "unsupported", "followup": "read file", "note": "honest no-symbols message"}
+{"cmd": "docs session start hook background build", "purpose": "find docs of the plugin's session-start behaviour", "verdict": "noisy", "followup": "read plugin files", "note": "returned README C# table row etc; plugin behaviour lives in shell comments not indexed"}
+{"cmd": "outline plugins/devkb/skills/devkb-review/SKILL.md", "purpose": "skill content", "verdict": "unsupported", "followup": "read file", "note": "markdown skills not outlined"}
+{"cmd": "uses _CS_TEST", "purpose": "where the new C# test regex applies", "verdict": "right", "followup": "none", "note": ""}
+{"cmd": "docs uv tool install", "purpose": "what install the docs recommend (to judge init warning)", "verdict": "noisy", "followup": "grep README", "note": "top hit is an image alt line; relevant L5 of a bench doc buried"}
