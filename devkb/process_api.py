@@ -340,8 +340,8 @@ class ProcessAPI:
                 return {"batch": [self._read().symbol(n, source=source, kind=kind, under=under, limit=min(limit, 3), lines=lines) for n in names]}
         return self._read().symbol(q, source=source, kind=kind, under=under, limit=limit, lines=lines)
 
-    def outline(self, path: str, limit: int = 200) -> dict:
-        return self._read().outline(path, limit=limit)
+    def outline(self, path: str, limit: int = 200, offset: int = 0) -> dict:
+        return self._read().outline(path, limit=limit, offset=offset)
 
     def uses(self, name: str, under: str = "", docs: bool = False) -> dict:
         return self._read().uses(name, under=under, docs=docs)

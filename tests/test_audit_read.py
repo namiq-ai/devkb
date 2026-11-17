@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,8 @@ FILES = {
     ".github/scripts/tool.py": "def gh_tool(x):\n    return x\n",
     "pkg/app.py": "def run():\n    return 1\n",
     "docs/pricing.md": "# Pricing\n\nPrice ($) per seat.\n",
+    "pkg/big.py": "".join(f'def member_{n:03d}(x):\n    """Member {n} of a file whose outline is far past one reply."""\n    return x\n\n\n'
+                          for n in range(300)),
     "pkg/many.py": (
         "# several notes: several is mentioned here\n"
         "# several again\n"
@@ -112,3 +115,18 @@ def test_uses_under_a_file_path_searches_that_file(api, under):  # #90
     r = api.call("uses", name="several", under=under)
     assert [f["f"] for f in r["files"]] == ["pkg/many.py"] and r["n_hits"] >= 3, r
     assert api.call("uses", name="several", under="pkg")["n_hits"] == r["n_hits"], "a directory still works"
+
+
+def test_outline_of_a_large_file_can_be_read_to_its_last_member(api):  # #91
+    from devkb.read_tools import RENDER  # noqa: PLC0415
+    seen, offset, rounds = set(), 0, 0
+    while rounds < 20:
+        text = RENDER["outline"](api.call("outline", path="pkg/big.py", offset=offset))
+        seen |= set(re.findall(r"function (member_\d{3})", text))
+        m = re.search(r"offset=(\d+)", text)
+        if not m:
+            break
+        assert int(m.group(1)) > offset, text
+        offset, rounds = int(m.group(1)), rounds + 1
+    assert rounds >= 1, "the fixture must overflow one reply"
+    assert seen == {f"member_{n:03d}" for n in range(300)}, sorted({f"member_{n:03d}" for n in range(300)} - seen)[:5]

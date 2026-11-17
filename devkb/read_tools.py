@@ -267,7 +267,7 @@ class ReadTools:
         return m["k"].split("::", 1)[1]
 
     # ── outline ───────────────────────────────────────────────────────────
-    def outline(self, path: str, limit: int = 200) -> dict:
+    def outline(self, path: str, limit: int = 200, offset: int = 0) -> dict:
         f, cands = self.resolve_file(path)
         if f is None:
             d = path.strip().strip("/")
@@ -293,9 +293,11 @@ class ReadTools:
                     imports.append(f"{n}: {text.strip()[:110]}")
                 if len(imports) >= 25:
                     break
-        out = {"path": f, "n": len(rows), "symbols": rows[:limit], "imports": imports, "lines": len(self.lines(f))}
-        if len(rows) > limit:
-            out["omitted"] = len(rows) - limit
+        offset = max(0, int(offset or 0))  # symbols to skip: the next page of a file too large for one reply (#91)
+        out = {"path": f, "n": len(rows), "symbols": rows[offset:offset + limit], "imports": [] if offset else imports,
+               "lines": len(self.lines(f)), "offset": offset}
+        if len(rows) > offset + limit:
+            out["omitted"] = len(rows) - offset - limit
         if not rows:
             out["note"] = "no symbols indexed for this file (a language devkb does not read, or a file with no definitions)"
         return out
@@ -526,13 +528,30 @@ def render_outline(r: dict) -> str:
         return fit_text(f"{r['path']}/  {r['n']} symbols in {r['n_files']} files\n" + "\n".join(f"  {x['f']}  {x['n']} symbols" for x in r["files"])) + _stale(r)
     suffix = "." + r["path"].rsplit(".", 1)[-1] if "." in r["path"] else ""
     rng = "start-only" if suffix in START_ONLY else "exact"
-    out = [f"{r['path']}  {LANG.get(suffix, 'unknown language')} {r['n']} symbols  range={rng}  ({r['lines']} lines)"]
+    offset = r.get("offset") or 0
+    out = [f"{r['path']}  {LANG.get(suffix, 'unknown language')} {r['n']} symbols  range={rng}  ({r['lines']} lines)"
+           + (f"  from symbol {offset + 1}" if offset else "")]
     out += [f"  {i}" for i in r["imports"][:30]]
+    rows = []
     for s in r["symbols"]:
         span = f"L{s['ls']}-{s['le']}" if s["range"] == "exact" else f"L{s['ls']}"
-        out.append("  " * (s["depth"] + 1) + f"{s['kind']} {s['name']}  {span}" + (f'  "{s["doc"]}"' if s["doc"] else ""))
-    if r.get("omitted"):
-        out.append(f"({r['omitted']} more symbols)")
+        rows.append("  " * (s["depth"] + 1) + f"{s['kind']} {s['name']}  {span}" + (f'  "{s["doc"]}"' if s["doc"] else ""))
+    # Cut whole symbols, not lines, and name where the next page starts, so every member can be listed (#91).
+    size = len("\n".join(out).encode())
+    room = BUDGET - 200
+    shown = 0
+    for line in rows:
+        size += len(line.encode()) + 1
+        if size > room:
+            break
+        shown += 1
+    out += rows[:shown]
+    rest = r["n"] - offset - shown
+    if rest > 0:
+        nxt = offset + shown
+        why = f"output cut at {BUDGET} bytes" if shown < len(rows) else "symbol limit reached"
+        out.append(f"({why}: symbols {offset + 1}-{nxt} of {r['n']} shown, {rest} more; "
+                   f"the rest: outline with offset={nxt} (shell: --offset {nxt}))")
     if r.get("note"):
         out.append(f"no indexed symbols in {r['path']}; indexed languages: Python, TypeScript, JavaScript, C#, C, C++, Odoo XML")
     return fit_text("\n".join(out)) + _stale(r)
@@ -589,12 +608,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, default=8)
     ap.add_argument("--lines", type=int, default=MAX_SOURCE, help="symbol --source: lines to print (default 80, at most 200)")
     ap.add_argument("--docs", action="store_true", help="uses: include documentation files")
+    ap.add_argument("--offset", type=int, default=0, help="outline: skip this many symbols (the next page of a large file)")
     a = ap.parse_args(argv)
     from devkb.process_api import ProcessAPI  # noqa: PLC0415
     api = ProcessAPI(a.project, telemetry=False)
     tool = {"symbol": "symbol", "outline": "outline", "uses": "uses", "docs": "search_docs"}[a.cmd]
     kw = {"symbol": dict(query=a.query, source=a.source, kind=a.kind, under=a.under, limit=a.limit, lines=a.lines),
-          "outline": dict(path=a.query), "uses": dict(name=a.query, under=a.under, docs=a.docs),
+          "outline": dict(path=a.query, offset=a.offset), "uses": dict(name=a.query, under=a.under, docs=a.docs),
           "search_docs": dict(query=a.query, under=a.under)}[tool]
     print(RENDER[tool](api.call(tool, **kw)))
     return 0
