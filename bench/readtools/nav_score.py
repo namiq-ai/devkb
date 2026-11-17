@@ -27,7 +27,11 @@ elif k == "N5":
     score = f1({f for f in tr["files"] if f in ans or base(f) in ans} | {m for m in re.findall(r"src/click/\w+\.py", ans) if m not in tr["files"]}, tr["files"])
 elif k == "N6":
     want = {(b, l) for b, l in tr["sites"]}
-    got = {(b, int(l)) for b, l in re.findall(r"(\w+\.py)\D{1,6}?(\d{1,5})", ans)}
+    got = set(); cur = None            # every number on a line belongs to the file name before it, so `core.py: 45, 1561` gives both sites
+    for line in ans.splitlines():
+        for tok in re.finditer(r"(\w+\.py)|(?<![\w.])(\d{1,5})(?![\w])", line):
+            if tok.group(1): cur = tok.group(1)
+            elif cur: got.add((cur, int(tok.group(2))))
     score = f1(got, want)
 elif k == "N7":
     score = (0.6 if tr["file"] in ans else 0) + (0.4 if tr["heading"].lower() in ans.lower() else 0)
