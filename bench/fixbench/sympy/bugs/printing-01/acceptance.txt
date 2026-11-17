@@ -1,0 +1,6 @@
+sympy/printing/tests/test_conventions.py::test_super_sub
+sympy/printing/tests/test_latex.py::test_latex_functions
+sympy/printing/tests/test_latex.py::test_latex_issue_4576
+sympy/printing/tests/test_latex.py::test_modifiers
+sympy/printing/tests/test_latex.py::test_issue_12886
+sympy/printing/pretty/tests/test_pretty.py::test_upretty_modifiers

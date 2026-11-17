@@ -1,0 +1,13 @@
+diff --git a/sympy/sets/handlers/union.py b/sympy/sets/handlers/union.py
+index 75d867b..10c65bd 100644
+--- a/sympy/sets/handlers/union.py
++++ b/sympy/sets/handlers/union.py
+@@ -101,7 +101,7 @@ def _(a, b):
+             start = Min(a.start, b.start)
+             end = Max(a.end, b.end)
+ 
+-            left_open = ((a.start != start or a.left_open) and
++            left_open = ((a.start != start or a.left_open) or
+                          (b.start != start or b.left_open))
+             right_open = ((a.end != end or a.right_open) and
+                           (b.end != end or b.right_open))

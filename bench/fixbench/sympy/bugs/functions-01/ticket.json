@@ -1,0 +1,4 @@
+{
+  "title": "Definite integral of sin with an upper limit containing 2*pi/3 is wrong",
+  "body": "### What I did\n\n```python\nfrom sympy import symbols, sin, integrate, pi\nx, t = symbols('x t')\nprint(integrate(sin(t), (t, 0, x + 2*pi/3)))\n```\n\n### What I got\n\n```\nsin(x) + 1\n```\n\n### What I expected\n\n`1 - cos(x + 2*pi/3)`, i.e. `sin(x + pi/6) + 1`. Plugging in x = 0 the true value is 3/2, but the returned expression gives 1. Upper limits like x + pi/2 or x + pi seem fine.\n"
+}

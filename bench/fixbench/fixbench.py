@@ -26,9 +26,10 @@ REPO = os.environ.get("FIXBENCH_REPO", str(B.parent.parent))   # the devkb check
 BASE = "4369145"
 TICKETS = [50, 54, 70, 57, 63, 65]
 VARIANT = os.environ.get("FIXBENCH_VARIANT", "")      # "" = tickets as filed, released 0.2.7; "B" = no "where to start", main's devkb
-# Variant B's tool: `uv venv toolenv && uv pip install --python toolenv/bin/python "<checkout of BASE>[mcp]"`, and
-# shim-B/devkb -> toolenv/bin/devkb; the default variant's shim/devkb -> the installed release.
 SUF = f"-{VARIANT}" if VARIANT else ""
+TICKETS = [int(x) for x in os.environ.get("FIXBENCH_TICKETS", "").split(",") if x] or TICKETS
+# Variant B's tool: `uv venv toolenv && uv pip install --python toolenv/bin/python "<checkout of BASE>[mcp]"`, and
+# shim-B/devkb -> toolenv/bin/devkb; the other variants' shim/devkb -> the installed release.
 DEVKB = os.environ.get("FIXBENCH_DEVKB") or (str(B / "toolenv" / "bin" / "devkb") if VARIANT == "B" else os.path.expanduser("~/.local/bin/devkb"))
 MODEL = "sonnet"
 PROMPT = """You are working in a clone of the devkb repository (a Python code-graph tool for coding agents; its venv is
@@ -67,8 +68,13 @@ def checkout(w: Path, arm: str):
         sh(["git", *c], cwd=w)
     sh(["uv", "venv", "-q", ".venv"], cwd=w)
     sh(["uv", "pip", "install", "-q", "--python", ".venv/bin/python", "-e", ".[mcp]", "pytest"], cwd=w)
-    if arm == "devkb":
-        sh([DEVKB, "init", "--project", str(w), "--toolset", "lean-pack"], cwd=w)
+    if arm in ("devkb", "hook"):
+        sh([DEVKB, "init", "--project", str(w), "--toolset", "lean-pack", *(["--claude-hook"] if arm == "hook" else [])], cwd=w)
+        if arm == "hook":   # the hook runs the released tool too, never the code being edited
+            st = json.loads((w / ".claude" / "settings.json").read_text())
+            for h in st["hooks"]["PreToolUse"][0]["hooks"]:
+                h["command"] = h["command"].replace("devkb ", DEVKB + " ", 1)
+            (w / ".claude" / "settings.json").write_text(json.dumps(st, indent=2) + "\n")
         # the server and the `devkb` command are the released tool, never the code the agent is editing
         cfg = json.loads((w / ".mcp.json").read_text())
         cfg["mcpServers"]["devkb"]["command"] = DEVKB
@@ -88,7 +94,7 @@ def run_one(n: int, arm: str, rep: int) -> str:
     checkout(w, arm)
     t = json.loads((B / f"tickets{SUF}" / f"{n}.json").read_text())
     prompt = PROMPT.format(n=n, title=t["title"], body=t["body"])
-    if arm == "devkb":
+    if arm in ("devkb", "hook"):
         mcp, allow, deny = str(w / ".mcp.json"), COMMON + ["mcp__devkb", "Bash(devkb:*)"], []
     else:
         (B / "no-mcp.json").write_text(json.dumps({"mcpServers": {}}))
@@ -109,7 +115,8 @@ def run_one(n: int, arm: str, rep: int) -> str:
 
 
 def run(reps: int, parallel: int):
-    jobs = [(n, arm, r) for n in TICKETS for arm in ("plain", "devkb") for r in range(1, reps + 1)]
+    arms = os.environ.get("FIXBENCH_ARMS", "plain,devkb").split(",")
+    jobs = [(n, arm, r) for n in TICKETS for arm in arms for r in range(1, reps + 1)]
     random.Random(2032).shuffle(jobs)
     with cf.ThreadPoolExecutor(parallel) as ex:
         for f in cf.as_completed([ex.submit(run_one, *j) for j in jobs]):
@@ -127,12 +134,15 @@ def score():
         end = json.loads((out / "end").read_text())
         hidden = B / "hidden" / f"test_hidden_{n}.py"
         shutil.copy(hidden, w / "tests" / hidden.name)
+        if (B / "hidden" / "_t3common.py").exists():
+            shutil.copy(B / "hidden" / "_t3common.py", w / "tests" / "_t3common.py")
         py = str(w / ".venv" / "bin" / "python")
         h = subprocess.run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", f"tests/{hidden.name}"], cwd=w,
                            capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=str(w)))
         full = subprocess.run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests", "--ignore", f"tests/{hidden.name}"],
                               cwd=w, capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=str(w)))
         (w / "tests" / hidden.name).unlink()
+        (w / "tests" / "_t3common.py").unlink(missing_ok=True)
         base = (w / ".bench-base").read_text().strip()
         diff = sh(["git", "diff", "--shortstat", base], cwd=w).stdout.strip()
         committed = sh(["git", "rev-list", "--count", f"{base}..HEAD"], cwd=w).stdout.strip()

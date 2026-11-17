@@ -1,0 +1,4 @@
+{
+  "title": "imageset drops an endpoint the function actually reaches",
+  "body": "### What I did\n\n```python\nfrom sympy import Symbol, Interval, imageset\nx = Symbol('x', real=True)\nprint(imageset(x, 1/x + 1/(x - 1)**2, Interval.Lopen(0, 2)))\n```\n\n### What I got\n\n```\nInterval.open(3/2, oo)\n```\n\n### What I expected\n\n`Interval(3/2, oo)`. At x = 2 (which is in the domain, the interval is closed on the right) the function equals 1/2 + 1 = 3/2, so 3/2 belongs to the image and the lower end should be closed, not open.\n"
+}

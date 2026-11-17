@@ -1,0 +1,78 @@
+=== functions-01
+--- clean: snippet
+sin(x + pi/6) + 1
+--- clean: acceptance: 2 passed in 0.73s  [wall 1.6s]
+--- patched: snippet
+sin(x) + 1
+--- patched: acceptance:
+FAILED sympy/functions/elementary/tests/test_trigonometric.py::test_tan_expansion
+FAILED sympy/functions/elementary/tests/test_trigonometric.py::test_cot_expansion
+2 failed in 0.54s
+[wall 1.4s]
+=== matrices-01
+--- clean: snippet
+Matrix([[1, 0, 0]]) Matrix([[0, 0, 0]])
+--- clean: acceptance: 3 passed in 0.69s  [wall 1.5s]
+--- patched: snippet
+Matrix([[18, -7, -1]]) Matrix([[0, -1, 1]])
+--- patched: acceptance:
+FAILED sympy/matrices/tests/test_decompositions.py::test_LUdecomp
+FAILED sympy/matrices/tests/test_matrices.py::test_inverse
+FAILED sympy/matrices/tests/test_matrixbase.py::test_inverse
+3 failed in 0.86s
+[wall 1.7s]
+=== printing-01
+--- clean: snippet
+x^{2}
+--- clean: acceptance: 6 passed in 0.53s  [wall 1.4s]
+--- patched: snippet
+x_{2}
+--- patched: acceptance:
+FAILED sympy/printing/tests/test_conventions.py::test_super_sub
+FAILED sympy/printing/tests/test_latex.py::test_latex_functions
+FAILED sympy/printing/tests/test_latex.py::test_latex_issue_4576
+FAILED sympy/printing/tests/test_latex.py::test_modifiers
+FAILED sympy/printing/tests/test_latex.py::test_issue_12886
+FAILED sympy/printing/pretty/tests/test_pretty.py::test_upretty_modifiers
+6 failed in 0.91s
+[wall 1.8s]
+=== sets-01
+--- clean: snippet
+Interval(3/2, oo)
+--- clean: acceptance: 3 passed in 0.85s  [wall 1.8s]
+--- patched: snippet
+Interval.open(3/2, oo)
+--- patched: acceptance:
+FAILED sympy/sets/tests/test_sets.py::test_union
+FAILED sympy/sets/tests/test_sets.py::test_image_interval
+FAILED sympy/sets/tests/test_sets.py::test_image_piecewise
+3 failed in 0.89s
+[wall 1.8s]
+=== simplify-01
+--- clean: snippet
+sqrt(2) + sqrt(3) + sqrt(5) -0.e-123
+--- clean: acceptance: 4 passed in 0.83s  [wall 1.8s]
+--- patched: snippet
+sqrt(6)/3 + sqrt(3) + sqrt(5) 0.597716981445369
+--- patched: acceptance:
+FAILED sympy/simplify/tests/test_sqrtdenest.py::test_sqrtdenest_rec
+FAILED sympy/simplify/tests/test_sqrtdenest.py::test_issue_6241
+FAILED sympy/simplify/tests/test_sqrtdenest.py::test_sqrtdenest3
+FAILED sympy/simplify/tests/test_sqrtdenest.py::test_sqrtdenest4
+4 failed in 0.40s
+[wall 1.2s]
+=== solvers-01
+--- clean: snippet
+[(-1, -2, -3), (1, 2, 3)]
+{(-1, -2, -3), (1, 2, 3)}
+--- clean: acceptance: 4 passed in 1.13s  [wall 2.0s]
+--- patched: snippet
+[]
+{(-3, -2, -1), (3, 2, 1)}
+--- patched: acceptance:
+FAILED sympy/solvers/tests/test_polysys.py::test_solve_poly_system
+FAILED sympy/solvers/tests/test_polysys.py::test_solve_generic
+FAILED sympy/solvers/tests/test_solveset.py::test_nonlinsolve_inexact
+FAILED sympy/solvers/tests/test_solveset.py::test_nonlinsolve_issue_25182
+4 failed in 1.33s
+[wall 2.2s]

@@ -1,0 +1,4 @@
+sympy/solvers/tests/test_polysys.py::test_solve_poly_system
+sympy/solvers/tests/test_polysys.py::test_solve_generic
+sympy/solvers/tests/test_solveset.py::test_nonlinsolve_inexact
+sympy/solvers/tests/test_solveset.py::test_nonlinsolve_issue_25182

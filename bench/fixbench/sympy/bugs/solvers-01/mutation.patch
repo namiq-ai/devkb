@@ -1,0 +1,13 @@
+diff --git a/sympy/solvers/polysys.py b/sympy/solvers/polysys.py
+index eb4787e..e58399d 100644
+--- a/sympy/solvers/polysys.py
++++ b/sympy/solvers/polysys.py
+@@ -320,7 +320,7 @@ def _solve_reduced_system(system, gens, entry=False):
+                     new_system.append(eq)
+ 
+             for solution in _solve_reduced_system(new_system, new_gens):
+-                solutions.append(solution + (zero,))
++                solutions.append((zero,) + solution)
+ 
+         if solutions and len(solutions[0]) != len(gens):
+             raise NotImplementedError(filldedent('''

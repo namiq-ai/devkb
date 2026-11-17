@@ -1,0 +1,4 @@
+{
+  "title": "LUsolve gives a wrong solution for an invertible 3x3 system",
+  "body": "### What I did\n\n```python\nfrom sympy import Matrix\nA = Matrix([[1, 2, 3], [2, 4, 7], [3, 7, 1]]); b = Matrix([1, 2, 3])\nx = A.LUsolve(b)\nprint(x.T, (A*x - b).T)\n```\n\n### What I got\n\n```\nMatrix([[18, -7, -1]]) Matrix([[0, -1, 1]])\n```\n\n### What I expected\n\n`Matrix([[1, 0, 0]]) Matrix([[0, 0, 0]])`. The matrix is invertible (determinant -1) so the answer is unique, and `A.solve(b)` does return (1, 0, 0). LUsolve's answer doesn't even satisfy the system (non-zero residual).\n"
+}

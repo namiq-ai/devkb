@@ -1,0 +1,4 @@
+{
+  "title": "sqrtdenest returns a value that is not equal to its input",
+  "body": "### What I did\n\n```python\nfrom sympy import sqrt, sqrtdenest, N\ne = sqrt(10 + 2*sqrt(6) + 2*sqrt(10) + 2*sqrt(15))\nr = sqrtdenest(e)\nprint(r, N(e - r))\n```\n\n### What I got\n\n```\nsqrt(6)/3 + sqrt(3) + sqrt(5) 0.597716981445369\n```\n\n### What I expected\n\n`sqrt(2) + sqrt(3) + sqrt(5)`, which squares back to the original radicand, and a difference of 0. Getting a numerically different number out of a simplification is worse than getting the input back unchanged.\n"
+}
