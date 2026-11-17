@@ -1,0 +1,3 @@
+sympy/matrices/tests/test_decompositions.py::test_LUdecomp
+sympy/matrices/tests/test_matrices.py::test_inverse
+sympy/matrices/tests/test_matrixbase.py::test_inverse

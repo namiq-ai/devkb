@@ -1,0 +1,13 @@
+diff --git a/sympy/simplify/radsimp.py b/sympy/simplify/radsimp.py
+index 8c1fe8d..55a7783 100644
+--- a/sympy/simplify/radsimp.py
++++ b/sympy/simplify/radsimp.py
+@@ -1191,7 +1191,7 @@ def split_surds(expr):
+         if s.is_Pow and s.exp == S.Half:
+             s1 = s.base
+             if s1 in b1:
+-                a1v.append(c*sqrt(s1/g2))
++                a1v.append(c*sqrt(s1/g))
+             else:
+                 a2v.append(c*s)
+         else:

@@ -1,0 +1,4 @@
+sympy/simplify/tests/test_sqrtdenest.py::test_sqrtdenest_rec
+sympy/simplify/tests/test_sqrtdenest.py::test_issue_6241
+sympy/simplify/tests/test_sqrtdenest.py::test_sqrtdenest3
+sympy/simplify/tests/test_sqrtdenest.py::test_sqrtdenest4

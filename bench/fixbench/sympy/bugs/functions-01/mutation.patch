@@ -1,0 +1,13 @@
+diff --git a/sympy/functions/elementary/trigonometric.py b/sympy/functions/elementary/trigonometric.py
+index 2608dc4..0d4a0f7 100644
+--- a/sympy/functions/elementary/trigonometric.py
++++ b/sympy/functions/elementary/trigonometric.py
+@@ -161,7 +161,7 @@ def _peeloff_pi(arg):
+     m1 = (pi_coeff % S.Half)
+     m2 = pi_coeff - m1
+     if m2.is_integer or ((2*m2).is_integer and m2.is_even is False):
+-        return Add(*(rest_terms + [m1*pi])), m2
++        return Add(*rest_terms), m2
+     return arg, S.Zero
+ 
+ 

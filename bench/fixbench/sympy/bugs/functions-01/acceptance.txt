@@ -1,0 +1,2 @@
+sympy/functions/elementary/tests/test_trigonometric.py::test_tan_expansion
+sympy/functions/elementary/tests/test_trigonometric.py::test_cot_expansion

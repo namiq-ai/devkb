@@ -1,0 +1,13 @@
+diff --git a/sympy/printing/conventions.py b/sympy/printing/conventions.py
+index 3eda9c1..5b2a55d 100644
+--- a/sympy/printing/conventions.py
++++ b/sympy/printing/conventions.py
+@@ -54,7 +54,7 @@ def split_super_sub(text):
+         elif part.startswith("^"):
+             supers.append(part[1:])
+         elif part.startswith("__"):
+-            supers.append(part[2:])
++            subs.append(part[2:])
+         elif part.startswith("_"):
+             subs.append(part[1:])
+         else:

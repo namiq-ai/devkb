@@ -1,0 +1,4 @@
+{
+  "title": "LaTeX output of a symbol named with a double underscore shows a subscript instead of a superscript",
+  "body": "### What I did\n\n```python\nfrom sympy import Symbol, latex\nx2 = Symbol('x__2')\nprint(latex(x2))\n```\n\n### What I got\n\n```\nx_{2}\n```\n\n### What I expected\n\n`x^{2}`. The docs say a double underscore in a symbol name marks a superscript (like `^`), and this used to work. `pprint` of the same symbol also prints `x\u2082` now.\n"
+}

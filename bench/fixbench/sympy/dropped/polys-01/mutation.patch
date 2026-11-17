@@ -1,0 +1,14 @@
+diff --git a/sympy/polys/densetools.py b/sympy/polys/densetools.py
+index 0c9db99..a8879b6 100644
+--- a/sympy/polys/densetools.py
++++ b/sympy/polys/densetools.py
+@@ -1207,8 +1207,7 @@ def dup_sign_variations(f, K):
+         if K.is_negative(coeff*prev):
+             k += 1
+ 
+-        if coeff:
+-            prev = coeff
++        prev = coeff
+ 
+     return k
+ 

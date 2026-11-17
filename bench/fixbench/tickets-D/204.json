@@ -1,0 +1,1 @@
+{"title": "Rename tickets_git._run to _git", "body": "`devkb/extractors/tickets_git.py` defines a helper `_run(...)` that runs git; several other modules have their own `_run`. Rename the one in `tickets_git.py` to `_git` and update every module that imports or calls **that** helper. Do not rename any other `_run`."}

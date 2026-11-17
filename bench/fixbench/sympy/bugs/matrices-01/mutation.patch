@@ -1,0 +1,13 @@
+diff --git a/sympy/matrices/decompositions.py b/sympy/matrices/decompositions.py
+index a8dd466..f60db80 100644
+--- a/sympy/matrices/decompositions.py
++++ b/sympy/matrices/decompositions.py
+@@ -1010,7 +1010,7 @@ def _LUdecomposition_Simple(M, iszerofunc=_iszero, simpfunc=None,
+ 
+             # Update L.
+             lu[pivot_row, 0:pivot_row], lu[candidate_pivot_row, 0:pivot_row] = \
+-                lu[candidate_pivot_row, 0:pivot_row], lu[pivot_row, 0:pivot_row]
++                lu[pivot_row, 0:pivot_row], lu[candidate_pivot_row, 0:pivot_row]
+ 
+             # Swap pivot row of U with candidate pivot row.
+             lu[pivot_row, pivot_col:lu.cols], lu[candidate_pivot_row, pivot_col:lu.cols] = \
