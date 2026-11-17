@@ -197,7 +197,7 @@ All under `tests/fixtures/readtools/`, built with `devkb build --project <dir>`,
 | FX-CS | `cs/` | `src/Loader.cs` (class `Loader`: constructor, `Load(string)`, `Load(Stream)`, generic `Load<T>`, a property; `interface ILoader`), `tests/LoaderTests.cs` with an attribute above a test method |
 | FX-C | `c/` | `src/json.c`, `src/json.h` (`json_parse` of 150 lines, `static skip_ws` in `json.c` and in `test_json.c`, macro `JSON_MAX_DEPTH`, `const int MAX_NODES`), `test/test_json.c` |
 | FX-CPP | `cpp/` | `src/store.hpp`, `src/store.cpp` (namespace `kv`, class `Store` with overloaded `put(int)` and `put(std::string)` and a template `get`; a free `get`; `kv::get`; a declaration in the header and its definition in the `.cpp`), `test/store_test.cpp` |
-| FX-MIX | `mixed/` | `bind/lib.c` (`add_one`), `bind/wrap.py` (a Python `add_one` calling it through `ctypes`), `ui/app.ts` (a start-only `add_one`), an Odoo view declaration under `ui/`, `docs/spec/SPEC-X.md`, `docs/adr/ADR-1.md`, `docs/notes.rst`, `Makefile`, `app.cfg` holding the key `retry_limit` |
+| FX-MIX | `mixed/` | `bind/lib.c` (`add_one`), `bind/wrap.py` (a Python `add_one` calling it through `ctypes`), `ui/app.ts` (a start-only `add_one`), an Odoo view declaration under `ui/`, `docs/specs/SPEC-X.md`, `docs/adr/ADR-1.md`, `docs/notes.rst`, `Makefile`, `app.cfg` holding the key `retry_limit` |
 
 Fixtures are synthetic (no customer data; RFC5737 addresses if one is needed).
 

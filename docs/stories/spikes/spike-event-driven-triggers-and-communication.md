@@ -73,7 +73,7 @@ risk: medium
 
 ## References
 
-- spec — `docs/spec/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md`, §Approach (unique-name rule, qualified Complete, per-profile coverage)
+- spec — `docs/specs/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md`, §Approach (unique-name rule, qualified Complete, per-profile coverage)
 - decision — `docs/adr/ADR-DKB-001_c-cpp-support.md`, §3 (indirect references) and §4 (when a pack may say Complete)
 - ontology — `devkb/ontology.md`
 - sibling — `_bmad-output/backlog/spike-generated-code-and-preprocessing-as-graph.md`

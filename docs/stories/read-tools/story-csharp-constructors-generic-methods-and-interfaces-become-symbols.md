@@ -60,7 +60,7 @@ report recall 0.85 and 0.83 against tree-sitter definitions, and the missing def
 
 ## References
 
-- spec — docs/spec/SPEC-DKB-003_read-tools-for-every-language.md, Gaps GAP-6
+- spec — docs/specs/SPEC-DKB-003_read-tools-for-every-language.md, Gaps GAP-6
 - decision — docs/adr/ADR-DEVKB-010_read-tools.md, section 8
 - analysis — docs/analysis/read-tools-analysis.md, section 2 finding 3
 

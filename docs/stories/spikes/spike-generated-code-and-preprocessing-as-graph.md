@@ -69,9 +69,9 @@ risk: medium
 
 ## References
 
-- spec — `docs/spec/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md`, §Context, Gaps and Approach (the ConfigKey and boundary resolver this builds on)
+- spec — `docs/specs/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md`, §Context, Gaps and Approach (the ConfigKey and boundary resolver this builds on)
 - decision — `docs/adr/ADR-DEVKB-009_language-profiles-and-boundaries.md`
-- spec — `docs/spec/SPEC-DKB-001_a-coding-agent-working-in-a-c-or-c-repository-ge.md`, Out of Scope (preprocessor) and Gaps
+- spec — `docs/specs/SPEC-DKB-001_a-coding-agent-working-in-a-c-or-c-repository-ge.md`, Out of Scope (preprocessor) and Gaps
 - ontology — `devkb/ontology.md` (read in the code branch `<local-path>`)
 - sibling — `_bmad-output/backlog/spike-event-driven-triggers-and-communication.md` (autoas RTE and Zephyr syscall lists are both generated and registered)
 

@@ -50,5 +50,5 @@ The C profile of D7: a C call resolves through linkage, not through classes. Tod
 ## References
 
 - parent — _bmad-output/initiative-language-profiles-and-boundaries/tickets/epic-language-profiles/epic-language-profiles.md
-- spec — docs/spec/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md
+- spec — docs/specs/SPEC-DKB-002_language-profiles-and-cross-language-boundaries.md
 - decision — docs/adr/ADR-DEVKB-009_language-profiles-and-boundaries.md

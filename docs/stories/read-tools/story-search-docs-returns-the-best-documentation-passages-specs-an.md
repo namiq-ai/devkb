@@ -18,7 +18,7 @@ D6. 9.6% of grep cost is a search in docs, specs and tickets; `find_docs` ranks 
 ## Requirements
 
 1. **Specs and ADRs come first** (R8)
-   **Given** FX-MIX with `docs/spec/SPEC-X.md`, `docs/adr/ADR-1.md` and `docs/notes.rst`, all holding the word `retry`
+   **Given** FX-MIX with `docs/specs/SPEC-X.md`, `docs/adr/ADR-1.md` and `docs/notes.rst`, all holding the word `retry`
    **When** `search_docs retry` runs
    **Then** the spec and the ADR are listed before `docs/notes.rst`, even when the notes file has more matching lines
 
