@@ -91,7 +91,7 @@ def test_a_pack_carries_evidence_lines_coverage_and_freshness(tmp_path, monkeypa
     text = p.change("add_edge", "app/store.py")
     assert "`app/routes.py:6: store.add_edge(1, 2)`" in text, "each item carries the line that proves it"
     assert "app/routes.py::post_record" in text and "tests/test_store.py" in text
-    assert "**Incomplete: 1 call site(s)" in text and "None of the files below has changed since" in text
+    assert "**Incomplete: calls under this name from 1 function(s)" in text and "None of the files below has changed since" in text
     (tmp_path / "app" / "routes.py").write_text(FILES["app/routes.py"] + "\n# edited\n")
     assert "Changed since, re-read these:" in Packer(api).change("add_edge", "app/store.py")
     err = p.error("a record without a name cannot be saved")

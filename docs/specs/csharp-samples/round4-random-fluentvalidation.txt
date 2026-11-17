@@ -1,0 +1,60 @@
+ 1. FluentValidation.Tests.CascadingFailuresTester.Validation_continues_to_first_failing_validator_then_stops_in_all_rules_when_first_validator_succeeds_and_globaldefault_rule_Stop -> src/FluentValidation.Tests/Person.cs::FluentValidation.Tests.Person.ctor
+    call src/FluentValidation.Tests/CascadingFailuresTester.cs:138: var result = _validator.Validate(new Person() { Surname = "x", Forename = "x", Email = "x", CreditCard = "x" });
+    def  37: public Person() {
+ 2. FluentValidation.Tests.CascadingFailuresTester.Dispose -> src/FluentValidation.Tests/CascadingFailuresTester.cs::FluentValidation.Tests.CascadingFailuresTester.SetBothGlobalCascadeModes
+    call src/FluentValidation.Tests/CascadingFailuresTester.cs:37: SetBothGlobalCascadeModes(CascadeMode.Continue);
+    def  492: private static void SetBothGlobalCascadeModes(CascadeMode cascadeMode) {
+ 3. FluentValidation.Tests.ComplexValidationTester.Async_condition_throws_when_validator_invoked_synchronously -> src/FluentValidation.Tests/TestValidator.cs::FluentValidation.Tests.TestValidator.ctor
+    call src/FluentValidation.Tests/ComplexValidationTester.cs:139: var validator = new TestValidator() {
+    def  24: public TestValidator() {
+ 4. FluentValidation.Tests.CustomValidatorTester.Allows_placeholders -> src/FluentValidation/Internal/MessageFormatter.cs::FluentValidation.Internal.MessageFormatter.AppendArgument
+    call src/FluentValidation.Tests/CustomValidatorTester.cs:167: context.MessageFormatter.AppendArgument("Foo", "1");
+    def  48: public MessageFormatter AppendArgument(string name, object value) {
+ 5. FluentValidation.Tests.EnumValidatorTests.Flags_enum_with_overlapping_flags_valid_when_using_bitwise_value -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.Validate
+    call src/FluentValidation.Tests/EnumValidatorTests.cs:110: inlineValidator.Validate(poco).IsValid.ShouldBeTrue();
+    def  98: public ValidationResult Validate(T instance)
+ 6. FluentValidation.Tests.ExactLengthValidatorTester.Min_and_max_properties_should_be_set -> src/FluentValidation/Validators/LengthValidator.cs::FluentValidation.Validators.ExactLengthValidator.ctor
+    call src/FluentValidation.Tests/ExactLengthValidatorTester.cs:61: var validator = new ExactLengthValidator<Person>(5);
+    def  79: public ExactLengthValidator(int length) : base(length,length) {
+ 7. FluentValidation.Tests.ForEachRuleTests.Can_validate_collection_using_validator_for_base_type -> src/FluentValidation.Tests/TestValidator.cs::FluentValidation.Tests.TestValidator.ctor
+    call src/FluentValidation.Tests/ForEachRuleTests.cs:479: var validator = new TestValidator() {
+    def  24: public TestValidator() {
+ 8. FluentValidation.Tests.ForEachRuleTests.Can_specify_condition_for_individual_collection_elements_async -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.ValidateAsync
+    call src/FluentValidation.Tests/ForEachRuleTests.cs:507: var results = await validator.ValidateAsync(_person);
+    def  107: public Task<ValidationResult> ValidateAsync(T instance, CancellationToken cancellation = new())
+ 9. FluentValidation.Tests.GreaterThanOrEqualToValidatorTester.Validates_with_nullable_when_property_is_null -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.Validate
+    call src/FluentValidation.Tests/GreaterThanOrEqualToValidatorTester.cs:124: var result = validator.Validate(new Person());
+    def  98: public ValidationResult Validate(T instance)
+10. FluentValidation.Tests.GreaterThanOrEqualToValidatorTester.Validates_with_nullable_when_property_is_null_cross_property -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldBeTrue
+    call src/FluentValidation.Tests/GreaterThanOrEqualToValidatorTester.cs:151: result.IsValid.ShouldBeTrue();
+    def  36: public static void ShouldBeTrue(this bool b) => Assert.True(b);
+11. FluentValidation.Tests.InheritanceValidatorTest.Validates_ruleset -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.RuleSet
+    call src/FluentValidation.Tests/InheritanceValidatorTest.cs:240: impl1Validator.RuleSet("RuleSet1", () => {
+    def  237: public void RuleSet(string ruleSetName, Action action) {
+12. FluentValidation.Tests.LanguageManagerTests.Gets_translation_for_croatian_culture -> src/FluentValidation.Tests/TestExtensions.cs::FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/LanguageManagerTests.cs:84: msg.ShouldEqual("Niste upisali '{PropertyName}'");
+    def  26: public static void ShouldEqual(this object actual, object expected)
+13. FluentValidation.Tests.MessageFormatterTests.ctor -> src/FluentValidation/Internal/MessageFormatter.cs::FluentValidation.Internal.MessageFormatter
+    call src/FluentValidation.Tests/MessageFormatterTests.cs:30: formatter = new MessageFormatter();
+    def  26: public partial class MessageFormatter {
+14. FluentValidation.Tests.PropertyChainTests.Should_ignore_blanks -> src/FluentValidation/Internal/PropertyChain.cs::FluentValidation.Internal.PropertyChain.Add
+    call src/FluentValidation.Tests/PropertyChainTests.cs:120: chain.Add("");
+    def  87: public void Add(MemberInfo member) {
+15. FluentValidation.Tests.RulesetTests.Trims_spaces -> src/FluentValidation.Tests/Person.cs::FluentValidation.Tests.Person.ctor
+    call src/FluentValidation.Tests/RulesetTests.cs:175: var result = validator.Validate(new Person(), v => v.IncludeRuleSets( "First", "Second"));
+    def  37: public Person() {
+16. FluentValidation.Tests.ValidateAndThrowTester.Does_not_throw_when_valid_and_a_ruleset_async -> src/FluentValidation/Internal/ValidationStrategy.cs::FluentValidation.Internal.ValidationStrategy.ThrowOnFailures
+    call src/FluentValidation.Tests/ValidateAndThrowTester.cs:111: await validator.ValidateAsync(person, v => v.IncludeRuleSets(ruleSetName).ThrowOnFailures());
+    def  121: public ValidationStrategy<T> ThrowOnFailures() {
+17. FluentValidation.Tests.ValidatorTesterTester.ShouldHaveChildValidator_throws_when_property_does_not_have_child_validator -> src/FluentValidation/TestHelper/ValidatorTestExtensions.cs::FluentValidation.TestHelper.ValidationTestExtension.ShouldHaveChildValidator
+    call src/FluentValidation.Tests/ValidatorTesterTester.cs:155: validator.ShouldHaveChildValidator(x => x.Address, typeof(AddressValidator))
+    def  38: public static void ShouldHaveChildValidator<T, TProperty>(this IValidator<T> validator, Expression<Func<T, TProperty>> expres
+18. FluentValidation.Tests.ValidatorTesterTester.ShouldHaveChildValidator_should_work_with_DependentRules -> src/FluentValidation/AbstractValidator.cs::FluentValidation.AbstractValidator.RuleFor
+    call src/FluentValidation.Tests/ValidatorTesterTester.cs:626: validator.RuleFor(x => x.Children)
+    def  210: public IRuleBuilderInitial<T, TProperty> RuleFor<TProperty>(Expression<Func<T, TProperty>> expression) {
+19. FluentValidation.Tests.ValidatorTesterTester.ShouldHaveValidationErrorFor_Only -> src/FluentValidation/TestHelper/TestValidationResult.cs::FluentValidation.TestHelper.TestValidationResult.ShouldHaveValidationErrorFor
+    call src/FluentValidation.Tests/ValidatorTesterTester.cs:817: .ShouldHaveValidationErrorFor(x => x.Surname)
+    def  36: public ITestValidationWith ShouldHaveValidationErrorFor<TProperty>(Expression<Func<T, TProperty>> memberAccessor) {
+20. FluentValidation.Validators.PrecisionScaleValidator.IsValid -> src/FluentValidation/Validators/PrecisionScaleValidator.cs::FluentValidation.Validators.PrecisionScaleValidator.Info.Get
+    call src/FluentValidation/Validators/PrecisionScaleValidator.cs:68: var info = Info.Get(decimalValue, IgnoreTrailingZeros);
+    def  98: public static Info Get(decimal value, bool ignoreTrailingZeros) {

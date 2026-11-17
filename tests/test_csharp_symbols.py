@@ -715,3 +715,283 @@ public class Use
     _, calls = csharp_symbols.extract(_repo(tmp_path))
     callees = {_short(c["callee"]) for c in calls if c["rel"] == "L.cs"}
     assert "L.E.ToList" not in callees and "L.E.FindIndex" in callees
+
+
+# ── round 4 (SPEC-DEVKB-CSHARP-4, #40) ────────────────────────────────────────────────────────────────────────
+
+def _sites(tmp_path, name, text, caller="Go"):
+    """{source line: callees resolved on it} for every call site in `caller` (extract() keeps one edge per pair)."""
+    (tmp_path / name).write_text(text)
+    sc = csharp_symbols.scan_file(name, text)
+    for x in sc["symbols"]:
+        x["rel"], x["key"] = name, name + "::" + ".".join(x["qparts"])
+    index = csharp_symbols._Index(sc["symbols"])
+    go = next(x for x in sc["symbols"] if x["name"] == caller)
+    lines = text.splitlines()
+    got = {}
+    for callee, _c, line, _t, why in csharp_symbols._calls_in(go, sc["masked"], sc["nl"], index, {}, sc["raw"],
+                                                               sc.get("aliases")):
+        key = lines[line - 1].split("//")[0].strip()
+        got.setdefault(key, set()).add(".".join(callee["qparts"]) if callee else "-" + why)
+    return got
+
+
+def test_f6_static_calls_on_generic_types(tmp_path):
+    got = _sites(tmp_path, "G6.cs", '''namespace G6;
+public class Ctx<T> { public static Ctx<T> FromOther(object o) => null; public void Run() { } }
+public class Use
+{
+    public void Go(object o)
+    {
+        Ctx<int>.FromOther(o);
+        var p = System.IO.Path.GetExtension("a.b");
+        Path.GetExtension("x");
+    }
+}
+public static class Ext { public static string GetExtension(this string s) => s; }
+''')
+    assert got["Ctx<int>.FromOther(o);"] == {"G6.Ctx.FromOther"}
+    assert "G6.Ext.GetExtension" not in got.get('Path.GetExtension("x");', set()), ".NET's Path.GetExtension"
+
+
+def test_f7_element_access(tmp_path):
+    got = _sites(tmp_path, "G7.cs", '''namespace G7;
+using System.Collections.Generic;
+public class Failure { public string Name; public void Show() { } }
+public class Result { public List<Failure> Errors { get; } }
+public class Use
+{
+    public void Go(Result result, Dictionary<string, Failure> byName, Failure[] all)
+    {
+        result.Errors[0].Show();
+        byName["a"].Show();
+        all[1].Show();
+    }
+}
+''')
+    for line in ("result.Errors[0].Show();", 'byName["a"].Show();', "all[1].Show();"):
+        assert got[line] == {"G7.Failure.Show"}, line
+
+
+def test_f8_casts_and_patterns(tmp_path):
+    got = _sites(tmp_path, "G8.cs", '''namespace G8;
+public class Builder { public void AddComponent(int c) { } }
+public class Shape { }
+public class Circle : Shape { public void Roll() { } }
+public class Use
+{
+    public void Go(object o, Shape s)
+    {
+        var rb = (Builder)o;
+        rb.AddComponent(1);
+        var c = s as Circle;
+        c.Roll();
+        if (s is Circle round) { round.Roll(); }
+        ((Builder)o).AddComponent(2);
+    }
+}
+''')
+    assert got["rb.AddComponent(1);"] == {"G8.Builder.AddComponent"}
+    assert got["c.Roll();"] == {"G8.Circle.Roll"}
+    assert got["if (s is Circle round) { round.Roll(); }"] == {"G8.Circle.Roll"}
+    assert got["((Builder)o).AddComponent(2);"] == {"G8.Builder.AddComponent"}
+
+
+def test_f1_generic_arguments_are_carried_through(tmp_path):
+    got = _sites(tmp_path, "G1.cs", '''namespace G1;
+using System;
+using System.Collections.Generic;
+public class Person { public decimal CalculateSalary() => 0; }
+public class Blog { public void Publish() { } }
+public class Order { public void Ship() { } }
+public class Reporter { public void ReportAsync() { } }
+public class Builder<TEntity> { public PropBuilder<TEntity> Property(int x) => null; public TEntity Entity => default; }
+public class PropBuilder<TP> { public PropBuilder<TP> HasMax(int n) => this; }
+public class ModelBuilder { public ModelBuilder Entity<TEntity>(Action<Builder<TEntity>> configure) => this; }
+public abstract class AbstractValidator<T>
+{
+    public void RuleFor<TProperty>(Func<T, TProperty> pick) { }
+}
+public class Repository<T> { public T Get(int id) => default; public List<T> All() => null; }
+public static class Seq { public static T FirstItem<T>(this IEnumerable<T> xs) => default; }
+public class PersonValidator : AbstractValidator<Person>
+{
+    public void Go(ModelBuilder mb, Repository<Order> orders, Lazy<Reporter> reporter, List<Blog> blogs)
+    {
+        RuleFor(x => x.CalculateSalary());
+        mb.Entity<Blog>(b => b.Property(1).HasMax(10));
+        mb.Entity<Blog>(b => b.Entity.Publish());
+        orders.Get(1).Ship();
+        orders.All()[0].Ship();
+        reporter.Value.ReportAsync();
+        blogs.FirstItem().Publish();
+    }
+}
+''')
+    assert "G1.Person.CalculateSalary" in got["RuleFor(x => x.CalculateSalary());"], "T from the base list"
+    assert "G1.PropBuilder.HasMax" in got["mb.Entity<Blog>(b => b.Property(1).HasMax(10));"]
+    assert "G1.Blog.Publish" in got["mb.Entity<Blog>(b => b.Entity.Publish());"], "explicit <Blog> into the lambda"
+    assert "G1.Order.Ship" in got["orders.Get(1).Ship();"], "the receiver's argument binds T"
+    assert "G1.Order.Ship" in got["orders.All()[0].Ship();"]
+    assert "G1.Reporter.ReportAsync" in got["reporter.Value.ReportAsync();"], "Lazy<T>.Value"
+    assert "G1.Blog.Publish" in got["blogs.FirstItem().Publish();"], "T inferred from the receiver"
+
+
+def test_f2_overload_betterness_across_keys(tmp_path):
+    got = _sites(tmp_path, "G2.cs", '''namespace G2;
+public class Animal { }
+public class Dog : Animal { }
+public static class AnimalExt { public static void Feed(this Animal a, int n) { } }
+public static class DogExt { public static void Feed(this Dog d, int n) { } }
+public static class ObjExt { public static void Tag(this object o, string s) { } }
+public static class StrExt { public static void Tag(this object o, int n) { } }
+public class Use
+{
+    public void Go(Dog dog, Animal cat)
+    {
+        dog.Feed(1);
+        cat.Feed(1);
+        dog.Tag("x");
+    }
+}
+''')
+    assert got["dog.Feed(1);"] == {"G2.DogExt.Feed"}, "the more specific `this` type wins"
+    assert got["cat.Feed(1);"] == {"G2.AnimalExt.Feed"}, "a Dog extension cannot take an Animal"
+    assert got['dog.Tag("x");'] == {"G2.ObjExt.Tag"}, "the string literal rules the int overload out"
+
+
+def test_f3_dynamic_receivers_bind_at_run_time(tmp_path):
+    got = _sites(tmp_path, "G3.cs", '''namespace G3;
+public class Thing { public void Run() { } }
+public class Use { public void Go(dynamic d) { d.Run(); } }
+''')
+    assert got["public class Use { public void Go(dynamic d) { d.Run(); } }"] == {"-external"}
+
+
+def test_f4_linq_query_syntax(tmp_path):
+    got = _sites(tmp_path, "G4.cs", '''namespace G4;
+using System.Collections.Generic;
+using System.Linq;
+public class Order { public bool IsLate() => true; public Customer Buyer; }
+public class Customer { public string Name() => ""; }
+public class Use
+{
+    public void Go(List<Order> orders, List<Customer> customers)
+    {
+        var late = from o in orders
+                   where o.IsLate()
+                   select o;
+        var names = from Customer c in customers select c.Name();
+    }
+}
+''')
+    assert got["where o.IsLate()"] == {"G4.Order.IsLate"}
+    assert got["var names = from Customer c in customers select c.Name();"] == {"G4.Customer.Name"}
+
+
+def test_f5_third_party_bases_and_f9_expression_receivers(tmp_path):
+    got = _sites(tmp_path, "G5.cs", '''namespace G5;
+using System;
+using System.Linq.Expressions;
+using Microsoft.AspNetCore.Mvc;
+public static class ExprExt { public static bool IsParameterExpression(this LambdaExpression e) => true; }
+public class ItemsController : ControllerBase
+{
+    public object Ok(int x) => null;
+    public void Go(Expression<Func<int, int>> expression)
+    {
+        NotFound();
+        expression.IsParameterExpression();
+    }
+}
+''')
+    assert got["NotFound();"] == {"-external"}, "MVC's NotFound, inherited from ControllerBase"
+    assert got["expression.IsParameterExpression();"] == {"G5.ExprExt.IsParameterExpression"}
+
+
+def test_a_partial_types_members_are_seen_from_every_file(tmp_path):
+    (tmp_path / "P1.cs").write_text('''namespace PP;
+public abstract partial class Pool { public static Pool Shared { get; } = null; public Ctx Get(int t) => null; }
+public class Ctx { }
+''')
+    (tmp_path / "P2.cs").write_text('''namespace PP;
+public abstract partial class Pool { private sealed class SharedPool : Pool { } }
+public class Use { public void Go() { Pool.Shared.Get(1); } }
+''')
+    _, calls = csharp_symbols.extract(_repo(tmp_path))
+    assert ("PP.Use.Go", "PP.Pool.Get") in {(_short(c["caller"]), _short(c["callee"])) for c in calls}
+
+
+def test_overloads_that_agree_on_the_result_type_keep_it(tmp_path):
+    got = _sites(tmp_path, "OV.cs", '''namespace OV;
+using System;
+public class Builder<TResult> { public Builder<TResult> Or<TException>() => this; }
+public class Policy
+{
+    public static Builder<TResult> HandleResult<TResult>(TResult result) => null;
+    public static Builder<TResult> HandleResult<TResult>(Func<TResult, bool> pick) => null;
+}
+public class Use { public void Go(int failure) { Policy.HandleResult(failure).Or<Exception>(); } }
+''')
+    line = "public class Use { public void Go(int failure) { Policy.HandleResult(failure).Or<Exception>(); } }"
+    assert {"OV.Policy.HandleResult", "OV.Builder.Or"} <= got[line]
+
+
+def test_var_from_a_call_chain_ending_in_a_property_and_switch_arm_patterns(tmp_path):
+    got = _sites(tmp_path, "VP.cs", '''namespace VP;
+public class Complex { public void Touch() { } }
+public class Prop { public Complex ComplexType { get; } }
+public class Model { public Prop Single() => null; }
+public class Expr { }
+public class ArrayExpr : Expr { }
+public class Use
+{
+    public void Visit(ArrayExpr e) { }
+    public object Go(Model model, Expr x)
+    {
+        var complexType = model.Single().ComplexType;
+        complexType.Touch();
+        return x switch
+        {
+            ArrayExpr a => Pick(a),
+            _ => null
+        };
+    }
+    public object Pick(ArrayExpr a) => a;
+}
+''')
+    assert got["complexType.Touch();"] == {"VP.Complex.Touch"}
+    assert got["ArrayExpr a => Pick(a),"] == {"VP.Use.Pick"}
+
+
+def test_dotnet_names_shadowed_by_repo_types_array_casts_and_collection_arguments(tmp_path):
+    got = _sites(tmp_path, "SH.cs", '''namespace SH;
+using System.Collections.Generic;
+public class List { }                                        // a repository type named like .NET's List<T>
+public static class TupleExt { public static string FormatTables(this IEnumerable<(string T, string S)> t) => ""; }
+public static class Coll { public static Queue<T> Enqueue<T>(this Queue<T> q, IEnumerable<T> items) => q; }
+public class Bytes { public static string ToHex(byte[] b) => ""; }
+public class Data { public List<(string T, string S)> Tables { get; } }
+public class Use
+{
+    public void Go(Data d, object v, Queue<bool> failures)
+    {
+        d.Tables.FormatTables();
+        var raw = (byte[])v;
+        Bytes.ToHex(raw);
+        failures.Enqueue([true]);
+    }
+}
+''')
+    assert got["d.Tables.FormatTables();"] == {"SH.TupleExt.FormatTables"}
+    assert got["Bytes.ToHex(raw);"] == {"SH.Bytes.ToHex"}
+    assert got["failures.Enqueue([true]);"] == {"SH.Coll.Enqueue"}
+
+
+def test_generic_types_sharing_a_name_with_different_arity_are_both_repository_types(tmp_path):
+    got = _sites(tmp_path, "AR.cs", '''namespace AR;
+public interface IRule<T> { }
+public interface IRule<T, TProperty> : IRule<T> { void AddValidator(int v); }
+public class Builder<T, TProperty> { public IRule<T, TProperty> Rule { get; } public void Go() { Rule.AddValidator(1); } }
+''', caller="Go")
+    assert got["public class Builder<T, TProperty> { public IRule<T, TProperty> Rule { get; } public void Go() { Rule.AddValidator(1); } }"] == {"AR.IRule.AddValidator"}

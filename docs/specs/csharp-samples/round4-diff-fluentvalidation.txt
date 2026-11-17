@@ -1,0 +1,71 @@
+FluentValidation: 4538 edges before, 4629 after; removed 2, added 93
+
+## REMOVED (sample 2 of 2)
+ 1. FluentValidation.TestHelper.ValidationTestExtension.GetDependentRules -> FluentValidation.DefaultValidatorExtensions.Empty
+    call src/FluentValidation/TestHelper/ValidatorTestExtensions.cs:68: .SelectMany(x => x.DependentRules ?? Enumerable.Empty<IValidationRuleInternal<T>>())
+    def  src/FluentValidation/DefaultValidatorExtensions.cs:124: public static IRuleBuilderOptions<T, TProperty> Empty<T, TProperty>(this IRuleBuilder<T, TProperty> ruleBuilder)
+ 2. FluentValidation.TestHelper.ValidationTestExtension.BuildErrorMessage -> FluentValidation.DefaultValidatorExtensions.Matches
+    call src/FluentValidation/TestHelper/ValidatorTestExtensions.cs:129: var messageArgumentMatches = Regex.Matches(formattedExceptionMessage, "{MessageArgument:(.*)}");
+    def  src/FluentValidation/DefaultValidatorExtensions.cs:247: public static IRuleBuilderOptions<T, string> Matches<T>(this IRuleBuilder<T, string> ruleBuilder, Func<T, string> expression, RegexOptions o
+
+## ADDED (sample 20 of 93)
+ 1. FluentValidation.Tests.AbstractValidatorTester.OverridePropertyName_with_lambda_should_override_property_name -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/AbstractValidatorTester.cs:128: result.Errors[0].PropertyName.ShouldEqual("Forename");
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+ 2. FluentValidation.Tests.CascadingFailuresTester.Validation_continues_to_first_failing_validator_then_stops_in_all_rules_when_first_validator_succeeds_and_globaldefault_rule_Stop -> FluentValidation.DefaultValidatorExtensions.Length
+    call src/FluentValidation.Tests/CascadingFailuresTester.cs:133: _validator.RuleFor(x => x.Surname).NotNull().Equal("Foo").Length(2, 10);
+    def  src/FluentValidation/DefaultValidatorExtensions.cs:170: public static IRuleBuilderOptions<T, string> Length<T>(this IRuleBuilder<T, string> ruleBuilder, Func<T, int> exactLength)
+ 3. FluentValidation.Tests.CollectionValidatorWithParentTests.Should_override_property_name -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/CollectionValidatorWithParentTests.cs:208: results.Errors[0].PropertyName.ShouldEqual("Orders2[0].ProductName");
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+ 4. FluentValidation.Tests.ComplexValidationTester.Should_override_propertyName -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/ComplexValidationTester.cs:66: results.Errors[0].PropertyName.ShouldEqual("Address2.Postcode");
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+ 5. FluentValidation.Tests.CustomMessageFormatTester.Uses_custom_delegate_for_building_message_only_for_specific_validator -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/CustomMessageFormatTester.cs:64: result.Errors[0].ErrorMessage.ShouldEqual("Foo");
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+ 6. FluentValidation.Tests.EqualValidatorTests.Comparison_property_uses_custom_resolver -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/EqualValidatorTests.cs:96: result.Errors[0].ErrorMessage.ShouldEqual("ForenameFoo");
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+ 7. FluentValidation.Tests.ForEachRuleTests.Overrides_indexer -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/ForEachRuleTests.cs:92: result.Errors[0].PropertyName.ShouldEqual("NickNames<0>");
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+ 8. FluentValidation.Tests.ForEachRuleTests.Can_access_colletion_index_async -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/ForEachRuleTests.cs:584: result.Errors[0].ErrorMessage.ShouldEqual("1");
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+ 9. FluentValidation.Tests.ForEachRuleTests.Can_access_parent_index -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/ForEachRuleTests.cs:644: result.Errors[0].ErrorMessage.ShouldEqual("1 must not be empty");
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+10. FluentValidation.Tests.GreaterThanOrEqualToValidatorTester.Comparison_property_uses_custom_resolver -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/GreaterThanOrEqualToValidatorTester.cs:74: result.Errors[0].ErrorMessage.ShouldEqual("AnotherIntFoo");
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+11. FluentValidation.Tests.LessThanOrEqualToValidatorTester.Comparison_property_uses_custom_resolver -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/LessThanOrEqualToValidatorTester.cs:80: result.Errors[0].ErrorMessage.ShouldEqual("AnotherIntFoo");
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+12. FluentValidation.Tests.LocalisedMessagesTester.Uses_string_format_with_property_value -> FluentValidation.DefaultValidatorOptions.WithMessage
+    call src/FluentValidation.Tests/LocalisedMessagesTester.cs:92: validator.RuleFor(x => x.Forename).Equal("Foo").WithMessage((x, forename) => $"Hello {forename}");
+    def  src/FluentValidation/DefaultValidatorOptions.cs:145: public static IRuleBuilderOptions<T, TProperty> WithMessage<T, TProperty>(this IRuleBuilderOptions<T, TProperty> rule, Func<T, TProperty, st
+13. FluentValidation.Tests.PrecisionScaleValidatorTests.Scale_precision_should_not_be_valid_nullable -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/PrecisionScaleValidatorTests.cs:107: result.Errors[0].ErrorMessage.ShouldEqual("'Discount' must not be more than 4 digits in total, with allowance for 2 decimals. 9 digits and 6
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+14. FluentValidation.Tests.PrecisionScaleValidatorTests.Scale_precision_should_not_be_valid_when_ignoring_trailing_zeroes -> FluentValidation.Tests.TestExtensions.ShouldEqual
+    call src/FluentValidation.Tests/PrecisionScaleValidatorTests.cs:188: result.Errors[0].ErrorMessage.ShouldEqual("'Discount' must not be more than 4 digits in total, with allowance for 2 decimals. 6 digits and 2
+    def  src/FluentValidation.Tests/TestExtensions.cs:26: public static void ShouldEqual(this object actual, object expected)
+15. FluentValidation.DefaultValidatorExtensions.Equal -> FluentValidation.Internal.AccessorCache.GetCachedAccessor
+    call src/FluentValidation/DefaultValidatorExtensions.cs:385: var func = AccessorCache<T>.GetCachedAccessor(member, expression);
+    def  src/FluentValidation/Internal/AccessorCache.cs:24: public static Func<T, TProperty> GetCachedAccessor<TProperty>(MemberInfo member, Expression<Func<T, TProperty>> expression, bool bypassCache
+16. FluentValidation.DefaultValidatorExtensions.LessThan -> FluentValidation.Internal.AccessorCache.GetCachedAccessor
+    call src/FluentValidation/DefaultValidatorExtensions.cs:642: var func = AccessorCache<T>.GetCachedAccessor(member, expression);
+    def  src/FluentValidation/Internal/AccessorCache.cs:24: public static Func<T, TProperty> GetCachedAccessor<TProperty>(MemberInfo member, Expression<Func<T, TProperty>> expression, bool bypassCache
+17. FluentValidation.DefaultValidatorOptions.When -> FluentValidation.ValidationContext.GetFromNonGenericContext
+    call src/FluentValidation/DefaultValidatorOptions.cs:202: Configurable(rule).ApplyCondition(ctx => predicate(ctx.InstanceToValidate, ValidationContext<T>.GetFromNonGenericContext(ctx)), applyConditi
+    def  src/FluentValidation/IValidationContext.cs:204: public static ValidationContext<T> GetFromNonGenericContext(IValidationContext context) {
+18. FluentValidation.DefaultValidatorOptions.WhenAsync -> FluentValidation.ValidationContext.GetFromNonGenericContext
+    call src/FluentValidation/DefaultValidatorOptions.cs:310: Configurable(rule).ApplyAsyncCondition((ctx, ct) => predicate(ctx.InstanceToValidate, ValidationContext<T>.GetFromNonGenericContext(ctx), ct
+    def  src/FluentValidation/IValidationContext.cs:204: public static ValidationContext<T> GetFromNonGenericContext(IValidationContext context) {
+19. FluentValidation.Internal.AccessorCache.GetCachedAccessor -> FluentValidation.Internal.ExtensionsInternal.IsParameterExpression
+    call src/FluentValidation/Internal/AccessorCache.cs:34: if (expression.IsParameterExpression() && typeof(T) == typeof(TProperty)) {
+    def  src/FluentValidation/Internal/ExtensionsInternal.cs:44: internal static bool IsParameterExpression(this LambdaExpression expression) {
+20. FluentValidation.TestHelper.ValidationTestExtension.TestValidateAsync -> FluentValidation.ValidationContext.CreateWithOptions
+    call src/FluentValidation/TestHelper/ValidatorTestExtensions.cs:111: return TestValidateAsync(validator, ValidationContext<T>.CreateWithOptions(objectToTest, options), cancellationToken);
+    def  src/FluentValidation/IValidationContext.cs:124: public static ValidationContext<T> CreateWithOptions(T instanceToValidate, Action<ValidationStrategy<T>> options) {

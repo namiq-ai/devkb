@@ -489,11 +489,16 @@ def _annotation_class(ann: ast.expr | None) -> str | None:
     return _class_ref(ann)
 
 
+def _looks_like_class(name: str) -> bool:
+    """Capitalised after any leading underscores: `Index`, and a private `_Index` (dogfood D1, #40)."""
+    return name.lstrip("_")[:1].isupper()
+
+
 def _class_ref(node: ast.expr) -> str | None:
-    """`Cls` or `module.Cls` when the name looks like a class (capitalised), else None."""
-    if isinstance(node, ast.Name) and node.id[:1].isupper():
+    """`Cls` or `module.Cls` when the name looks like a class (capitalised, private ones included), else None."""
+    if isinstance(node, ast.Name) and _looks_like_class(node.id):
         return node.id
-    if isinstance(node, ast.Attribute) and node.attr[:1].isupper() and isinstance(node.value, ast.Name):
+    if isinstance(node, ast.Attribute) and _looks_like_class(node.attr) and isinstance(node.value, ast.Name):
         return f"{node.value.id}.{node.attr}"
     return None
 
@@ -550,8 +555,11 @@ def _typed_calls(tree: ast.Module) -> list[tuple[str, str, str]]:
                             types.setdefault(t.attr, cls)
         return types
 
-    def visit_function(fn, qual: str, self_types: dict[str, str], enclosing: str = "") -> None:
-        env = params(fn)
+    def visit_function(fn, qual: str, self_types: dict[str, str], enclosing: str = "",
+                       outer: dict[str, str] | None = None) -> dict[str, str]:
+        # a nested function sees the names of the function around it (dogfood D7, #40: `index: _Index` used from a
+        # helper defined inside the function), its own parameters shadowing them
+        env = {**(outer or {}), **params(fn)}
         for n in _own_body(fn):
             if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
                 cls = _constructed(n.value)
@@ -574,24 +582,26 @@ def _typed_calls(tree: ast.Module) -> list[tuple[str, str, str]]:
             if isinstance(recv, ast.Name) and recv.id in ("self", "cls") and enclosing:
                 cls = "self:" + enclosing  # ODSF-313: resolved on the enclosing class, then its bases
             elif isinstance(recv, ast.Name):
-                cls = env.get(recv.id) or (recv.id if recv.id[:1].isupper() else None)  # `Cls.static()` too
+                cls = env.get(recv.id) or (recv.id if _looks_like_class(recv.id) else None)  # `Cls.static()` too
             elif isinstance(recv, ast.Attribute) and isinstance(recv.value, ast.Name) and recv.value.id == "self":
                 cls = self_types.get(recv.attr)
             elif isinstance(recv, ast.Call):
                 cls = _constructed(recv)  # `RuntimeStore().add_edge(...)`, built and called in one expression
             if cls:
                 out.append((qual, cls, method))
+        return env
 
-    def walk(node, stack: list[str], self_types: dict[str, str], cls_qual: str = "") -> None:
+    def walk(node, stack: list[str], self_types: dict[str, str], cls_qual: str = "",
+             outer: dict[str, str] | None = None) -> None:
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.ClassDef):
                 walk(child, stack + [child.name], attr_types(child), ".".join(stack + [child.name]))
             elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 qual = ".".join(stack + [child.name])
-                visit_function(child, qual, self_types, cls_qual)
-                walk(child, stack + [child.name], {}, "")
+                env = visit_function(child, qual, self_types, cls_qual, outer)
+                walk(child, stack + [child.name], {}, "", env)
             else:
-                walk(child, stack, self_types, cls_qual)
+                walk(child, stack, self_types, cls_qual, outer)
 
     walk(tree, [], {})
     return out

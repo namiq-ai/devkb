@@ -1,0 +1,80 @@
+jellyfin: 13447 edges before, 13555 after; removed 5, added 113
+
+## REMOVED (sample 5 of 5)
+ 1. Emby.Server.Implementations.Collections.CollectionManager.AddToCollectionAsync -> Jellyfin.Extensions.CopyToExtensions.CopyTo
+    call Emby.Server.Implementations/Collections/CollectionManager.cs:264: collection.LinkedChildren.CopyTo(newChildren, 0);
+    def  src/Jellyfin.Extensions/CopyToExtensions.cs:18: public static void CopyTo<T>(this IReadOnlyList<T> source, IList<T> destination, int index = 0)
+ 2. Jellyfin.Data.UserEntityExtensions.GetPreference -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call Jellyfin.Data/UserEntityExtensions.cs:60: return string.IsNullOrEmpty(val) ? Array.Empty<string>() : val.Split(Delimiter);
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+ 3. Jellyfin.Data.UserEntityExtensions.GetPreferenceValues -> Jellyfin.Extensions.SplitStringExtensions.Split
+    call Jellyfin.Data/UserEntityExtensions.cs:80: var stringValues = val.Split(Delimiter);
+    def  src/Jellyfin.Extensions/SplitStringExtensions.cs:54: [Pure]
+ 4. Jellyfin.Data.UserEntityExtensions.IsFolderGrouped -> Jellyfin.Extensions.ReadOnlyListExtension.IndexOf
+    call Jellyfin.Data/UserEntityExtensions.cs:162: return Array.IndexOf(GetPreferenceValues<Guid>(entity, PreferenceKind.GroupedFolders), id) != -1;
+    def  src/Jellyfin.Extensions/ReadOnlyListExtension.cs:18: public static int IndexOf<T>(this IReadOnlyList<T> source, T value)
+ 5. MediaBrowser.Providers.MediaInfo.ProbeProvider.FetchShortcutInfo -> Jellyfin.Extensions.StreamExtensions.ReadAllLines
+    call MediaBrowser.Providers/MediaInfo/ProbeProvider.cs:345: var shortcutPath = File.ReadAllLines(item.Path)
+    def  src/Jellyfin.Extensions/StreamExtensions.cs:45: public static IEnumerable<string> ReadAllLines(this TextReader reader)
+
+## ADDED (sample 20 of 113)
+ 1. Emby.Server.Implementations.ApplicationHost.FindParts -> MediaBrowser.Controller.Library.ISimilarItemsManager.AddParts
+    call Emby.Server.Implementations/ApplicationHost.cs:747: Resolve<ISimilarItemsManager>().AddParts(GetExports<ISimilarItemsProvider>());
+    def  MediaBrowser.Controller/Library/ISimilarItemsManager.cs:22: void AddParts(IEnumerable<ISimilarItemsProvider> providers);
+ 2. Emby.Server.Implementations.HttpServer.WebSocketManager.WebSocketRequestHandler -> MediaBrowser.Controller.Net.IWebSocketListener.ProcessWebSocketConnectedAsync
+    call Emby.Server.Implementations/HttpServer/WebSocketManager.cs:69: tasks[i] = _webSocketListeners[i].ProcessWebSocketConnectedAsync(connection, context);
+    def  MediaBrowser.Controller/Net/IWebSocketListener.cs:24: Task ProcessWebSocketConnectedAsync(IWebSocketConnection connection, HttpContext httpContext);
+ 3. Emby.Server.Implementations.Images.CollectionFolderImageProvider.GetItemsWithImages -> MediaBrowser.Controller.Entities.Folder.GetItemList
+    call Emby.Server.Implementations/Images/CollectionFolderImageProvider.cs:48: return view.GetItemList(new InternalItemsQuery
+    def  MediaBrowser.Controller/Entities/Folder.cs:1087: public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query)
+ 4. Emby.Server.Implementations.Images.PlaylistImageProvider.GetItemsWithImages -> MediaBrowser.Controller.Playlists.Playlist.GetManageableItems
+    call Emby.Server.Implementations/Images/PlaylistImageProvider.cs:29: return playlist.GetManageableItems()
+    def  MediaBrowser.Controller/Playlists/Playlist.cs:159: public IReadOnlyList<Tuple<LinkedChild, BaseItem>> GetManageableItems()
+ 5. Emby.Server.Implementations.Library.SimilarItems.SimilarItemsManager.GetSimilarItemsAsync -> MediaBrowser.Controller.Library.IRemoteSimilarItemsProvider.GetSimilarItemsAsync
+    call Emby.Server.Implementations/Library/SimilarItems/SimilarItemsManager.cs:203: await foreach (var reference in remoteProvider.GetSimilarItemsAsync(item, query, cancellationToken).ConfigureAwait(false))
+    def  MediaBrowser.Controller/Library/IRemoteSimilarItemsProvider.cs:49: IAsyncEnumerable<SimilarItemReference> GetSimilarItemsAsync(
+ 6. Emby.Server.Implementations.Playlists.PlaylistManager.MoveItemAsync -> MediaBrowser.Controller.Entities.BaseItem.IsVisible
+    call Emby.Server.Implementations/Playlists/PlaylistManager.cs:323: var accessibleChildren = children.Where(c => c.Item2.IsVisible(user)).ToArray();
+    def  MediaBrowser.Controller/Entities/BaseItem.cs:2089: public virtual bool IsVisible(User user, bool skipAllowedTagsCheck = false)
+ 7. Emby.Server.Implementations.ScheduledTasks.TaskManager.CancelIfRunning -> Emby.Server.Implementations.ScheduledTasks.ScheduledTaskWorker.CancelIfRunning
+    call Emby.Server.Implementations/ScheduledTasks/TaskManager.cs:73: ((ScheduledTaskWorker)task).CancelIfRunning();
+    def  Emby.Server.Implementations/ScheduledTasks/ScheduledTaskWorker.cs:390: public void CancelIfRunning()
+ 8. Emby.Server.Implementations.Session.SessionManager.TranslateItemForPlayback -> MediaBrowser.Controller.Entities.Folder.GetItemList
+    call Emby.Server.Implementations/Session/SessionManager.cs:1491: return folder.GetItemList(new InternalItemsQuery(user)
+    def  MediaBrowser.Controller/Entities/Folder.cs:1087: public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query)
+ 9. Jellyfin.Api.Controllers.LibraryController.GetDownload -> MediaBrowser.Controller.Entities.BaseItem.CanDownload
+    call Jellyfin.Api/Controllers/LibraryController.cs:688: if (!item.CanDownload(user))
+    def  MediaBrowser.Controller/Entities/BaseItem.cs:933: public bool CanDownload(User user)
+10. Jellyfin.Server.Migrations.JellyfinMigrationService.CheckFirstTimeRunOrMigration -> Jellyfin.Server.ServerSetupApp.IStartupLogger.BeginGroup
+    call Jellyfin.Server/Migrations/JellyfinMigrationService.cs:93: var logger = _startupLogger.With(_loggerFactory.CreateLogger<JellyfinMigrationService>()).BeginGroup($"Migration Startup");
+    def  Jellyfin.Server/ServerSetupApp/IStartupLogger.cs:65: new IStartupLogger<TCategory> BeginGroup(FormattableString logEntry);
+11. Jellyfin.Server.Program.StartApp -> Jellyfin.Server.ServerSetupApp.IStartupLogger.BeginGroup
+    call Jellyfin.Server/Program.cs:138: StorageHelper.TestCommonPathsForStorageCapacity(appPaths, StartupLogger.Logger.With(_loggerFactory.CreateLogger<Startup>()).BeginGroup($"Sto
+    def  Jellyfin.Server/ServerSetupApp/IStartupLogger.cs:65: new IStartupLogger<TCategory> BeginGroup(FormattableString logEntry);
+12. MediaBrowser.Providers.Manager.MetadataService.RefreshMetadata -> MediaBrowser.Controller.Providers.IHasLookupInfo.GetLookupInfo
+    call MediaBrowser.Providers/Manager/MetadataService.cs:175: var id = itemOfType.GetLookupInfo();
+    def  MediaBrowser.Controller/Providers/IHasLookupInfo.cs:14: TLookupInfoType GetLookupInfo();
+13. MediaBrowser.Providers.Manager.MetadataService.SaveItemAsync -> MediaBrowser.Controller.Entities.BaseItem.UpdateToRepositoryAsync
+    call MediaBrowser.Providers/Manager/MetadataService.cs:314: await result.Item.UpdateToRepositoryAsync(reason, cancellationToken).ConfigureAwait(false);
+    def  MediaBrowser.Controller/Entities/BaseItem.cs:2439: public virtual async Task UpdateToRepositoryAsync(ItemUpdateType updateReason, CancellationToken cancellationToken)
+14. MediaBrowser.Providers.Manager.MetadataService.SaveItemAsync -> MediaBrowser.Controller.Entities.BaseItem.ReattachUserDataAsync
+    call MediaBrowser.Providers/Manager/MetadataService.cs:317: await result.Item.ReattachUserDataAsync(cancellationToken).ConfigureAwait(false);
+    def  MediaBrowser.Controller/Entities/BaseItem.cs:2442: public async Task ReattachUserDataAsync(CancellationToken cancellationToken) =>
+15. Jellyfin.LiveTv.Channels.ChannelManager.GetChannelDataCachePath -> MediaBrowser.Controller.Channels.IHasCacheKey.GetCacheKey
+    call src/Jellyfin.LiveTv/Channels/ChannelManager.cs:913: userCacheKey = hasCacheKey.GetCacheKey(userId) ?? string.Empty;
+    def  MediaBrowser.Controller/Channels/IHasCacheKey.cs:13: string? GetCacheKey(string? userId);
+16. Jellyfin.LiveTv.Channels.RefreshChannelsScheduledTask.ExecuteAsync -> Jellyfin.LiveTv.Channels.ChannelManager.RefreshChannels
+    call src/Jellyfin.LiveTv/Channels/RefreshChannelsScheduledTask.cs:68: await manager.RefreshChannels(new Progress<double>(), cancellationToken).ConfigureAwait(false);
+    def  src/Jellyfin.LiveTv/Channels/ChannelManager.cs:289: public async Task RefreshChannels(IProgress<double> progress, CancellationToken cancellationToken)
+17. Jellyfin.LiveTv.Guide.GuideManager.GetChannel -> MediaBrowser.Controller.Entities.BaseItem.GetImageInfo
+    call src/Jellyfin.LiveTv/Guide/GuideManager.cs:460: var currentPrimary = item.GetImageInfo(ImageType.Primary, 0);
+    def  MediaBrowser.Controller/Entities/BaseItem.cs:2639: private ItemImageInfo GetImageInfo(FileSystemMetadata file, ImageType type)
+18. Jellyfin.LiveTv.LiveTvManager.CreateTimer -> MediaBrowser.Controller.LiveTv.ISupportsNewTimerIds.CreateTimer
+    call src/Jellyfin.LiveTv/LiveTvManager.cs:1125: newTimerId = await supportsNewTimerIds.CreateTimer(info, cancellationToken).ConfigureAwait(false);
+    def  MediaBrowser.Controller/LiveTv/ILiveTvService.cs:160: Task<string> CreateTimer(TimerInfo info, CancellationToken cancellationToken);
+19. Jellyfin.LiveTv.LiveTvManager.CreateSeriesTimer -> MediaBrowser.Controller.LiveTv.ISupportsNewTimerIds.CreateSeriesTimer
+    call src/Jellyfin.LiveTv/LiveTvManager.cs:1158: newTimerId = await supportsNewTimerIds.CreateSeriesTimer(info, cancellationToken).ConfigureAwait(false);
+    def  MediaBrowser.Controller/LiveTv/ILiveTvService.cs:168: Task<string> CreateSeriesTimer(SeriesTimerInfo info, CancellationToken cancellationToken);
+20. Jellyfin.LiveTv.LiveTvMediaSourceProvider.GetChannelStream -> MediaBrowser.Controller.LiveTv.ISupportsDirectStreamProvider.GetChannelStreamWithDirectStreamProvider
+    call src/Jellyfin.LiveTv/LiveTvMediaSourceProvider.cs:282: liveStream = await supportsManagedStream.GetChannelStreamWithDirectStreamProvider(channel.ExternalId, mediaSourceId, currentLiveStreams, can
+    def  MediaBrowser.Controller/LiveTv/ILiveTvService.cs:173: Task<ILiveStream> GetChannelStreamWithDirectStreamProvider(string channelId, string streamId, List<ILiveStream> currentLiveStreams, Cancella

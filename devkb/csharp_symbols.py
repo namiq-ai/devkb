@@ -228,6 +228,46 @@ def _strip_generics(s: str) -> str:
     return s
 
 
+def _base_types(h: str) -> list[tuple]:
+    """The types a type header lists after `:`, with their generic arguments (`AbstractValidator<Person>`)."""
+    h = re.split(r"\bwhere\b", h)[0]
+    h = re.sub(r"^\s*<[^<>]*(?:<[^<>]*>[^<>]*)*>", "", h)            # the type's own parameter list
+    h = re.sub(r"^\s*\([^()]*(?:\([^()]*\)[^()]*)*\)", "", h)          # a record's or primary constructor's parameters
+    k = h.find(":")
+    if k < 0:
+        return []
+    out = []
+    for part in _split_top(h[k + 1:]):
+        part = re.sub(r"\([^()]*(?:\([^()]*\)[^()]*)*\)\s*$", "", part.strip())   # `Base(args)`: the base call
+        t = _pt(part)
+        if t:
+            out.append(t)
+    return out
+
+
+def _subst(t, binding: dict):
+    """`t` with generic parameter names replaced by what `binding` maps them to (F1)."""
+    if not t or not binding:
+        return t
+    if not t[1] and t[0] in binding:
+        return binding[t[0]]
+    return (t[0], tuple(_subst(x, binding) for x in t[1]))
+
+
+def _unify(pt, at, gps: set, out: dict) -> None:
+    """Bind the method's generic parameters `gps` by matching parameter type `pt` against argument type `at`."""
+    if not pt or not at:
+        return
+    if pt[0] in gps and not pt[1]:
+        out.setdefault(pt[0], at)
+        return
+    if pt[1] and at[1] and len(pt[1]) == len(at[1]) and (pt[0] == at[0] or pt[0] in dotnet.ancestors(at[0])):
+        for p_, a__ in zip(pt[1], at[1]):
+            _unify(p_, a__, gps, out)
+    elif pt[1] and len(pt[1]) == 1 and at[0] == "Array" and at[1] and pt[0] in dotnet.ancestors("Array"):
+        _unify(pt[1][0], at[1][0], gps, out)           # T[] passed as IEnumerable<T>
+
+
 def _base_names(h: str) -> list[str]:
     """Simple names of the types a type header lists after `:` (generic arguments and `where` clauses dropped)."""
     h = re.split(r"\bwhere\b", h)[0]
@@ -490,8 +530,9 @@ def _local_fn_sig(h: str, k: int, ptext: str) -> dict:
     head = re.sub(r"@?[A-Za-z_]\w*$", "", _strip_end_generics(h[:k]))
     head = re.sub(r"\b(static|async|unsafe|extern)\b", " ", head)
     gm = re.search(r"<([^<>]*)>\s*$", h[:k].rstrip())
+    glist = [g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()] if gm else []
     return {"arity": _arity(bare, False), "pfull": _pfull(ptext), "ret_full": _last_type_token(head),
-            "gparams": {g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set()}
+            "gparams": set(glist), "gparams_list": glist}
 
 
 _MODIFIER_WORDS = frozenset("public private protected internal static readonly sealed abstract virtual override "
@@ -509,6 +550,51 @@ def _constraints(h: str) -> dict[str, str]:
         if c not in ("class", "struct", "new", "unmanaged", "notnull", "default", "allows"):
             out.setdefault(t, c)
     return out
+
+
+def _index_elem(t):
+    """The type of `x[i]` for an `x` of type `t` (F7): arrays, lists, read-only lists, collections, spans; a
+    dictionary's value; a string's char. None when the indexer is not one of these."""
+    if not t:
+        return None
+    if t[0] == "Array" or (t[0] in ("List", "IList", "IReadOnlyList", "Collection", "ReadOnlyCollection",
+                                     "ImmutableArray", "ImmutableList", "Span", "ReadOnlySpan", "Memory",
+                                     "ReadOnlyMemory", "ObservableCollection") and t[1]):
+        return t[1][0] if t[1] else None
+    if t[0] in ("Dictionary", "IDictionary", "IReadOnlyDictionary", "ConcurrentDictionary", "SortedDictionary",
+                "ImmutableDictionary") and len(t[1]) == 2:
+        return t[1][1]
+    if t[0] in ("string", "String"):
+        return ("char", ())
+    return None
+
+
+def _open_of(body: str, q: int) -> int | None:
+    """Index of the bracket that opens the one closing at body[q] (`)`, `]` or `}`), scanning back a bounded span."""
+    pairs = {")": "(", "]": "[", "}": "{"}
+    depth, j, lo = 0, q, max(0, q - _ARG_SCAN)
+    while j >= lo:
+        c = body[j]
+        if c in ")]}":
+            depth += 1
+        elif c in "([{":
+            depth -= 1
+            if depth == 0:
+                return j if body[j] == pairs[body[q]] else None
+        j -= 1
+    return None
+
+
+_CAST = re.compile(r"^\s*\(\s*([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\[\])?\??)\s*\)\s*[\w@(]")
+_AS = re.compile(r"\bas\s+([A-Za-z_][\w.]*(?:<[^()]*>)?)\s*$")
+_GENERIC_TYPE_END = re.compile(r"(?<![\w.])([A-Za-z_][\w.]*)\s*<([^<>()]*(?:<[^<>()]*>[^<>()]*)*)>$")
+# declarations whose type the source writes (F8): `var x = (T)y;`, `var x = y as T;`, `y is T x`, `case T x`
+_DECL_CAST = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*\(\s*([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\s*\[\s*\])*)\s*\)\s*[\w@(]")
+_DECL_AS = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*[^;=]*?\bas\s+([A-Za-z_][\w.]*(?:<[^;()]*?>)?)\s*;")
+_DECL_PATTERN = re.compile(r"\b(?:is|case)\s+(?:not\s+)?([A-Za-z_][\w.]*(?:<[^()]*?>)?)\s+@?([A-Za-z_]\w*)\b"
+                           r"(?!\s*[(<.])"
+                           # a switch-expression arm: `ArrayConstantExpression e => ...` (EF Core), `T e when c => ...`
+                           r"|(?:^|[{,(]\s*)([A-Z][\w.]*(?:<[^()]*?>)?)\s+@?([a-z_]\w*)\s*(?:when\b[^=]*)?=>", re.M)
 
 
 def _member_head(h: str) -> dict | None:
@@ -540,9 +626,11 @@ def _member_head(h: str) -> dict | None:
         bare = _ATTR_ANY.sub(" ", params)                           # `[Attr] this Type x` is still an extension
         ext = bool(re.match(r"\s*this\s", bare)) and bool(re.search(r"\bstatic\b", h[:k]))
         gm = re.search(r"<([^<>]*)>\s*$", h[:k].rstrip())
+        glist = [g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()] if gm else []
         ret_text = re.sub(r"@?[A-Za-z_]\w*$", "", _strip_end_generics(h[:k]))
         return {"name": m.group(1), "kind": "method", "params": params, "static_ext": ext, "ret": _ret_type(rest),
                 "ret_full": _last_type_token(ret_text) if rest else None, "pfull": _pfull(params), "gcons": gcons,
+                "gparams_list": glist,
                 "static": bool(re.search(r"\bstatic\b", h[:k])),
                 "arity": _arity(bare, ext), "this_type": _this_type(bare) if ext else None,
                 "gparams": {g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set()}
@@ -763,6 +851,8 @@ def _dealias_symbol(sym: dict, aliases: dict) -> None:
         sym["ffull"] = {k: _dealias(v, aliases) for k, v in sym["ffull"].items()}
     if sym.get("bases"):
         sym["bases"] = [name(b) for b in sym["bases"]]
+    if sym.get("bases_full"):
+        sym["bases_full"] = [_dealias(b, aliases) for b in sym["bases_full"]]
 
 
 def _type_frame(tm, header: str, q: tuple[str, ...], start: int, brace: int, add, line) -> dict:
@@ -777,7 +867,9 @@ def _type_frame(tm, header: str, q: tuple[str, ...], start: int, brace: int, add
         close = _close(after, k)
         params = after[k + 1:close] if close else ""
     gm = re.match(r"\s*<([^<>]*)>", after)
+    tg_list = [g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()] if gm else []
     sym = add(kind, name, tq, start, brace, bases=_base_names(after), fields=_params(params), type_q=tq,
+              tgparams_list=tg_list, bases_full=_base_types(after),
               body=[], attrs=set(), is_interface=tm.group(1) == "interface",
               ffull={p["name"]: p["t"] for p in _pfull(params) if p["t"]},
               tgparams={g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set(),
@@ -794,7 +886,7 @@ def _member_frame(mh: dict, attrs: set[str], header: str, top: dict, start: int,
             type_q=top["q"], attrs=attrs, ext=mh.get("static_ext", False), ret=mh.get("ret"),
             arity=mh.get("arity"), this_type=mh.get("this_type"), gparams=mh.get("gparams", set()),
             static=mh.get("static", False), ret_full=mh.get("ret_full"), pfull=mh.get("pfull"),
-            gcons=mh.get("gcons") or {},
+            gcons=mh.get("gcons") or {}, gparams_list=mh.get("gparams_list") or [],
             is_test=bool(attrs & TEST_ATTRS))
     if mh["kind"] == "property" and mh.get("ret"):
         tsym["fields"][mh["name"]] = mh["ret"]
@@ -825,6 +917,7 @@ class _Index:
         self.by_key: dict[str, list[dict]] = {}        # overloads share a key
         self.type_gparams: dict[tuple, set[str]] = {}
         self.type_cons: dict[tuple, dict[str, str]] = {}    # a type's generic parameters' constraints
+        self._type_view: dict[tuple, dict | None] = {}      # type_sym(): partial declarations merged
         self.implicit: set[str] = set()                 # types declaring a conversion operator (any argument may fit)
         self.enums: set[str] = set()
         for s in symbols:
@@ -884,6 +977,40 @@ class _Index:
             if not (ar[0] <= m and (ar[1] is None or m <= ar[1])):
                 return False
         return not isinstance(a, _Args) or self.accepts(sym, a, explicit_this)
+
+    def _score(self, sym: dict, a, explicit_this: bool, rtype: str | None):
+        """Per certain argument (and an extension's receiver): 3 identity, 2 a conversion to a specific type, 1 a
+        generic parameter or object. None when a position cannot be scored."""
+        ps = sym.get("pfull")
+        if not ps or not isinstance(a, _Args) or a.types is None or a.named:
+            return None
+        gp = set(sym.get("gparams") or ()) | self.type_gparams.get(sym.get("type_q"), set())
+        out = []
+        if sym.get("ext") and not explicit_this:
+            th = sym.get("this_type")
+            out.append(1 if th in generic_names(sym) else 3 if th == rtype else 2)
+            ps = ps[1:]
+        for i, at in enumerate(a.types):
+            if at is None or i >= len(ps) or not ps[i]["t"]:
+                continue
+            pt = ps[i]["t"]
+            out.append(1 if pt[0] in gp or pt[0] in ("object", "Object") else 3 if pt[0] == at[0] else 2)
+        return out
+
+    def better(self, cands: list[dict], a, explicit_this: bool = False, rtype: str | None = None) -> dict | None:
+        """F2: the one candidate (by key) at least as good as every other on every scored position and strictly
+        better on one, by C#'s better-conversion rules as far as certain types decide them; else None."""
+        by_key: dict[str, dict] = {}
+        for c in cands:
+            by_key.setdefault(c["key"], c)
+        if len(by_key) < 2:
+            return next(iter(by_key.values()), None)
+        scored = {k: self._score(c, a, explicit_this, rtype) for k, c in by_key.items()}
+        if any(v is None for v in scored.values()) or len({len(v) for v in scored.values()}) != 1:
+            return None
+        best = [k for k, v in scored.items()
+                if all(all(x >= y for x, y in zip(v, w)) and v != w for k2, w in scored.items() if k2 != k)]
+        return by_key[best[0]] if len(best) == 1 else None
 
     def accepts(self, sym: dict, a: "_Args", explicit_this: bool = False) -> bool:
         """False only when an argument's certain type cannot convert to the parameter at its position."""
@@ -971,7 +1098,7 @@ class _Index:
         here = self.members.get((tq, name), [])
         fitting = [c for c in here if self.fits(c, n, explicit_this)]
         if fitting:
-            one = self._one(fitting)
+            one = self._one(fitting) or self.better(fitting, n, explicit_this)
             if one is None:
                 self.ambiguous = True                            # e.g. overloads split over partial-class files
             return one
@@ -998,16 +1125,28 @@ class _Index:
                     todo.append(bq)
         return out
 
-    def dotnet_member(self, rtype: str | None, near: tuple[str, ...]) -> set[str]:
+    def is_repo_type(self, name: str | None, nargs: int | None = None) -> bool:
+        """Whether `name` (seen with `nargs` generic arguments) is a repository type. A repository type that happens to
+        share a .NET name (EF Core's own `List`) is not the receiver `List<(string, string?)>` when the argument
+        counts differ; that one is .NET's."""
+        if not name or name not in self.types:
+            return False
+        if not nargs:
+            return True
+        # each declaration's own arity: `Foo<T>` and `Foo<T, U>` are different types sharing a name (FluentValidation's
+        # IValidationRuleInternal, Polly's AsyncSerializingCacheProvider), and the merged view keeps only one list
+        return any(len(t.get("tgparams_list") or []) == nargs for t in self.types[name])
+
+    def dotnet_member(self, rtype: str | None, near: tuple[str, ...], nargs: int | None = None) -> set[str]:
         """Instance method names the receiver has from .NET (its own type if outside, or its outside bases)."""
         if not rtype:
             return set()
-        if rtype not in self.types:
+        if not self.is_repo_type(rtype, nargs):
             return dotnet.members(rtype) or set()
         names, _ = self._repo_ancestors(rtype)
         return set().union(*((dotnet.members(b) or set()) for b in names if b not in self.types))
 
-    def extension(self, name: str, n, rtype: str | None, near: tuple[str, ...]) -> dict | None:
+    def extension(self, name: str, n, rtype: str | None, near: tuple[str, ...], nargs: int | None = None) -> dict | None:
         """The extension method `x.name(...)` means: among those so named that accept `n` arguments, the one whose
         `this` type fits the receiver. Receiver of a repository type: its own type, a base or an interface, or a
         generic parameter. Of an outside type (whose bases the repository cannot show): its name, `I` + its name
@@ -1025,13 +1164,14 @@ class _Index:
         cands = [c for c in every if self.fits(c, n)]
         # `this T` (a generic parameter) and `this object` accept any receiver
         generic = [c for c in cands if c.get("this_type") in generic_names(c)]
-        if rtype and rtype in self.types:
+        if rtype and self.is_repo_type(rtype, nargs):
             # A repository type; when several share the name (Jellyfin: two `Series`), the call compiles against one
             # of them, so a candidate fitting any of their hierarchies is the only one that can be meant.
             rq = self.type_named(rtype, near)
             qs = [rq] if rq else sorted({t["qparts"] for t in self.types[rtype]})
             names = set().union(*(self.ancestors(q) for q in qs))
-            return self._one([c for c in cands if c.get("this_type") in names] or generic)
+            pool = [c for c in cands if c.get("this_type") in names] or generic
+            return self._one(pool) or self.better(pool, n, False, rtype)
         # an instance method of some repository type, so named and taking these arguments, could be the target
         shared = any(self.fits(c, n) for c in self.instance_methods.get(name, []))
         if rtype:
@@ -1061,6 +1201,72 @@ class _Index:
                 found = self.field_type(bq, name)
                 if found:
                     return found
+        return None
+
+    def type_sym(self, tq: tuple[str, ...]) -> dict | None:
+        """One view of type `tq` across all its partial declarations (files): type parameters, base types, fields and
+        properties merged. (Round 4 first took the first declaration only and lost Polly's `ResilienceContextPool
+        .Shared`, declared in the other file.)"""
+        cached = self._type_view.get(tq)
+        if cached is not None or tq in self._type_view:
+            return cached
+        parts = [t for t in self.types.get(tq[-1], []) if t["qparts"] == tq]
+        if not parts:
+            self._type_view[tq] = None
+            return None
+        view = {"tgparams_list": next((t["tgparams_list"] for t in parts if t.get("tgparams_list")), []),
+                "bases_full": [], "ffull": {}, "fields": {}}
+        for t in parts:
+            for b in t.get("bases_full") or []:
+                if b not in view["bases_full"]:
+                    view["bases_full"].append(b)
+            view["ffull"].update(t.get("ffull") or {})
+            view["fields"].update(t.get("fields") or {})
+        self._type_view[tq] = view
+        return view
+
+    def chain(self, rt, near: tuple[str, ...]):
+        """(type, binding) for the receiver type tree `rt` and each type it derives from, nearest first: the
+        receiver's arguments bind its own parameters (`EntityTypeBuilder<Blog>` -> TEntity=Blog), and a base written
+        with arguments binds the base's (`V : AbstractValidator<Person>` -> T=Person) (F1)."""
+        q0 = self.type_named(rt[0], near) if rt else None
+        if not q0:
+            return
+        todo, seen = [(q0, rt[1])], set()
+        while todo and len(seen) < 16:
+            q, args = todo.pop(0)
+            if q in seen:
+                continue
+            seen.add(q)
+            ts = self.type_sym(q) or {}
+            params = ts.get("tgparams_list") or []
+            binding = {p: a for p, a in zip(params, args) if a is not None} if len(params) == len(args) else {}
+            yield q, binding
+            for bt in ts.get("bases_full") or []:
+                bq = self.type_named(bt[0], q[:-1])
+                if bq:
+                    todo.append((bq, tuple(_subst(x, binding) for x in bt[1])))
+
+    def binding_for(self, member: dict, rt, near: tuple[str, ...]) -> dict:
+        """The class-level binding under which `member` (declared on some type) is seen from receiver type `rt`."""
+        dq = member.get("type_q")
+        for q, binding in self.chain(rt, near):
+            if q == dq:
+                return binding
+        return {}
+
+    def field_bound(self, t, prop: str, near: tuple[str, ...]):
+        """The type of property or field `prop` on a value of type tree `t`, its generic parameters bound."""
+        for q, binding in self.chain(t, near):
+            ts = self.type_sym(q) or {}
+            if prop in (ts.get("ffull") or {}):
+                return _subst(ts["ffull"][prop], binding)
+            if prop in ts.get("fields", {}):
+                return (ts["fields"][prop], ())
+        if t and t[0] not in self.types:                 # an outside generic: `Lazy<T>.Value` (table)
+            idx = dotnet.GENERIC_MEMBERS.get(t[0], {}).get(prop)
+            if idx is not None and len(t[1]) > idx:
+                return t[1][idx]
         return None
 
     def field_full(self, tq: tuple[str, ...] | None, name: str, seen: frozenset = frozenset()):
@@ -1129,6 +1335,14 @@ def _locals_full(body: str) -> dict[str, tuple]:
         t = _pt(text) if text else None
         if t and t[0] not in _NOT_CALL and m.group("n") not in _NOT_CALL:
             out.setdefault(m.group("n"), t)
+    for rx, ti, ni in ((_DECL_CAST, 2, 1), (_DECL_AS, 2, 1), (_DECL_PATTERN, 1, 2), (_DECL_PATTERN, 3, 4)):
+        for m in rx.finditer(body):
+            if not m.group(ti):
+                continue
+            t = _pt(m.group(ti))
+            if t and t[0] not in _NOT_CALL and t[0] not in ("null", "var", "not", "and", "or") \
+                    and m.group(ni) not in _NOT_CALL:
+                out.setdefault(m.group(ni), t)
     return out
 
 
@@ -1141,7 +1355,9 @@ def _locals(body: str) -> dict[str, str]:
 # (a 1 MB generated method in EF Core did not finish in 5 minutes).
 _LOOKBACK = 256
 
-_KEEP_BEFORE = frozenset("return await yield throw new in is as case when else".split())
+_KEEP_BEFORE = frozenset("return await yield throw new in is as case when else "
+                         # query keywords (F4): `where x.M()`, `select c.Name()`, `orderby x.Key()`, `on a.Id() equals ...`
+                         "where select orderby ascending descending on equals by into let group join from".split())
 
 
 def _why(m, before: str, parts: list[str], rtype: str | None, name: str, index: "_Index") -> str:
@@ -1163,6 +1379,7 @@ def _why(m, before: str, parts: list[str], rtype: str | None, name: str, index: 
 
 _VAR_BEFORE = re.compile(r"\bvar\s+@?(?P<n>[A-Za-z_]\w*)\s*=\s*(?P<aw>await\s+)?$")
 _FOREACH_BEFORE = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[A-Za-z_]\w*)\s+in\s+(?P<aw>await\s+)?$")
+_AFTER_PROPS = re.compile(r"^((?:\s*!?\s*\??\.\s*@?[A-Za-z_]\w*)+)\s*;")
 _AFTER_STMT = re.compile(r"^\s*(?:\.\s*ConfigureAwait\s*\([^()]*\)\s*)?;")
 _AFTER_FOREACH = re.compile(r"^\s*(?:\.\s*ConfigureAwait\s*\([^()]*\)\s*)?\)")
 _FOREACH_LOCAL = re.compile(r"\bforeach\s*\(\s*var\s+@?(?P<n>[A-Za-z_]\w*)\s+in\s+@?(?P<src>[A-Za-z_]\w*)\s*\)")
@@ -1233,7 +1450,9 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             correct edge (found on EF Core)."""
             for a0, b0, x, t, declared in reversed(scoped):
                 if x == nm and a0 <= pos < b0:
-                    return t if (declared or not declared_only) else None   # (None: untyped, still shadows)
+                    # (None: untyped, still shadows); a type parameter is its constraint here too (EF Core: the
+                    # lambda's `e` of type `TExtension : RelationalOptionsExtension`)
+                    return constrained(t) if (declared or not declared_only) else None
             if nm in types:
                 return None if declared_only and nm in inferred else constrained(types[nm])
             return constrained(index.field_full(tq, nm)) if tq else None
@@ -1258,6 +1477,31 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             if close is not None:
                 results[close] = (_dealias(_pt(nm_.group(1)), aliases), nm_.start())
 
+        def expr_type(o: int):
+            """The type of the expression just before body[o] (an indexer's `[`): a call's result, or a name and its
+            property chain."""
+            lhs = body[max(0, o - _LOOKBACK):o].rstrip()
+            if lhs.endswith(")"):
+                j = o - 1
+                while j > 0 and body[j].isspace():             # bounded: no copy of the body's prefix
+                    j -= 1
+                r = results.get(j)
+                return r[0] if r else None
+            cm = re.search(r"(?<![\w.])(this\.)?@?([A-Za-z_]\w*)((?:\s*\??\.\s*@?[A-Za-z_]\w*)*)$", lhs)
+            if not cm:
+                return None
+            props = [p_ for p_ in re.sub(r"[\s?@]", "", cm.group(3)).split(".") if p_]
+            return walk(type_of(cm.group(2), o), props)
+
+        def cast_at(q: int):
+            """`((T)x).M()` or `(x as T).M()`: (T, start) for the parenthesised expression closing at body[q]."""
+            o = _open_of(body, q)
+            if o is None:
+                return None
+            inner = body[o + 1:q]
+            cm = _CAST.match(inner) or _AS.search(inner)
+            return ((_dealias(_pt(cm.group(1)), aliases), o) if cm else None)
+
         def walk(t, props):
             guessed[0] = False
             for prop in props:
@@ -1265,12 +1509,27 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                     return None
                 t = constrained(t)
                 q = index.type_named(t[0], tq)
-                nt = constrained(index.field_full(q, prop)) if q else None
+                nt = constrained(index.field_bound(t, prop, tq))
                 if nt is None and prop in index.types:
                     nt = (prop, ())          # "Color Color": a property named like a type is of that type (EF Core:
                     guessed[0] = True        # `Fixture.TestSqlLoggerFactory`); only when the lookup itself failed
                 t = nt
             return t
+
+        # F4: `from x in src` / `join y in src2`: x and y are elements of their source, for the rest of the query
+        for qm in re.finditer(r"\b(?:from|join)\s+(?:([A-Za-z_][\w.]*(?:<[^<>()]*>)?)\s+)?@?([A-Za-z_]\w*)\s+in\s+"
+                              r"(this\.)?@?([A-Za-z_]\w*)((?:\s*\??\.\s*@?[A-Za-z_]\w*)*)", body):
+            if qm.group(1) in ("var",):
+                continue
+            end_q = body.find(";", qm.end())
+            end_q = len(body) if end_q < 0 else end_q
+            if qm.group(1):
+                el = _dealias(_pt(qm.group(1)), aliases)
+                declared = True
+            else:
+                props = [p_ for p_ in re.sub(r"[\s?@]", "", qm.group(5)).split(".") if p_]
+                el, declared = _elem(walk(type_of(qm.group(4), qm.start()), props)), False
+            scoped.append((qm.start(), end_q, qm.group(2), el, declared))
 
         for m in _CALL.finditer(body):
             at = start + m.start()
@@ -1307,12 +1566,23 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                             scoped.append((ai, bi, toks[-1].lstrip("@"), declared, declared is not None))
             expr_start = m.start()
             chained = False
+            generic_static = None                                 # F6: `Type<A>.M(...)`
             if not m.group("new") and before.endswith("."):
                 left = before[:-1].rstrip()
                 left = left[:-1].rstrip() if left.endswith(("?", "!")) else left
-                if left.endswith((")", "}")):
-                    q = off + len(left) - 1
-                    r = results.get(q) or _awaited(body, q, results)
+                q = off + len(left) - 1
+                gm_ = _GENERIC_TYPE_END.search(left) if left.endswith(">") else None
+                if gm_ and gm_.group(1).split(".")[-1][:1].isupper():
+                    generic_static = (gm_.group(1).split(".")[-1], tuple(_pt(x) for x in _split_top(gm_.group(2))))
+                elif left.endswith("]") and (o := _open_of(body, q)) is not None:
+                    inner_t = expr_type(o)                        # F7: `x[i].M()`
+                    el = _index_elem(inner_t)
+                    if el:
+                        chained, rt = True, walk(el, parts[:-1])
+                    else:
+                        chained = None
+                elif left.endswith((")", "}")):
+                    r = results.get(q) or _awaited(body, q, results) or cast_at(q)
                     if r and r[0]:
                         chained = True
                         rt = walk(r[0], parts[:-1])
@@ -1327,6 +1597,15 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                 new_type = _dealias(_pt(gm.group(1)), aliases) if gm else None
                 hit = index.constructor(name, tq, a_)
                 found = (hit, 0.6) if hit else None
+            elif generic_static is not None:
+                gname = generic_static[0]
+                if (bq := index.type_named(gname, tq)) is not None and len(parts) == 1:
+                    static = explicit = True
+                    hit = index.member(bq, name, a_, explicit_this=True)
+                    found = (hit, 0.7) if hit else None
+                    rt = (gname, generic_static[1])
+                elif dotnet.static_member(gname, name):
+                    dotnet_bound = True
             elif chained is None:
                 found = None                                      # a call on an expression we cannot type
             elif chained:
@@ -1335,6 +1614,8 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                 explicit = True
                 hit = locals_fns.get(name) or (index.member(tq, name, a_, explicit_this=True) if tq else None)
                 found = (hit, 0.8) if hit else None
+                if found is None and tq and not index.ambiguous and name in index.dotnet_member(tq[-1], tq):
+                    dotnet_bound = True                           # `Ok(x)` in a ControllerBase: MVC's own method
             else:
                 if parts[0] == "this" and len(parts) > 2:
                     parts = parts[1:]                             # `this.field.M()` is `field.M()`
@@ -1351,6 +1632,8 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                     if rt0:
                         rt = walk(rt0, rest)
                         rtype = rt[0] if rt else None
+                    elif not rest and recv not in index.types and dotnet.static_member(recv, name):
+                        dotnet_bound = True                       # `Path.GetExtension(p)`: .NET's own static method
                     elif recv[:1].isupper() and (bq := index.type_named(recv, tq)):
                         if not rest:
                             static = explicit = True
@@ -1364,17 +1647,25 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                         static = explicit = True
                         hit = index.member(bq, name, a_, explicit_this=True)       # `Ns.Type.Member(...)`
                         found = (hit, 0.6) if hit else None
+            if rtype == "dynamic":
+                dotnet_bound = True                               # F3: bound at run time; not a repository call
+                rtype = None
             if rtype and found is None:
-                bq = index.type_named(rtype, tq)
+                bq = index.type_named(rtype, tq) if index.is_repo_type(rtype, len(rt[1]) if rt else None) else None
                 hit = index.member(bq, name, a_) if bq else None
                 found = (hit, 0.7) if hit else None
-                if found is None and not index.ambiguous and name in index.dotnet_member(rtype, tq):
+                collection_arg = any(mi.strip().startswith("[") for mi, *_ in (a_.items or []))
+                if found is None and not index.ambiguous and not collection_arg and \
+                        name in index.dotnet_member(rtype, tq, len(rt[1]) if rt else None):
+                    # (a collection expression `[x]` may not convert to the .NET member's parameter, while a
+                    # repository extension taking IEnumerable<T> does: EF Core `queue.Enqueue([failure])`)
                     dotnet_bound = True                           # C#: the receiver's own .NET method wins
             if found is None and not index.ambiguous and not dotnet_bound and not m.group("new") \
                     and chained is not None and (len(parts) > 1 or chained):
                 # `x.Ext()`: chosen by arguments and receiver; a failed `Type.M()` may be a property sharing a type's
                 # name (`User.GetUserId()`)
-                ext = index.extension(name, a_, None if static else rtype, tq)
+                ext_rtype = "LambdaExpression" if rt and rt[0] == "Expression" and rt[1] else rtype   # F9
+                ext = index.extension(name, a_, None if static else ext_rtype, tq, len(rt[1]) if rt else None)
                 if ext is None and rtype and guessed[0]:
                     ext = index.extension(name, a_, None, tq)    # the guessed type was wrong: as an unknown receiver
                 found = (ext, 0.6 if rtype else 0.5) if ext else None
@@ -1388,12 +1679,37 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
             res = new_type
             if callee is not None:
                 ovs = [o for o in index.by_key.get(callee["key"], [callee]) if index.fits(o, a_, explicit)] or [callee]
+                # F1: the class binding seen from the receiver (or from this type itself for a bare call), and the
+                # method's own: explicit `<...>` in the call, else inferred from the arguments' and receiver's types
+                self_rt = (tq[-1], tuple((g, ()) for g in (index.type_sym(tq) or {}).get("tgparams_list") or [])) \
+                    if tq else None
+                recv_rt = rt if rt is not None else (self_rt if len(parts) == 1 or parts[0] in ("this", "base") else None)
+                gtext = body[m.end("chain"):m.end() - 1].strip()
+                explicit_args = [_pt(x) for x in _split_top(gtext[1:-1])] if gtext.startswith("<") else []
+                any_types = ([_dealias(_arg_type(mi, ri, lambda nm, pos=ai: type_of(nm, pos)), aliases)
+                              for mi, ri, ai, _bi in a_.items] if a_.items else [])
+
+                def bound(o):
+                    b = dict(index.binding_for(o, recv_rt, tq)) if recv_rt and o.get("type_q") else {}
+                    gl = o.get("gparams_list") or []
+                    if explicit_args and len(explicit_args) == len(gl):
+                        b.update({g: a__ for g, a__ in zip(gl, explicit_args) if a__})
+                    elif gl:
+                        ps_ = o.get("pfull") or []
+                        mb: dict = {}
+                        if o.get("ext") and not explicit and ps_ and rt is not None:
+                            _unify(ps_[0]["t"], rt, set(gl), mb)            # `this IEnumerable<T>` <- the receiver
+                            ps_ = ps_[1:]
+                        for p_, at_ in zip(ps_, any_types):
+                            _unify(p_["t"], at_, set(gl), mb)
+                        b.update(mb)
+                    return b
                 rets = set()
                 for o in ovs:
                     if o["name"] == "ctor" or o["kind"] in ("class", "enum"):
                         t = new_type or (o["type_q"][-1] if o["name"] == "ctor" else o["name"], ())
                     else:
-                        t = o.get("ret_full")
+                        t = _subst(o.get("ret_full"), bound(o))
                         if t and t[0] in (o.get("gparams") or ()):
                             t = rt if (o.get("ext") and not explicit and o.get("this_type") == t[0]) else None
                         elif t and t[0] in index.type_gparams.get(o.get("type_q"), set()):
@@ -1401,7 +1717,18 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                         if t and t[0] in ("void", "Void"):
                             t = None
                     rets.add(t)
-                res = rets.pop() if len(rets) == 1 else None
+                if len(rets) == 1:
+                    res = rets.pop()
+                elif None not in rets and len({t[0] for t in rets}) == 1:
+                    # overloads agree on the type and differ only in how much of its arguments is bound (F1: a
+                    # generic overload binds `TResult`, its non-generic sibling cannot; Polly `HandleResult(...).Or()`)
+                    gnames: set[str] = set()
+                    for o in ovs:
+                        gnames |= set(o.get("gparams") or ()) | index.type_gparams.get(o.get("type_q"), set())
+                    unbound = lambda t: sum(1 for x in t[1] if x is None or (not x[1] and x[0] in gnames))  # noqa: E731
+                    res = min(rets, key=lambda t: (unbound(t), str(t)))
+                else:
+                    res = None
                 if a_.items:
                     skip = 1 if callee.get("ext") and not explicit else 0
                     for i, (mi, _ri, ai, bi) in enumerate(a_.items):
@@ -1413,7 +1740,7 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                         cand = set()
                         for o in ovs:
                             ps = (o.get("pfull") or [])[skip if o.get("ext") else 0:]
-                            lt = _lambda_param_types(ps[i]["t"], len(names)) if i < len(ps) else None
+                            lt = _lambda_param_types(_subst(ps[i]["t"], bound(o)), len(names)) if i < len(ps) else None
                             gp = set(o.get("gparams") or ())
                             cand.add(tuple(None if (x is None or x[0] in gp) else x for x in lt) if lt else None)
                         if len(cand) == 1 and (lt := cand.pop()):
@@ -1447,8 +1774,11 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                 head = body[max(0, expr_start - _LOOKBACK): expr_start]
                 tail = body[a_.close + 1: a_.close + 80]
                 vm = _VAR_BEFORE.search(head)
-                if vm and _AFTER_STMT.match(tail):
+                pm = _AFTER_PROPS.match(tail) if vm and not _AFTER_STMT.match(tail) else None
+                if vm and (_AFTER_STMT.match(tail) or pm):
                     t = _unwrap(res) if vm.group("aw") else res
+                    if t and pm:                                  # `var x = a.B().C;`: the value is a property of it
+                        t = walk(t, [p_ for p_ in re.sub(r"[\s!?@]", "", pm.group(1)).split(".") if p_])
                     if t:
                         types[vm.group("n")] = t
                         inferred.add(vm.group("n"))
