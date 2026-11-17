@@ -47,13 +47,21 @@ Change: `symbol`, `outline` and `pack` carry `_meta anthropic/alwaysLoad`, so th
 
 Measured (multi-hop questions about click, 16 runs, default Claude Code settings, the plugin's `lean-pack` toolset):
 
-| Arm | Score | Turns | Model calls | ToolSearch as first call | Cost per run |
+| Arm | F1 (corrected) | Turns | Model calls | ToolSearch as first call | Cost per run |
 |---|---|---|---|---|---|
-| plain | 0.772 | 4.12 | 3.75 | n/a | $0.0456 |
-| devkb, tools deferred (before) | 0.764 | 4.19 | 4.06 | 15 of 16 | $0.0474 |
-| **devkb, alwaysLoad (after)** | 0.753 | **3.25** | **3.12** | **0 of 16** | **$0.0430** |
+| plain | 0.878 | 4.12 | 3.75 | n/a | $0.0456 |
+| devkb, tools deferred (before) | 0.889 | 4.19 | 4.06 | 15 of 16 | $0.0474 |
+| **devkb, alwaysLoad (after)** | 0.876 | **3.25** | **3.12** | **0 of 16** | **$0.0430** |
 
-Turns fall 22% against the deferred arm and 21% against plain; cost is 6% below plain (it was 4% above). The score differences are within the run-to-run noise (0.75-0.77). 16 runs per arm: a direction, not a proof.
+Turns fall 22% against the deferred arm and 21% against plain; cost is 6% below plain (it was 4% above). 16 runs per arm: a direction, not a proof.
+
+### The apparent score drop was the scorer
+
+The first scorer gave 0.772 (plain), 0.764 (deferred) and 0.753 (alwaysLoad), which looked like a drop. It was not one:
+- **Recall is the same in every arm**: all 72 callees (4 to 6 per question, 16 runs) were found with the right first line, by plain, deferred and alwaysLoad alike.
+- **The difference was in the precision term.** The first scorer counted a repository-defined name in the answer as wrong when it was not in its list of the function's callees. That list left out every callee whose name several classes share (`consume_value`, `process_value`, `get_parameter_source` for `handle_parse_result`), so answers that named them correctly were marked down, and so were class names used as qualifiers (`Command.format_help`) and words in prose (`read`, `function`). The three arms each had 49 to 53 such names over 16 runs: noise in a flawed term.
+- **Rescored** (`bench/readtools/hop_rescore.py`: truth = every defined name the function calls; class qualifiers not counted): F1 plain 0.878, deferred 0.889, alwaysLoad 0.876. Paired difference alwaysLoad minus plain: **-0.003, 95% interval [-0.036, +0.032]** (16 pairs). There is no measurable score change.
+- One `nav` run (M1) scored recall 0.75 because it gave the constructor's line (`__init__`) for three classes it constructs, where the truth wanted the `class` line; a valid reading, not a miss.
 
 ## What changed in the benchmark workflow
 
