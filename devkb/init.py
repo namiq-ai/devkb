@@ -207,7 +207,8 @@ def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool, claude_hook
                             ".gitignore": (ignore, HASH_BEGIN, HASH_END),
                             **{str(hdir / n): (_read(hdir / n), HASH_BEGIN, HASH_END) for n in HOOKS}})
     p.write("AGENTS.md", _set_block(agents, AGENTS_BLOCK) if install else _drop_block(agents))
-    p.write("CLAUDE.md", _set_block(claude, "@AGENTS.md") if install else _drop_block(claude))
+    if (root / "CLAUDE.md").resolve() != (root / "AGENTS.md").resolve():  # one file under two names: block once (#51)
+        p.write("CLAUDE.md", _set_block(claude, "@AGENTS.md") if install else _drop_block(claude))
     p.write(".gitignore", _set_block(ignore, ".devkb/", HASH_BEGIN, HASH_END) if install else _drop_block(ignore, HASH_BEGIN, HASH_END))
     p.write(".mcp.json", _mcp(root, toolset))
     if claude_hook or not install:

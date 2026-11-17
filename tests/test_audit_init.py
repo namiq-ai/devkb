@@ -49,3 +49,17 @@ def test_crlf_line_endings_survive_init_and_remove_byte_for_byte(tmp_path):  # #
     assert init.run(root, "lean-pack", hooks=False, dry_run=False) == [], "a second run changes nothing"
     init.run(root, None, hooks=False, dry_run=False)
     assert (root / "AGENTS.md").read_bytes() == original
+
+
+def test_claude_md_symlinked_to_agents_md_gets_the_block_once_and_no_self_import(tmp_path):  # #51
+    import os
+    root = _repo(tmp_path)
+    (root / "AGENTS.md").write_text("# Rules\nbe nice\n")
+    os.symlink("AGENTS.md", root / "CLAUDE.md")
+    assert "update AGENTS.md" in init.run(root, "lean-pack", hooks=False, dry_run=False)
+    text = (root / "AGENTS.md").read_text()
+    assert "ask the graph before" in text and "@AGENTS.md" not in text and text.count(init.BEGIN) == 1
+    assert (root / "CLAUDE.md").is_symlink()
+    assert init.run(root, "lean-pack", hooks=False, dry_run=False) == [], "a second run changes nothing"
+    init.run(root, None, hooks=False, dry_run=False)
+    assert (root / "AGENTS.md").read_text() == "# Rules\nbe nice\n" and (root / "CLAUDE.md").is_symlink()
