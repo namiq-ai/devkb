@@ -97,6 +97,7 @@ class Masked:
     line_starts: list[int] = field(default_factory=list)
     guards: list[tuple[int, int]] = field(default_factory=list)   # spans inside `#ifdef __cplusplus` (SPEC-DKB-002 R2)
     conds: list[tuple[int, str]] = field(default_factory=list)    # (line, text) of `#if/#ifdef/#ifndef/#elif` (SPEC-DKB-002 R15)
+    alts: list[tuple[int, int]] = field(default_factory=list)     # sorted spans of `#elif`/`#else` branches (not of `#if 0`); nested ones too
 
     def line(self, offset: int) -> int:
         return bisect_right(self.line_starts, offset)
@@ -129,6 +130,8 @@ def mask_source(text: str) -> Masked:
     conds: list[tuple[int, str]] = []
     skipping: int | None = None
     skip_from = 0
+    astack: list[int | None] = []       # per open conditional: start of its current `#elif`/`#else` branch; -1 after `#if 0`
+    alts: list[tuple[int, int]] = []
     line_starts = [0] + [m.end() for m in re.finditer("\n", code)]
     for d in _DIRECTIVE.finditer(code):
         body = d.group(0)
@@ -141,9 +144,18 @@ def mask_source(text: str) -> Masked:
         if word in ("if", "ifdef", "ifndef", "elif") and skipping is None:
             conds.append((bisect_right(line_starts, d.start()), body))
         if word in ("if", "ifdef", "ifndef"):
-            if skipping is None and word == "if" and re.match(r"\s*#\s*if\s*\(?\s*0\s*\)?\s*$", body.split("\\\n")[0]):
+            zero = word == "if" and re.match(r"\s*#\s*if\s*\(?\s*0\s*\)?\s*$", body.split("\\\n")[0])
+            astack.append(-1 if zero else None)
+            if skipping is None and zero:
                 skipping, skip_from = len(stack), d.end()
         elif word in ("else", "elif", "endif"):
+            if astack:
+                if astack[-1] is not None and astack[-1] >= 0:
+                    alts.append((astack[-1], d.start()))
+                if word == "endif":
+                    astack.pop()
+                elif astack[-1] != -1:
+                    astack[-1] = d.end()
             if gstack and gstack[-1] is not None:
                 guards.append((gstack[-1], d.start()))
                 gstack[-1] = None
@@ -182,7 +194,8 @@ def mask_source(text: str) -> Masked:
         out.append(code[pos:])
         code = "".join(out)
     code = _blank_dialect(code)
-    return Masked(code, literals, defines, includes, line_starts, guards, conds)
+    alts.sort()
+    return Masked(code, literals, defines, includes, line_starts, guards, conds, alts)
 
 
 # ── dialect keywords (ADR-DEVKB-009 §2, SPEC-DKB-002 R6): the one closed table, read without any compiler ─────────
@@ -310,6 +323,7 @@ class Def:
     body: tuple[int, int] = (0, 0)  # offsets inside the masked code
     index: int = -1
     linkage: str = ""               # functions and methods: internal | c | cpp (ADR-DEVKB-009 §2)
+    class_ns: str | None = None     # methods: the namespace the class is looked up from; None when a qualifier named one (#93)
 
 
 @dataclass
@@ -320,6 +334,7 @@ class ClassRec:
     bases: list[str] = field(default_factory=list)
     members: dict[str, tuple[str, str] | None] = field(default_factory=dict)
     methods: dict[str, bool] = field(default_factory=dict)   # declared or defined method name -> virtual?
+    namespace: str = ""             # the enclosing namespace, `a::b` (#93)
 
 
 @dataclass
@@ -380,6 +395,9 @@ _TYPE_KEYWORDS = {
 }
 _CALL_AFTER = {"return", "else", "case", "throw", "co_return", "co_await", "co_yield", "do", "delete"}
 _CAPS = re.compile(r"^[A-Z][A-Z0-9_]*$")
+# a built-in type written before `(` starts a parenthesised declarator (`void (*f)(int)`); it never names a function
+_BUILTIN_TYPES = {"void", "char", "short", "int", "long", "float", "double", "signed", "unsigned", "bool", "_Bool",
+                  "wchar_t", "char8_t", "char16_t", "char32_t", "const", "volatile", "struct", "union", "enum"}
 
 _CAND = re.compile(
     r"(?P<name>(?P<qual>(?:::\s*)?(?:" + _IDENT + r"\s*(?:" + _TARGS + r")?\s*::\s*)*)"
@@ -438,6 +456,32 @@ def _match_close(code: str, open_i: int, o: str, c: str, limit: int | None = Non
     return None
 
 
+def _match_close_first_branch(code: str, open_i: int, limit: int, alts: list[tuple[int, int]]) -> int | None:
+    """Offset of the `}` closing the `{` at `open_i` when the braces inside `#elif`/`#else` branches are not counted, or
+    None. Used only when plain matching fails: two variants of a signature or of a block opener under `#ifdef`/`#else`
+    open one `{` each but share one `}` (#64); reading the first branch alone pairs them as one configuration would."""
+    # a branch that already holds `open_i` is the one being read: only branches starting after it are left out. Branches
+    # nest or are disjoint, so those form one union of disjoint spans.
+    skip: list[tuple[int, int]] = []
+    for a, b in alts[bisect_right(alts, (open_i, len(code) + 1)):]:
+        if a >= limit:
+            break
+        if skip and a <= skip[-1][1]:
+            skip[-1] = (skip[-1][0], max(skip[-1][1], b))
+        else:
+            skip.append((a, b))
+    depth = 0
+    for m in _BR["{"].finditer(code, open_i, limit):
+        p = m.start()
+        i = bisect_right(skip, (p, len(code) + 1)) - 1
+        if i >= 0 and p < skip[i][1]:
+            continue
+        depth += 1 if m.group() == "{" else -1
+        if depth == 0:
+            return p
+    return None
+
+
 _BR = {"{": re.compile(r"[{}]"), "(": re.compile(r"[()]"), "[": re.compile(r"[\[\]]")}
 
 
@@ -458,12 +502,14 @@ def _split_top(s: str, sep: str = ",") -> list[str]:
 
 
 _VAR_TYPE = (r"(?P<type>(?:::)?" + _IDENT + r"(?:::" + _IDENT + r")*)(?:\s+const)?(?P<ptr>(?:\s*(?:const\b\s*)?[*&]+(?:\s*const\b)?)*)")
+# the declared name never starts inside the type's identifier (`Tasks` is not a `Task` named `s`, #62)
+_VAR_NAME = r"(?<![\w])(?P<name>" + _IDENT + r")"
 _PARAM = re.compile(
     r"^\s*(?:(?:const|volatile|struct|class|union|enum|unsigned|signed|register|typename)\s+)*" + _VAR_TYPE
-    + r"\s*(?P<name>" + _IDENT + r")?\s*(?:\[[^\]]*\])?\s*$", re.S)
+    + r"\s*" + _VAR_NAME + r"?\s*(?:\[[^\]]*\])?\s*$", re.S)
 _LOCAL = re.compile(
     r"(?:^|[;{}(])\s*(?:(?:const|static|volatile|register|struct|class|union|enum|typename|extern|mutable|constexpr|"
-    r"thread_local|unsigned|signed)\s+)*" + _VAR_TYPE + r"\s*(?P<name>" + _IDENT + r")\s*(?=[=;,\[({)])")
+    r"thread_local|unsigned|signed)\s+)*" + _VAR_TYPE + r"\s*" + _VAR_NAME + r"\s*(?=[=;,\[({)])")
 _TEMPL_LOCAL = re.compile(r">\s*[*&]*\s*(" + _IDENT + r")\s*(?=[=;({,])")
 
 
@@ -514,6 +560,18 @@ def _norm_name(text: str) -> str:
     return re.sub(r"operator\s*([^\w\s])", r"operator\1", re.sub(r"operator\s*(\(\s*\)|\[\s*\])", lambda m: "operator" + re.sub(r"\s", "", m.group(1)), text))
 
 
+_INIT_TAIL = re.compile(r"(?<!:)([:,])(?!:)\s*(?:::)?" + _IDENT + r"(?:\s*::\s*" + _IDENT + r")*\s*(?:" + _TARGS + r")?\s*$")
+_INIT_COLON = re.compile(r"\)\s*(?:(?:noexcept|try)\b\s*(?:\([^)]*\)\s*)?)*:(?!:)")
+
+
+def _init_brace(head: str) -> bool:
+    """Whether the `{` after `head` opens a brace initialiser in a constructor's initialiser list (`K() : m_x{1}`, #63):
+    `head` ends with a member or base name right after the list's `:` or a `,`, and a parameter list's `)` precedes
+    that `:`. A class's base list (`struct C : A, B {`) has no `)` before its `:`."""
+    m = _INIT_TAIL.search(head)
+    return bool(m and _INIT_COLON.search(head, 0, m.end(1)))
+
+
 # ── the file scanner ───────────────────────────────────────────────────────────
 class _Scope:
     __slots__ = ("ns", "anon", "classes", "access", "rec", "ext_c")
@@ -529,6 +587,8 @@ class _Scanner:
         self.classes: list[ClassRec] = []
         self.calls: list[Call] = []
         self.errors: list[ErrorSite] = []
+        self.ns_paths: set[str] = set()      # every named namespace this file opens, as `a::b` (#93)
+        self.aliases: set[str] = set()       # names a using-declaration, alias or typedef introduces (#93)
 
     # statement walker -------------------------------------------------------
     def walk(self, lo: int, hi: int, scope: _Scope) -> None:
@@ -550,13 +610,25 @@ class _Scanner:
                 i = start = k + 1
             else:  # "{"
                 close = _match_close(code, k, "{", "}", hi)
+                if close is None and self.m.alts:
+                    close = _match_close_first_branch(code, k, hi, self.m.alts)
+                unmatched = close is None
                 if close is None:
                     close = hi
-                end = self.brace(start, k, close, scope)
+                if self.cpp and not unmatched and _init_brace(code[start:k]):
+                    i = close + 1      # `K() : m_x{1}, ...`: a member's brace initialiser; the body is a later `{`
+                    continue
+                end = self.brace(start, k, close, scope, unmatched)
                 i = start = close + 1 if end is None else end
         # trailing statement without terminator: ignore
 
-    def brace(self, start: int, k: int, close: int, scope: _Scope) -> int | None:
+    def brace(self, start: int, k: int, close: int, scope: _Scope, unmatched: bool = False) -> int | None:
+        """Read the construct whose `{` is at `k`. Returns where walking resumes, or None for just after `close`.
+
+        `unmatched`: no `}` closes this `{` before `close` (typically two signature variants under `#ifdef`/`#else`, #64).
+        A namespace, `extern "C"` block or class is still walked to `close`, so what it contains is read; a function,
+        macro body or enum is not read at all, and walking resumes just inside its `{`, rather than letting one
+        definition swallow, and take the calls of, the rest of the file."""
         code = self.code
         _set_access(code[start:k], scope)
         h = _strip_decor(code[start:k])
@@ -567,6 +639,8 @@ class _Scanner:
                 nm = re.match(r"\s*(" + _IDENT + r"(?:\s*::\s*" + _IDENT + r")*)", rest)
                 if nm:
                     chain = tuple(re.sub(r"\s", "", nm.group(1)).split("::"))
+                    for i in range(1, len(chain) + 1):
+                        self.ns_paths.add("::".join(scope.ns + chain[:i]))
                     self.walk(k + 1, close, _Scope(scope.ns + chain, scope.anon, scope.classes, "public", None, scope.ext_c))
                 else:
                     self.walk(k + 1, close, _Scope(scope.ns, True, scope.classes, "public", None, scope.ext_c))
@@ -580,6 +654,8 @@ class _Scanner:
         hs = re.sub(r"^\s*extern\s*\"[^\"]*\"", lambda mm: " " * len(mm.group(0)), h)
         em = _ENUM_HEAD.match(hs) if "enum" in hs else None
         if em and "(" not in hs and "=" not in hs.replace("==", ""):
+            if unmatched:
+                return k + 1
             nm = re.match(r"\s*(?:[A-Z][A-Z0-9_]*\s+)*(" + _IDENT + r")\b(?!\s*\()", em.group(1))
             name = nm.group(1) if nm else None
             if name is None and re.match(r"^\s*typedef\b", hs):
@@ -607,7 +683,7 @@ class _Scanner:
                     pos = start + hs.rfind(name, 0, len(hs) - len(bases_text)) if name in head else start + hs.find(name)
                     chain = scope.classes + (name,)
                     qn = ".".join(chain)
-                    rec = ClassRec(qn, kw, self.m.line(pos))
+                    rec = ClassRec(qn, kw, self.m.line(pos), namespace="::".join(scope.ns))
                     for b in _split_top(re.sub(r"\b(?:public|private|protected|virtual)\b", " ", re.sub(_TARGS, "", bases_text))):
                         b = re.sub(r"\s", "", b).lstrip(":")
                         if b and re.match(r"^[\w:]+$", b):
@@ -618,6 +694,8 @@ class _Scanner:
                     self.walk(k + 1, close, _Scope(scope.ns, scope.anon, chain, "public" if kw != "class" else "private", rec))
                     return None
         # a function or macro-bodied definition
+        if unmatched:
+            return k + 1
         fn = self.function(start, k, close, h, scope)
         if fn:
             return None
@@ -649,7 +727,7 @@ class _Scanner:
                     rec.methods[short] = rec.methods.get(short, False) or bool(re.search(r"\bvirtual\b|\boverride\b", h))
             return
         fm = re.match(r"^\s*(?:(?:mutable|static|const|volatile|constexpr|inline|thread_local|struct|class|enum)\s+)*" + _VAR_TYPE
-                      + r"\s*(?P<name>" + _IDENT + r")\s*(?:\[[^\]]*\])?\s*(?:=.*|\{.*|:\s*\d+)?\s*$", h, re.S)
+                      + r"\s*" + _VAR_NAME + r"\s*(?:\[[^\]]*\])?\s*(?:=.*|\{.*|:\s*\d+)?\s*$", h, re.S)
         if fm:
             rec.members[fm.group("name")] = _decl_type(fm)
         else:
@@ -674,8 +752,17 @@ class _Scanner:
             if last in _NOT_FUNC:
                 pos = cl + 1
                 continue
+            if last in _BUILTIN_TYPES and not m.group("qual").strip() and not re.search(r"\boperator\b[\w\s]*$", hs[:m.start()]):
+                # `void (*name...)`: a type, then a declarator in parentheses; the name is inside (#92). `int (ns::f)(...)`
+                # (a name parenthesised against a macro) loses its parentheses, so the name is read as written.
+                if re.fullmatch(r"\s*" + _IDENT + r"(?:\s*::\s*" + _IDENT + r")*\s*", hs[open_i + 1:cl]) and re.match(r"\s*\(", hs[cl + 1:]):
+                    hs = hs[:open_i] + " " + hs[open_i + 1:cl] + " " + hs[cl + 1:]
+                pos = open_i + 1
+                continue
             qual_empty = not m.group("qual").strip()
             tail = hs[cl + 1:]
+            if re.search(r"(?<![=!<>])=(?!=)", _flatten(tail)):
+                return False       # `void (*tab[])(void) = { a, b };`: an initialiser, not a body (#92)
             if qual_empty and _CAPS.match(last) and re.match(r"\s*[A-Za-z_*&]", tail) and not re.match(r"\s*(?:const|noexcept|override|final|volatile|try)\b", tail):
                 pos = cl + 1   # an all-caps wrapper before the return type (`CJSON_PUBLIC(cJSON *) cJSON_Parse(...)`)
                 continue
@@ -698,7 +785,9 @@ class _Scanner:
             return True
         if not self.cpp and qparts:
             return False
-        qparts = [p for p in qparts if p not in self.ns_seen and p not in scope.ns]
+        kept = [p for p in qparts if p not in self.ns_seen and p not in scope.ns]
+        class_ns = "::".join(scope.ns) if len(kept) == len(qparts) else None   # `ns::K::f`: K's namespace is not read here
+        qparts = kept
         chain = scope.classes + tuple(qparts)
         qn = ".".join(chain + (short,))
         kind = "method" if chain else "function"
@@ -717,7 +806,7 @@ class _Scanner:
         else:
             linkage = "c" if scope.ext_c or re.match(r"\s*extern\s*\"", h) else "cpp"
         d = self.add_def(Def(qn, short, kind, "::".join(scope.ns), line, self.m.line(close), is_public=pub, virtual=virtual,
-                             class_chain=chain, body=(k + 1, close), linkage=linkage))
+                             class_chain=chain, body=(k + 1, close), linkage=linkage, class_ns=class_ns))
         if in_class and scope.rec is not None and not qparts:
             scope.rec.methods[short] = scope.rec.methods.get(short, False) or virtual
         d.params = hs[open_i + 1:cl]
@@ -795,6 +884,8 @@ class _Scanner:
                     word = text[j + 1:k + 1]
                     if word not in _CALL_AFTER:
                         continue  # `Foo x(1)`, `new Foo(...)`: a declaration or an implicit constructor call
+                elif prev in ">*&" and self.cpp and _DECL_PREFIX.match(text, _stmt_start(text, k), a):
+                    continue      # `std::vector<int> x(3)`, `Foo *x(p)`, `const Bar& x(y)`: a declaration, not a call (#65)
                 form, qualifier, recv, rl = "bare", "", None, None
             self.calls.append(Call(d.index, name, form, qualifier, recv, rl, line_of(lo + cm.start())))
         self.errors_in(d, lo, text)
@@ -857,6 +948,18 @@ class _Scanner:
 
 
 _CALL_RE = re.compile(r"([A-Za-z_]\w*)\s*(?:<[\w\s:,*]*(?:<[\w\s:,*]*>[\w\s:,*]*)*>\s*)?\(")
+
+
+# a statement prefix that is nothing but a type, so the name after it is declared, not called (#65): `std::vector<int>`, `Foo *`
+_DECL_PREFIX = re.compile(
+    r"(?!.*<<)\s*(?:(?:const|static|volatile|constexpr|thread_local|mutable|register|unsigned|signed|struct|class|union|enum|typename)\s+)*"
+    r"(?!(?:" + "|".join(sorted(_CALL_AFTER)) + r")\b)(?:::\s*)?" + _IDENT + r"\s*(?:" + _TARGS + r")?"
+    r"(?:\s*::\s*" + _IDENT + r"\s*(?:" + _TARGS + r")?)*\s*(?:const\b\s*)?(?:[*&]\s*(?:const\b\s*)?)*\Z", re.S)
+
+
+def _stmt_start(text: str, k: int) -> int:
+    """Offset just after the last `;`, `{` or `}` before `k` (the start of the statement `k` is in)."""
+    return max(text.rfind(";", 0, k), text.rfind("{", 0, k), text.rfind("}", 0, k)) + 1
 
 
 def _qualifier_before(text: str, a: int) -> tuple[str, int]:
@@ -934,6 +1037,12 @@ _IND = re.compile(
 )
 
 
+# `using ns::K;`, `using K = ...;`, `typedef ... K;`: a name that may stand for a class of another namespace (#93)
+_ALIAS = re.compile(r"\busing\s+(?!namespace\b)(?:typename\s+)?(?:" + _IDENT + r"\s*::\s*)+(" + _IDENT + r")\s*;|\busing\s+(" + _IDENT
+                    + r")\s*=")
+_TYPEDEF = re.compile(r"\btypedef\b[^;{}]*?\b(" + _IDENT + r")\s*(?:\[[^\]]*\]\s*)*;|\}\s*(" + _IDENT + r")\s*;")
+
+
 def extract_file(path: str, text: str, includer_languages: list[str] | None = None) -> FileRecords:
     """Pass 1 for one file. `includer_languages` (languages of the files that include a `.h`) is the header rule's input."""
     m = mask_source(text)
@@ -942,6 +1051,8 @@ def extract_file(path: str, text: str, includer_languages: list[str] | None = No
     ns_seen = set(re.findall(r"\bnamespace\s+(" + _IDENT + r")", m.code)) if cpp else set()
     sc = _Scanner(path, m, cpp, ns_seen)
     sc.walk(0, len(m.code), _Scope())
+    if cpp:
+        sc.aliases = {a or b for a, b in _ALIAS.findall(m.code) + _TYPEDEF.findall(m.code)}
     # Pass 1 ends here: definitions only. Calls, errors and indirect references need the repository's symbol names
     # (a call to a name no symbol bears is never linked or counted), so `scan_bodies` runs once all files are read.
     return FileRecords(path, cpp, sc.defs, sc.classes, sc.calls, sc.errors, [],
@@ -975,14 +1086,16 @@ def indirect_refs(rec: FileRecords, function_names: set[str]) -> list[tuple[str,
     members: set[str] = set()
     for c in rec.classes:
         members.update(c.members)
+    # the owner of a line is the first body (by offset) whose lines contain it: one table, filled last-to-first so the
+    # first wins, instead of a scan of every body per reference (#66)
+    owner_of: dict[int, int] = {}
+    for a, b, idx in reversed(spans):
+        for ln in range(m.line(a), m.line(b) + 1):
+            owner_of[ln] = idx
     for name, line, _ in rec.indirect:
         if name not in function_names:
             continue
-        owner = -1
-        for a, b, idx in spans:
-            if m.line(a) <= line <= m.line(b):
-                owner = idx
-                break
+        owner = owner_of.get(line, -1)
         if owner >= 0 and name in rec.scanner.locals_of(rec.defs[owner]):
             continue
         if name in members:
@@ -1012,6 +1125,7 @@ class Symbolic:
     def_indexes: list[int]
     framework: str | None = None
     linkage: str = ""
+    class_ns: str | None = None     # see Def.class_ns; None when overloads disagree
 
 
 def finalize(rec: FileRecords) -> dict[str, Symbolic]:
@@ -1030,7 +1144,7 @@ def finalize(rec: FileRecords) -> dict[str, Symbolic]:
         s = out.get(qn)
         if s is None:
             out[qn] = Symbolic(qn, d.short, d.kind, d.namespace, d.line, d.line_end, [d.line], d.is_public, d.virtual,
-                               d.class_chain, [d.index], None, d.linkage)
+                               d.class_chain, [d.index], None, d.linkage, d.class_ns)
         else:
             s.overload_lines.append(d.line)
             s.line_end = max(s.line_end, d.line_end)
@@ -1039,6 +1153,8 @@ def finalize(rec: FileRecords) -> dict[str, Symbolic]:
             s.def_indexes.append(d.index)
             if d.linkage == "c" or not s.linkage:
                 s.linkage = d.linkage
+            if s.class_ns != d.class_ns:
+                s.class_ns = None
     for s in out.values():
         s.overload_lines = sorted(set(s.overload_lines))[:20]
     return out

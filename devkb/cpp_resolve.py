@@ -89,7 +89,11 @@ class Repo:
         self.function_names: set[str] = set()
         self.language: dict[str, str] = {u.path: u.rec.language for u in units}
         self.c_linkage: dict[str, list[tuple[str, Symbolic]]] = {}     # non-static functions with C linkage, by short name
+        self.ns_paths: set[str] = set()        # every named namespace a file opens, as `a::b`
+        self.aliases: set[str] = set()         # names a using-declaration, alias or typedef introduces somewhere
         for u in units:
+            self.ns_paths |= getattr(u.rec.scanner, "ns_paths", set())
+            self.aliases |= getattr(u.rec.scanner, "aliases", set())
             self.namespaces |= u.rec.namespaces
             self.macros |= u.rec.define_names
             for qn, s in u.syms.items():
@@ -113,22 +117,50 @@ class Repo:
         self._unit = {u.path: u for u in units}
 
     # classes -------------------------------------------------------------------
-    def class_by_type(self, t: str) -> tuple[str, object] | None:
-        """The one repository class a written type names, else None (ambiguous or not a repository class)."""
+    def class_by_type(self, t: str, from_ns: str | None = None) -> tuple[str, object] | None:
+        """The one repository class a written type names, else None (ambiguous or not a repository class).
+
+        `from_ns`: the namespace the type is written in. A name several namespaces' classes share is then looked up as
+        C++ does, from that namespace outward (#93); without it, or when a nested class bears the name, it stays ambiguous."""
+        absolute = t.replace(" ", "").startswith("::")
         parts = [p for p in t.replace(" ", "").lstrip(":").split("::") if p]
+        lead: list[str] = []
         while len(parts) > 1 and parts[0] in self.namespaces:
+            lead.append(parts[0])
             parts = parts[1:]
         if not parts:
             return None
         key = ".".join(parts)
         exact = self.classes.get(key, [])
         found = exact if exact else self.class_suffix.get(key, [])
-        return found[0] if len(found) == 1 else None
+        if len(found) == 1:
+            return found[0]
+        if from_ns is None or len(exact) < 2 or self.class_suffix.get(key) or parts[-1] in self.aliases:
+            return None
+        return self._lookup(exact, lead, "" if absolute else from_ns)
 
-    def caller_class(self, path: str, chain: tuple[str, ...]) -> tuple[str, object] | None:
+    def _lookup(self, cands: list[tuple[str, object]], lead: list[str], from_ns: str) -> tuple[str, object] | None:
+        """C++ name lookup of a class among same-named `cands`: from `from_ns` outward, the first namespace that holds
+        the name (or, for `a::K`, the first that sees a namespace `a`) decides; two classes there is None (#93). The
+        callers give up first when a nested class, a using-declaration, an alias or a typedef bears the name: any of
+        them may be what C++ finds, and none is a class here."""
+        bits = from_ns.split("::") if from_ns else []
+        for i in range(len(bits), -1, -1):
+            level = bits[:i]
+            if lead and "::".join(level + lead[:1]) not in self.ns_paths:
+                continue
+            ns = "::".join(level + lead)
+            hits = [c for c in cands if c[1].namespace == ns]
+            if hits or lead:
+                return hits[0] if len(hits) == 1 else None
+        return None
+
+    def caller_class(self, path: str, chain: tuple[str, ...], from_ns: str | None = None) -> tuple[str, object] | None:
+        """The class a method belongs to. `from_ns` (the method's `class_ns`) decides between same-named classes of
+        different namespaces when the file layout does not (#93)."""
         if not chain:
             return None
-        cands = self.classes.get(".".join(chain), [])
+        every = cands = self.classes.get(".".join(chain), [])
         if len(cands) > 1:
             same = [c for c in cands if c[0] == path]
             if not same:
@@ -136,7 +168,11 @@ class Repo:
                 same = [c for c in cands if c[0].rsplit(".", 1)[0].rsplit("/", 1)[-1] == stem[-1]
                         and c[0].rsplit("/", 1)[0:-1] == (path.rsplit("/", 1)[0:-1])]
             cands = same
-        return cands[0] if len(cands) == 1 else None
+        if len(cands) == 1:
+            return cands[0]
+        if from_ns is None or len(every) < 2 or chain[0] in self.aliases:
+            return None
+        return self._lookup(every, [], from_ns)
 
     def method_on(self, cls: tuple[str, object], name: str, seen: set[str] | None = None, via_base: bool = False):
         """('hit', key, via_base) | ('declared',) | None: `name` on a class, else on its in-repository bases."""
@@ -146,12 +182,17 @@ class Repo:
             return None
         seen.add(c.qn + "@" + path)
         found = [(p, s) for p, s in self.by_qn.get(c.qn + "." + name, []) if s.kind == "method"]
+        if len(self.classes.get(c.qn, [])) > 1 and found:
+            # a class name several namespaces share: only a method defined in this class's namespace is its own (#93)
+            if any(s.class_ns is None for _p, s in found):
+                return ("declared",)
+            found = [(p, s) for p, s in found if s.class_ns == c.namespace]
         if len(found) == 1:
             return ("hit", f"{found[0][0]}::{found[0][1].qn}", via_base)
         if found or name in c.methods:
             return ("declared",)
         for b in c.bases:
-            bc = self.class_by_type(b)
+            bc = self.class_by_type(b, c.namespace)
             if bc is not None:
                 r = self.method_on(bc, name, seen, True)
                 if r is not None:
@@ -162,7 +203,7 @@ class Repo:
         seen = seen if seen is not None else set()
         out = []
         for b in cls[1].bases:
-            bc = self.class_by_type(b)
+            bc = self.class_by_type(b, cls[1].namespace)
             if bc is not None and bc[1].qn + "@" + bc[0] not in seen:
                 seen.add(bc[1].qn + "@" + bc[0])
                 out.append(bc)
@@ -196,6 +237,7 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                 continue
             caller = u.syms.get(caller_qn)
             chain = caller.class_chain if caller is not None and caller.kind == "method" else ()
+            caller_ns = caller.class_ns if caller is not None else None
             ckey = f"{u.path}::{caller_qn}"
             n = call.name
             stop_unresolved = False
@@ -250,7 +292,7 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                     continue
             elif call.form == "bare":
                 if chain:
-                    cls = repo.caller_class(u.path, chain)
+                    cls = repo.caller_class(u.path, chain, caller_ns)
                     if cls is not None:
                         r = repo.method_on(cls, n)
                         if r and r[0] == "hit":
@@ -271,7 +313,7 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                         if hand_over():
                             continue
             else:  # member
-                cls = repo.caller_class(u.path, chain) if chain else None
+                cls = repo.caller_class(u.path, chain, caller_ns) if chain else None
                 if call.recv == "this" and cls is not None:
                     r = repo.method_on(cls, n)
                     if r and r[0] == "hit":
@@ -284,7 +326,7 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                     elif call.recv_local is None and cls is not None:
                         t = cls[1].members.get(call.recv)
                     if t is not None:
-                        target = repo.class_by_type(t[0])
+                        target = repo.class_by_type(t[0], caller_ns)
                         if target is not None:
                             r = repo.method_on(target, n)
                             if r and r[0] == "hit":
@@ -318,7 +360,7 @@ def incomplete_reasons(units: list[Unit]) -> dict[tuple[str, str], set[str]]:
                 reasons.add("implicit-call")
             if s.kind != "method" or not s.class_chain:
                 continue
-            cls = repo.caller_class(u.path, s.class_chain)
+            cls = repo.caller_class(u.path, s.class_chain, s.class_ns)
             if cls is None:
                 continue
             if s.virtual or cls[1].methods.get(s.short):
