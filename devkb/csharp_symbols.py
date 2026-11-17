@@ -1834,14 +1834,30 @@ def extract(repo_root: Path, stats: dict | None = None) -> tuple[list[dict], lis
     calls: dict[tuple[str, str], dict] = {}
     unresolved: dict[str, set[tuple[str, str]]] = {}
     local_fns: dict[tuple[str, ...], dict[str, dict]] = {}     # owner's qparts -> its local functions (one pass, not n²)
+    fn_q: set[tuple[str, ...]] = set()
     for x in symbols:
         if x["kind"] == "function":
             local_fns.setdefault(x["qparts"][:-1], {})[x["name"]] = x
+            fn_q.add(x["qparts"])
     for s in symbols:
         if not s.get("body"):
             continue
         sc = scans[s["rel"]]
         locals_fns = local_fns.get(s["qparts"], {})
+        if s["kind"] == "function":
+            # a local function also sees its siblings and those of every enclosing local function, up to the member
+            # that holds them; the nearest scope wins (#58)
+            q, scopes = s["qparts"][:-1], []
+            while True:
+                scopes.append(local_fns.get(q, {}))
+                if q not in fn_q:
+                    break
+                q = q[:-1]
+            seen: dict[str, dict] = {}
+            for d in reversed(scopes):
+                seen.update(d)
+            seen.update(locals_fns)
+            locals_fns = seen
         for callee, conf, line, text, why in _calls_in(s, sc["masked"], sc["nl"], index, locals_fns, sc["raw"],
                                                        sc.get("aliases")):
             if stats is not None:

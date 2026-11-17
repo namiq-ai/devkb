@@ -1020,3 +1020,22 @@ def test_a_verbatim_string_of_one_quote_is_not_a_raw_string(tmp_path):
     assert {"V.A.M", "V.A.Helper", "V.A.Other"} <= names
     assert {("V.A.M", "V.A.Helper"), ("V.A.Other", "V.A.Helper")} <= edges
     assert csharp_symbols.mask('x = @"""" + @"a""b"; y();').endswith("y();")
+
+
+def test_a_local_function_calls_its_sibling_local_function(tmp_path):
+    """#58: a call from one local function to a sibling (or to one of an enclosing local function) binds to it,
+    not to the type's method of the same name."""
+    _, edges = _edges_of(tmp_path, {"L.cs": '''namespace L { class A {
+  void M() {
+    int B() => 1;
+    int C() { return B(); }
+    int D() { int E() => B() + C(); return E(); }
+    C();
+  }
+  int B() => 2;
+  void N() { B(); }
+} }
+'''})
+    assert ("L.A.M.C", "L.A.M.B") in edges and ("L.A.M.C", "L.A.B") not in edges
+    assert {("L.A.M.D.E", "L.A.M.B"), ("L.A.M.D.E", "L.A.M.C"), ("L.A.M.D", "L.A.M.D.E"), ("L.A.M", "L.A.M.C")} <= edges
+    assert ("L.A.N", "L.A.B") in edges and not any(callee == "L.A.B" for caller, callee in edges if caller != "L.A.N")
