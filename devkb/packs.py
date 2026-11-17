@@ -29,7 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from devkb.cpp_symbols import C_LIMITS_TEXT, CXX_LIMITS_TEXT, is_cxx_path  # noqa: E402
-from devkb.process_api import ProcessAPI, is_test_path  # noqa: E402
+from devkb.process_api import ProcessAPI  # noqa: E402
 from devkb.service import GraphNotBuilt  # noqa: E402
 
 MAX_DEPTH = 6
@@ -177,7 +177,7 @@ class Packer:
             nxt = set()
             for s in frontier:
                 for c in set(self.idx.sources("CALLS", s)) | set(self.idx.sources("CALLS_API", s)):
-                    if c in parent or c in start or is_test_path(self.api._key(c).split("::")[0]):
+                    if c in parent or c in start or self.api._is_test(self.api._key(c).split("::")[0]):
                         continue
                     parent[c] = s
                     nxt.add(c)
@@ -213,7 +213,7 @@ class Packer:
         for s in syms:
             for c in set(self.idx.sources("CALLS", s)):
                 rel = self.api._key(c).split("::")[0]
-                if is_test_path(rel):
+                if self.api._is_test(rel):
                     out.setdefault(rel, []).append((c, s))
         return out
 
@@ -359,7 +359,7 @@ class Packer:
         dnt = self.api._role_table().get(role, {}).get("dnt", []) if role else []
         files = sorted(set(by_file) | set(at_module))
         blocked = sorted(f for f in files if any(f.startswith(p) for p in dnt))
-        tests = sorted(f for f in files if is_test_path(f))
+        tests = sorted(f for f in files if self.api._is_test(f))
         out = [f"# Graph pack: changing the signature of `{self.api._key(i)}`" + (f" as role {role}" if role else ""), "",
                self.freshness(files), "", f"Defined at `{self.def_line(i)}`.", "",
                f"## Files with a direct caller ({len(files)}, tests included)"]
@@ -390,7 +390,7 @@ class Packer:
             for key in r.get("changed_symbols", []):
                 path, _, qual = key.partition("::")
                 i = self.idx.node("Symbol", key)
-                if i is not None and "." not in qual and not is_test_path(path) and self.idx.props[i].get("kind") == "function":
+                if i is not None and "." not in qual and not self.api._is_test(path) and self.idx.props[i].get("kind") == "function":
                     changed.setdefault(i, self.idx.props[c].get("short_hash", self.api._key(c)[:10]))
         return changed
 

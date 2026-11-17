@@ -46,11 +46,6 @@ IMPORT_RE = {
 }
 
 
-def _is_test(path: str) -> bool:
-    from devkb.process_api import is_test_path  # noqa: PLC0415  (one rule for "test code" across devkb)
-    return is_test_path(path)
-
-
 def repo_path(path: str) -> str:
     """A path as the graph keys it: without leading `./` and `/`. Not `lstrip("./")`, which strips characters and so
     took the dot off `.github/...` (#54)."""
@@ -126,7 +121,7 @@ class ReadTools:
         """Best tier score first; among equals production before tests, shallower qualified name, more callers, the
         spelling the query used, then path and line. Case alone never lifts test code above production code."""
         path = self.file[i]
-        return (-score, _is_test(path), self.qual[i].count("."), -self.api._caller_count(i), 0 if exact_case else 1, path,
+        return (-score, self.api._is_test(path), self.qual[i].count("."), -self.api._caller_count(i), 0 if exact_case else 1, path,
                 self.idx.props[i].get("line_start") or 0)
 
     def resolve(self, query: str, kind: str = "", under: str = "", limit: int = 8, tests: bool = True) -> dict:
@@ -151,7 +146,7 @@ class ReadTools:
                 if (not kind or self.idx.props[i].get("kind") == kind)
                 and (not under or self.file[i].startswith(under))
                 and (not want_file or self.file[i] == want_file or self.file[i].endswith("/" + want_file))
-                and (tests or not _is_test(self.file[i]))]
+                and (tests or not self.api._is_test(self.file[i]))]
         poolset = set(pool)
 
         def collect(pred, score_of):
@@ -345,7 +340,7 @@ class ReadTools:
             r = self.resolve(q, limit=4)
             if r.get("how") in ("exact", "suffix") and r["matches"]:
                 defs = [{"k": m["k"], "kind": m["kind"], "ls": m["ls"], "le": m["le"], "range": m["range"]} for m in r["matches"]]
-        ranked = sorted(by_file.items(), key=lambda kv: (_is_test(kv[0]), -len(kv[1]), kv[0]))
+        ranked = sorted(by_file.items(), key=lambda kv: (self.api._is_test(kv[0]), -len(kv[1]), kv[0]))
         out_files = []; shown = 0
         for f, hs in ranked[:files]:
             spans = self._enclosing(f); rows = []
@@ -363,7 +358,7 @@ class ReadTools:
                     inner = (prev[-1][2], True) if prev else None
                 rows.append({"line": ln, "text": text.strip()[:110], "in": inner[0] if inner else None, "approx": bool(inner and inner[1])})
                 shown += 1
-            out_files.append({"f": f, "n": len(hs), "test": _is_test(f), "hits": rows})
+            out_files.append({"f": f, "n": len(hs), "test": self.api._is_test(f), "hits": rows})
         return {"name": q, "mode": mode, "definitions": defs, "n_hits": total, "n_files": len(by_file), "files": out_files,
                 "omitted_files": max(0, len(ranked) - files), "capped": total >= 6000,
                 "note": "text matches, not resolved references: a match inside a string or comment is still listed"}
