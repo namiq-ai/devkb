@@ -8,6 +8,9 @@
 // "failures": [...], "resolved": n, "unresolved": n}. Only calls whose target is defined in the repository are edges;
 // a call inside a lambda belongs to the member that contains the lambda (as in devkb). Static binding: a call through
 // an interface or virtual method is an edge to that declaration; `dispatch` lists who implements or overrides what.
+// Reading or writing a property or indexer is an edge to the accessor used (getter; setter for `x.P = v`; both for
+// `x.P += v`). A method group converted to a delegate (`Register(_controller.CloseCircuitAsync)`) is not a call:
+// `delegates` lists [member holding the reference, method], to be followed like dispatch (it runs when invoked).
 using System.Text.Json;
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
@@ -40,6 +43,8 @@ static class Truth
         var defs = new Dictionary<string, object[]>();
         var edges = new HashSet<(string, string)>();
         var dispatch = new HashSet<(string, string)>();
+        var delegates = new HashSet<(string, string)>();
+        long accessorEdges = 0;
         var errors = new Dictionary<string, int>();
         var done = new HashSet<string>();                  // file + defining symbol set: multi-targeting repeats files
         long resolved = 0, unresolved = 0;
@@ -76,6 +81,30 @@ static class Truth
                                         dispatch.Add((Id(sym), Id(im.OriginalDefinition)));
                         }
                     }
+                    if (node is IdentifierNameSyntax or ElementAccessExpressionSyntax or ElementBindingExpressionSyntax)
+                    {
+                        if (InNameof(node)) continue;
+                        var used = model.GetSymbolInfo(node).Symbol;
+                        if (used is IPropertySymbol prop)
+                        {
+                            prop = prop.OriginalDefinition;
+                            if (!prop.Locations.Any(l => l.IsInSource)) continue;
+                            var holder = Enclosing(node, model);
+                            if (holder is null) continue;
+                            var (reads, writes) = Access(node);
+                            if (reads && prop.GetMethod is { } get) { if (edges.Add((Id(holder), Id(get)))) accessorEdges++; }
+                            if (writes && prop.SetMethod is { } set) { if (edges.Add((Id(holder), Id(set)))) accessorEdges++; }
+                        }
+                        else if (used is IMethodSymbol group && node is IdentifierNameSyntax && !Invoked(node)
+                                 && group.MethodKind is MethodKind.Ordinary or MethodKind.LocalFunction)
+                        {
+                            group = (group.ReducedFrom ?? group).OriginalDefinition;
+                            if (!group.Locations.Any(l => l.IsInSource)) continue;
+                            var holder = Enclosing(node, model);
+                            if (holder is not null) delegates.Add((Id(holder), Id(group)));
+                        }
+                        continue;
+                    }
                     if (node is not (InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax
                         or ConstructorInitializerSyntax)) continue;
                     var info = model.GetSymbolInfo(node);
@@ -95,12 +124,14 @@ static class Truth
             ["defs"] = defs,
             ["edges"] = edges.Select(e => new[] { e.Item1, e.Item2 }).ToList(),
             ["dispatch"] = dispatch.Select(e => new[] { e.Item1, e.Item2 }).ToList(),
+            ["delegates"] = delegates.Select(e => new[] { e.Item1, e.Item2 }).ToList(),
+            ["accessor_edges"] = accessorEdges,
             ["errors"] = errors, ["failures"] = failures, ["resolved"] = resolved, ["unresolved"] = unresolved,
             ["projects"] = ws.CurrentSolution.Projects.Select(p => p.Name).ToList(),
         };
         await File.WriteAllTextAsync(outPath, JsonSerializer.Serialize(json));
         Console.WriteLine($"projects {ws.CurrentSolution.Projects.Count()} defs {defs.Count} edges {edges.Count} " +
-                          $"dispatch {dispatch.Count} resolved {resolved} unresolved {unresolved} " +
+                          $"dispatch {dispatch.Count} accessor edges {accessorEdges} delegates {delegates.Count} resolved {resolved} unresolved {unresolved} " +
                           $"compile errors {errors.Values.Sum()} workspace failures {failures.Count}");
         return 0;
     }
@@ -112,6 +143,50 @@ static class Truth
         // an expression-bodied property or indexer (`int X => ...;`) has no accessor syntax: its getter is the method
         if (s is IPropertySymbol p && node is BasePropertyDeclarationSyntax bp && bp.AccessorList is null && p.GetMethod is { } g)
             yield return g;
+    }
+
+    // the expression a name stands for: `x.Name`, `x?.Name` or the name itself
+    static SyntaxNode Whole(SyntaxNode node) => node.Parent switch
+    {
+        MemberAccessExpressionSyntax ma when ma.Name == node => ma,
+        MemberBindingExpressionSyntax mb when mb.Name == node => Whole(mb),
+        ConditionalAccessExpressionSyntax ca when ca.WhenNotNull == node => ca,
+        _ => node,
+    };
+
+    static bool Invoked(SyntaxNode node)
+    {
+        var e = Whole(node);
+        if (e.Parent is InvocationExpressionSyntax inv && inv.Expression == e) return true;
+        // `x?.M()`: the binding `.M` is the invoked expression inside the conditional access
+        return node.Parent is MemberBindingExpressionSyntax mb && mb.Parent is InvocationExpressionSyntax i2 && i2.Expression == mb;
+    }
+
+    static bool InNameof(SyntaxNode node)
+    {
+        for (var n = node.Parent; n is not null and not StatementSyntax and not MemberDeclarationSyntax; n = n.Parent)
+            if (n is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } })
+                return true;
+        return false;
+    }
+
+    // (reads, writes) for a property or indexer access: `P = v` writes, `P += v` and `P++` both, anything else reads
+    static (bool, bool) Access(SyntaxNode node)
+    {
+        var e = node is IdentifierNameSyntax ? Whole(node) : node;
+        switch (e.Parent)
+        {
+            case AssignmentExpressionSyntax a when a.Left == e:
+                return a.IsKind(SyntaxKind.SimpleAssignmentExpression) ? (false, true) : (true, true);
+            case PostfixUnaryExpressionSyntax or PrefixUnaryExpressionSyntax
+                when e.Parent.IsKind(SyntaxKind.PostIncrementExpression) || e.Parent.IsKind(SyntaxKind.PostDecrementExpression)
+                  || e.Parent.IsKind(SyntaxKind.PreIncrementExpression) || e.Parent.IsKind(SyntaxKind.PreDecrementExpression):
+                return (true, true);
+            case InitializerExpressionSyntax when e.Parent.Parent is BaseObjectCreationExpressionSyntax:
+                return (false, true);
+            default:
+                return (true, false);
+        }
     }
 
     static IMethodSymbol? Enclosing(SyntaxNode node, SemanticModel model)
