@@ -34,7 +34,10 @@ def _run(module: str, argv: list[str]) -> int:
     try:
         runpy.run_module(module, run_name="__main__", alter_sys=True)
     except SystemExit as exc:
-        return int(exc.code or 0) if not isinstance(exc.code, str) else 1
+        if isinstance(exc.code, str):           # a message: print it, as Python itself would have (#99)
+            print(exc.code, file=sys.stderr)
+            return 1
+        return int(exc.code or 0)
     return 0
 
 
