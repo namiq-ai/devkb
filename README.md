@@ -26,14 +26,14 @@ Everything runs locally: devkb reads files and runs `git`, never your code (unle
 
 | Language | Status | What devkb understands |
 |---|---|---|
-| Python | ✅ Supported | functions, classes, calls (through imports, re-exports, typed objects, base classes), tests, FastAPI/Flask routes, raised and logged errors, environment variables; every pack |
-| TypeScript, TSX | 🟡 Partial | functions, components, classes, and the HTTP calls they make to backend routes; not calls between them |
-| JavaScript (`.js`, `.mjs`) | 🟡 Partial | as TypeScript |
-| C# | ✅ Supported | classes, structs, interfaces, records, methods, constructors, properties, local and extension methods; calls through typed receivers, call results (`a.B().C()`, `await`, `var`, `foreach`), property chains, element access, casts and patterns, lambda parameters (builder lambdas, LINQ method and query syntax), static calls (also on generic types), `new T()`; generic arguments carried through classes, base lists and methods; extension methods and overloads chosen by receiver type, argument count, declared argument types and C#'s better-conversion rules; `dynamic` calls left to run time; tables of .NET's common types and of ASP.NET MVC, Microsoft.Extensions and Moq; xUnit/NUnit/MSTest tests; every pack. Checked against the compiler on MediatR, FluentValidation, Polly, Jellyfin and EF Core. Not: full overload resolution, constraint solving, third-party types outside the tables, member signatures of .NET types |
-| Odoo XML | 🟡 Partial | templates and menus |
-| Bash / shell | ⬜ Not yet | files and history only |
-| C, C++ | 🟡 Partial | definitions, calls, tests, `throw`/`assert`/log-macro messages. Limits: no preprocessor expansion, no overload resolution, no type inference; an answer says Incomplete where a call could not be attributed. C and C++ are separate profiles: C resolves through linkage and treats a function-pointer or ops table as an unresolved indirect reference; a call across languages is linked only through `extern "C"`, `ctypes`/`cffi`, a `PyMethodDef` table or pybind11 `m.def`, and the pack of an exported function is Complete only for the languages read |
-| Java, Rust, Go, others | ⬜ Not yet | files and history only |
+| Python | ✅ Supported | functions, classes, calls (imports, typed objects, base classes), tests, FastAPI/Flask/Odoo routes, errors, environment variables |
+| C# | ✅ Supported | types, members, calls through typed receivers, generics, LINQ and overloads, tests; checked against the compiler on five open-source repositories |
+| C, C++ | 🟡 Partial | functions, classes, calls, tests, error messages, calls across languages (`extern "C"`, ctypes, pybind11); no preprocessor or type inference |
+| TypeScript, JavaScript | 🟡 Partial | functions, components, classes and their HTTP calls to backend routes; not calls between them |
+| Odoo XML | 🟡 Partial | templates, views, menus |
+| Java, Go, Rust, shell, others | ⬜ Not yet | files and history only |
+
+Where a call cannot be attributed, an answer says Incomplete instead of guessing.
 
 "Files and history" is the language-independent layer every repository gets: files, commits, pull requests and
 tickets.
