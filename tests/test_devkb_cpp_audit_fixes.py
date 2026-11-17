@@ -151,3 +151,25 @@ def test_indirect_refs_keep_their_owner_with_two_definitions_on_one_line():
     by_idx = {d.index: d.qn for d in r.defs}
     got = sorted((n, line, by_idx.get(o)) for n, line, o in cs.indirect_refs(r, names))
     assert got == [("a", 3, "p"), ("b", 3, "p"), ("b", 7, "r")]
+
+
+# #92: a function-pointer table is a variable with an initialiser, not a function named `void`
+def test_a_function_pointer_table_is_not_a_function_named_void(tmp_path):
+    src = ("void a(void) {}\nvoid b(void) {}\n"
+           "void (*tab[])(void) = { a, b };\n"
+           "static void (*const tab2[2])(int) = {\n  a,\n  b,\n};\n"
+           "void (*pick(int i))(void) { return 0; }\n")
+    r = cs.extract_file("t.c", src)
+    assert [(d.qn, d.line) for d in r.defs] == [("a", 1), ("b", 2), ("pick", 8)]
+    cs.scan_bodies(r, {"a", "b"}, {"a", "b"})
+    by_idx = {d.index: d.qn for d in r.defs}
+    got = sorted((n, line, by_idx.get(o)) for n, line, o in cs.indirect_refs(r, {"a", "b"}))
+    assert got == [("a", 3, None), ("a", 5, None), ("b", 3, None), ("b", 6, None)]
+    g = S.build(tmp_path, {"t.c": src})
+    assert not [k for k in S.symbols(g) if k.endswith("::void")]
+
+
+def test_a_conversion_operator_and_a_parenthesised_name_keep_their_definitions():
+    r = cs.extract_file("t.cpp", "struct R { operator long long() const { return 1; } };\n"
+                                 "int(fileno)(int s) {\n  return s;\n}\n")
+    assert [(d.qn, d.line, d.line_end) for d in r.defs] == [("R", 1, 1), ("R.long", 1, 1), ("fileno", 2, 4)]

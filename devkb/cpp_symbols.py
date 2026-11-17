@@ -393,6 +393,9 @@ _TYPE_KEYWORDS = {
 }
 _CALL_AFTER = {"return", "else", "case", "throw", "co_return", "co_await", "co_yield", "do", "delete"}
 _CAPS = re.compile(r"^[A-Z][A-Z0-9_]*$")
+# a built-in type written before `(` starts a parenthesised declarator (`void (*f)(int)`); it never names a function
+_BUILTIN_TYPES = {"void", "char", "short", "int", "long", "float", "double", "signed", "unsigned", "bool", "_Bool",
+                  "wchar_t", "char8_t", "char16_t", "char32_t", "const", "volatile", "struct", "union", "enum"}
 
 _CAND = re.compile(
     r"(?P<name>(?P<qual>(?:::\s*)?(?:" + _IDENT + r"\s*(?:" + _TARGS + r")?\s*::\s*)*)"
@@ -743,8 +746,17 @@ class _Scanner:
             if last in _NOT_FUNC:
                 pos = cl + 1
                 continue
+            if last in _BUILTIN_TYPES and not m.group("qual").strip() and not re.search(r"\boperator\b[\w\s]*$", hs[:m.start()]):
+                # `void (*name...)`: a type, then a declarator in parentheses; the name is inside (#92). `int (ns::f)(...)`
+                # (a name parenthesised against a macro) loses its parentheses, so the name is read as written.
+                if re.fullmatch(r"\s*" + _IDENT + r"(?:\s*::\s*" + _IDENT + r")*\s*", hs[open_i + 1:cl]) and re.match(r"\s*\(", hs[cl + 1:]):
+                    hs = hs[:open_i] + " " + hs[open_i + 1:cl] + " " + hs[cl + 1:]
+                pos = open_i + 1
+                continue
             qual_empty = not m.group("qual").strip()
             tail = hs[cl + 1:]
+            if re.search(r"(?<![=!<>])=(?!=)", _flatten(tail)):
+                return False       # `void (*tab[])(void) = { a, b };`: an initialiser, not a body (#92)
             if qual_empty and _CAPS.match(last) and re.match(r"\s*[A-Za-z_*&]", tail) and not re.match(r"\s*(?:const|noexcept|override|final|volatile|try)\b", tail):
                 pos = cl + 1   # an all-caps wrapper before the return type (`CJSON_PUBLIC(cJSON *) cJSON_Parse(...)`)
                 continue
