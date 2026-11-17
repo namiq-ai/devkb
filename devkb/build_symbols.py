@@ -251,6 +251,54 @@ def _calls_in_body(node: ast.AST) -> list[tuple[str | None, str]]:
 MODULE_CALLER = "<module>"
 
 
+def _bound_names(fn: ast.AST) -> set[str]:
+    """Names a function binds itself (parameters, assignments, loop and comprehension targets, local imports), not
+    looking into nested defs: a load of one of these is the local, never a module-level function of that name."""
+    a = fn.args
+    out = {x.arg for x in (*a.posonlyargs, *a.args, *a.kwonlyargs, a.vararg, a.kwarg) if x is not None}
+    for n in _own_body(fn):
+        if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
+            out.add(n.id)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            out.update((al.asname or al.name).split(".")[0] for al in n.names)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            out.add(n.name)
+    return out
+
+
+def _value_refs(tree: ast.Module) -> list[tuple[str, str | None, str, int]]:
+    """(scope, receiver, name, line) for every name that may be a function used as a value, not called:
+    `pool.submit(self._moved_files, rev)`, `sorted(xs, key=key_of)`, a dispatch table. receiver is "self"/"cls" for
+    `self.name`, None for a bare name; scope is the enclosing function's qualified name, or MODULE_CALLER. Extract
+    resolves them; a resolved one is a reference, not a call: who calls through it is not visible (#69)."""
+    called = {id(n.func) for n in ast.walk(tree) if isinstance(n, ast.Call)}
+    attr_of = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Attribute)}  # `f.__name__`, `self._store.get`
+    out: list[tuple[str, str | None, str, int]] = []
+
+    def visit(n: ast.AST, scope: list[str], bound: set[str]) -> None:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            head = [*n.decorator_list, *getattr(n, "bases", ()), *getattr(n, "keywords", ())]
+            if not isinstance(n, ast.ClassDef):
+                head += [*n.args.defaults, *(d for d in n.args.kw_defaults if d is not None)]
+            for h in head:                              # evaluated in the enclosing scope
+                visit(h, scope, bound)
+            inner = bound if isinstance(n, ast.ClassDef) else bound | _bound_names(n)
+            for b in n.body:
+                visit(b, [*scope, n.name], inner)
+            return
+        if id(n) not in called and id(n) not in attr_of and isinstance(getattr(n, "ctx", None), ast.Load):
+            where = ".".join(scope) or MODULE_CALLER
+            if isinstance(n, ast.Name) and n.id not in bound:
+                out.append((where, None, n.id, n.lineno))
+            elif isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id in ("self", "cls"):
+                out.append((where, n.value.id, n.attr, n.lineno))
+        for c in ast.iter_child_nodes(n):
+            visit(c, scope, bound)
+
+    visit(tree, [], set())
+    return out
+
+
 def _module_level_calls(tree: ast.Module) -> list[tuple[str | None, str]]:
     calls: list[tuple[str | None, str]] = []
 
@@ -355,6 +403,7 @@ def _py_literals(tree: ast.AST) -> list[str]:
 
 
 _SUFFIX_CACHE: dict[int, tuple[int, dict[str, list[str]]]] = {}
+_LEADING_STEPS = re.compile(r"^(?:\.{1,2}/|/)+")  # leading `./`, `../` and `/`: path steps, not characters
 
 
 def _suffix_index(per_file_symbols: dict[str, list[dict]]) -> dict[str, list[str]]:
@@ -380,7 +429,7 @@ def _resolve_via_literals(
     """`short_name` in the one file this caller names by path, when exactly one
     symbol matches across every file those path strings point at."""
     index = _suffix_index(per_file_symbols)
-    files = {p for lit in literals for p in index.get(lit.lstrip("./"), [])}
+    files = {p for lit in literals for p in index.get(_LEADING_STEPS.sub("", lit), [])}  # keeps `.github/` (#86)
     hits = [f"{f}::{s['qualified_name']}" for f in sorted(files) for s in per_file_symbols[f]
             if s["qualified_name"].rsplit(".", 1)[-1] == short_name]
     return hits[0] if len(hits) == 1 else None
@@ -896,16 +945,17 @@ def _parse_python_file(
 ) -> tuple[list[dict], list[tuple[str, str | None, str]], list[tuple[str, str | None]],
            list[tuple[str, str, str]], str | None, list[tuple[str, str, str | None, int | None]],
            list[tuple[str, str, str | None]], list[tuple[str, str]], str, list[str],
-           list[tuple[int, str, str | None, str]], list[str], list[tuple[str, str, str]]]:
+           list[tuple[int, str, str | None, str]], list[str], list[tuple[str, str, str]],
+           list[tuple[str, str | None, str, int]]]:
     """Returns (symbols, calls, imports, routes, module_docstring, raises,
     logs, middleware_registrations, router_prefix, daemon_entries,
-    import_descriptors, path_literals, typed_calls) for one file. An unparseable file yields all-empty,
+    import_descriptors, path_literals, typed_calls, value_refs) for one file. An unparseable file yields all-empty,
     not a crash."""
     try:
         text = path.read_text(errors="replace")
         tree = ast.parse(text, filename=str(path))
     except (SyntaxError, OSError, ValueError, RecursionError):
-        return [], [], [], [], None, [], [], [], "", [], [], [], []
+        return [], [], [], [], None, [], [], [], "", [], [], [], [], []
     v = _Visitor()
     v.router_prefix = _router_prefix(tree)
     v.visit(tree)
@@ -913,7 +963,14 @@ def _parse_python_file(
     module_docstring = ast.get_docstring(tree)
     return (v.symbols, v.calls, _imports(tree), v.routes, module_docstring, v.raises, v.logs,
             _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree), _py_literals(tree),
-            _typed_calls(tree))
+            _typed_calls(tree), _safe_value_refs(tree))
+
+
+def _safe_value_refs(tree: ast.Module) -> list[tuple[str, str | None, str, int]]:
+    try:
+        return _value_refs(tree)
+    except RecursionError:  # a pathologically deep expression: no references rather than no file
+        return []
 
 
 def extract(repo_root: Path) -> DevKBGraph:
@@ -934,13 +991,14 @@ def extract(repo_root: Path) -> DevKBGraph:
     per_file_router_prefix: dict[str, str] = {}
     per_file_daemon_entries: dict[str, list[str]] = {}
     per_file_typed_calls: dict[str, list[tuple[str, str, str]]] = {}
+    per_file_value_refs: dict[str, list[tuple[str, str | None, str, int]]] = {}
     route_index: dict[str, str] = {}  # "METHOD /path" -> Symbol natural_key
     reexports: dict[str, dict[str, tuple[str, str]]] = {}  # every parsed file's from-imports, symbols or not
     module_callers: dict[str, set[str]] = {}  # called Symbol -> files that call it outside any function
 
     for rel_path in _list_python_files(repo_root):
         (symbols, calls, imports, routes, module_doc, raises, logs, middleware, router_prefix,
-         daemon_entries, descriptors, literals, typed_calls) = _parse_python_file(repo_root / rel_path)
+         daemon_entries, descriptors, literals, typed_calls, value_refs) = _parse_python_file(repo_root / rel_path)
         # `@typing.overload` signatures and the implementation share one qualified name, and so one Symbol key: keep
         # one entry (the last, the implementation), or every lookup by name sees several and resolves nothing
         # (click's `prompt`: all 13 call sites were left unattributed).
@@ -967,6 +1025,7 @@ def extract(repo_root: Path) -> DevKBGraph:
         per_file_router_prefix[rel_path] = router_prefix
         per_file_daemon_entries[rel_path] = daemon_entries
         per_file_typed_calls[rel_path] = typed_calls
+        per_file_value_refs[rel_path] = value_refs
         for qn, method, path in routes:
             key, owner = f"{method} {path}", f"{rel_path}::{qn}"
             if route_index.get(key, owner) != owner:
@@ -1240,6 +1299,35 @@ def extract(repo_root: Path) -> DevKBGraph:
                            unresolved_file_count=len(ranked))
     for key, files in module_callers.items():
         g.add_node("Symbol", key, source="ast", module_callers=sorted(files))
+
+    # ── #69: a function or method named without being called (`pool.submit(self._moved_files, rev)`, `key=key_of`, a
+    # dispatch table) is called where the graph cannot see. Not a CALLS edge, which would claim a call: the sites are
+    # kept on the Symbol, and its coverage is Incomplete with the existing `indirect-reference` reason. Resolved the
+    # way a call is: `self.f`/`cls.f` to the one method of that name in the file, a bare name to the one function of
+    # the file, else through this file's own `from m import f`. ─────────────────────────────────────────────────────
+    kind_of = {f"{rel}::{s['qualified_name']}": s.get("kind") for rel, syms in per_file_symbols.items() for s in syms}
+    value_refs: dict[str, set[str]] = {}
+    for rel_path, refs in per_file_value_refs.items():
+        bare_here: dict[str, list[str]] = {}
+        method_here: dict[str, list[str]] = {}
+        for s in per_file_symbols.get(rel_path, []):
+            if s.get("kind") in ("function", "method"):
+                (method_here if s["kind"] == "method" else bare_here).setdefault(
+                    s["qualified_name"].rsplit(".", 1)[-1], []).append(s["qualified_name"])
+        bare_imports = per_file_import_targets.get(rel_path, ({}, {}))[1]
+        for scope, receiver, name, line in refs:
+            local = method_here.get(name, []) if receiver else bare_here.get(name, [])
+            target = f"{rel_path}::{local[0]}" if len(local) == 1 else None
+            if target is None and receiver is None and not local and name in bare_imports:
+                module, original = bare_imports[name]
+                hit = _resolve_cross_file_symbol(module, rel_path, original, per_file_symbols)
+                target = hit if hit and kind_of.get(hit) in ("function", "method") else None
+            if target and target != f"{rel_path}::{scope}":
+                value_refs.setdefault(target, set()).add(f"{rel_path}:{line}")
+    for key, sites in value_refs.items():
+        ranked = sorted(sites, key=lambda x: (x.rsplit(":", 1)[0], int(x.rsplit(":", 1)[1])))
+        g.add_node("Symbol", key, source="ast", value_refs=ranked[:20], value_ref_count=len(ranked),
+                   incomplete_reasons=["indirect-reference"])
 
     # ── BL-3c: TypeScript/TSX Symbols + their own route-call sites ─────────
     ts_route_calls: list[tuple[str, str, str, str]] = []  # (file, symbol_qn, method, path)

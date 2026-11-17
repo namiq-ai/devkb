@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import fnmatch
 import math
 import os
 import re
@@ -33,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from devkb.project_context import CONFIG_FILES, registry, resolve, run_repo_scripts  # noqa: E402
 from devkb.service import CompactIndex, Staleness, Telemetry, load_index, words  # noqa: E402
-from devkb.test_discovery import _CS_TEST, _JS_TEST, _PY_TEST  # noqa: E402
+from devkb.test_discovery import _CS_TEST, _JS_TEST, _PY_TEST, pytest_testpaths  # noqa: E402
 
 _TICKET_ID = re.compile(r"\b[A-Z][A-Z0-9]{1,6}-\d+\b")
 # ODSF writes `### OWN:`; OCO writes `### YOU OWN:`, `### YOU OWN (read + write freely):` or `### TL OWNS:`.
@@ -93,10 +94,16 @@ _CXX_TEST = re.compile(
     re.IGNORECASE)
 
 
-def is_test_path(path: str) -> bool:
+def is_test_path(path: str, testpaths: tuple[str, ...] = ()) -> bool:
     """Test code: a test module by name, or any Python file in a tests/ or test/ tree (fixtures, helpers, conftest),
-    since a change that breaks those breaks the test run just the same."""
-    return bool(_PY_TEST.search(path) or _JS_TEST.search(path) or _CS_TEST.search(path) or _TEST_TREE.search(path) or _CXX_TEST.search(path))
+    since a change that breaks those breaks the test run just the same. `testpaths`, the project's pytest
+    configuration (`ProcessAPI.testpaths`): a Python module named like a test outside all of them is source (#71)."""
+    if _TEST_TREE.search(path) or _JS_TEST.search(path) or _CS_TEST.search(path) or _CXX_TEST.search(path):
+        return True
+    if not _PY_TEST.search(path):
+        return False
+    return not testpaths or any(fnmatch.fnmatch(path, t.strip("/") + "/*") or fnmatch.fnmatch(path, t)
+                                for t in (t[2:] if t.startswith("./") else t for t in testpaths))
 
 
 def _lines(block: str) -> list[str]:
@@ -153,6 +160,7 @@ class ProcessAPI:
         store = devkb_dir or (Path(os.environ["DEVKB_DIR"]) if os.environ.get("DEVKB_DIR") else self.ctx.devkb_dir)
         self.idx: CompactIndex = load_index(self.ctx.code, self.root, store, use_cache)
         self.stale = Staleness(self.root, self.idx.git_head)
+        self.testpaths = pytest_testpaths(self.root)   # where the project says its tests are (#71)
         self.tel = Telemetry(store, telemetry)
         self._roles: dict[str, dict[str, list[str]]] | None = None
         self._roles_key: tuple | None = None
@@ -225,7 +233,7 @@ class ProcessAPI:
                     if c not in seen:
                         seen.add(c)
                         nxt.add(c)
-            levels.append(sorted(nxt, key=lambda i: (is_test_path(self._key(i).split("::")[0]), self._key(i))))
+            levels.append(sorted(nxt, key=lambda i: (self._is_test(self._key(i).split("::")[0]), self._key(i))))
             frontier = nxt
         return levels
 
@@ -238,7 +246,7 @@ class ProcessAPI:
                     found.setdefault(p["file"], set()).add(p.get("function", "?"))
             for c in self.idx.sources("CALLS", s):
                 path, _, qual = self._key(c).partition("::")
-                if is_test_path(path):
+                if self._is_test(path):
                     found.setdefault(path, set()).add(qual.rsplit(".", 1)[-1])
         return found
 
@@ -332,8 +340,8 @@ class ProcessAPI:
                 return {"batch": [self._read().symbol(n, source=source, kind=kind, under=under, limit=min(limit, 3), lines=lines) for n in names]}
         return self._read().symbol(q, source=source, kind=kind, under=under, limit=limit, lines=lines)
 
-    def outline(self, path: str, limit: int = 200) -> dict:
-        return self._read().outline(path, limit=limit)
+    def outline(self, path: str, limit: int = 200, offset: int = 0) -> dict:
+        return self._read().outline(path, limit=limit, offset=offset)
 
     def uses(self, name: str, under: str = "", docs: bool = False) -> dict:
         return self._read().uses(name, under=under, docs=docs)
@@ -455,20 +463,20 @@ class ProcessAPI:
         return {"for": ref, "n_files": len(files), "n_tests": sum(len(v) for v in found.values()),
                 "files": [{"f": f, "t": sorted(found[f])[:5]} for f in files[:limit]],
                 "run": self._run_line(files[:limit]),
-                **({"coverage": {k: v for k, v in cov.items() if k != "search_files"} | {"search_files": [f for f in cov.get("search_files", []) if is_test_path(f)]}}
+                **({"coverage": {k: v for k, v in cov.items() if k != "search_files"} | {"search_files": [f for f in cov.get("search_files", []) if self._is_test(f)]}}
                    if cov else {})}
 
     def tests_to_run(self, files: list[str] | str, limit: int = 12) -> dict:
         files = [files] if isinstance(files, str) else list(files)
         hits: dict[str, int] = {}
         for f in files:
-            if is_test_path(f):
+            if self._is_test(f):
                 hits[f] = hits.get(f, 0) + 100
                 continue
             for tf, names in self._tests_of(self._file_symbols(f)).items():
                 hits[tf] = hits.get(tf, 0) + len(names)
         ranked = sorted(hits, key=lambda f: (-hits[f], f))
-        known = sum(1 for f in files if self._file_symbols(f) or is_test_path(f))
+        known = sum(1 for f in files if self._file_symbols(f) or self._is_test(f))
         return {"changed": len(files), "known_to_graph": known, "n": len(ranked), "tests": ranked[:limit],
                 "run": self._run_line(ranked[:limit]),
                 **({"note": "no tests linked; run the full suite"} if not ranked else {})}
@@ -780,7 +788,7 @@ class ProcessAPI:
     def _has_tests(self, s: int) -> bool:
         if self.idx.targets("TESTED_BY", s):
             return True
-        return any(is_test_path(self._key(c).split("::")[0]) for c in self.idx.sources("CALLS", s))
+        return any(self._is_test(self._key(c).split("::")[0]) for c in self.idx.sources("CALLS", s))
 
     def _function_ranges(self, head_rev: str, path: str) -> list[tuple[int, int, str]]:
         """(first line, last line, `Class.method`) for every function in `path` as it was at `head_rev`.
@@ -883,12 +891,19 @@ class ProcessAPI:
         key = self._key(i)
         return key in self.idx.ep_by_owner or not self.idx.sources("CALLS", i) or key.endswith("::main")
 
+    def _is_test(self, path: str) -> bool:
+        return is_test_path(path, self.testpaths)
+
     def _caller_count(self, i: int) -> int:
-        """Production callers only: what depends on this code, not what checks it."""
-        return sum(1 for c in set(self.idx.sources("CALLS", i)) if not is_test_path(self._key(c).split("::")[0]))
+        """Production callers only: what depends on this code, not what checks it. A recursive call is not a caller:
+        a function only it calls is still unused (#70)."""
+        return sum(1 for c in set(self.idx.sources("CALLS", i)) if c != i and not self._is_test(self._key(c).split("::")[0]))
 
     def _test_caller_count(self, i: int) -> int:
-        return sum(1 for c in set(self.idx.sources("CALLS", i)) if is_test_path(self._key(c).split("::")[0]))
+        return sum(1 for c in set(self.idx.sources("CALLS", i)) if c != i and self._is_test(self._key(c).split("::")[0]))
+
+    def _calls_itself(self, i: int) -> bool:
+        return i in self.idx.sources("CALLS", i)
 
     def _code_hits(self, query: str, limit: int = 8, under: str = "", tests: bool = False) -> list[tuple[float, int]]:
         toks = set(query_words(query))
@@ -906,7 +921,7 @@ class ProcessAPI:
         ranked = []
         for i, s in score.items():
             path = self._key(i).split("::")[0]
-            if (under and not path.startswith(under)) or (not tests and is_test_path(path)):
+            if (under and not path.startswith(under)) or (not tests and self._is_test(path)):
                 continue
             ranked.append((s * (0.5 + 0.5 * matched[i] / len(toks)), i))
         ranked.sort(key=lambda r: (-r[0], -self._caller_count(r[1]), self._key(r[1])))
@@ -997,7 +1012,7 @@ class ProcessAPI:
             return {"symptom": symptom, "error": "nothing in the graph matches this symptom; search the code directly"}
         levels = self._callers(set(raisers), max(1, min(int(depth), 4)))
         chain = [{"k": self._key(c), "d": d + 1, **({"entry": True} if self._is_entry(c) else {})}
-                 for d, lv in enumerate(levels) for c in lv if not is_test_path(self._key(c).split("::")[0])]
+                 for d, lv in enumerate(levels) for c in lv if not self._is_test(self._key(c).split("::")[0])]
         files = list(dict.fromkeys([self._key(s).split("::")[0] for s in raisers] + [c["k"].split("::")[0] for c in chain if c["d"] == 1]))[:8]
         tests = self._tests_of(raisers)
         flows = sorted({self._key(f) for s in raisers for f in self.idx.sources("STEP", s)})
@@ -1052,7 +1067,7 @@ class ProcessAPI:
         files = [f for f in self.idx.sym_by_file if f == prefix or f.startswith(prefix + "/")]
         if not files:
             return {"error": f"no indexed source under {path}"}
-        src = [f for f in files if not is_test_path(f)]
+        src = [f for f in files if not self._is_test(f)]
         syms = [s for f in src for s in self.idx.sym_by_file[f]]
         key_syms = sorted(syms, key=lambda s: (-self._caller_count(s), self._key(s)))[:limit]
         eps = sorted({self._key(e) for s in syms for e in self.idx.ep_by_owner.get(self._key(s), [])})
@@ -1082,7 +1097,7 @@ class ProcessAPI:
                 if c in own:
                     continue
                 f = self._key(c).split("::")[0]
-                (test_callers if is_test_path(f) else by_file)[f] = (test_callers if is_test_path(f) else by_file).get(f, 0) + 1
+                (test_callers if self._is_test(f) else by_file)[f] = (test_callers if self._is_test(f) else by_file).get(f, 0) + 1
         endpoints = sorted({self._key(e) for s in syms for e in self.idx.ep_by_owner.get(self._key(s), [])})
         flows = sorted({self._key(f) for s in syms for f in self.idx.sources("STEP", s)})
         files_to_touch = sorted(by_file, key=lambda f: -by_file[f])
@@ -1235,7 +1250,7 @@ class ProcessAPI:
 
     def _public_symbols(self, area: str) -> list[int]:
         prefix = area.rstrip("/")
-        files = [f for f in self.idx.sym_by_file if (f == prefix or f.startswith(prefix + "/")) and not is_test_path(f)]
+        files = [f for f in self.idx.sym_by_file if (f == prefix or f.startswith(prefix + "/")) and not self._is_test(f)]
         syms = [s for f in files for s in self.idx.sym_by_file[f]]
         if not syms:
             i, err = self._resolve(area)
@@ -1380,7 +1395,7 @@ class ProcessAPI:
                     drift.append({"f": f, "newer_commits": len(newer)})
         drift.sort(key=lambda d: -d["newer_commits"])
         unmentioned: list[str] = []
-        code_files = [f for f in existing if f in self.idx.sym_by_file and not is_test_path(f)]
+        code_files = [f for f in existing if f in self.idx.sym_by_file and not self._is_test(f)]
         if code_files:
             common = max({"/".join(f.split("/")[:-1]) or f for f in code_files}, key=lambda d: sum(1 for f in code_files if f.startswith(d)))
             area = self.explain_area(common, limit=8) if common else {}
@@ -1435,7 +1450,7 @@ class ProcessAPI:
                 mine.append(i)
         mine.sort(key=lambda i: (prio.get(idx.props[i].get("priority"), 9), self._key(i)))
         own = spec.get("own", [])
-        files = [f for f in idx.sym_by_file if any(f.startswith(p) for p in own) and not is_test_path(f)]
+        files = [f for f in idx.sym_by_file if any(f.startswith(p) for p in own) and not self._is_test(f)]
         syms = [s for f in files for s in idx.sym_by_file[f]]
         key_syms = sorted(syms, key=lambda s: (-self._caller_count(s), self._key(s)))[:limit]
         eps = sorted({self._key(e) for s in syms for e in idx.ep_by_owner.get(self._key(s), [])})

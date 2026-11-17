@@ -166,9 +166,9 @@ def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
         return _read("symbol", query=query, source=source, kind=kind, under=under, limit=limit, lines=lines)
 
     @tool
-    def outline(path: str) -> str:
-        """A file's symbols in order with nesting and line ranges, plus its imports; a directory lists its files with symbol counts."""
-        return _read("outline", path=path)
+    def outline(path: str, offset: int = 0) -> str:
+        """A file's symbols in order with nesting and line ranges, plus its imports; a directory lists its files with symbol counts. offset=N skips N symbols (the next page of a large file)."""
+        return _read("outline", path=path, offset=offset)
 
     @tool
     def uses(name: str, under: str = "", docs: bool = False) -> str:
