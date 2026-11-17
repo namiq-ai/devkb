@@ -1,0 +1,38 @@
+{
+ "click": {
+  "function": "echo",
+  "function_file": "src/click/utils.py",
+  "file": "src/click/core.py",
+  "callers": 59
+ },
+ "mealie": {
+  "function": "require",
+  "function_file": "mealie/routes/_base/permissions.py",
+  "file": "tests/integration_tests/user_recipe_tests/test_recipe_crud.py",
+  "callers": 61
+ },
+ "prefect": {
+  "function": "get_client",
+  "function_file": "src/prefect/client/orchestration/__init__.py",
+  "file": "src/integrations/prefect-github/prefect_github/schemas/graphql_schema.py",
+  "callers": 254
+ },
+ "leveldb": {
+  "function": "Status.OK",
+  "function_file": "include/leveldb/status.h",
+  "file": "db/db_test.cc",
+  "callers": 78
+ },
+ "fmt": {
+  "function": "to_unsigned",
+  "function_file": "include/fmt/core.h",
+  "file": "test/gtest/gmock-gtest-all.cc",
+  "callers": 50
+ },
+ "zephyr": {
+  "function": "shell_strtoul",
+  "function_file": "subsys/shell/shell_utils.c",
+  "file": "tests/bluetooth/controller/ctrl_isoal/src/sub_sets/isoal_test_rx.c",
+  "callers": 345
+ }
+}
