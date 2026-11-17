@@ -206,12 +206,16 @@ static class Truth
         return null;
     }
 
+    // the documentation-comment id, qualified by the assembly: two assemblies of one repository may declare the same
+    // type (Polly and Polly.Core both have Polly.CircuitBreaker.CircuitStateController<T>), and without the assembly
+    // their members would be one node
     static string Id(IMethodSymbol m)
     {
+        var asm = m.OriginalDefinition.ContainingAssembly?.Name ?? "";
         var id = m.OriginalDefinition.GetDocumentationCommentId();
-        if (!string.IsNullOrEmpty(id) && m.MethodKind != MethodKind.LocalFunction) return id;
+        if (!string.IsNullOrEmpty(id) && m.MethodKind != MethodKind.LocalFunction) return asm + "|" + id;
         var loc = m.Locations.FirstOrDefault(l => l.IsInSource);
-        return m.ToDisplayString() + "@" + (loc is null ? "" : loc.SourceTree!.FilePath + ":" + loc.SourceSpan.Start);
+        return asm + "|" + m.ToDisplayString() + "@" + (loc is null ? "" : loc.SourceTree!.FilePath + ":" + loc.SourceSpan.Start);
     }
 
     static string Qn(IMethodSymbol m)
