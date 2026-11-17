@@ -193,7 +193,7 @@ silently. A measure computed from incomplete links (N1) is marked so and is not 
 | Scope boundary | §1 non-goals; N4 |
 | Schema change governed | §3: ADR before code |
 | Evaluation designed before build | §7 |
-| Open risk | the large-repository bug-fix benchmark (T2, sympy) is still running; its outcome decides how much of F2/F9 is navigation the graph must carry versus search an agent already does well |
+| Open risk | Bug fixing is not where the value lies. The T2 benchmark (sympy, 1,517 files, 36 runs) is done: every arm fixed every bug, and devkb was used in 5 of 24 runs. The pre-edit hook raised cost by 30% with no extra fixes, because agents find faults by running the code (`docs/analysis/bugfix-benchmark.md`). Across 138 runs devkb never changed a fix outcome. So F2 and F9 are justified only by questions with no runnable symptom, such as audit, release impact, coverage and defect history, and §7's evaluation must measure exactly those. A private repository the model has never seen remains untested. |
 
 ## 7. Evaluation plan (from what devkb's benchmarks taught)
 
