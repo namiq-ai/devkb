@@ -37,7 +37,7 @@ sys.path.insert(0, str(HERE))
 import run as base  # noqa: E402  parse, norm, f1 and READ_TOOLS are shared with the lifecycle benchmark
 
 ARMS = tuple(os.environ.get("BENCH_ARMS", "plain,core,workflow").split(","))  # ODSF-313 adds lean and pack
-FORCE = " Use the devkb-sdlc tools first (load them with ToolSearch if they are not yet loaded), then read only what they name."
+FORCE = " Use the devkb-sdlc tools first, then read only what they name."  # no ToolSearch hint: it cost every run a turn (symbol, outline and pack carry alwaysLoad)
 
 
 def skill(name: str) -> str:
@@ -77,7 +77,7 @@ def _run_once(task: dict, arm: str, cfg_dir: Path) -> dict:
     path.write_text(json.dumps(cfg))
     control = (TOOL_ROOT / "devkb" / "bench" / "control.md").read_text()
     addendum = {"plain": control, "pack": control, "core": skill("devkb-sdlc"), "lean": skill("devkb-lean"),
-                "lean-pack": skill("devkb-lean-pack"),
+                "lean-pack": skill("devkb-lean-pack"), "nav": skill("devkb-lean-pack"),
                 "workflow": skill(task["skill"])}[arm]
     tools = base.READ_TOOLS + (["mcp__devkb-sdlc"] if arm not in ("plain", "pack") else [])
     prompt = task["prompt"] + (FORCE if arm not in ("plain", "pack") else "")
@@ -93,6 +93,7 @@ def _run_once(task: dict, arm: str, cfg_dir: Path) -> dict:
     except subprocess.TimeoutExpired as exc:
         stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
     calls, graph, rbytes, used = 0, 0, 0, []
+    tool_search, first_tool = 0, ""
     final: dict = {}
     mcp_ok = arm in ("plain", "pack")  # a tool arm counts only when its graph server connected
     contexts: dict[str, int] = {}  # message id -> tokens of context that message was given (insertion-ordered)
@@ -112,6 +113,8 @@ def _run_once(task: dict, arm: str, cfg_dir: Path) -> dict:
             for c in e["message"].get("content", []):
                 if c.get("type") == "tool_use":
                     calls += 1
+                    first_tool = first_tool or c["name"]
+                    tool_search += c["name"] == "ToolSearch"
                     if c["name"].startswith("mcp__devkb-sdlc"):
                         graph += 1
                         used.append(c["name"].split("__")[-1])
@@ -130,7 +133,7 @@ def _run_once(task: dict, arm: str, cfg_dir: Path) -> dict:
             "cache_write_5m": cw.get("ephemeral_5m_input_tokens", 0), "cache_write_1h": cw.get("ephemeral_1h_input_tokens", 0),
             "thinking": (u.get("output_tokens_details") or {}).get("thinking_tokens", 0), "model_calls": len(ctx),
             "ctx_initial": ctx[0] if ctx else 0, "ctx_peak": max(ctx) if ctx else 0, "ctx_final": ctx[-1] if ctx else 0,
-            "tool_calls": calls,
+            "tool_calls": calls, "tool_search": tool_search, "first_tool": first_tool.replace("mcp__devkb-sdlc__", "devkb:"),
             "graph_calls": graph, "graph_tools": used, "result_bytes": rbytes,
             "mcp_connected": mcp_ok,
             "is_error": bool(final.get("is_error")) or not final or not mcp_ok, "answer": final.get("result", "")}
