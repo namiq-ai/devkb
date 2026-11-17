@@ -33,11 +33,11 @@ Calls per run (mean); parentheses give the text returned to the model. Grep = th
 
 ## What this shows, and what it does not
 
-> **Correction (2026-11-17).** The EF Core question's compiler truth stops at four properties whose getters reach the
-> target (the truth tool records calls, not property reads); 29 methods that reach it were scored wrong
-> (`truth-corrections.md`). Corrected scores, from the same transcripts (`bench/cs_value_rescore.py`): precision
-> plain 0.60 → **0.73**, devkb 0.85 → **0.97**; EF Core alone plain 0.17 → 0.80, devkb 0.45 → 0.93. The sentence below
-> about EF Core ("43 listed for 9 true callers") is wrong on that account: most of those 43 do reach the target.
+> **Correction (2026-11-17).** The compiler truth recorded calls only and merged two Polly classes of the same name;
+> both are fixed and the truth regenerated (`DEVKB-VALUE-0.2.7.md`, `truth-corrections.md`). Rescored on the same
+> transcripts: precision plain 0.60 → **0.71**, devkb 0.85 → **0.94**; recall plain 0.94 → 0.92, devkb 0.96 → 0.91 (the
+> fixed truth is larger). EF Core alone, devkb precision 0.45 → 0.94. The sentence below about EF Core ("43 listed for
+> 9 true callers") is wrong on that account: many of those 43 read properties that reach the target.
 > The text below is kept as first published.
 
 - **The devkb agent answers more precisely with the same or better recall, for less.** Across all 12 runs per arm:

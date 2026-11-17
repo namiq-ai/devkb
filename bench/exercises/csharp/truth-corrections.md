@@ -1,10 +1,18 @@
 # Truth corrections for the C# value report
 
-The compiler truth (`bench/roslyn_truth`, `bench/cs_truth_from_roslyn.py`) records calls and object creations as
-edges, not property reads and not method groups passed as callbacks. Where a question's target is reached through
-either, its truth stops early and an agent that names the real callers is scored wrong. Each correction below is in
-`questions.json` next to the compiler truth (`truth_property_reads`, `uncertain_by_hand`, `corrections_note`), and
-`bench/cs_value.py score(..., compiler_only=True)` still gives the compiler-only score.
+**Outcome.** The hand check below found that the compiler truth recorded calls only, not property reads; a second
+look at the regenerated truth found that it merged same-named types of two assemblies (Polly and Polly.Core both
+declare `Polly.CircuitBreaker.CircuitStateController<T>`). Both are fixed in `bench/roslyn_truth/Program.cs` (property
+and indexer accesses are edges to the accessor; method groups are recorded as `delegates` and followed like dispatch;
+ids carry the assembly) and the truth regenerated (`cs-truth` run 44015588074). `questions.json` now holds that truth.
+
+What the regenerated truth says about the names traced by hand below: on EF Core, `AddEntry`, `BatchCommands`,
+`CreateCommandBatches`, `PropagateResults`, `PropagateOutputParameters` are right (static); 24 others, `SaveChanges`
+and the SQL generators among them, reach the target through `IReadOnlyModificationCommand.ColumnModifications`
+(dispatch: neither right nor wrong, the truth's existing rule); `TryCreateDependentKeyValue` likewise; `IsModified` is
+wrong. Only names the tool still cannot judge stay as `uncertain_by_hand` (listed at the end).
+
+`score(..., compiler_only=True)` ignores `uncertain_by_hand`.
 
 ## EF Core `ModificationCommand.GetTableMapping` (pinned `8859f78f10`)
 
@@ -76,8 +84,17 @@ reach `ThrowDisposed`).
 FluentValidation: `ChildRules`, `SetValidator`, `SetDisplayName`, `RuleForEach` configure rules whose lambdas run
 later; they do not reach `GetFromNonGenericContext` themselves and stay wrong.
 
-## The lasting fix
+## Still by hand (`uncertain_by_hand`)
 
-`bench/roslyn_truth/Program.cs` should record property and indexer reads as edges to the accessor, and method groups
-converted to delegates as dispatch-like (uncertain). That needs the `cs-truth` workflow re-run on GitHub's runners; not
-done here.
+| Question | Names | Why the tool cannot judge them |
+|---|---|---|
+| EF Core `GetTableMapping` | `ModificationCommandComparer`, `UpdateSqlGenerator` | type names a property shares, not methods |
+| EF Core `GetTableMapping` | `IsValid` | `SqlServerModificationCommandBatch.IsValid` reads `ColumnModifications` through the interface (dispatch) but is in EFCore.SqlServer, which the truth job does not compile |
+| Polly `EnsureNotDisposed` | `CloseAsync`, `IsolateAsync`, `Initialize` | they invoke the callbacks the strategy registers; `delegates` records who registers a method group, not who invokes the delegate field |
+| Polly `ThrowDisposed` | `DisposeHelper` | a property, not a method |
+
+## Known convention
+
+A call or property read inside a lambda belongs to the member that creates the lambda (as in devkb's graph). On Polly
+`EnsureNotDisposed` this puts the strategy constructor, `CreateStrategy` and `AddCircuitBreaker` in the truth
+(`stateProvider?.Initialize(() => _controller.CircuitState)`), though the lambda runs later.
