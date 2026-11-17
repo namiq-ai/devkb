@@ -1133,7 +1133,9 @@ class _Index:
             return False
         if not nargs:
             return True
-        return any(len(self.type_sym(t["qparts"]).get("tgparams_list") or []) == nargs for t in self.types[name])
+        # each declaration's own arity: `Foo<T>` and `Foo<T, U>` are different types sharing a name (FluentValidation's
+        # IValidationRuleInternal, Polly's AsyncSerializingCacheProvider), and the merged view keeps only one list
+        return any(len(t.get("tgparams_list") or []) == nargs for t in self.types[name])
 
     def dotnet_member(self, rtype: str | None, near: tuple[str, ...], nargs: int | None = None) -> set[str]:
         """Instance method names the receiver has from .NET (its own type if outside, or its outside bases)."""

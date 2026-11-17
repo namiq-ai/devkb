@@ -986,3 +986,12 @@ public class Use
     assert got["d.Tables.FormatTables();"] == {"SH.TupleExt.FormatTables"}
     assert got["Bytes.ToHex(raw);"] == {"SH.Bytes.ToHex"}
     assert got["failures.Enqueue([true]);"] == {"SH.Coll.Enqueue"}
+
+
+def test_generic_types_sharing_a_name_with_different_arity_are_both_repository_types(tmp_path):
+    got = _sites(tmp_path, "AR.cs", '''namespace AR;
+public interface IRule<T> { }
+public interface IRule<T, TProperty> : IRule<T> { void AddValidator(int v); }
+public class Builder<T, TProperty> { public IRule<T, TProperty> Rule { get; } public void Go() { Rule.AddValidator(1); } }
+''', caller="Go")
+    assert got["public class Builder<T, TProperty> { public IRule<T, TProperty> Rule { get; } public void Go() { Rule.AddValidator(1); } }"] == {"AR.IRule.AddValidator"}
