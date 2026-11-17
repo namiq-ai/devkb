@@ -884,11 +884,15 @@ class ProcessAPI:
         return key in self.idx.ep_by_owner or not self.idx.sources("CALLS", i) or key.endswith("::main")
 
     def _caller_count(self, i: int) -> int:
-        """Production callers only: what depends on this code, not what checks it."""
-        return sum(1 for c in set(self.idx.sources("CALLS", i)) if not is_test_path(self._key(c).split("::")[0]))
+        """Production callers only: what depends on this code, not what checks it. A recursive call is not a caller:
+        a function only it calls is still unused (#70)."""
+        return sum(1 for c in set(self.idx.sources("CALLS", i)) if c != i and not is_test_path(self._key(c).split("::")[0]))
 
     def _test_caller_count(self, i: int) -> int:
-        return sum(1 for c in set(self.idx.sources("CALLS", i)) if is_test_path(self._key(c).split("::")[0]))
+        return sum(1 for c in set(self.idx.sources("CALLS", i)) if c != i and is_test_path(self._key(c).split("::")[0]))
+
+    def _calls_itself(self, i: int) -> bool:
+        return i in self.idx.sources("CALLS", i)
 
     def _code_hits(self, query: str, limit: int = 8, under: str = "", tests: bool = False) -> list[tuple[float, int]]:
         toks = set(query_words(query))

@@ -337,7 +337,7 @@ class Packer:
             i = cands[0] if len(cands) == 1 else None
         if i is None:
             return f"# Graph pack: refactor\n\nThe graph cannot resolve `{name}` unambiguously. Search the code."
-        callers = sorted(set(self.idx.sources("CALLS", i)), key=self.api._key)
+        callers = sorted(set(self.idx.sources("CALLS", i)) - {i}, key=self.api._key)  # a recursive call is not a caller (#70)
         by_file: dict[str, list[int]] = {}
         for c in callers:
             by_file.setdefault(self.api._key(c).split("::")[0], []).append(c)
@@ -363,6 +363,8 @@ class Packer:
             out += ["", f"## Files role {role} must not edit ({len(blocked)})"] + ([f"- `{f}`" for f in blocked] or ["- none"])
         if own not in by_file:
             out += ["", f"(The defining file `{own}` is not counted as a caller.)"]
+        if self.api._calls_itself(i):
+            out += ["", f"(It calls itself at `{self.call_site(i, self._name(i))}`; that call is not counted as a caller.)"]
         out += ["", "## Coverage", self.coverage([i], set(files))]
         return "\n".join(out + ["", HOW_TO_USE])
 

@@ -213,6 +213,7 @@ class ReadTools:
             p = self.idx.props[i]; f = self.file[i]; ls, le = p.get("line_start"), p.get("line_end")
             rows.append({"i": i, "k": self.idx.keys[i], "kind": p.get("kind"), "ls": ls, "le": le, "range": range_state(f, ls, le),
                          "doc": (p.get("docstring_summary") or "")[:90], "callers": self.api._caller_count(i),
+                         "self_call": self.api._calls_itself(i),
                          "how": how if how != "similar" else f"similar {hit[i] / 60:.2f}"})
         return {"query": query, "how": how, "n": len(order), "matches": rows}
 
@@ -445,7 +446,7 @@ def render_symbol(r: dict) -> str:
     for n, m in enumerate(r["matches"], 1):
         f, q = m["k"].split("::", 1)
         out.append(f"{n}. {f}  {m['kind']}  {_span(m)}  {m.get('sig', '')}")
-        tail = (f'"{m["doc"]}"   ' if m.get("doc") else "") + (f"callers {m['callers']}   " if m["callers"] else "") + f"how {m['how']}"
+        tail = (f'"{m["doc"]}"   ' if m.get("doc") else "") + (f"callers {m['callers']}{' (+ itself)' if m.get('self_call') else ''}   " if m["callers"] or m.get("self_call") else "") + f"how {m['how']}"
         out.append(f"   {q}   {tail}")
         if m.get("moved") is not None:
             out.append(f"   adjusted: the graph recorded this elsewhere; found {m['moved']:+d} line(s) away" if isinstance(m["moved"], int) else f"   moved: {m['moved']}")
