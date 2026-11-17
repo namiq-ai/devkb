@@ -161,7 +161,8 @@ def add_to_graph(g: DevKBGraph, repo_root: Path, error_sig_key: Callable[[str, s
     for c in cross:
         records.append(boundaries.Record("import", c.name, "extern-c", c.path, c.line, f"{c.path}::{c.caller_qn}", language=c.language,
                                          blocked=c.language == "cpp" and c.name in cpp_names))
-    records += py_boundaries.extract(repo_root)
+    exported_modules = {r.abi_name.split(".")[0] for r in records if r.direction == "export" and r.mechanism in ("pyc-api", "pybind11")}
+    records += py_boundaries.extract(repo_root, modules=exported_modules)
     result = boundaries.resolve(records)
     linked = {(link.caller, link.callee.rsplit("::", 1)[-1]) for link in result.links if link.mechanism == "extern-c"}
     for c in cross:                 # a handed-over call nobody linked is still an unresolved call
