@@ -1,0 +1,11 @@
+MediatR: 774 edges before, 776 after; removed 0, added 2
+
+## REMOVED (sample 0 of 0)
+
+## ADDED (sample 2 of 2)
+ 1. MediatR.Mediator.Send -> MediatR.Wrappers.RequestHandlerWrapper.Handle
+    call src/MediatR/Mediator.cs:64: return handler.Handle(request, _serviceProvider, cancellationToken);
+    def  src/MediatR/Wrappers/RequestHandlerWrapper.cs:23: public abstract Task<Unit> Handle(IRequest request, IServiceProvider serviceProvider,
+ 2. MediatR.Mediator.CreateStream -> MediatR.Wrappers.StreamRequestHandlerWrapper.Handle
+    call src/MediatR/Mediator.cs:177: var items = streamHandler.Handle(request, _serviceProvider, cancellationToken);
+    def  src/MediatR/Wrappers/StreamRequestHandlerWrapper.cs:19: public abstract IAsyncEnumerable<TResponse> Handle(

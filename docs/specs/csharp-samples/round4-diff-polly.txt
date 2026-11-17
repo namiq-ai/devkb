@@ -1,0 +1,65 @@
+Polly: 6372 edges before, 6839 after; removed 0, added 467
+
+## REMOVED (sample 0 of 0)
+
+## ADDED (sample 20 of 467)
+ 1. Polly.Policy.ExecuteAndCapture -> Polly.Policy.Execute
+    call src/Polly/Policy.ExecuteOverloads.cs:242: Execute(action, context, cancellationToken);
+    def  src/Polly/Policy.ExecuteOverloads.cs:147: [DebuggerStepThrough]
+ 2. Polly.Policy.Execute -> Polly.Policy.Implementation
+    call src/Polly/Policy.TResult.ExecuteOverloads.cs:79: return Implementation(action, context, cancellationToken);
+    def  src/Polly/Policy.SyncGenericImplementation.cs:12: protected abstract TResult Implementation(
+ 3. Polly.Core.Tests.OutcomeTests.Ctor_Exception_Ok -> Polly.Outcome.ToString
+    call test/Polly.Core.Tests/OutcomeTests.cs:39: outcome.ToString().ShouldBe("Dummy message.");
+    def  src/Polly.Core/Outcome.TResult.cs:84: public override string ToString() => ExceptionDispatchInfo is not null
+ 4. Polly.Specs.CircuitBreaker.AdvancedCircuitBreakerAsyncSpecs.Should_not_open_circuit_if_exceptions_raised_are_not_one_of_the_specified_exceptions -> Polly.PolicyBuilder.Or
+    call test/Polly.Specs/CircuitBreaker/AdvancedCircuitBreakerAsyncSpecs.cs:195: .Or<ArgumentOutOfRangeException>()
+    def  src/Polly/PolicyBuilder.OrSyntax.cs:164: public PolicyBuilder<TResult> Or<TException>(Func<TException, bool> exceptionPredicate)
+ 5. Polly.Specs.CircuitBreaker.CircuitBreakerSpecs.Should_set_LastException_on_handling_inner_exception_even_when_not_breaking -> Polly.Specs.Helpers.ContextualPolicyExtensions.RaiseException
+    call test/Polly.Specs/CircuitBreaker/CircuitBreakerSpecs.cs:1311: Should.Throw<DivideByZeroException>(() => breaker.RaiseException(withInner))
+    def  test/Polly.Specs/Helpers/ContextualPolicyExtensions.cs:28: public static void RaiseException<TException>(
+ 6. Polly.Specs.Custom.CustomTResultAsyncSpecs.Active_policy_should_execute -> Polly.Specs.Helpers.Custom.PreExecute.AsyncPreExecutePolicy.CreateAsync
+    call test/Polly.Specs/Custom/CustomTResultAsyncSpecs.cs:25: AsyncPreExecutePolicy<ResultPrimitive> policy = AsyncPreExecutePolicy<ResultPrimitive>.CreateAsync(() => { preExecuted = true; return Task.C
+    def  test/Polly.Specs/Helpers/Custom/PreExecute/AsyncPreExecutePolicy.cs:21: public static AsyncPreExecutePolicy<TResult> CreateAsync(Func<Task> preExecute) =>
+ 7. Polly.Specs.Fallback.FallbackSpecs.Should_not_execute_fallback_when_exception_thrown_does_not_match_any_of_handling_predicates -> Polly.PolicyBuilder.Or
+    call test/Polly.Specs/Fallback/FallbackSpecs.cs:237: .Or<ArgumentNullException>(_ => false)
+    def  src/Polly/PolicyBuilder.OrSyntax.cs:164: public PolicyBuilder<TResult> Or<TException>(Func<TException, bool> exceptionPredicate)
+ 8. Polly.Specs.Fallback.FallbackSpecs.Should_not_execute_fallback_when_exception_thrown_does_not_match_any_of_handling_predicates -> Polly.FallbackSyntax.Fallback
+    call test/Polly.Specs/Fallback/FallbackSpecs.cs:238: .Fallback(fallbackAction);
+    def  src/Polly/Fallback/FallbackSyntax.cs:124: public static FallbackPolicy Fallback(this PolicyBuilder policyBuilder, Action<Exception, Context, CancellationToken> fallbackAction, Action
+ 9. Polly.Specs.Fallback.FallbackSpecs.Should_call_fallbackAction_with_the_exception -> Polly.FallbackSyntax.Fallback
+    call test/Polly.Specs/Fallback/FallbackSpecs.cs:918: .Fallback(fallbackAction, onFallback);
+    def  src/Polly/Fallback/FallbackSyntax.cs:124: public static FallbackPolicy Fallback(this PolicyBuilder policyBuilder, Action<Exception, Context, CancellationToken> fallbackAction, Action
+10. Polly.Specs.Fallback.FallbackTResultAsyncSpecs.Should_throw_when_fallback_action_is_null -> Polly.AsyncFallbackSyntax.FallbackAsync
+    call test/Polly.Specs/Fallback/FallbackTResultAsyncSpecs.cs:43: .FallbackAsync(fallbackAction);
+    def  src/Polly/Fallback/AsyncFallbackSyntax.cs:73: public static AsyncFallbackPolicy FallbackAsync(this PolicyBuilder policyBuilder, Func<Exception, Context, CancellationToken, Task> fallback
+11. Polly.Specs.Fallback.FallbackTResultAsyncSpecs.Should_not_throw_when_onFallback_delegate_is_not_null -> Polly.AsyncFallbackSyntax.FallbackAsync
+    call test/Polly.Specs/Fallback/FallbackTResultAsyncSpecs.cs:130: .FallbackAsync((_, _) => Task.FromResult(ResultPrimitive.Substitute), (_, _) => TaskHelper.EmptyTask);
+    def  src/Polly/Fallback/AsyncFallbackSyntax.cs:73: public static AsyncFallbackPolicy FallbackAsync(this PolicyBuilder policyBuilder, Func<Exception, Context, CancellationToken, Task> fallback
+12. Polly.Specs.Fallback.FallbackTResultAsyncSpecs.Should_not_execute_action_when_cancellationToken_cancelled_before_execute -> Polly.AsyncFallbackSyntax.FallbackAsync
+    call test/Polly.Specs/Fallback/FallbackTResultAsyncSpecs.cs:685: .FallbackAsync(fallbackAction);
+    def  src/Polly/Fallback/AsyncFallbackSyntax.cs:73: public static AsyncFallbackPolicy FallbackAsync(this PolicyBuilder policyBuilder, Func<Exception, Context, CancellationToken, Task> fallback
+13. Polly.Specs.Fallback.FallbackTResultSpecs.Should_not_throw_when_fallback_action_is_not_null -> Polly.FallbackSyntax.Fallback
+    call test/Polly.Specs/Fallback/FallbackTResultSpecs.cs:41: .Fallback(() => ResultPrimitive.Substitute);
+    def  src/Polly/Fallback/FallbackSyntax.cs:124: public static FallbackPolicy Fallback(this PolicyBuilder policyBuilder, Action<Exception, Context, CancellationToken> fallbackAction, Action
+14. Polly.Specs.Fallback.FallbackTResultSpecs.Should_report_unhandled_fault_and_not_execute_fallback_if_action_execution_raises_unhandled_fault_and_user_delegate_does_not_observe_the_set_cancellationToken -> Polly.FallbackSyntax.Fallback
+    call test/Polly.Specs/Fallback/FallbackTResultSpecs.cs:858: .Fallback(fallbackAction);
+    def  src/Polly/Fallback/FallbackSyntax.cs:124: public static FallbackPolicy Fallback(this PolicyBuilder policyBuilder, Action<Exception, Context, CancellationToken> fallbackAction, Action
+15. Polly.Specs.ISyncPolicyExtensionsSpecs.Converting_a_nongeneric_ISyncPolicy_to_generic_should_return_an_ISyncPolicyTResult_version_of_the_supplied_nongeneric_policy_instance -> Polly.ISyncPolicy.Execute
+    call test/Polly.Specs/ISyncPolicyExtensionsSpecs.cs:24: genericPolicy.Execute(deleg).ShouldBe(ResultPrimitive.Good);
+    def  src/Polly/ISyncPolicy.TResult.cs:67: TResult Execute(Func<Context, CancellationToken, TResult> action, Context context, CancellationToken cancellationToken);
+16. Polly.Specs.Registry.ConcurrentPolicyRegistrySpecs.Should_be_able_to_add_Policy_by_interface_using_TryAdd -> Polly.Policy.HandleResult
+    call test/Polly.Specs/Registry/ConcurrentPolicyRegistrySpecs.cs:53: ISyncPolicy<ResultPrimitive> policy2 = Policy<ResultPrimitive>.HandleResult(ResultPrimitive.Fault).Retry();
+    def  src/Polly/Policy.HandleSyntax.cs:125: public static PolicyBuilder<TResult> HandleResult(TResult result) =>
+17. Polly.Specs.Retry.RetryTResultMixedResultExceptionSpecs.Should_throw_when_exception_thrown_next_after_retries_exhaust_handling_both_exceptions_and_specified_results__mixing_exceptions_and_results_specifying_exceptions_first -> Polly.PolicyBuilder.OrResult
+    call test/Polly.Specs/Retry/RetryTResultMixedResultExceptionSpecs.cs:122: .OrResult(ResultPrimitive.Fault)
+    def  src/Polly/PolicyBuilder.OrSyntax.cs:139: public PolicyBuilder<TResult> OrResult(TResult result) =>
+18. Polly.Specs.Retry.RetryTResultMixedResultExceptionSpecs.Should_throw_when_exception_thrown_next_after_retries_exhaust_handling_both_exceptions_and_specified_results__mixing_exceptions_and_results_specifying_exceptions_first -> Polly.PolicyBuilder.Or
+    call test/Polly.Specs/Retry/RetryTResultMixedResultExceptionSpecs.cs:123: .Or<ArgumentException>()
+    def  src/Polly/PolicyBuilder.OrSyntax.cs:164: public PolicyBuilder<TResult> Or<TException>(Func<TException, bool> exceptionPredicate)
+19. Polly.Specs.Retry.WaitAndRetrySpecs.Should_throw_when_exception_thrown_is_not_one_of_the_specified_exception_types -> Polly.PolicyBuilder.Or
+    call test/Polly.Specs/Retry/WaitAndRetrySpecs.cs:231: .Or<ArgumentException>()
+    def  src/Polly/PolicyBuilder.OrSyntax.cs:164: public PolicyBuilder<TResult> Or<TException>(Func<TException, bool> exceptionPredicate)
+20. Polly.Testing.Tests.ResiliencePipelineExtensionsTests.GetPipelineDescriptor_NonGeneric_Ok -> Polly.RateLimiterResiliencePipelineBuilderExtensions.AddConcurrencyLimiter
+    call test/Polly.Testing.Tests/ResiliencePipelineExtensionsTests.cs:79: .AddConcurrencyLimiter(10)
+    def  src/Polly.RateLimiting/RateLimiterResiliencePipelineBuilderExtensions.cs:47: public static TBuilder AddConcurrencyLimiter<TBuilder>(

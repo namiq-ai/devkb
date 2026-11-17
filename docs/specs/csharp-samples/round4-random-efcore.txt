@@ -1,0 +1,60 @@
+ 1. Microsoft.EntityFrameworkCore.Metadata.Internal.RelationalPropertyOverrides.Attach -> src/EFCore.Relational/Metadata/Internal/RelationalPropertyOverrides.cs::Microsoft.EntityFrameworkCore.Metadata.Internal.RelationalPropertyOverrides.GetOrCreate
+    call src/EFCore.Relational/Metadata/Internal/RelationalPropertyOverrides.cs:121: var newOverrides = GetOrCreate(
+    def  262: public static RelationalPropertyOverrides GetOrCreate(
+ 2. Microsoft.EntityFrameworkCore.Query.RelationalQueryableMethodTranslatingExpressionVisitor.AddEntitySelectConditions -> src/EFCore.Relational/Query/ISqlExpressionFactory.cs::Microsoft.EntityFrameworkCore.Query.ISqlExpressionFactory.AndAlso
+    call src/EFCore.Relational/Query/RelationalQueryableMethodTranslatingExpressionVisitor.CreateSelect.cs:750: : _sqlExpressionFactory.AndAlso(predicate, atLeastOneNonNullValueInNullablePropertyCondition);
+    def  125: SqlExpression AndAlso(SqlExpression left, SqlExpression right);
+ 3. Microsoft.EntityFrameworkCore.Metadata.IReadOnlyComplexProperty.ToDebugString -> src/EFCore/Metadata/Internal/PropertyBaseExtensions.cs::Microsoft.EntityFrameworkCore.Metadata.Internal.PropertyBaseExtensions.GetPropertyIndexes
+    call src/EFCore/Metadata/IReadOnlyComplexProperty.cs:96: var indexes = ((IProperty)this).GetPropertyIndexes();
+    def  56: public static PropertyIndexes GetPropertyIndexes(this IPropertyBase propertyBase)
+ 4. Microsoft.EntityFrameworkCore.Query.NorthwindMiscellaneousQueryCosmosTest.Client_OrderBy_GroupBy_Group_ordering_works -> test/EFCore.Cosmos.FunctionalTests/Query/NorthwindMiscellaneousQueryCosmosTest.cs::Microsoft.EntityFrameworkCore.Query.NorthwindMiscellaneousQueryCosmosTest.AssertSql
+    call test/EFCore.Cosmos.FunctionalTests/Query/NorthwindMiscellaneousQueryCosmosTest.cs:3510: AssertSql();
+    def  5124: private void AssertSql(params string[] expected)
+ 5. TestNamespace.PrincipalBaseEntityType.CreateAnnotations -> src/EFCore/Metadata/IProperty.cs::Microsoft.EntityFrameworkCore.Metadata.IProperty.GetKeyValueComparer
+    call test/EFCore.Cosmos.FunctionalTests/Scaffolding/Baselines/BigModel/PrincipalBaseEntityType.cs:675: return ((ISnapshot)(new Snapshot<long?, Guid, object, object>((source.GetCurrentValue<long?>(id) == null ? null : ((ValueComp
+    def  87: new ValueComparer GetKeyValueComparer();
+ 6. Microsoft.EntityFrameworkCore.Migrations.Internal.SnapshotModelProcessorTest.Does_not_warn_for_duplicate_non_conflicting_annotations -> src/EFCore/Infrastructure/IReadOnlyAnnotatable.cs::Microsoft.EntityFrameworkCore.Infrastructure.IReadOnlyAnnotatable.GetAnnotations
+    call test/EFCore.Design.Tests/Migrations/Design/SnapshotModelProcessorTest.cs:129: Assert.Equal(3, model.GetAnnotations().Count());
+    def  44: IEnumerable<IAnnotation> GetAnnotations();
+ 7. Microsoft.EntityFrameworkCore.Query.NorthwindJoinQueryInMemoryTest.Join_local_collection_int_closure_is_cached_correctly -> test/EFCore.Specification.Tests/Query/QueryTestBase.cs::Microsoft.EntityFrameworkCore.Query.QueryTestBase.AssertQueryScalar
+    call test/EFCore.InMemory.FunctionalTests/Query/NorthwindJoinQueryInMemoryTest.cs:55: await AssertTranslationFailed(() => AssertQueryScalar(
+    def  96: public Task AssertQueryScalar<TResult>(
+ 8. Microsoft.EntityFrameworkCore.Query.AdHocMiscellaneousQueryRelationalTestBase.GroupBy_after_join_then_whole_object_nested_in_wrapper -> test/EFCore.Specification.Tests/NonSharedModelTestBase.cs::Microsoft.EntityFrameworkCore.NonSharedModelTestBase.InitializeNonSharedTest
+    call test/EFCore.Relational.Specification.Tests/Query/AdHocMiscellaneousQueryRelationalTestBase.cs:871: var contextFactory = await InitializeNonSharedTest<Context30915>(seed: Seed30915);
+    def  39: protected virtual async Task<ContextFactory<TContext>> InitializeNonSharedTest<TContext>(
+ 9. Microsoft.EntityFrameworkCore.Query.AdHocPrecompiledQueryRelationalTestBase.SealedContext.OnModelCreating -> src/EFCore/Metadata/Builders/EntityTypeBuilder`.cs::Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder.Property
+    call test/EFCore.Relational.Specification.Tests/Query/AdHocPrecompiledQueryRelationalTestBase.cs:287: modelBuilder.Entity<SealedEntity>().Property(e => e.Id).ValueGeneratedNever();
+    def  149: public virtual PropertyBuilder<TProperty> Property<TProperty>(Expression<Func<TEntity, TProperty>> propertyExpression)
+10. Microsoft.EntityFrameworkCore.Metadata.RelationalModelTest.GetRelationalModel_throws_if_convention_has_not_run -> test/EFCore.Relational.Tests/Metadata/RelationalModelTest.cs::Microsoft.EntityFrameworkCore.Metadata.RelationalModelTest.CreateConventionModelBuilder
+    call test/EFCore.Relational.Tests/Metadata/RelationalModelTest.cs:18: var modelBuilder = CreateConventionModelBuilder();
+    def  4090: protected virtual TestHelpers.TestModelBuilder CreateConventionModelBuilder()
+11. Microsoft.EntityFrameworkCore.Metadata.RelationalModelTest.Json_element_tree_is_built_for_primitive_collection_columns -> src/EFCore/Storage/ValueConversion/ValueConverter`.cs::Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter.ctor
+    call test/EFCore.Relational.Tests/Metadata/RelationalModelTest.cs:3844: converter: new ValueConverter<List<string>, string>(v => null!, v => null!),
+    def  25: public ValueConverter(
+12. Microsoft.EntityFrameworkCore.ProxyGraphUpdatesTestBase.Required_many_to_one_dependents_with_alternate_key_are_cascade_deleted -> test/EFCore.Specification.Tests/GraphUpdates/ProxyGraphUpdatesFixtureBase.cs::Microsoft.EntityFrameworkCore.ProxyGraphUpdatesTestBase.ExecuteWithStrategyInTransactionAsync
+    call test/EFCore.Specification.Tests/GraphUpdates/ProxyGraphUpdatesTestBaseOneToManyAk.cs:606: return ExecuteWithStrategyInTransactionAsync(
+    def  1967: protected virtual Task ExecuteWithStrategyInTransactionAsync(
+13. Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.ComplexTypeTestBase.Complex_properties_can_be_configured_as_optional -> test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.cs::Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.TestComplexPropertyBuilder.IsRequired
+    call test/EFCore.Specification.Tests/ModelBuilding/ModelBuilderTest.ComplexType.cs:1641: .ComplexProperty(e => e.Customer).IsRequired(false);
+    def  474: public abstract TestComplexPropertyBuilder<TComplex> IsRequired(bool isRequired = true);
+14. Microsoft.EntityFrameworkCore.AdHocMiscellaneousQueryTestBase.LeftJoin_with_missing_key_values_on_both_sides -> test/EFCore.Specification.Tests/NonSharedModelTestBase.cs::Microsoft.EntityFrameworkCore.NonSharedModelTestBase.InitializeNonSharedTest
+    call test/EFCore.Specification.Tests/Query/AdHocMiscellaneousQueryTestBase.cs:67: var contextFactory = await InitializeNonSharedTest<Context6901>();
+    def  39: protected virtual async Task<ContextFactory<TContext>> InitializeNonSharedTest<TContext>(
+15. Microsoft.EntityFrameworkCore.Query.Translations.Operators.BitwiseOperatorTranslationsTestBase.And_with_logical_and -> test/EFCore.Specification.Tests/Query/QueryTestBase.cs::Microsoft.EntityFrameworkCore.Query.QueryTestBase.AssertQuery
+    call test/EFCore.Specification.Tests/Query/Translations/Operators/BitwiseOperatorTranslationsTestBase.cs:75: => AssertQuery(ss => ss.Set<BasicTypesEntity>().Where(b => b.Int == 8 & b.Short == 8 && b.String == "Seattle"));
+    def  44: public Task AssertQuery<TResult>(
+16. Microsoft.EntityFrameworkCore.Query.Inheritance.TPTGearsOfWarQuerySqlServerTest.Checked_context_with_addition_does_not_fail -> test/EFCore.Specification.Tests/Query/GearsOfWarQueryTestBase.cs::Microsoft.EntityFrameworkCore.Query.GearsOfWarQueryTestBase.Checked_context_with_addition_does_not_fail
+    call test/EFCore.SqlServer.FunctionalTests/Query/Inheritance/TPTGearsOfWarQuerySqlServerTest.cs:8086: await base.Checked_context_with_addition_does_not_fail(isAsync);
+    def  5342: [Theory, MemberData(nameof(IsAsyncData))]
+17. TestNamespace.BlogEntityType.CreateAnnotations -> src/EFCore/Metadata/RuntimeTypeBase.cs::Microsoft.EntityFrameworkCore.Metadata.RuntimeTypeBase.SetTemporaryValuesFactory
+    call test/EFCore.SqlServer.FunctionalTests/Scaffolding/Baselines/Owned_entity_sharing_table_with_owner_that_has_an_index/BlogEntityType.cs:91: runtimeEntityType.SetTemporaryValuesFactory(
+    def  575: [EntityFrameworkInternal]
+18. Microsoft.EntityFrameworkCore.Query.Translations.ByteArrayTranslationsSqliteTest.Contains_with_column -> test/EFCore.Specification.Tests/Query/Translations/ByteArrayTranslationsTestBase.cs::Microsoft.EntityFrameworkCore.Query.Translations.ByteArrayTranslationsTestBase.Contains_with_column
+    call test/EFCore.Sqlite.FunctionalTests/Query/Translations/ByteArrayTranslationsSqliteTest.cs:63: await base.Contains_with_column();
+    def  35: [Fact]
+19. Microsoft.EntityFrameworkCore.Query.Translations.MiscellaneousTranslationsSqliteTest.Int_Compare_to_simple_zero -> test/EFCore.Specification.Tests/Query/Translations/MiscellaneousTranslationsTestBase.cs::Microsoft.EntityFrameworkCore.Query.Translations.MiscellaneousTranslationsTestBase.Int_Compare_to_simple_zero
+    call test/EFCore.Sqlite.FunctionalTests/Query/Translations/MiscellaneousTranslationsSqliteTest.cs:127: await base.Int_Compare_to_simple_zero();
+    def  270: [Fact]
+20. Microsoft.EntityFrameworkCore.Query.Translations.Temporal.DateOnlyTranslationsSqliteTest.FromDateTime_compared_to_property -> test/EFCore.Sqlite.FunctionalTests/Query/Translations/Temporal/DateOnlyTranslationsSqliteTest.cs::Microsoft.EntityFrameworkCore.Query.Translations.Temporal.DateOnlyTranslationsSqliteTest.AssertSql
+    call test/EFCore.Sqlite.FunctionalTests/Query/Translations/Temporal/DateOnlyTranslationsSqliteTest.cs:155: AssertSql(
+    def  242: private void AssertSql(params string[] expected)

@@ -1,0 +1,60 @@
+ 1. Emby.Server.Implementations.Library.CoreResolutionIgnoreRule.ShouldIgnore -> Emby.Server.Implementations/Library/IgnorePatterns.cs::Emby.Server.Implementations.Library.IgnorePatterns.ShouldIgnore
+    call Emby.Server.Implementations/Library/CoreResolutionIgnoreRule.cs:40: if (IgnorePatterns.ShouldIgnore(fileInfo.FullName))
+    def  136: public static bool ShouldIgnore(ReadOnlySpan<char> path)
+ 2. Emby.Server.Implementations.Library.LibraryManager.ForgetDroppedLocalAlternateVersions -> Emby.Server.Implementations/Library/LibraryManager.cs::Emby.Server.Implementations.Library.LibraryManager.GetNewItemId
+    call Emby.Server.Implementations/Library/LibraryManager.cs:2776: .Select(path => GetNewItemId(path, videoType))
+    def  792: public Guid GetNewItemId(string key, Type type)
+ 3. Emby.Server.Implementations.Session.SessionManager.SendSyncPlayGroupUpdate -> Emby.Server.Implementations/Session/SessionManager.cs::Emby.Server.Implementations.Session.SessionManager.CheckDisposed
+    call Emby.Server.Implementations/Session/SessionManager.cs:1451: CheckDisposed();
+    def  179: private void CheckDisposed()
+ 4. Jellyfin.Api.Controllers.InstantMixController.GetInstantMixFromItem -> Jellyfin.Api/Helpers/RequestHelpers.cs::Jellyfin.Api.Helpers.RequestHelpers.GetUserId
+    call Jellyfin.Api/Controllers/InstantMixController.cs:290: userId = RequestHelpers.GetUserId(User, userId);
+    def  67: internal static Guid GetUserId(ClaimsPrincipal claimsPrincipal, Guid? userId)
+ 5. Jellyfin.Api.Controllers.LibraryStructureController.RefreshAfterRenameAsync -> MediaBrowser.Controller/Library/ILibraryMonitor.cs::MediaBrowser.Controller.Library.ILibraryMonitor.Start
+    call Jellyfin.Api/Controllers/LibraryStructureController.cs:253: _libraryMonitor.Start();
+    def  11: void Start();
+ 6. Jellyfin.Api.Controllers.YearsController.GetYears.Filter -> Jellyfin.Api/Controllers/YearsController.cs::Jellyfin.Api.Controllers.YearsController.FilterItem
+    call Jellyfin.Api/Controllers/YearsController.cs:108: bool Filter(BaseItem i) => FilterItem(i, excludeItemTypes, includeItemTypes, mediaTypes);
+    def  196: private bool FilterItem(BaseItem f, IReadOnlyCollection<BaseItemKind> excludeItemTypes, IReadOnlyCollection<BaseItemKind> inc
+ 7. MediaBrowser.Controller.LiveTv.TimerInfo.IsSports -> src/Jellyfin.Extensions/EnumerableExtensions.cs::Jellyfin.Extensions.EnumerableExtensions.Contains
+    call MediaBrowser.Controller/LiveTv/TimerInfo.cs:128: public bool IsSports => Tags.Contains("Sports", StringComparison.OrdinalIgnoreCase);
+    def  20: public static bool Contains(this IEnumerable<string> source, ReadOnlySpan<char> value, StringComparison stringComparison)
+ 8. MediaBrowser.Providers.Manager.ProviderManager.OnConfigurationUpdated -> MediaBrowser.Providers/Manager/ProviderManager.cs::MediaBrowser.Providers.Manager.ProviderManager.ClearMetadataProviderCache
+    call MediaBrowser.Providers/Manager/ProviderManager.cs:1349: ClearMetadataProviderCache();
+    def  1352: internal void ClearMetadataProviderCache()
+ 9. MediaBrowser.Providers.Manager.ProviderManager.GetPluginSummary -> MediaBrowser.Providers/Manager/ProviderManager.cs::MediaBrowser.Providers.Manager.ProviderManager.GetMetadataOptions
+    call MediaBrowser.Providers/Manager/ProviderManager.cs:672: var options = GetMetadataOptions(dummy);
+    def  785: public MetadataOptions GetMetadataOptions(BaseItem item)
+10. Jellyfin.LiveTv.LiveTvManager.GetTimersInternal -> MediaBrowser.Controller/LiveTv/ILiveTvService.cs::MediaBrowser.Controller.LiveTv.ILiveTvService.GetTimersAsync
+    call src/Jellyfin.LiveTv/LiveTvManager.cs:667: var recs = await i.GetTimersAsync(cancellationToken).ConfigureAwait(false);
+    def  91: Task<IEnumerable<TimerInfo>> GetTimersAsync(CancellationToken cancellationToken);
+11. Jellyfin.MediaEncoding.Keyframes.FfProbe.FfProbeKeyframeExtractor.ParseStream -> src/Jellyfin.MediaEncoding.Keyframes/KeyframeData.cs::Jellyfin.MediaEncoding.Keyframes.KeyframeData.ctor
+    call src/Jellyfin.MediaEncoding.Keyframes/FfProbe/FfProbeKeyframeExtractor.cs:130: return new KeyframeData(TimeSpan.FromSeconds(duration).Ticks, keyframes);
+    def  15: public KeyframeData(long totalDuration, IReadOnlyList<long> keyframeTicks)
+12. Jellyfin.Api.Tests.Auth.DefaultAuthorizationPolicy.DefaultAuthorizationHandlerTests.ShouldSucceedOnUser -> tests/Jellyfin.Api.Tests/TestHelpers.cs::Jellyfin.Api.Tests.TestHelpers.SetupConfigurationManager
+    call tests/Jellyfin.Api.Tests/Auth/DefaultAuthorizationPolicy/DefaultAuthorizationHandlerTests.cs:46: TestHelpers.SetupConfigurationManager(_configurationManagerMock, true);
+    def  73: public static void SetupConfigurationManager(in Mock<IConfigurationManager> configurationManagerMock, bool startupWizardCompl
+13. Jellyfin.Naming.Tests.Video.MultiVersionTests.TestMultiVersionLimit -> Emby.Naming/Video/VideoListResolver.cs::Emby.Naming.Video.VideoListResolver.Resolve
+    call tests/Jellyfin.Naming.Tests/Video/MultiVersionTests.cs:111: var result = _videoListResolver.Resolve(
+    def  49: public IReadOnlyList<VideoInfo> Resolve(IReadOnlyList<VideoFileInfo> videoInfos, bool supportMultiVersion = true, bool parseN
+14. Jellyfin.Naming.Tests.Video.VideoListResolverTests.Resolve_TrailerMatchesFolderName_ReturnsSingleItem -> Emby.Naming/Video/VideoResolver.cs::Emby.Naming.Video.VideoResolver.Resolve
+    call tests/Jellyfin.Naming.Tests/Video/VideoListResolverTests.cs:170: files.Select(i => VideoResolver.Resolve(i, false, _namingOptions)).OfType<VideoFileInfo>().ToList()).ToList();
+    def  49: public static VideoFileInfo? Resolve(string? path, bool isDirectory, NamingOptions namingOptions, bool parseName = true, stri
+15. Jellyfin.Naming.Tests.Video.VideoListResolverTests.TestArgumentOutOfRangeException -> Emby.Naming/Video/VideoResolver.cs::Emby.Naming.Video.VideoResolver.Resolve
+    call tests/Jellyfin.Naming.Tests/Video/VideoListResolverTests.cs:294: files.Select(i => VideoResolver.Resolve(i, false, _namingOptions)).OfType<VideoFileInfo>().ToList()).ToList();
+    def  49: public static VideoFileInfo? Resolve(string? path, bool isDirectory, NamingOptions namingOptions, bool parseName = true, stri
+16. Jellyfin.Networking.Tests.NetworkParseTests.TestBindInterfaces -> src/Jellyfin.Networking/Manager/NetworkManager.cs::Jellyfin.Networking.Manager.NetworkManager.TryParseInterface
+    call tests/Jellyfin.Networking.Tests/NetworkParseTests.cs:311: if (nm.TryParseInterface(result, out var resultObj))
+    def  710: public bool TryParseInterface(string intf, [NotNullWhen(true)] out IReadOnlyList<IPData>? result)
+17. Jellyfin.Providers.Tests.ExternalId.TmdbExternalUrlProviderTests.GetExternalUrls_BoxSetWithNoTmdbId_ReturnsNoUrl -> MediaBrowser.Controller/Entities/Movies/BoxSet.cs::MediaBrowser.Controller.Entities.Movies.BoxSet.ctor
+    call tests/Jellyfin.Providers.Tests/ExternalId/TmdbExternalUrlProviderTests.cs:186: var boxSet = new BoxSet();
+    def  25: public BoxSet()
+18. Jellyfin.Server.Implementations.Tests.SyncPlay.PlayQueueManagerTests.SetShuffleMode_SortedWhileAlreadySorted_KeepsPlayingItem -> MediaBrowser.Controller/SyncPlay/Queue/PlayQueueManager.cs::MediaBrowser.Controller.SyncPlay.Queue.PlayQueueManager.SetPlayingItemByIndex
+    call tests/Jellyfin.Server.Implementations.Tests/SyncPlay/PlayQueueManagerTests.cs:149: queue.SetPlayingItemByIndex(1);
+    def  275: public void SetPlayingItemByIndex(int playlistIndex)
+19. Jellyfin.Server.Implementations.Tests.SyncPlay.PlayQueueManagerTests.SetShuffleMode_SortedWhileAlreadySorted_KeepsPlayingItem -> MediaBrowser.Controller/SyncPlay/Queue/PlayQueueManager.cs::MediaBrowser.Controller.SyncPlay.Queue.PlayQueueManager.GetPlayingItemId
+    call tests/Jellyfin.Server.Implementations.Tests/SyncPlay/PlayQueueManagerTests.cs:150: var expectedItemId = queue.GetPlayingItemId();
+    def  240: public Guid GetPlayingItemId()
+20. Jellyfin.Server.Implementations.Tests.SyncPlay.WaitingGroupStateTests.GroupHarness.ctor -> tests/Jellyfin.Server.Implementations.Tests/SyncPlay/WaitingGroupStateTests.cs::Jellyfin.Server.Implementations.Tests.SyncPlay.WaitingGroupStateTests.GroupHarness.NewSession
+    call tests/Jellyfin.Server.Implementations.Tests/SyncPlay/WaitingGroupStateTests.cs:367: First = NewSession("first");
+    def  412: public SessionInfo NewSession(string id)

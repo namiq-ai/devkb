@@ -121,3 +121,20 @@ Acceptance criteria (from #40, plus the measured items):
 | R3 ≥ 3 falsifiable criteria, one failing today | 8; criteria 2 and 3 fail on the base |
 | R4 scope boundary | §2 Out of scope |
 | R5 no schema change | N3 |
+
+## 6. Results
+
+| Criterion | Result |
+|---|---|
+| 1 baseline before code | §1, measured on `4ef4766` |
+| 2 a fixture test per item, failing on the base | `tests/test_csharp_symbols.py`: 8 round-4 test functions (F1–F9) fail on `4ef4766`, pass now; every regression the benchmark found has its own test (14 more) |
+| 3 recall rises on EF Core and FluentValidation, falls on none; precision ≥ 0.98 | FluentValidation 0.841 → 0.870, Polly 0.851 → 0.866, MediatR, Jellyfin unchanged, **EF Core unchanged (0.933 → 0.933): not met**; precision 1.000 on all five. Owner's decision: release with this criterion stated unmet. On the corrected sample EF Core's base already reaches 0.933 |
+| 4 sampled added edges correct, removals explained | 82/82 added edges correct (2 + 4 × 20); every sampled removal a base error or a move to the declaration the compiler binds (`csharp-4-precision.md`) |
+| 5 random sample ≥ 19/20 | 100/100 (20 per repository) |
+| 6 agent value report on the release | `bench/exercises/csharp/DEVKB-VALUE-0.2.7.md` (run on the version installed from PyPI) |
+| 7 EF Core build within 20%; verify; standard library | 164.7 s against 142 s (+16%); `make verify` passes; no dependency added |
+| 8 README and SCOPE | README's C# row rewritten |
+
+**Dogfood** (`csharp-4-dogfood-log.md`): seven limitations of devkb found by using it on its own code during the round;
+five fixed with tests (D1 private classes typing receivers, D2 the Incomplete count, D3 recursive evidence lines, D4
+`uses` and data files, D7 nested functions), two noted (D5 phrase search in `docs`, D6 the `uses` hint).
