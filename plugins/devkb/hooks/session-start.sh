@@ -13,7 +13,9 @@ if [ ! -f "$d/.devkb/nodes.jsonl" ] || [ -n "$head" -a "$head" != "$built" ]; th
   lock="$d/.devkb/.building"
   if [ ! -e "$lock" ] || [ -n "$(find "$lock" -mmin +30 2>/dev/null)" ]; then
     touch "$lock"
-    (nohup sh -c "uvx --from 'devkb[mcp]>=0.2.1' devkb build --project '$d' >'$d/.devkb/build.log' 2>&1; rm -f '$lock'" >/dev/null 2>&1 &)
+    # The paths are positional arguments, never pasted into the script: a quote in them neither breaks nor runs (#72).
+    (nohup sh -c 'uvx --from "devkb[mcp]>=0.2.1" devkb build --project "$1" >"$1/.devkb/build.log" 2>&1; rm -f "$2"' \
+      sh "$d" "$lock" >/dev/null 2>&1 &)
   fi
 fi
 exit 0
