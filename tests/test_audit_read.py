@@ -130,3 +130,11 @@ def test_outline_of_a_large_file_can_be_read_to_its_last_member(api):  # #91
         offset, rounds = int(m.group(1)), rounds + 1
     assert rounds >= 1, "the fixture must overflow one reply"
     assert seen == {f"member_{n:03d}" for n in range(300)}, sorted({f"member_{n:03d}" for n in range(300)} - seen)[:5]
+
+
+@pytest.mark.parametrize("query", ["app.run", "pkg.app.run", "tool.gh_tool"])
+def test_symbol_accepts_a_module_qualified_python_name(api, query):  # #100
+    r = api.call("symbol", query=query)
+    keys = [m["k"] for m in r.get("matches", [])]
+    want = {"app.run": "pkg/app.py::run", "pkg.app.run": "pkg/app.py::run", "tool.gh_tool": ".github/scripts/tool.py::gh_tool"}
+    assert keys and keys[0] == want[query], r
