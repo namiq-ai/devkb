@@ -458,12 +458,14 @@ def _split_top(s: str, sep: str = ",") -> list[str]:
 
 
 _VAR_TYPE = (r"(?P<type>(?:::)?" + _IDENT + r"(?:::" + _IDENT + r")*)(?:\s+const)?(?P<ptr>(?:\s*(?:const\b\s*)?[*&]+(?:\s*const\b)?)*)")
+# the declared name never starts inside the type's identifier (`Tasks` is not a `Task` named `s`, #62)
+_VAR_NAME = r"(?<![\w])(?P<name>" + _IDENT + r")"
 _PARAM = re.compile(
     r"^\s*(?:(?:const|volatile|struct|class|union|enum|unsigned|signed|register|typename)\s+)*" + _VAR_TYPE
-    + r"\s*(?P<name>" + _IDENT + r")?\s*(?:\[[^\]]*\])?\s*$", re.S)
+    + r"\s*" + _VAR_NAME + r"?\s*(?:\[[^\]]*\])?\s*$", re.S)
 _LOCAL = re.compile(
     r"(?:^|[;{}(])\s*(?:(?:const|static|volatile|register|struct|class|union|enum|typename|extern|mutable|constexpr|"
-    r"thread_local|unsigned|signed)\s+)*" + _VAR_TYPE + r"\s*(?P<name>" + _IDENT + r")\s*(?=[=;,\[({)])")
+    r"thread_local|unsigned|signed)\s+)*" + _VAR_TYPE + r"\s*" + _VAR_NAME + r"\s*(?=[=;,\[({)])")
 _TEMPL_LOCAL = re.compile(r">\s*[*&]*\s*(" + _IDENT + r")\s*(?=[=;({,])")
 
 
@@ -649,7 +651,7 @@ class _Scanner:
                     rec.methods[short] = rec.methods.get(short, False) or bool(re.search(r"\bvirtual\b|\boverride\b", h))
             return
         fm = re.match(r"^\s*(?:(?:mutable|static|const|volatile|constexpr|inline|thread_local|struct|class|enum)\s+)*" + _VAR_TYPE
-                      + r"\s*(?P<name>" + _IDENT + r")\s*(?:\[[^\]]*\])?\s*(?:=.*|\{.*|:\s*\d+)?\s*$", h, re.S)
+                      + r"\s*" + _VAR_NAME + r"\s*(?:\[[^\]]*\])?\s*(?:=.*|\{.*|:\s*\d+)?\s*$", h, re.S)
         if fm:
             rec.members[fm.group("name")] = _decl_type(fm)
         else:
