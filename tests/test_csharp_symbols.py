@@ -1152,3 +1152,29 @@ class A : IRunner, System.IDisposable, System.Collections.Generic.IEnumerable<in
             ("I79.A.IEnumerable.GetEnumerator", "I79.A.Make"), ("I79.A.IRunner.Count", "I79.A.Helper2")} <= edges
     assert ("I79.A.Go", "I79.A.Run") in edges and ("I79.A.Go", "I79.A.Dispose") in edges
     assert not any(callee.startswith(("I79.A.IRunner.", "I79.A.IDisposable.")) for _, callee in edges)
+
+
+
+def test_if_else_branches_with_unbalanced_braces_do_not_nest_the_rest_of_the_class(tmp_path):
+    """#80: two signature variants under `#if`/`#else` open one `{` each but share one `}`; the rest of the class was
+    nested in the first method (`A.M.Foo`). Read as one configuration would: the first branch alone."""
+    names, edges = _edges_of(tmp_path, {"P80.cs": '''namespace P80 { class A {
+#if X
+void M(int a) {
+#else
+void M(int a, int b) {
+#endif
+  Foo();
+}
+void Foo(){} void Bar(){ Foo(); }
+#if Y
+void Kept() { Foo(); }
+#else
+void Also() { Bar(); }
+#endif
+} }
+'''})
+    assert {"P80.A.M", "P80.A.Foo", "P80.A.Bar", "P80.A.Kept", "P80.A.Also"} <= names
+    assert not any(n.startswith("P80.A.M.") for n in names)
+    assert {("P80.A.Bar", "P80.A.Foo"), ("P80.A.M", "P80.A.Foo"), ("P80.A.Kept", "P80.A.Foo"),
+            ("P80.A.Also", "P80.A.Bar")} <= edges

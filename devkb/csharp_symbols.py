@@ -127,6 +127,7 @@ def mask(text: str) -> str:
     text = text.replace("\ufeff", " ")                           # a byte-order mark is not code
     chars = list(text)
     n, i, line_start = len(text), 0, True
+    conds: list[tuple[str, int, int]] = []                        # (`if`/`elif`/`else`/`endif`, start, end) directives
     while i < n:
         m = _MASK_NEXT.search(text, i)                         # jump to the next character that can start something
         if m is None:
@@ -141,6 +142,8 @@ def mask(text: str) -> str:
         if line_start and c == "#":
             end = text.find("\n", i)
             end = n if end < 0 else end
+            if dm := _COND.match(text, i, end):
+                conds.append((dm.group(1), i, end))
             _blank(chars, i, end)
             i = end
             continue
@@ -169,7 +172,37 @@ def mask(text: str) -> str:
             i = end
         else:
             i += 1
+    if conds:
+        _first_branch_only(chars, conds)
     return "".join(chars)
+
+
+_COND = re.compile(r"#[ \t]*(if|elif|else|endif)\b")
+
+
+def _first_branch_only(chars: list[str], conds: list[tuple[str, int, int]]) -> None:
+    """Blank the `#elif`/`#else` branches of every `#if` whose branches do not each balance their braces (#80).
+
+    `#if X void M(int a) { #else void M(int a, int b) { #endif ... }`: both variants open a `{` that one `}` closes, and
+    the rest of the type nested in M. Read as one configuration would, the first branch alone. A conditional whose
+    branches each balance (whole members per branch) keeps them all, as before; innermost conditionals go first."""
+    stack: list[list[list[int]]] = []                           # per open `#if`: its branches' [start, end]
+    for word, start, end in conds:
+        if word == "if":
+            stack.append([[end, -1]])
+        elif not stack:
+            continue
+        elif word in ("elif", "else"):
+            stack[-1][-1][1] = start
+            stack[-1].append([end, -1])
+        else:
+            branches = stack.pop()
+            branches[-1][1] = start
+            if len(branches) > 1:
+                deltas = [("".join(chars[a:b]).count("{") - "".join(chars[a:b]).count("}")) for a, b in branches]
+                if any(deltas):
+                    for a, b in branches[1:]:
+                        _blank(chars, a, b)
 
 
 # ── headers ──────────────────────────────────────────────────────────────────
