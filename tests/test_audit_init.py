@@ -37,3 +37,15 @@ def test_an_orphan_end_marker_is_refused_too(tmp_path):  # #50
         init.run(root, "lean-pack", hooks=False, dry_run=False)
     assert "CLAUDE.md" in str(refused.value) and "line 4" in str(refused.value)
     assert (root / "CLAUDE.md").read_bytes() == original
+
+
+def test_crlf_line_endings_survive_init_and_remove_byte_for_byte(tmp_path):  # #52
+    root = _repo(tmp_path)
+    original = b"# Rules\r\nline two\r\n"
+    (root / "AGENTS.md").write_bytes(original)
+    init.run(root, "lean-pack", hooks=False, dry_run=False)
+    during = (root / "AGENTS.md").read_bytes()
+    assert during.startswith(original) and b"devkb:end -->\r\n" in during and b"\n" not in during.replace(b"\r\n", b"")
+    assert init.run(root, "lean-pack", hooks=False, dry_run=False) == [], "a second run changes nothing"
+    init.run(root, None, hooks=False, dry_run=False)
+    assert (root / "AGENTS.md").read_bytes() == original

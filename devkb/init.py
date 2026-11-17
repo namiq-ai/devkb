@@ -114,9 +114,12 @@ class Plan:
 
     def write(self, rel: str, text: str | None) -> None:
         path = self.root / rel
-        old = path.read_text() if path.exists() else None
+        old = _read(path, newline="") if path.exists() else None
         if text is not None and not text.strip():
             text = None
+        eol = "\r\n" if old and "\r\n" in old.split("\n", 1)[0] + "\n" else "\n"  # the file's first line ending (#52)
+        if text is not None:
+            text = text.replace("\n", eol)
         if old == text:
             return
         self.changes.append(f"{'remove' if text is None else 'create' if old is None else 'update'} {rel}")
@@ -126,11 +129,16 @@ class Plan:
             path.unlink(missing_ok=True)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text)
+            path.write_text(text, newline="")
 
 
-def _read(path: Path) -> str:
-    return path.read_text() if path.exists() else ""
+def _read(path: Path, newline: str | None = None) -> str:
+    """The file's text, "" when absent; newline="" keeps its line endings as they are (Path.read_text has no newline
+    argument before Python 3.13)."""
+    if not path.exists():
+        return ""
+    with path.open(newline=newline) as f:
+        return f.read()
 
 
 def _mcp(root: Path, toolset: str | None) -> str | None:
