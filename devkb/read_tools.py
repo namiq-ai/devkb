@@ -364,7 +364,11 @@ class ReadTools:
         else:
             args = ["-F", "-e", q]
             mode = "text"
-        spec = [":(glob)" + (under.rstrip("/") + "/**" if under else "**")] if under else []
+        under = repo_path(under).rstrip("/") if under else ""
+        if under and (self.root / under).is_file():  # a file path narrows to that file, not to a directory under it (#90)
+            spec = [":(literal)" + under]
+        else:
+            spec = [":(glob)" + under + "/**"] if under else []
         excl = [] if docs else [f":(exclude,glob)**/*{s}" for s in NOT_CODE]
         cmd = ["git", "grep", "-n", "-I", "--no-color", "--max-count=60", *args, "--", *(spec or ["."]), *excl]
         try:

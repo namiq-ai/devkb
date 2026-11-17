@@ -105,3 +105,10 @@ def test_uses_keeps_the_calls_when_comments_and_docstrings_come_first_in_a_file(
     r = api.call("uses", name="several")
     hits = next(f for f in r["files"] if f["f"] == "pkg/many.py")["hits"]
     assert [h["line"] for h in hits] == [15, 19, 23], hits  # the three calls, in line order; not the definition or prose
+
+
+@pytest.mark.parametrize("under", ["pkg/many.py", "./pkg/many.py"])
+def test_uses_under_a_file_path_searches_that_file(api, under):  # #90
+    r = api.call("uses", name="several", under=under)
+    assert [f["f"] for f in r["files"]] == ["pkg/many.py"] and r["n_hits"] >= 3, r
+    assert api.call("uses", name="several", under="pkg")["n_hits"] == r["n_hits"], "a directory still works"
