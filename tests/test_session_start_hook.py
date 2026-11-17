@@ -58,3 +58,23 @@ def test_a_failed_build_removes_its_lock(tmp_path):
     args, lock = _run_hook(project, tmp_path, code=1)
     assert args and not lock.exists()
 
+
+def test_exclude_without_a_trailing_newline_keeps_the_users_last_line(tmp_path):
+    project = _repo(tmp_path / "repo")
+    exclude = project / ".git" / "info" / "exclude"
+    exclude.write_text("*.log")
+    _run_hook(project, tmp_path)
+    assert exclude.read_text() == "*.log\n.devkb/\n"
+    _run_hook(project, tmp_path)  # idempotent
+    assert exclude.read_text() == "*.log\n.devkb/\n"
+
+
+def test_exclude_with_a_trailing_newline_or_missing_gets_one_line(tmp_path):
+    project = _repo(tmp_path / "repo")
+    exclude = project / ".git" / "info" / "exclude"
+    exclude.write_text("*.log\n")
+    _run_hook(project, tmp_path)
+    assert exclude.read_text() == "*.log\n.devkb/\n"
+    exclude.unlink()
+    _run_hook(project, tmp_path)
+    assert exclude.read_text() == ".devkb/\n"
