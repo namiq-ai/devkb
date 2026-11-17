@@ -17,6 +17,31 @@ FILES = {
     ".github/scripts/tool.py": "def gh_tool(x):\n    return x\n",
     "pkg/app.py": "def run():\n    return 1\n",
     "docs/pricing.md": "# Pricing\n\nPrice ($) per seat.\n",
+    "pkg/many.py": (
+        "# several notes: several is mentioned here\n"
+        "# several again\n"
+        '"""Module doc mentioning several."""\n'
+        "\n"
+        "\n"
+        "def several(x):\n"
+        '    """several: a docstring\n'
+        "    that says several twice.\n"
+        '    """\n'
+        "    return x\n"
+        "\n"
+        "\n"
+        "def caller_a():\n"
+        "    # use several here\n"
+        "    return several(1)  # several\n"
+        "\n"
+        "\n"
+        "def caller_b():\n"
+        "    return several(2)\n"
+        "\n"
+        "\n"
+        "def caller_c():\n"
+        "    return several (3)\n"
+    ),
 }
 
 
@@ -74,3 +99,9 @@ def test_a_path_literal_into_a_dot_directory_resolves_a_call():  # #86
     assert _resolve_via_literals([".github/scripts/tool.py"], "gh_tool", table) == ".github/scripts/tool.py::gh_tool"
     assert _resolve_via_literals(["./.github/scripts/tool.py"], "gh_tool", table) == ".github/scripts/tool.py::gh_tool"
     assert _resolve_via_literals(["../pkg/app.py"], "run", table) == "pkg/app.py::run"
+
+
+def test_uses_keeps_the_calls_when_comments_and_docstrings_come_first_in_a_file(api):  # #89
+    r = api.call("uses", name="several")
+    hits = next(f for f in r["files"] if f["f"] == "pkg/many.py")["hits"]
+    assert [h["line"] for h in hits] == [15, 19, 23], hits  # the three calls, in line order; not the definition or prose

@@ -17,9 +17,11 @@ from __future__ import annotations
 import argparse
 import difflib
 import fnmatch
+import io
 import re
 import subprocess
 import sys
+import tokenize
 from collections import defaultdict
 from pathlib import Path
 
@@ -299,6 +301,45 @@ class ReadTools:
         return out
 
     # ── uses ──────────────────────────────────────────────────────────────
+    def _prose(self, f: str) -> tuple[set[int], dict[int, int]]:
+        """A Python file's docstring lines and, per line, the column its comment starts at: where a word match is prose."""
+        doc: set[int] = set(); comment: dict[int, int] = {}
+        if not f.endswith(".py"):
+            return doc, comment
+        try:
+            first = True
+            for t in tokenize.generate_tokens(io.StringIO("\n".join(self.lines(f)) + "\n").readline):
+                if t.type == tokenize.COMMENT:
+                    comment[t.start[0]] = t.start[1]
+                elif t.type == tokenize.STRING and first:  # a string standing alone as a statement: a docstring
+                    doc.update(range(t.start[0], t.end[0] + 1))
+                if t.type not in (tokenize.COMMENT, tokenize.NL):
+                    first = t.type in (tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT)
+        except (tokenize.TokenError, SyntaxError, IndentationError):
+            pass
+        return doc, comment
+
+    def _hit_rank(self, f: str, ln: int, text: str, name: str, mode: str, prose) -> int:
+        """0 a call, 1 other code, 2 a comment or docstring: the per-file cap keeps code before prose (#89)."""
+        doc, comment = prose
+        line = text
+        if f.endswith(".py"):
+            if ln in doc:
+                return 2
+            raw = self.lines(f)[ln - 1] if 0 < ln <= len(self.lines(f)) else text
+            line = raw[:comment[ln]] if ln in comment else raw
+        else:
+            stripped = text.lstrip()
+            if stripped.startswith(("//", "/*", "*", "#", "<!--")):
+                return 2
+            line = text.split("//", 1)[0]
+        if mode != "word":  # plain text: code or prose only
+            return 1 if name in line else 2
+        word = re.escape(name.rsplit(".", 1)[-1])
+        if not re.search(rf"\b{word}\b", line):
+            return 2
+        return 0 if re.search(rf"(?<!def )(?<!class )(?<!function )(?<!func )\b{word}\s*\(", line) else 1  # a definition is code, not a call
+
     def _enclosing(self, f: str):
         spans = []
         for i in self.idx.sym_by_file.get(f, ()):
@@ -347,7 +388,11 @@ class ReadTools:
         out_files = []; shown = 0
         for f, hs in ranked[:files]:
             spans = self._enclosing(f); rows = []
-            for ln, text in hs[:per_file]:
+            keep = hs[:per_file]
+            if mode != "regex" and len(hs) > per_file:  # code before comments and docstrings within the cap (#89)
+                prose = self._prose(f)
+                keep = sorted(sorted(hs, key=lambda h: (self._hit_rank(f, h[0], h[1], q, mode, prose), h[0]))[:per_file])
+            for ln, text in keep:
                 if shown >= hits:
                     break
                 best = None
