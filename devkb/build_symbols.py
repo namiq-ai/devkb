@@ -403,6 +403,7 @@ def _py_literals(tree: ast.AST) -> list[str]:
 
 
 _SUFFIX_CACHE: dict[int, tuple[int, dict[str, list[str]]]] = {}
+_LEADING_STEPS = re.compile(r"^(?:\.{1,2}/|/)+")  # leading `./`, `../` and `/`: path steps, not characters
 
 
 def _suffix_index(per_file_symbols: dict[str, list[dict]]) -> dict[str, list[str]]:
@@ -428,7 +429,7 @@ def _resolve_via_literals(
     """`short_name` in the one file this caller names by path, when exactly one
     symbol matches across every file those path strings point at."""
     index = _suffix_index(per_file_symbols)
-    files = {p for lit in literals for p in index.get(lit.lstrip("./"), [])}
+    files = {p for lit in literals for p in index.get(_LEADING_STEPS.sub("", lit), [])}  # keeps `.github/` (#86)
     hits = [f"{f}::{s['qualified_name']}" for f in sorted(files) for s in per_file_symbols[f]
             if s["qualified_name"].rsplit(".", 1)[-1] == short_name]
     return hits[0] if len(hits) == 1 else None

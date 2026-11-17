@@ -292,7 +292,8 @@ class Packer:
         """Before editing a file: which of its functions other files depend on (each with the call that proves it),
         the tests that exercise it, and what the graph could not attribute. A file's contract is what is called from
         outside it, so those functions come first and its private helpers are only counted."""
-        path = path.strip().lstrip("./")
+        from devkb.read_tools import repo_path  # noqa: PLC0415
+        path = repo_path(path)  # not lstrip("./"), which took the dot off `.github/` (#86)
         syms = list(self.idx.sym_by_file.get(path, []))
         if not syms:
             return f"# Graph pack: file\n\nThe graph has no code in `{path}`. Search the code."

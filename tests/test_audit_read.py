@@ -51,3 +51,26 @@ def test_search_docs_reports_a_pattern_git_grep_rejects_as_an_error_not_as_no_ma
     r = api.call("search_docs", query="Price ($")
     assert "error" in r and "Price ($" in r["error"], r
     assert api.call("search_docs", query="Price")["n_files"] == 1, "a valid query still finds the doc"
+
+
+@pytest.mark.parametrize("path", [".github/scripts/tool.py", "./.github/scripts/tool.py"])
+def test_the_file_pack_finds_a_file_under_a_dot_directory(api, path):  # #86
+    from devkb.packs import Packer  # noqa: PLC0415
+    text = Packer(api).file(path)
+    assert "# Graph pack: before editing `.github/scripts/tool.py`" in text, text
+
+
+def test_a_cpp_include_into_a_dot_directory_resolves_and_parent_steps_still_drop():  # #86
+    from devkb.cpp_graph import _Includers  # noqa: PLC0415
+    inc = _Includers([".gen/config.h", "include/api.h"])
+    assert inc.resolve("src/a.c", ".gen/config.h") == [".gen/config.h"]
+    assert inc.resolve("src/a.c", "./.gen/config.h") == [".gen/config.h"]
+    assert inc.resolve("lib/deep/b.c", "../include/api.h") == ["include/api.h"]
+
+
+def test_a_path_literal_into_a_dot_directory_resolves_a_call():  # #86
+    from devkb.build_symbols import _resolve_via_literals  # noqa: PLC0415
+    table = {".github/scripts/tool.py": [{"qualified_name": "gh_tool"}], "pkg/app.py": [{"qualified_name": "run"}]}
+    assert _resolve_via_literals([".github/scripts/tool.py"], "gh_tool", table) == ".github/scripts/tool.py::gh_tool"
+    assert _resolve_via_literals(["./.github/scripts/tool.py"], "gh_tool", table) == ".github/scripts/tool.py::gh_tool"
+    assert _resolve_via_literals(["../pkg/app.py"], "run", table) == "pkg/app.py::run"
