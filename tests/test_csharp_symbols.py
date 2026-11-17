@@ -1178,3 +1178,22 @@ void Also() { Bar(); }
     assert not any(n.startswith("P80.A.M.") for n in names)
     assert {("P80.A.Bar", "P80.A.Foo"), ("P80.A.M", "P80.A.Foo"), ("P80.A.Kept", "P80.A.Foo"),
             ("P80.A.Also", "P80.A.Bar")} <= edges
+
+
+
+def test_a_finalizer_is_not_the_constructor(tmp_path):
+    """#81: `~Res()` was recorded as `Res.ctor`, so `new Res()` linked to the finalizer."""
+    names, edges = _edges_of(tmp_path, {"F81.cs": '''namespace F81 {
+class Res { ~Res(){ Release(); } void Release(){} }
+class User { void Go(){ new Res(); } }
+class Both { public Both() { Init(); } ~Both() { Release(); } void Init(){} void Release(){} }
+class Make { void Go(){ new Both(); } }
+}
+'''})
+    assert "F81.Res.~Res" in names and "F81.Res.ctor" not in names
+    assert ("F81.Res.~Res", "F81.Res.Release") in edges
+    assert not any(callee.endswith(("~Res", "~Both")) for caller, callee in edges if caller != callee)
+    assert ("F81.User.Go", "F81.Res.ctor") not in edges
+    assert {("F81.Both.ctor", "F81.Both.Init"), ("F81.Both.~Both", "F81.Both.Release"),
+            ("F81.Make.Go", "F81.Both.ctor")} <= edges
+    assert ("F81.Both.ctor", "F81.Both.Release") not in edges

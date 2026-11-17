@@ -662,6 +662,8 @@ def _member_head(h: str) -> dict | None:
             name, rest, ret_text = f"{qm.group(2)}.{name}", rest[: qm.start(1)].strip(), _drop_qualifier(ret_text)
         if rest and not re.search(r"[\w>\]?)]$", rest) and rest[-1:] not in "~":
             return None
+        if rest.endswith("~"):
+            name = "~" + name                 # `~Res()`: the finalizer, not the constructor `new Res()` means (#81)
         params = h[k + 1:close]
         bare = _ATTR_ANY.sub(" ", params)                           # `[Attr] this Type x` is still an extension
         ext = bool(re.match(r"\s*this\s", bare)) and bool(re.search(r"\bstatic\b", h[:k]))
