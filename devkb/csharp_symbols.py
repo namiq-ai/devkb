@@ -1914,6 +1914,17 @@ def list_files(repo_root: Path) -> list[str]:
     return sorted(f for f in proc.stdout.splitlines() if f and not _SKIP.search(f))
 
 
+def read_source(path: Path) -> str:
+    """A C# file's text, decoded by its byte-order mark: Visual Studio's "Unicode" encoding is UTF-16, which read as
+    UTF-8 yielded nothing, silently (#83). Without a mark, UTF-8. A UTF-8 mark is kept (`mask` blanks it)."""
+    data = path.read_bytes()
+    if data[:4] in (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff"):
+        return data.decode("utf-32", errors="replace")
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return data.decode("utf-16", errors="replace")
+    return data.decode("utf-8", errors="replace")
+
+
 def extract(repo_root: Path, stats: dict | None = None) -> tuple[list[dict], list[dict]]:
     """(symbols, calls) for every tracked C# file. Symbols carry rel, key, qparts, kind, name, line_start, line_end;
     calls are {caller, callee, rel, line, text, confidence}, deduplicated per caller and callee."""
@@ -1923,7 +1934,7 @@ def extract(repo_root: Path, stats: dict | None = None) -> tuple[list[dict], lis
         try:
             if path.stat().st_size > _MAX_BYTES:
                 continue
-            text = path.read_text(errors="replace")
+            text = read_source(path)
         except OSError:
             continue
         scans[rel] = scan_file(rel, text)

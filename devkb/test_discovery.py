@@ -62,7 +62,11 @@ def tests_in_file(repo_root: Path, rel: str) -> list[tuple[str, int]]:
     not hide the rest of a project's tests."""
     path = repo_root / rel
     try:
-        text = path.read_text(errors="replace")
+        if rel.endswith(".cs"):
+            from devkb.csharp_symbols import read_source  # noqa: PLC0415
+            text = read_source(path)                      # UTF-16 with a byte-order mark too (#83)
+        else:
+            text = path.read_text(errors="replace")
     except OSError:
         return []
     if cpp_symbols.is_cxx_path(rel):

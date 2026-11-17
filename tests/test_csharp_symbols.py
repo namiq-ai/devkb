@@ -1214,3 +1214,19 @@ def test_overloads_do_not_share_their_local_functions(tmp_path):
     m_calls = {(c["line"], _short(c["callee"])) for c in calls if _short(c["caller"]) == "O82.A.M"}
     assert (2, "O82.A.M.Validate") in m_calls and (3, "O82.A.Validate") in m_calls
     assert ("O82.A.M.Validate", "O82.A.Check") in edges
+
+
+
+def test_a_utf16_file_is_read(tmp_path):
+    """#83: a file saved as UTF-16 (Visual Studio's "Unicode") with a byte-order mark yielded nothing, silently."""
+    src = 'namespace U83 { class A { void Go() { Helper(); } void Helper() { } } }\n'
+    (tmp_path / "Le.cs").write_bytes(src.encode("utf-16"))                 # little-endian with a BOM
+    (tmp_path / "Be.cs").write_bytes(b"\xfe\xff" + src.replace("U83", "B83").encode("utf-16-be"))
+    (tmp_path / "U8.cs").write_bytes(b"\xef\xbb\xbf" + src.replace("U83", "E83").encode("utf-8"))
+    names, edges = _edges_of(tmp_path, {})
+    for ns in ("U83", "B83", "E83"):
+        assert {f"{ns}.A.Go", f"{ns}.A.Helper"} <= names
+        assert (f"{ns}.A.Go", f"{ns}.A.Helper") in edges
+    tests = '[Fact] public void Works() { }'.join(("namespace U83 { class T { ", " } }\n"))
+    (tmp_path / "T.cs").write_bytes(tests.encode("utf-16"))
+    assert test_discovery.tests_in_file(tmp_path, "T.cs") == [("Works", 1)]
