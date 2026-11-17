@@ -51,6 +51,15 @@ def _is_test(path: str) -> bool:
     return is_test_path(path)
 
 
+def repo_path(path: str) -> str:
+    """A path as the graph keys it: without leading `./` and `/`. Not `lstrip("./")`, which strips characters and so
+    took the dot off `.github/...` (#54)."""
+    path = path.strip()
+    while path.startswith("./"):
+        path = path[2:]
+    return path.lstrip("/")
+
+
 def range_state(path: str, ls: int | None, le: int | None) -> str:
     """exact: the graph holds a real end line. end unknown: the language's extractor stores none. one line: a real one-line body."""
     if ls and le and le > ls:
@@ -91,7 +100,7 @@ class ReadTools:
 
     def resolve_file(self, path: str) -> tuple[str | None, list[str]]:
         """A tracked path, or the one tracked file that ends with it; else the candidates."""
-        path = path.strip().lstrip("./")
+        path = repo_path(path)
         known = set(self.idx.sym_by_file) | {k for (t, k) in self.idx.by_key if t == "File"}
         if path in known:
             return path, []
@@ -129,7 +138,7 @@ class ReadTools:
         if "::" in q:
             left, right = q.rsplit("::", 1)
             if "/" in left or re.search(r"\.[A-Za-z0-9]{1,5}$", left):
-                want_file, q = left.lstrip("./"), right
+                want_file, q = repo_path(left), right
         q = q.replace("::", ".").replace("#", ".")
         ql = q.lower()
         rx = None
