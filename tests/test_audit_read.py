@@ -45,3 +45,9 @@ def test_outline_finds_a_file_under_a_dot_directory(api, path):  # #54
 def test_symbol_finds_a_definition_under_a_dot_directory(api, query):  # #54
     r = api.call("symbol", query=query)
     assert [m["k"] for m in r["matches"]] == [".github/scripts/tool.py::gh_tool"], r
+
+
+def test_search_docs_reports_a_pattern_git_grep_rejects_as_an_error_not_as_no_match(api):  # #55
+    r = api.call("search_docs", query="Price ($")
+    assert "error" in r and "Price ($" in r["error"], r
+    assert api.call("search_docs", query="Price")["n_files"] == 1, "a valid query still finds the doc"

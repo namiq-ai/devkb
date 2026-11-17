@@ -386,6 +386,9 @@ class ReadTools:
                                   capture_output=True, text=True, timeout=25)
         except (OSError, subprocess.TimeoutExpired) as e:
             return {"error": f"search failed: {e}"}
+        if proc.returncode not in (0, 1):                # 1 is "no match"; anything else, e.g. a rejected regex, is not (#55)
+            return {"query": q, "error": f'search_docs could not search for "{q}": '
+                                         f'{(proc.stderr or "git grep failed").strip()[:200]}'}
         by_file: dict[str, list[tuple[int, str]]] = defaultdict(list)
         for line in proc.stdout.splitlines()[:4000]:
             m = re.match(r"([^:]+):(\d+):(.*)", line)
