@@ -87,6 +87,27 @@ def _drop_block(text: str, begin: str = BEGIN, end: str = END) -> str:
     return _between(text, begin, end).sub("\n", text, count=1).strip("\n") + "\n" if begin in text else text
 
 
+def _unpaired(text: str, begin: str, end: str) -> int | None:
+    """The line of the first marker without its partner, or None. A BEGIN whose END was deleted by hand would make the
+    block regex run on to the next END and take the user's text between them with it (#50)."""
+    marks = sorted([(m.start(), begin) for m in re.finditer(re.escape(begin), text)]
+                   + [(m.start(), end) for m in re.finditer(re.escape(end), text)])
+    for i, (pos, kind) in enumerate(marks):
+        partner = marks[i + 1][1] if i + 1 < len(marks) else None
+        if (i % 2 == 0 and (kind != begin or partner != end)) or (i % 2 == 1 and kind != end):
+            return text.count("\n", 0, pos) + 1
+    return None
+
+
+def _refuse_unpaired(root: Path, files: dict[str, tuple[str, str, str]]) -> None:
+    """Fail closed before anything is written: a file whose managed markers do not pair up is not touched."""
+    for rel, (text, begin, end) in files.items():
+        line = _unpaired(text, begin, end)
+        if line is not None:
+            raise SystemExit(f"{root / rel}, line {line}: a devkb block marker has no partner, so devkb init "
+                             f"changed nothing. Restore or delete the marker by hand, then run it again")
+
+
 class Plan:
     def __init__(self, root: Path, dry_run: bool) -> None:
         self.root, self.dry_run, self.changes = root, dry_run, []
@@ -173,13 +194,16 @@ def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool, claude_hook
     p = Plan(root, dry_run)
     install = toolset is not None
     agents, claude, ignore = _read(root / "AGENTS.md"), _read(root / "CLAUDE.md"), _read(root / ".gitignore")
+    hdir = _hooks_dir(root)
+    _refuse_unpaired(root, {"AGENTS.md": (agents, BEGIN, END), "CLAUDE.md": (claude, BEGIN, END),
+                            ".gitignore": (ignore, HASH_BEGIN, HASH_END),
+                            **{str(hdir / n): (_read(hdir / n), HASH_BEGIN, HASH_END) for n in HOOKS}})
     p.write("AGENTS.md", _set_block(agents, AGENTS_BLOCK) if install else _drop_block(agents))
     p.write("CLAUDE.md", _set_block(claude, "@AGENTS.md") if install else _drop_block(claude))
     p.write(".gitignore", _set_block(ignore, ".devkb/", HASH_BEGIN, HASH_END) if install else _drop_block(ignore, HASH_BEGIN, HASH_END))
     p.write(".mcp.json", _mcp(root, toolset))
     if claude_hook or not install:
         p.write(".claude/settings.json", _settings(root, install))
-    hdir = _hooks_dir(root)
     for name in HOOKS:
         path = hdir / name
         if not install or hooks:
