@@ -516,6 +516,18 @@ def _norm_name(text: str) -> str:
     return re.sub(r"operator\s*([^\w\s])", r"operator\1", re.sub(r"operator\s*(\(\s*\)|\[\s*\])", lambda m: "operator" + re.sub(r"\s", "", m.group(1)), text))
 
 
+_INIT_TAIL = re.compile(r"(?<!:)([:,])(?!:)\s*(?:::)?" + _IDENT + r"(?:\s*::\s*" + _IDENT + r")*\s*(?:" + _TARGS + r")?\s*$")
+_INIT_COLON = re.compile(r"\)\s*(?:(?:noexcept|try)\b\s*(?:\([^)]*\)\s*)?)*:(?!:)")
+
+
+def _init_brace(head: str) -> bool:
+    """Whether the `{` after `head` opens a brace initialiser in a constructor's initialiser list (`K() : m_x{1}`, #63):
+    `head` ends with a member or base name right after the list's `:` or a `,`, and a parameter list's `)` precedes
+    that `:`. A class's base list (`struct C : A, B {`) has no `)` before its `:`."""
+    m = _INIT_TAIL.search(head)
+    return bool(m and _INIT_COLON.search(head, 0, m.end(1)))
+
+
 # ── the file scanner ───────────────────────────────────────────────────────────
 class _Scope:
     __slots__ = ("ns", "anon", "classes", "access", "rec", "ext_c")
@@ -554,6 +566,9 @@ class _Scanner:
                 close = _match_close(code, k, "{", "}", hi)
                 if close is None:
                     close = hi
+                if self.cpp and close < hi and _init_brace(code[start:k]):
+                    i = close + 1      # `K() : m_x{1}, ...`: a member's brace initialiser; the body is a later `{`
+                    continue
                 end = self.brace(start, k, close, scope)
                 i = start = close + 1 if end is None else end
         # trailing statement without terminator: ignore
