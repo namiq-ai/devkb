@@ -1197,3 +1197,20 @@ class Make { void Go(){ new Both(); } }
     assert {("F81.Both.ctor", "F81.Both.Init"), ("F81.Both.~Both", "F81.Both.Release"),
             ("F81.Make.Go", "F81.Both.ctor")} <= edges
     assert ("F81.Both.ctor", "F81.Both.Release") not in edges
+
+
+
+def test_overloads_do_not_share_their_local_functions(tmp_path):
+    """#82: local functions were looked up by the owner's qualified name, which overloads share: `M(string)`'s
+    `Validate()` bound to the local function of `M(int)`."""
+    names, edges = _edges_of(tmp_path, {"O82.cs": '''namespace O82 { class A {
+  void M(int a){ void Validate(){ Check(); } Validate(); }
+  void M(string s){ Validate(); }
+  void Validate(){}
+  void Check(){}
+} }
+'''})
+    calls = csharp_symbols.extract(tmp_path)[1]
+    m_calls = {(c["line"], _short(c["callee"])) for c in calls if _short(c["caller"]) == "O82.A.M"}
+    assert (2, "O82.A.M.Validate") in m_calls and (3, "O82.A.Validate") in m_calls
+    assert ("O82.A.M.Validate", "O82.A.Check") in edges

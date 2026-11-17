@@ -752,7 +752,8 @@ def scan_file(rel: str, text: str) -> dict:
         return None
 
     def add(kind: str, name: str, q: tuple[str, ...], start: int, end: int, **kw) -> dict:
-        s = {"kind": kind, "name": name, "qparts": q, "line_start": line(start), "line_end": line(end), **kw}
+        s = {"kind": kind, "name": name, "qparts": q, "line_start": line(start), "line_end": line(end),
+             "ix": len(symbols), **kw}                       # ix: its place in this file's symbols
         symbols.append(s)
         return s
 
@@ -821,6 +822,7 @@ def scan_file(rel: str, text: str) -> dict:
                     ptext = h[k + 1:close] if close else ""
                     s = add("function", lm.group(1), owner["qparts"] + (lm.group(1),), head_start, i,
                             params=_params(ptext), body=[], type_q=owner.get("type_q"), attrs=set(),
+                            owner_ix=owner["ix"],
                             **_local_fn_sig(h, k, ptext))
                     frame = {"kind": "member", "q": top["q"], "sym": s, "start": i}
                 else:
@@ -881,7 +883,7 @@ def scan_file(rel: str, text: str) -> dict:
                     close = _close(h, k)
                     ptext = h[k + 1:close] if close else ""
                     add("function", lm.group(1), owner["qparts"] + (lm.group(1),), head_start, i,
-                        params=_params(ptext), body=[(last, i)],
+                        params=_params(ptext), body=[(last, i)], owner_ix=owner["ix"],
                         type_q=owner.get("type_q"), attrs=set(), **_local_fn_sig(h, k, ptext))
             last = i + 1
         i += 1
@@ -1934,26 +1936,26 @@ def extract(repo_root: Path, stats: dict | None = None) -> tuple[list[dict], lis
     index = _Index(symbols)
     calls: dict[tuple[str, str], dict] = {}
     unresolved: dict[str, set[tuple[str, str]]] = {}
-    local_fns: dict[tuple[str, ...], dict[str, dict]] = {}     # owner's qparts -> its local functions (one pass, not n²)
-    fn_q: set[tuple[str, ...]] = set()
+    # (file, owner's place in it) -> its local functions, one pass. Not the owner's qualified name: overloads share
+    # that, and one overload's call never means another's local function (#82)
+    local_fns: dict[tuple[str, int], dict[str, dict]] = {}
     for x in symbols:
         if x["kind"] == "function":
-            local_fns.setdefault(x["qparts"][:-1], {})[x["name"]] = x
-            fn_q.add(x["qparts"])
+            local_fns.setdefault((x["rel"], x["owner_ix"]), {})[x["name"]] = x
     for s in symbols:
         if not s.get("body"):
             continue
         sc = scans[s["rel"]]
-        locals_fns = local_fns.get(s["qparts"], {})
+        locals_fns = local_fns.get((s["rel"], s["ix"]), {})
         if s["kind"] == "function":
             # a local function also sees its siblings and those of every enclosing local function, up to the member
             # that holds them; the nearest scope wins (#58)
-            q, scopes = s["qparts"][:-1], []
+            o, scopes = sc["symbols"][s["owner_ix"]], []
             while True:
-                scopes.append(local_fns.get(q, {}))
-                if q not in fn_q:
+                scopes.append(local_fns.get((s["rel"], o["ix"]), {}))
+                if o["kind"] != "function":
                     break
-                q = q[:-1]
+                o = sc["symbols"][o["owner_ix"]]
             seen: dict[str, dict] = {}
             for d in reversed(scopes):
                 seen.update(d)
