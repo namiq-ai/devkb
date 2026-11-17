@@ -621,6 +621,12 @@ def _member_head(h: str) -> dict | None:
         if not m or m.group(1) in _NOT_CALL or m.group(1) in _MODIFIER_WORDS:
             return None                       # `private (int A, string B) _field;`: a tuple type, not a method `private`
         rest = before[: m.start()].strip()
+        name, ret_text = m.group(1), re.sub(r"@?[^\W\d]\w*$", "", _strip_end_generics(h[:k]))
+        qm = _EXPLICIT_IFACE.search(rest)
+        if qm and rest[: qm.start(1)].strip():
+            # `void IRunner.Run()`: an explicit interface implementation, keyed with its interface's name so it
+            # stays apart from a `Run()` of the type's own, which a call by simple name means (#79)
+            name, rest, ret_text = f"{qm.group(2)}.{name}", rest[: qm.start(1)].strip(), _drop_qualifier(ret_text)
         if rest and not re.search(r"[\w>\]?)]$", rest) and rest[-1:] not in "~":
             return None
         params = h[k + 1:close]
@@ -628,8 +634,7 @@ def _member_head(h: str) -> dict | None:
         ext = bool(re.match(r"\s*this\s", bare)) and bool(re.search(r"\bstatic\b", h[:k]))
         gm = re.search(r"<([^<>]*)>\s*$", h[:k].rstrip())
         glist = [g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()] if gm else []
-        ret_text = re.sub(r"@?[^\W\d]\w*$", "", _strip_end_generics(h[:k]))
-        return {"name": m.group(1), "kind": "method", "params": params, "static_ext": ext, "ret": _ret_type(rest),
+        return {"name": name, "kind": "method", "params": params, "static_ext": ext, "ret": _ret_type(rest),
                 "ret_full": _last_type_token(ret_text) if rest else None, "pfull": _pfull(params), "gcons": gcons,
                 "gparams_list": glist,
                 "static": bool(re.search(r"\bstatic\b", h[:k])),
@@ -637,11 +642,28 @@ def _member_head(h: str) -> dict | None:
                 "gparams": {g.strip().split()[-1] for g in gm.group(1).split(",") if g.strip()} if gm else set()}
     if "[" in h and re.search(r"\bthis\s*\[", h):
         return {"name": "this[]", "kind": "method", "params": "", "static_ext": False}
+    em = re.search(r"^(.*\S)\s+((?:[^\W\d]\w*\.)*(I[A-Z]\w*))\.@?([^\W\d]\w*)$", _strip_generics(h))
+    if em and re.search(r"[\w>\]?)]$", em.group(1)):                # `int IRunner.Count { get ... }` (#79)
+        return {"name": f"{em.group(3)}.{em.group(4)}", "kind": "property", "params": "", "static_ext": False,
+                "ret": _ret_type(em.group(1)), "ret_full": _last_type_token(_drop_qualifier(
+                    re.sub(r"\s*@?[^\W\d]\w*$", "", h)))}
     m = re.search(r"([^\W\d][\w.<>\[\],? ]*?)\s+@?([^\W\d]\w*)$", _strip_generics(h))
     if not m or m.group(2) in _NOT_CALL:
         return None
     return {"name": m.group(2), "kind": "property", "params": "", "static_ext": False, "ret": _ret_type(m.group(1)),
             "ret_full": _last_type_token(re.sub(r"\s*@?[^\W\d]\w*$", "", h))}
+
+
+# the interface an explicit implementation names before its member: `IRunner.`, `System.IDisposable.` (generics gone)
+_EXPLICIT_IFACE = re.compile(r"(?:^|\s)((?:[^\W\d]\w*\.)*(I[A-Z]\w*))\.$")
+
+
+def _drop_qualifier(s: str) -> str:
+    """`s` (a header up to a member's name) without the `IName<...>.` that ends it."""
+    s = s.rstrip()
+    if s.endswith("."):
+        s = re.sub(r"[\w.]*$", "", _strip_end_generics(s[:-1]))
+    return s
 
 
 def _ret_type(rest: str) -> str | None:
@@ -904,7 +926,7 @@ def _member_frame(mh: dict, attrs: set[str], header: str, top: dict, start: int,
             static=mh.get("static", False), ret_full=mh.get("ret_full"), pfull=mh.get("pfull"),
             gcons=mh.get("gcons") or {}, gparams_list=mh.get("gparams_list") or [],
             is_test=bool(attrs & TEST_ATTRS))
-    if mh["kind"] == "property" and mh.get("ret"):
+    if mh["kind"] == "property" and mh.get("ret") and "." not in mh["name"]:
         tsym["fields"][mh["name"]] = mh["ret"]
         if mh.get("ret_full"):
             tsym.setdefault("ffull", {})[mh["name"]] = mh["ret_full"]

@@ -1126,3 +1126,29 @@ public class CalcTests {
     assert {("T78.CalcTests.Sums", "T78.Calc.Sum"), ("T78.CalcTests.After", "T78.Calc.Sum"),
             ("T78.Marked.M", "T78.Calc.Sum")} <= edges
     assert [n for n, _ in csharp_symbols.tests_in_text(text)] == ["After", "Sums"]
+
+
+
+def test_explicit_interface_implementations_are_recorded_with_their_calls(tmp_path):
+    """#79: `void IRunner.Run()` was rejected (a name after `.`), so the member and every call inside it were lost.
+    The member keeps its interface name (`A.IRunner.Run`); a call `Run()` never binds to it, as in C#."""
+    names, edges = _edges_of(tmp_path, {"I79.cs": '''namespace I79 {
+interface IRunner { void Run(); }
+class A : IRunner, System.IDisposable, System.Collections.Generic.IEnumerable<int> {
+  void IRunner.Run(){ Helper(); }
+  void IDisposable.Dispose(){ Cleanup(); }
+  public void Dispose() { }
+  IEnumerator<int> IEnumerable<int>.GetEnumerator() { return Make(); }
+  int IRunner.Count { get { return Helper2(); } }
+  void Helper(){} void Cleanup(){} IEnumerator<int> Make() => null; int Helper2() => 1;
+  void Go() { Run(); Dispose(); }
+  void Run() { }
+}
+}
+'''})
+    assert {"I79.A.IRunner.Run", "I79.A.IDisposable.Dispose", "I79.A.IEnumerable.GetEnumerator",
+            "I79.A.IRunner.Count"} <= names
+    assert {("I79.A.IRunner.Run", "I79.A.Helper"), ("I79.A.IDisposable.Dispose", "I79.A.Cleanup"),
+            ("I79.A.IEnumerable.GetEnumerator", "I79.A.Make"), ("I79.A.IRunner.Count", "I79.A.Helper2")} <= edges
+    assert ("I79.A.Go", "I79.A.Run") in edges and ("I79.A.Go", "I79.A.Dispose") in edges
+    assert not any(callee.startswith(("I79.A.IRunner.", "I79.A.IDisposable.")) for _, callee in edges)
