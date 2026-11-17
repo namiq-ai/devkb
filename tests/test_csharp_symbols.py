@@ -1106,3 +1106,23 @@ public class Use
     assert got["Run.Wide(x => { Run.With(x => x.Qm()); x.Rm(); });"] >= {"S61.Q.Qm", "S61.R.Rm"}
     assert "S61.P.Pm" not in got["Run.Wide(x => { Run.With(x => x.Qm()); x.Rm(); });"]
     assert got["x.Pm();"] == {"S61.P.Pm"}
+
+
+
+def test_an_attribute_holding_braces_does_not_hide_the_member_after_it(tmp_path):
+    """#78: `[InlineData(new int[] { 1, 2 }, 3)]`: the attribute's `{` was read as a block at type level, so the test
+    method after it was neither a symbol nor a test and its calls were lost."""
+    text = '''namespace T78 {
+public static class Calc { public static int Sum(int[] a) => 0; }
+public class CalcTests {
+  [Theory][InlineData(new int[] { 1, 2 }, 3)] public void Sums(int[] a, int s) { Calc.Sum(a); }
+  [Fact] public void After() { Calc.Sum(null); }
+}
+[Obsolete(nameof(X), new[] { "a" })] public class Marked { public void M() { Calc.Sum(null); } }
+}
+'''
+    names, edges = _edges_of(tmp_path, {"T78.cs": text})
+    assert {"T78.CalcTests.Sums", "T78.CalcTests.After", "T78.Marked", "T78.Marked.M"} <= names
+    assert {("T78.CalcTests.Sums", "T78.Calc.Sum"), ("T78.CalcTests.After", "T78.Calc.Sum"),
+            ("T78.Marked.M", "T78.Calc.Sum")} <= edges
+    assert [n for n, _ in csharp_symbols.tests_in_text(text)] == ["After", "Sums"]

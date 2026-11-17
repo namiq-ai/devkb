@@ -706,6 +706,21 @@ def scan_file(rel: str, text: str) -> dict:
             continue
         raw = masked[last:i]
         top = stack[-1]
+        if c == "{" and top["kind"] in ("file", "ns", "type") and raw.count("[") > raw.count("]"):
+            # `[InlineData(new int[] { 1, 2 }, 3)]`: a brace inside an open attribute is part of its argument, not a
+            # scope; its `}` and any `;` inside it belong to the header too (#78)
+            depth, close = 0, None
+            for j in range(i, n):
+                if masked[j] == "{":
+                    depth += 1
+                elif masked[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        close = j
+                        break
+            if close is not None:                # never closed: read as before (and no rescan per later `{`)
+                i = close + 1
+                continue
         head_start = last + (len(raw) - len(raw.lstrip()))
         attrs, header = _split_attrs(raw)
         if c == "{":
