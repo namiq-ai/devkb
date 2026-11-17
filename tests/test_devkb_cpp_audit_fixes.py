@@ -121,3 +121,33 @@ def test_comparisons_and_arithmetic_before_a_call_are_still_calls(tmp_path):
     r = cs.extract_file("a.cpp", src)
     cs.scan_bodies(r, {"compute"}, {"compute"})
     assert sorted(c.line for c in r.calls if c.name == "compute") == [3, 4, 5, 9]
+
+
+# #66: indirect-reference resolution is near-linear in a function table's size
+def _table(n: int) -> str:
+    src = "".join(f"static int f{i}(int x) {{ return x; }}\n" for i in range(n))
+    return src + "void (*tab[])(void) = {\n" + "".join(f"  f{i},\n" for i in range(n)) + "};\n"
+
+
+def test_indirect_refs_on_a_4000_entry_function_table_take_under_a_second():
+    import time
+    r = cs.extract_file("t.c", _table(4000))
+    names = {f"f{i}" for i in range(4000)}
+    cs.scan_bodies(r, names, names)
+    t = time.perf_counter()
+    out = cs.indirect_refs(r, names)
+    assert time.perf_counter() - t < 1.0
+    assert sorted(n for n, _l, _o in out) == sorted(names)
+
+
+def test_indirect_refs_keep_their_owner_with_two_definitions_on_one_line():
+    # owners are found by line, as before #66: on a line holding two bodies the first one owns every reference
+    src = ("int a(int x) { return x; }\nint b(int x) { return x; }\n"
+           "void p(void) { use(a); } void q(void) { use(b); }\n"
+           "void r(void) {\n  int a = 1;\n  use(a);\n  use(b);\n}\n")
+    r = cs.extract_file("t.c", src)
+    names = {"a", "b"}
+    cs.scan_bodies(r, names | {"use"}, names)
+    by_idx = {d.index: d.qn for d in r.defs}
+    got = sorted((n, line, by_idx.get(o)) for n, line, o in cs.indirect_refs(r, names))
+    assert got == [("a", 3, "p"), ("b", 3, "p"), ("b", 7, "r")]

@@ -1058,14 +1058,16 @@ def indirect_refs(rec: FileRecords, function_names: set[str]) -> list[tuple[str,
     members: set[str] = set()
     for c in rec.classes:
         members.update(c.members)
+    # the owner of a line is the first body (by offset) whose lines contain it: one table, filled last-to-first so the
+    # first wins, instead of a scan of every body per reference (#66)
+    owner_of: dict[int, int] = {}
+    for a, b, idx in reversed(spans):
+        for ln in range(m.line(a), m.line(b) + 1):
+            owner_of[ln] = idx
     for name, line, _ in rec.indirect:
         if name not in function_names:
             continue
-        owner = -1
-        for a, b, idx in spans:
-            if m.line(a) <= line <= m.line(b):
-                owner = idx
-                break
+        owner = owner_of.get(line, -1)
         if owner >= 0 and name in rec.scanner.locals_of(rec.defs[owner]):
             continue
         if name in members:
