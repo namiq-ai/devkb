@@ -60,7 +60,8 @@ def _string_end(text: str, i: int) -> int | None:
         k += 1
     if k >= n or text[k] != '"' or (k > i and not text[i] in "$@"):
         return None
-    if text.startswith('"""', k):                                  # raw string: N quotes ... N quotes
+    # raw string: N quotes ... N quotes. Never verbatim: `@""""` is a verbatim string holding one quote (#57)
+    if not verbatim and text.startswith('"""', k):
         q = k
         while q < n and text[q] == '"':
             q += 1

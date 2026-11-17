@@ -995,3 +995,28 @@ public interface IRule<T, TProperty> : IRule<T> { void AddValidator(int v); }
 public class Builder<T, TProperty> { public IRule<T, TProperty> Rule { get; } public void Go() { Rule.AddValidator(1); } }
 ''', caller="Go")
     assert got["public class Builder<T, TProperty> { public IRule<T, TProperty> Rule { get; } public void Go() { Rule.AddValidator(1); } }"] == {"AR.IRule.AddValidator"}
+
+
+# ── 0.2.8 quality audit (#57-#61) ─────────────────────────────────────────────────────────────────────────────
+
+def _edges_of(tmp_path, files: dict[str, str]):
+    """(symbol names, {(caller, callee)}) from extract() over a repository of `files`."""
+    for rel, text in files.items():
+        (tmp_path / rel).write_text(text)
+    for cmd in (["init", "-q"], ["add", "-A", "-f"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+        subprocess.run(["git", *cmd], cwd=tmp_path, check=True)
+    symbols, calls = csharp_symbols.extract(tmp_path)
+    return {_short(s["key"]) for s in symbols}, {(_short(c["caller"]), _short(c["callee"])) for c in calls}
+
+
+def test_a_verbatim_string_of_one_quote_is_not_a_raw_string(tmp_path):
+    # #57: `@` and four quotes is a verbatim string holding one quote; read as a raw string it blanked the file
+    names, edges = _edges_of(tmp_path, {"V.cs": '''namespace V { class A {
+  void M() { var q = @""""; Helper(); }
+  void Helper() { }
+  void Other() { Helper(); }
+} }
+'''})
+    assert {"V.A.M", "V.A.Helper", "V.A.Other"} <= names
+    assert {("V.A.M", "V.A.Helper"), ("V.A.Other", "V.A.Helper")} <= edges
+    assert csharp_symbols.mask('x = @"""" + @"a""b"; y();').endswith("y();")
