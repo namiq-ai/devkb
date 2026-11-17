@@ -247,7 +247,7 @@ class Packer:
     def change(self, name: str, path: str = "") -> str:
         i, err = self.api._resolve(f"{path}::{name}" if path and "::" not in name else name)
         if i is None and path:
-            cands = [s for s in self.idx.short.get(name, []) if self.api._key(s).startswith(path + "::")]
+            cands = [s for s in self.api._by_name(name) if self.api._key(s).startswith(path + "::")]
             i = cands[0] if len(cands) == 1 else None
         if i is None:
             return f"# Graph pack: change\n\nThe graph cannot resolve `{name}`" + (f" in `{path}`" if path else "") + ". Search the code."
@@ -330,7 +330,7 @@ class Packer:
     def refactor(self, name: str, role: str = "", path: str = "") -> str:
         i, err = self.api._resolve(f"{path}::{name}" if path and "::" not in name else name)
         if i is None:
-            cands = [s for s in self.idx.short.get(name, []) if not path or self.api._key(s).startswith(path + "::")]
+            cands = [s for s in self.api._by_name(name) if not path or self.api._key(s).startswith(path + "::")]
             i = cands[0] if len(cands) == 1 else None
         if i is None:
             return f"# Graph pack: refactor\n\nThe graph cannot resolve `{name}` unambiguously. Search the code."
