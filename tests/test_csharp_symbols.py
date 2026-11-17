@@ -962,3 +962,27 @@ public class Use
 ''')
     assert got["complexType.Touch();"] == {"VP.Complex.Touch"}
     assert got["ArrayExpr a => Pick(a),"] == {"VP.Use.Pick"}
+
+
+def test_dotnet_names_shadowed_by_repo_types_array_casts_and_collection_arguments(tmp_path):
+    got = _sites(tmp_path, "SH.cs", '''namespace SH;
+using System.Collections.Generic;
+public class List { }                                        // a repository type named like .NET's List<T>
+public static class TupleExt { public static string FormatTables(this IEnumerable<(string T, string S)> t) => ""; }
+public static class Coll { public static Queue<T> Enqueue<T>(this Queue<T> q, IEnumerable<T> items) => q; }
+public class Bytes { public static string ToHex(byte[] b) => ""; }
+public class Data { public List<(string T, string S)> Tables { get; } }
+public class Use
+{
+    public void Go(Data d, object v, Queue<bool> failures)
+    {
+        d.Tables.FormatTables();
+        var raw = (byte[])v;
+        Bytes.ToHex(raw);
+        failures.Enqueue([true]);
+    }
+}
+''')
+    assert got["d.Tables.FormatTables();"] == {"SH.TupleExt.FormatTables"}
+    assert got["Bytes.ToHex(raw);"] == {"SH.Bytes.ToHex"}
+    assert got["failures.Enqueue([true]);"] == {"SH.Coll.Enqueue"}

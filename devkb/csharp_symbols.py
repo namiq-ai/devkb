@@ -589,7 +589,7 @@ _CAST = re.compile(r"^\s*\(\s*([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\[\])?\??)\s*\)\s*
 _AS = re.compile(r"\bas\s+([A-Za-z_][\w.]*(?:<[^()]*>)?)\s*$")
 _GENERIC_TYPE_END = re.compile(r"(?<![\w.])([A-Za-z_][\w.]*)\s*<([^<>()]*(?:<[^<>()]*>[^<>()]*)*)>$")
 # declarations whose type the source writes (F8): `var x = (T)y;`, `var x = y as T;`, `y is T x`, `case T x`
-_DECL_CAST = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*\(\s*([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\[\])?)\s*\)\s*[\w@(]")
+_DECL_CAST = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*\(\s*([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\s*\[\s*\])*)\s*\)\s*[\w@(]")
 _DECL_AS = re.compile(r"\bvar\s+@?([A-Za-z_]\w*)\s*=\s*[^;=]*?\bas\s+([A-Za-z_][\w.]*(?:<[^;()]*?>)?)\s*;")
 _DECL_PATTERN = re.compile(r"\b(?:is|case)\s+(?:not\s+)?([A-Za-z_][\w.]*(?:<[^()]*?>)?)\s+@?([A-Za-z_]\w*)\b"
                            r"(?!\s*[(<.])"
@@ -1125,16 +1125,26 @@ class _Index:
                     todo.append(bq)
         return out
 
-    def dotnet_member(self, rtype: str | None, near: tuple[str, ...]) -> set[str]:
+    def is_repo_type(self, name: str | None, nargs: int | None = None) -> bool:
+        """Whether `name` (seen with `nargs` generic arguments) is a repository type. A repository type that happens to
+        share a .NET name (EF Core's own `List`) is not the receiver `List<(string, string?)>` when the argument
+        counts differ; that one is .NET's."""
+        if not name or name not in self.types:
+            return False
+        if not nargs:
+            return True
+        return any(len(self.type_sym(t["qparts"]).get("tgparams_list") or []) == nargs for t in self.types[name])
+
+    def dotnet_member(self, rtype: str | None, near: tuple[str, ...], nargs: int | None = None) -> set[str]:
         """Instance method names the receiver has from .NET (its own type if outside, or its outside bases)."""
         if not rtype:
             return set()
-        if rtype not in self.types:
+        if not self.is_repo_type(rtype, nargs):
             return dotnet.members(rtype) or set()
         names, _ = self._repo_ancestors(rtype)
         return set().union(*((dotnet.members(b) or set()) for b in names if b not in self.types))
 
-    def extension(self, name: str, n, rtype: str | None, near: tuple[str, ...]) -> dict | None:
+    def extension(self, name: str, n, rtype: str | None, near: tuple[str, ...], nargs: int | None = None) -> dict | None:
         """The extension method `x.name(...)` means: among those so named that accept `n` arguments, the one whose
         `this` type fits the receiver. Receiver of a repository type: its own type, a base or an interface, or a
         generic parameter. Of an outside type (whose bases the repository cannot show): its name, `I` + its name
@@ -1152,7 +1162,7 @@ class _Index:
         cands = [c for c in every if self.fits(c, n)]
         # `this T` (a generic parameter) and `this object` accept any receiver
         generic = [c for c in cands if c.get("this_type") in generic_names(c)]
-        if rtype and rtype in self.types:
+        if rtype and self.is_repo_type(rtype, nargs):
             # A repository type; when several share the name (Jellyfin: two `Series`), the call compiles against one
             # of them, so a candidate fitting any of their hierarchies is the only one that can be meant.
             rq = self.type_named(rtype, near)
@@ -1639,17 +1649,21 @@ def _calls_in(s: dict, masked: str, nl: list[int], index: _Index, locals_fns: di
                 dotnet_bound = True                               # F3: bound at run time; not a repository call
                 rtype = None
             if rtype and found is None:
-                bq = index.type_named(rtype, tq)
+                bq = index.type_named(rtype, tq) if index.is_repo_type(rtype, len(rt[1]) if rt else None) else None
                 hit = index.member(bq, name, a_) if bq else None
                 found = (hit, 0.7) if hit else None
-                if found is None and not index.ambiguous and name in index.dotnet_member(rtype, tq):
+                collection_arg = any(mi.strip().startswith("[") for mi, *_ in (a_.items or []))
+                if found is None and not index.ambiguous and not collection_arg and \
+                        name in index.dotnet_member(rtype, tq, len(rt[1]) if rt else None):
+                    # (a collection expression `[x]` may not convert to the .NET member's parameter, while a
+                    # repository extension taking IEnumerable<T> does: EF Core `queue.Enqueue([failure])`)
                     dotnet_bound = True                           # C#: the receiver's own .NET method wins
             if found is None and not index.ambiguous and not dotnet_bound and not m.group("new") \
                     and chained is not None and (len(parts) > 1 or chained):
                 # `x.Ext()`: chosen by arguments and receiver; a failed `Type.M()` may be a property sharing a type's
                 # name (`User.GetUserId()`)
                 ext_rtype = "LambdaExpression" if rt and rt[0] == "Expression" and rt[1] else rtype   # F9
-                ext = index.extension(name, a_, None if static else ext_rtype, tq)
+                ext = index.extension(name, a_, None if static else ext_rtype, tq, len(rt[1]) if rt else None)
                 if ext is None and rtype and guessed[0]:
                     ext = index.extension(name, a_, None, tq)    # the guessed type was wrong: as an unknown receiver
                 found = (ext, 0.6 if rtype else 0.5) if ext else None
