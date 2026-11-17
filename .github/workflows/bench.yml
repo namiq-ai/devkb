@@ -15,7 +15,7 @@ name: bench
 
 on:
   pull_request:
-    paths: ["bench/repos.yaml", "devkb/**"]
+    paths: ["bench/repos.yaml", "bench/perf*.py", "devkb/**"]
   schedule:
     - cron: "0 8 * * *"   # 08:00 UTC = 2 AM CST (3 AM during daylight time); GitHub may start a scheduled run late
   workflow_dispatch:
@@ -28,7 +28,7 @@ on:
         type: boolean
         default: false
       arms:
-        description: "Arms"
+        description: "Arms: plain, core, workflow, lean, lean-pack (the plugin's toolset), nav (symbol, outline, pack), pack"
         default: "plain,core,lean,pack"
       reps:
         description: "Repetitions per task and arm"
@@ -122,3 +122,42 @@ jobs:
             bench-work/${{ matrix.id }}/${{ matrix.id }}.jsonl
             bench-work/${{ matrix.id }}/report.json
           if-no-files-found: ignore
+
+  # Free, on every pull request that touches devkb: does the code get slower or heavier? The previous release and this checkout build the
+  # same two repositories on the same runner, and a ratio over its limit fails the job (bench/perf.py, bench/perf_compare.py). Build
+  # times on a shared runner move by about 15% between identical runs, so the limits are loose (build 1.5x, query 2x and 0.05 s); a
+  # deliberate cost (a new kind of edge) is stated in the pull request, not hidden by raising a limit.
+  perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+      - name: Previous release and two pinned repositories
+        run: |
+          tag=$(git describe --tags --abbrev=0 --match 'v*')
+          git worktree add --detach "$RUNNER_TEMP/base" "$tag"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          clone() { git init -q "$RUNNER_TEMP/$1" && git -C "$RUNNER_TEMP/$1" fetch -q --depth 1 "$2" "$3" && git -C "$RUNNER_TEMP/$1" checkout -q FETCH_HEAD; }
+          clone click https://github.com/pallets/click.git e38188e9e205005d5af5f9e59df51904c984586a
+          clone fmt https://github.com/fmtlib/fmt.git 57f1b5930dc2906875534a15c209e1c39eda59ad
+      - name: Measure the release, then this checkout
+        env:
+          PERF_PYTHON: .venv/bin/python
+        run: |
+          repos="click=$RUNNER_TEMP/click fmt=$RUNNER_TEMP/fmt"
+          python3 bench/perf.py "$PWD" "this checkout" perf-head.json $repos --reps 3 --queries 5 --targets perf-targets.json --pick
+          python3 bench/perf.py "$RUNNER_TEMP/base" "$TAG" perf-base.json $repos --reps 3 --queries 5 --targets perf-targets.json
+      - name: Compare
+        run: python3 bench/perf_compare.py perf-base.json perf-head.json --max-build 1.5 --max-query 2.0 | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf
+          path: |
+            perf-base.json
+            perf-head.json

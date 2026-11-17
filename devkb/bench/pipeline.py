@@ -162,7 +162,7 @@ def run(e: dict, work: Path, arms: str, reps: int, model: str, workers: int) -> 
     return 0
 
 
-ARM_ORDER = ("plain", "core", "workflow", "lean", "lean-pack", "pack")
+ARM_ORDER = ("plain", "core", "workflow", "lean", "lean-pack", "nav", "pack")
 
 
 def token_table(rows: list[dict]) -> str:
@@ -264,12 +264,24 @@ def report(e: dict, work: Path, model: str) -> int:
     rows = [json.loads(x) for x in p["runs"].read_text().splitlines() if x.strip()]
     print("\nTokens by kind (median run):\n" + token_table(rows))
     print("\n" + detail_table(rows))
+    print("\n" + tool_search_table(rows))
     silent = tool_arms_without_tools(rows)
     if silent:
         print(f"\nWARNING: {', '.join(silent)} never called the graph: their tools were probably unavailable "
               "(check `mcp_connected`); do not report them as tool arms.", file=sys.stderr)
         return 1
     return 0
+
+
+def tool_search_table(rows: list[dict]) -> str:
+    """Per arm: runs whose first call was a ToolSearch, and ToolSearch calls per run. Each one is a model turn spent loading a
+    tool definition before the first lookup; the tools marked alwaysLoad should make it zero."""
+    out = ["ToolSearch turns (a tool-search call is one model turn before the first lookup):", "| Arm | Runs | First call was ToolSearch | ToolSearch calls per run |", "|---|---|---|---|"]
+    for arm in ARM_ORDER:
+        rs = [r for r in rows if r["arm"] == arm and "tool_search" in r]
+        if rs:
+            out.append(f"| {arm} | {len(rs)} | {sum(r.get('first_tool') == 'ToolSearch' for r in rs)} | {sum(r['tool_search'] for r in rs) / len(rs):.2f} |")
+    return "\n".join(out)
 
 
 def tool_arms_without_tools(rows: list[dict]) -> list[str]:

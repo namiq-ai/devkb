@@ -83,12 +83,22 @@ def _compact(reply: dict) -> str:
     return json.dumps(reply, separators=(",", ":"))
 
 
+# Claude Code defers MCP tools behind a ToolSearch call, which costs the agent a turn before its first lookup (measured: 15 of 16
+# runs began with ToolSearch). A tool that carries this annotation is loaded with the prompt instead. Only the tools agents reach for
+# first are marked, so the prompt grows by three definitions, not by the whole set.
+ALWAYS_LOAD = {"symbol", "outline", "pack"}
+ALWAYS_LOAD_META = {"anthropic/alwaysLoad": True}
+
+
 def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
     mcp = FastMCP("devkb-sdlc", instructions=INSTRUCTIONS)
     enabled = set(TOOLSETS[toolset])
 
     def tool(fn):
-        return mcp.tool(annotations=READ_ONLY, structured_output=False)(fn) if fn.__name__ in enabled else fn
+        if fn.__name__ not in enabled:
+            return fn
+        meta = ALWAYS_LOAD_META if fn.__name__ in ALWAYS_LOAD else None
+        return mcp.tool(annotations=READ_ONLY, structured_output=False, meta=meta)(fn)
 
     @tool
     def sdlc_context(ticket: str) -> str:
