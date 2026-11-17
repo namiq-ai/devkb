@@ -49,3 +49,56 @@ def test_out_of_class_constructor_with_brace_initialisers_and_class_bases_still_
     assert {"a.cpp::C", "a.cpp::C.C", "a.cpp::helper2", "a.cpp::after"} <= set(syms)
     assert {d for s, d in S.calls(g) if s == "a.cpp::C.C"} == {"a.cpp::helper", "a.cpp::helper2"}
     assert ("a.cpp::after", "a.cpp::helper") in S.calls(g)
+
+
+# #64: a function whose `{` never closes (signature variants under #ifdef/#else) does not swallow the rest of the file
+IFDEF = ("void a(void) {}\nvoid b(void) {}\nvoid c(void) {}\n"
+         "#ifdef X\nvoid f(int x) {\n#else\nvoid f(int x, int y) {\n#endif\n  a();\n}\n"
+         "void g(void) { b(); }\n"
+         "#ifdef Y\nvoid h(int x) {\n  if (x) {\n#else\nvoid h(int x) {\n  if (!x) {\n#endif\n    c();\n  }\n}\n"
+         "void k(void) { b(); }\n")
+
+
+def test_unbalanced_ifdef_signatures_do_not_swallow_the_rest_of_the_file(tmp_path):
+    g = S.build(tmp_path, {"a.c": IFDEF})
+    syms, edges = S.symbols(g), S.calls(g)
+    assert {"a.c::g", "a.c::k"} <= set(syms)
+    assert ("a.c::g", "a.c::b") in edges and ("a.c::k", "a.c::b") in edges
+    assert ("a.c::f", "a.c::b") not in edges and ("a.c::f", "a.c::c") not in edges
+    assert syms["a.c::f"].props["line_end"] < 12
+    assert not [e for e in edges if e[0] == "a.c::h" and e[1] != "a.c::c"], "h, when read at all, calls only c"
+
+
+def test_a_function_with_block_openers_under_ifdef_else_keeps_its_body(tmp_path):
+    src = ("void set(int i) {}\nvoid b(void) {}\n"
+           "void init(void)\n{\n  int i = 0;\n#if defined(A)\n  for (; i < 4; i++) {\n#else\n  for (; i < 8; i++) {\n#endif\n"
+           "    set(i);\n  }\n}\nvoid after(void) { b(); }\n")
+    g = S.build(tmp_path, {"a.c": src})
+    syms, edges = S.symbols(g), S.calls(g)
+    assert (syms["a.c::init"].props["line_start"], syms["a.c::init"].props["line_end"]) == (3, 13)
+    assert ("a.c::init", "a.c::set") in edges and ("a.c::after", "a.c::b") in edges
+    assert ("a.c::init", "a.c::b") not in edges
+
+
+def test_the_else_branch_of_if_0_is_still_read(tmp_path):
+    src = "void b(void) {}\n#if 0\nvoid f(int x) {\n#else\nvoid f(int x, int y) {\n#endif\n  b();\n}\nvoid g(void) { b(); }\n"
+    g = S.build(tmp_path, {"a.c": src})
+    assert {("a.c::f", "a.c::b"), ("a.c::g", "a.c::b")} <= S.calls(g)
+
+
+def test_unbalanced_brace_inside_a_class_does_not_hide_later_functions(tmp_path):
+    src = ("void b() {}\nclass C {\n public:\n#ifdef X\n  void f() {\n#else\n  void f(int) {\n#endif\n  }\n};\n"
+           "void g() { b(); }\n")
+    g = S.build(tmp_path, {"a.cpp": src})
+    assert any(k.endswith(".g") or k.endswith("::g") for k in S.symbols(g))
+    assert not [e for e in S.calls(g) if e[1] == "a.cpp::b" and "f" in e[0].rsplit(".", 1)[-1]]
+
+
+def test_a_function_defined_inside_an_else_branch_keeps_its_body(tmp_path):
+    src = ("void out(int c) {}\nvoid b(void) {}\n#ifdef A\nvoid w(int n) { out(n); }\n#else\nvoid w(int n)\n{\n"
+           "#if defined(BIG)\n  for (int i = n; i; --i) {\n#else\n  for (int i = 0; i < n; ++i) {\n#endif\n    out(i);\n  }\n}\n#endif\n"
+           "void after(void) { b(); }\n")
+    g = S.build(tmp_path, {"a.c": src})
+    syms, edges = S.symbols(g), S.calls(g)
+    assert syms["a.c::w"].props["line_end"] == 15
+    assert ("a.c::w", "a.c::out") in edges and ("a.c::after", "a.c::b") in edges and ("a.c::w", "a.c::b") not in edges

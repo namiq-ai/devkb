@@ -97,6 +97,7 @@ class Masked:
     line_starts: list[int] = field(default_factory=list)
     guards: list[tuple[int, int]] = field(default_factory=list)   # spans inside `#ifdef __cplusplus` (SPEC-DKB-002 R2)
     conds: list[tuple[int, str]] = field(default_factory=list)    # (line, text) of `#if/#ifdef/#ifndef/#elif` (SPEC-DKB-002 R15)
+    alts: list[tuple[int, int]] = field(default_factory=list)     # sorted spans of `#elif`/`#else` branches (not of `#if 0`); nested ones too
 
     def line(self, offset: int) -> int:
         return bisect_right(self.line_starts, offset)
@@ -129,6 +130,8 @@ def mask_source(text: str) -> Masked:
     conds: list[tuple[int, str]] = []
     skipping: int | None = None
     skip_from = 0
+    astack: list[int | None] = []       # per open conditional: start of its current `#elif`/`#else` branch; -1 after `#if 0`
+    alts: list[tuple[int, int]] = []
     line_starts = [0] + [m.end() for m in re.finditer("\n", code)]
     for d in _DIRECTIVE.finditer(code):
         body = d.group(0)
@@ -141,9 +144,18 @@ def mask_source(text: str) -> Masked:
         if word in ("if", "ifdef", "ifndef", "elif") and skipping is None:
             conds.append((bisect_right(line_starts, d.start()), body))
         if word in ("if", "ifdef", "ifndef"):
-            if skipping is None and word == "if" and re.match(r"\s*#\s*if\s*\(?\s*0\s*\)?\s*$", body.split("\\\n")[0]):
+            zero = word == "if" and re.match(r"\s*#\s*if\s*\(?\s*0\s*\)?\s*$", body.split("\\\n")[0])
+            astack.append(-1 if zero else None)
+            if skipping is None and zero:
                 skipping, skip_from = len(stack), d.end()
         elif word in ("else", "elif", "endif"):
+            if astack:
+                if astack[-1] is not None and astack[-1] >= 0:
+                    alts.append((astack[-1], d.start()))
+                if word == "endif":
+                    astack.pop()
+                elif astack[-1] != -1:
+                    astack[-1] = d.end()
             if gstack and gstack[-1] is not None:
                 guards.append((gstack[-1], d.start()))
                 gstack[-1] = None
@@ -182,7 +194,8 @@ def mask_source(text: str) -> Masked:
         out.append(code[pos:])
         code = "".join(out)
     code = _blank_dialect(code)
-    return Masked(code, literals, defines, includes, line_starts, guards, conds)
+    alts.sort()
+    return Masked(code, literals, defines, includes, line_starts, guards, conds, alts)
 
 
 # ── dialect keywords (ADR-DEVKB-009 §2, SPEC-DKB-002 R6): the one closed table, read without any compiler ─────────
@@ -438,6 +451,32 @@ def _match_close(code: str, open_i: int, o: str, c: str, limit: int | None = Non
     return None
 
 
+def _match_close_first_branch(code: str, open_i: int, limit: int, alts: list[tuple[int, int]]) -> int | None:
+    """Offset of the `}` closing the `{` at `open_i` when the braces inside `#elif`/`#else` branches are not counted, or
+    None. Used only when plain matching fails: two variants of a signature or of a block opener under `#ifdef`/`#else`
+    open one `{` each but share one `}` (#64); reading the first branch alone pairs them as one configuration would."""
+    # a branch that already holds `open_i` is the one being read: only branches starting after it are left out. Branches
+    # nest or are disjoint, so those form one union of disjoint spans.
+    skip: list[tuple[int, int]] = []
+    for a, b in alts[bisect_right(alts, (open_i, len(code) + 1)):]:
+        if a >= limit:
+            break
+        if skip and a <= skip[-1][1]:
+            skip[-1] = (skip[-1][0], max(skip[-1][1], b))
+        else:
+            skip.append((a, b))
+    depth = 0
+    for m in _BR["{"].finditer(code, open_i, limit):
+        p = m.start()
+        i = bisect_right(skip, (p, len(code) + 1)) - 1
+        if i >= 0 and p < skip[i][1]:
+            continue
+        depth += 1 if m.group() == "{" else -1
+        if depth == 0:
+            return p
+    return None
+
+
 _BR = {"{": re.compile(r"[{}]"), "(": re.compile(r"[()]"), "[": re.compile(r"[\[\]]")}
 
 
@@ -564,16 +603,25 @@ class _Scanner:
                 i = start = k + 1
             else:  # "{"
                 close = _match_close(code, k, "{", "}", hi)
+                if close is None and self.m.alts:
+                    close = _match_close_first_branch(code, k, hi, self.m.alts)
+                unmatched = close is None
                 if close is None:
                     close = hi
-                if self.cpp and close < hi and _init_brace(code[start:k]):
+                if self.cpp and not unmatched and _init_brace(code[start:k]):
                     i = close + 1      # `K() : m_x{1}, ...`: a member's brace initialiser; the body is a later `{`
                     continue
-                end = self.brace(start, k, close, scope)
+                end = self.brace(start, k, close, scope, unmatched)
                 i = start = close + 1 if end is None else end
         # trailing statement without terminator: ignore
 
-    def brace(self, start: int, k: int, close: int, scope: _Scope) -> int | None:
+    def brace(self, start: int, k: int, close: int, scope: _Scope, unmatched: bool = False) -> int | None:
+        """Read the construct whose `{` is at `k`. Returns where walking resumes, or None for just after `close`.
+
+        `unmatched`: no `}` closes this `{` before `close` (typically two signature variants under `#ifdef`/`#else`, #64).
+        A namespace, `extern "C"` block or class is still walked to `close`, so what it contains is read; a function,
+        macro body or enum is not read at all, and walking resumes just inside its `{`, rather than letting one
+        definition swallow, and take the calls of, the rest of the file."""
         code = self.code
         _set_access(code[start:k], scope)
         h = _strip_decor(code[start:k])
@@ -597,6 +645,8 @@ class _Scanner:
         hs = re.sub(r"^\s*extern\s*\"[^\"]*\"", lambda mm: " " * len(mm.group(0)), h)
         em = _ENUM_HEAD.match(hs) if "enum" in hs else None
         if em and "(" not in hs and "=" not in hs.replace("==", ""):
+            if unmatched:
+                return k + 1
             nm = re.match(r"\s*(?:[A-Z][A-Z0-9_]*\s+)*(" + _IDENT + r")\b(?!\s*\()", em.group(1))
             name = nm.group(1) if nm else None
             if name is None and re.match(r"^\s*typedef\b", hs):
@@ -635,6 +685,8 @@ class _Scanner:
                     self.walk(k + 1, close, _Scope(scope.ns, scope.anon, chain, "public" if kw != "class" else "private", rec))
                     return None
         # a function or macro-bodied definition
+        if unmatched:
+            return k + 1
         fn = self.function(start, k, close, h, scope)
         if fn:
             return None
