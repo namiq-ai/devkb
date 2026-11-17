@@ -64,6 +64,13 @@ def _url_paths(node: ast.AST) -> list[str]:
 def url_uses(text: str) -> list[tuple[str, str]]:
     """(qualified function name, URL path) for every URL a function uses, directly or through a module constant."""
     try:
+        return _url_uses(text)
+    except RecursionError:      # a file nested deeper than the walk can follow (#106)
+        return []
+
+
+def _url_uses(text: str) -> list[tuple[str, str]]:
+    try:
         tree = ast.parse(text)
     except (SyntaxError, ValueError, RecursionError):
         return []
