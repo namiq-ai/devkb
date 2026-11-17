@@ -18,6 +18,7 @@ import argparse
 import difflib
 import fnmatch
 import io
+import json
 import re
 import subprocess
 import sys
@@ -83,6 +84,7 @@ class ReadTools:
         self.idx = api.idx
         self.root: Path = api.root
         self._lines: dict[str, list[str]] = {}
+        self._skipped: dict[str, str] | None = None
         sym = [i for i, t in enumerate(self.idx.types) if t == "Symbol"]
         self.ids = sym
         self.file = {i: self.idx.keys[i].split("::", 1)[0] for i in sym}
@@ -278,8 +280,30 @@ class ReadTools:
         return m["k"].split("::", 1)[1]
 
     # ── outline ───────────────────────────────────────────────────────────
+    def skipped_files(self) -> dict[str, str]:
+        """Files the symbol build could not read, path -> reason (symbols-manifest.json, #109)."""
+        if self._skipped is None:
+            self._skipped = {}
+            store = getattr(self.api, "store", None)
+            if store is not None:
+                try:
+                    self._skipped = json.loads((store / "symbols-manifest.json").read_text()).get("skipped_files") or {}
+                except (OSError, ValueError, AttributeError):
+                    pass
+        return self._skipped
+
+    def _skipped_reply(self, path: str) -> dict | None:
+        rel = repo_path(path)
+        skipped = self.skipped_files()
+        hits = [f for f in skipped if f == rel or f.endswith("/" + rel)]
+        if len(hits) != 1:
+            return None
+        return {"path": hits[0], "skipped": skipped[hits[0]], "_meta": {}}
+
     def outline(self, path: str, limit: int = 200, offset: int = 0) -> dict:
         f, cands = self.resolve_file(path)
+        if f is None and (sk := self._skipped_reply(path)):
+            return sk
         if f is None:
             d = path.strip().strip("/")
             under = [(g, ids) for g, ids in self.idx.sym_by_file.items() if g.startswith(d + "/")]
@@ -309,6 +333,8 @@ class ReadTools:
                "lines": len(self.lines(f)), "offset": offset}
         if len(rows) > offset + limit:
             out["omitted"] = len(rows) - offset - limit
+        if not rows and (sk := self._skipped_reply(f)):
+            return sk
         if not rows:
             out["note"] = "no symbols indexed for this file (a language devkb does not read, or a file with no definitions)"
         return out
@@ -535,6 +561,8 @@ def render_symbol(r: dict) -> str:
 def render_outline(r: dict) -> str:
     if r.get("error"):
         return r["error"] + ("; did you mean: " + ", ".join(r["candidates"]) if r.get("candidates") else "")
+    if r.get("skipped"):
+        return f"{r['path']}: not indexed, the build could not read it ({r['skipped']}); read the file itself"
     if r.get("directory"):
         return fit_text(f"{r['path']}/  {r['n']} symbols in {r['n_files']} files\n" + "\n".join(f"  {x['f']}  {x['n']} symbols" for x in r["files"])) + _stale(r)
     suffix = "." + r["path"].rsplit(".", 1)[-1] if "." in r["path"] else ""
