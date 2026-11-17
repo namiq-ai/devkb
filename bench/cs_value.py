@@ -86,9 +86,11 @@ def run_one(work: Path, q: dict, arm: str, rep: int, model: str) -> Path:
     cwd = arm_dir(work, q["repo"], arm)
     mcp = work / (f"mcp-{short(q['repo'])}.json" if arm == "devkb" else "no-mcp.json")
     allow = READ_ONLY + (["mcp__devkb"] if arm == "devkb" else [])
+    # an ablation: DEVKB_DENY=uses,outline,symbol,search_docs denies those devkb tools (the agent keeps the rest)
+    deny_devkb = [f"mcp__devkb__{t}" for t in os.environ.get("DEVKB_DENY", "").split(",") if t]
     cmd = ["claude", "-p", PROMPT.format(**q), "--model", model, "--output-format", "stream-json", "--verbose",
            "--max-turns", "60", "--max-budget-usd", "2", "--permission-mode", "dontAsk", "--strict-mcp-config",
-           "--mcp-config", str(mcp), "--allowedTools", *allow, "--disallowedTools", *DENY]
+           "--mcp-config", str(mcp), "--allowedTools", *allow, "--disallowedTools", *DENY, *deny_devkb]
     with open(out, "w") as f:
         subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, timeout=1800)
     return out
