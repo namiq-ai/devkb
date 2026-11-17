@@ -1,5 +1,7 @@
 # Performance: v0.2.6 against main (2026-11-16)
 
+*Superseded for release comparisons by `performance-v0.2.6-to-v0.2.10.md`, which measures v0.2.6, v0.2.8 and v0.2.10 in one run with 2% noise.*
+
 Question: did the read tools (#39), the language profiles (#41) and the pre-edit hook (#42) make devkb slower or heavier?
 Method: `bench/perf.py` builds each repository's graph three times and times five command-line queries; `bench/perf_compare.py` compares two runs. The same machine ran everything one pass after another, never at the same time. The same code was measured twice (the second pass of `main`) to find the noise.
 Repositories: click (179 files), mealie (1,781), prefect (5,542), leveldb (154), fmt (148), Zephyr (70,856 files, 15,912 of them C/C++).

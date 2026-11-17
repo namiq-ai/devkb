@@ -1,0 +1,432 @@
+{
+ "label": "v0.2.8",
+ "code": "<perf>/code-0.2.8",
+ "repos": {
+  "click": {
+   "build": [
+    {
+     "secs": 4.05,
+     "peak_mb": 53,
+     "rc": 0
+    },
+    {
+     "secs": 4.01,
+     "peak_mb": 52,
+     "rc": 0
+    },
+    {
+     "secs": 3.97,
+     "peak_mb": 52,
+     "rc": 0
+    }
+   ],
+   "files": 179,
+   "graph_mb": 5.3,
+   "targets": {
+    "function": "echo",
+    "function_file": "src/click/utils.py",
+    "file": "src/click/core.py",
+    "callers": 59
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.199,
+     "min_s": 0.194,
+     "rc": 0,
+     "bytes": 7580,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.178,
+     "min_s": 0.148,
+     "rc": 0,
+     "bytes": 9523,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.179,
+     "min_s": 0.166,
+     "rc": 0,
+     "bytes": 387502,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 0.173,
+     "min_s": 0.144,
+     "rc": 0,
+     "bytes": 290,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 0.174,
+     "min_s": 0.162,
+     "rc": 0,
+     "bytes": 5909,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 0.248,
+     "min_s": 0.226,
+     "rc": 0,
+     "bytes": 3411,
+     "answered": true
+    }
+   }
+  },
+  "mealie": {
+   "build": [
+    {
+     "secs": 12.34,
+     "peak_mb": 85,
+     "rc": 0
+    },
+    {
+     "secs": 12.7,
+     "peak_mb": 85,
+     "rc": 0
+    },
+    {
+     "secs": 12.37,
+     "peak_mb": 85,
+     "rc": 0
+    }
+   ],
+   "files": 1781,
+   "graph_mb": 15.3,
+   "targets": {
+    "function": "require",
+    "function_file": "mealie/routes/_base/permissions.py",
+    "file": "tests/integration_tests/user_recipe_tests/test_recipe_crud.py",
+    "callers": 61
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.343,
+     "min_s": 0.33,
+     "rc": 0,
+     "bytes": 1348,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.39,
+     "min_s": 0.385,
+     "rc": 0,
+     "bytes": 27747,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.282,
+     "min_s": 0.27,
+     "rc": 0,
+     "bytes": 78054,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 0.245,
+     "min_s": 0.241,
+     "rc": 0,
+     "bytes": 254,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 0.215,
+     "min_s": 0.211,
+     "rc": 0,
+     "bytes": 5915,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 0.325,
+     "min_s": 0.263,
+     "rc": 0,
+     "bytes": 5901,
+     "answered": true
+    }
+   }
+  },
+  "prefect": {
+   "build": [
+    {
+     "secs": 88.23,
+     "peak_mb": 442,
+     "rc": 0
+    },
+    {
+     "secs": 88.59,
+     "peak_mb": 444,
+     "rc": 0
+    },
+    {
+     "secs": 86.5,
+     "peak_mb": 443,
+     "rc": 0
+    }
+   ],
+   "files": 5542,
+   "graph_mb": 109.9,
+   "targets": {
+    "function": "get_client",
+    "function_file": "src/prefect/client/orchestration/__init__.py",
+    "file": "src/integrations/prefect-github/prefect_github/schemas/graphql_schema.py",
+    "callers": 254
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.894,
+     "min_s": 0.856,
+     "rc": 0,
+     "bytes": 835,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.964,
+     "min_s": 0.912,
+     "rc": 0,
+     "bytes": 40362,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 1.801,
+     "min_s": 1.756,
+     "rc": 0,
+     "bytes": 271427,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 0.824,
+     "min_s": 0.815,
+     "rc": 0,
+     "bytes": 2747,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 0.755,
+     "min_s": 0.726,
+     "rc": 0,
+     "bytes": 5890,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 1.02,
+     "min_s": 0.991,
+     "rc": 0,
+     "bytes": 3794,
+     "answered": true
+    }
+   }
+  },
+  "leveldb": {
+   "build": [
+    {
+     "secs": 1.25,
+     "peak_mb": 41,
+     "rc": 0
+    },
+    {
+     "secs": 1.24,
+     "peak_mb": 41,
+     "rc": 0
+    },
+    {
+     "secs": 1.15,
+     "peak_mb": 42,
+     "rc": 0
+    }
+   ],
+   "files": 154,
+   "graph_mb": 3.9,
+   "targets": {
+    "function": "Status.OK",
+    "function_file": "include/leveldb/status.h",
+    "file": "db/db_test.cc",
+    "callers": 78
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.187,
+     "min_s": 0.157,
+     "rc": 0,
+     "bytes": 1734,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.182,
+     "min_s": 0.149,
+     "rc": 0,
+     "bytes": 7719,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.148,
+     "min_s": 0.124,
+     "rc": 0,
+     "bytes": 44503,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 0.174,
+     "min_s": 0.154,
+     "rc": 0,
+     "bytes": 595,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 0.162,
+     "min_s": 0.145,
+     "rc": 0,
+     "bytes": 5342,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 0.2,
+     "min_s": 0.187,
+     "rc": 0,
+     "bytes": 2798,
+     "answered": true
+    }
+   }
+  },
+  "fmt": {
+   "build": [
+    {
+     "secs": 2.19,
+     "peak_mb": 53,
+     "rc": 0
+    },
+    {
+     "secs": 2.14,
+     "peak_mb": 53,
+     "rc": 0
+    },
+    {
+     "secs": 2.21,
+     "peak_mb": 51,
+     "rc": 0
+    }
+   ],
+   "files": 148,
+   "graph_mb": 5.7,
+   "targets": {
+    "function": "to_unsigned",
+    "function_file": "include/fmt/core.h",
+    "file": "test/gtest/gmock-gtest-all.cc",
+    "callers": 50
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.205,
+     "min_s": 0.205,
+     "rc": 0,
+     "bytes": 4022,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.207,
+     "min_s": 0.167,
+     "rc": 0,
+     "bytes": 7286,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.165,
+     "min_s": 0.152,
+     "rc": 0,
+     "bytes": 24087,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 0.195,
+     "min_s": 0.181,
+     "rc": 0,
+     "bytes": 189,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 0.18,
+     "min_s": 0.151,
+     "rc": 0,
+     "bytes": 5908,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 0.213,
+     "min_s": 0.207,
+     "rc": 0,
+     "bytes": 2901,
+     "answered": true
+    }
+   }
+  },
+  "zephyr": {
+   "build": [
+    {
+     "secs": 136.9,
+     "peak_mb": 1688,
+     "rc": 0
+    },
+    {
+     "secs": 138.53,
+     "peak_mb": 1656,
+     "rc": 0
+    },
+    {
+     "secs": 139.79,
+     "peak_mb": 1657,
+     "rc": 0
+    }
+   ],
+   "files": 70856,
+   "graph_mb": 421.3,
+   "targets": {
+    "function": "shell_strtoul",
+    "function_file": "subsys/shell/shell_utils.c",
+    "file": "tests/bluetooth/controller/ctrl_isoal/src/sub_sets/isoal_test_rx.c",
+    "callers": 345
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 1.535,
+     "min_s": 1.494,
+     "rc": 0,
+     "bytes": 1701,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 1.519,
+     "min_s": 1.489,
+     "rc": 0,
+     "bytes": 7715,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 7.068,
+     "min_s": 7.059,
+     "rc": 0,
+     "bytes": 177657,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 2.782,
+     "min_s": 2.762,
+     "rc": 0,
+     "bytes": 263,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 1.57,
+     "min_s": 1.527,
+     "rc": 0,
+     "bytes": 539,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 3.593,
+     "min_s": 3.567,
+     "rc": 0,
+     "bytes": 4563,
+     "answered": true
+    }
+   }
+  }
+ }
+}

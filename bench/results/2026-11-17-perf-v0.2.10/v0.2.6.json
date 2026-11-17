@@ -1,0 +1,306 @@
+{
+ "label": "v0.2.6",
+ "code": "<perf>/code-0.2.6",
+ "repos": {
+  "click": {
+   "build": [
+    {
+     "secs": 3.62,
+     "peak_mb": 52,
+     "rc": 0
+    },
+    {
+     "secs": 3.53,
+     "peak_mb": 51,
+     "rc": 0
+    },
+    {
+     "secs": 3.53,
+     "peak_mb": 52,
+     "rc": 0
+    }
+   ],
+   "files": 179,
+   "graph_mb": 5.3,
+   "targets": {
+    "function": "echo",
+    "function_file": "src/click/utils.py",
+    "file": "src/click/core.py",
+    "callers": 59
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.186,
+     "min_s": 0.143,
+     "rc": 0,
+     "bytes": 7570,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.182,
+     "min_s": 0.144,
+     "rc": 0,
+     "bytes": 9512,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.18,
+     "min_s": 0.178,
+     "rc": 0,
+     "bytes": 387502,
+     "answered": true
+    }
+   }
+  },
+  "mealie": {
+   "build": [
+    {
+     "secs": 10.58,
+     "peak_mb": 85,
+     "rc": 0
+    },
+    {
+     "secs": 10.63,
+     "peak_mb": 85,
+     "rc": 0
+    },
+    {
+     "secs": 10.9,
+     "peak_mb": 84,
+     "rc": 0
+    }
+   ],
+   "files": 1781,
+   "graph_mb": 15.3,
+   "targets": {
+    "function": "require",
+    "function_file": "mealie/routes/_base/permissions.py",
+    "file": "tests/integration_tests/user_recipe_tests/test_recipe_crud.py",
+    "callers": 61
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.374,
+     "min_s": 0.357,
+     "rc": 0,
+     "bytes": 1338,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.379,
+     "min_s": 0.369,
+     "rc": 0,
+     "bytes": 27737,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.275,
+     "min_s": 0.269,
+     "rc": 0,
+     "bytes": 78054,
+     "answered": true
+    }
+   }
+  },
+  "prefect": {
+   "build": [
+    {
+     "secs": 77.87,
+     "peak_mb": 439,
+     "rc": 0
+    },
+    {
+     "secs": 76.54,
+     "peak_mb": 438,
+     "rc": 0
+    },
+    {
+     "secs": 76.63,
+     "peak_mb": 440,
+     "rc": 0
+    }
+   ],
+   "files": 5542,
+   "graph_mb": 109.5,
+   "targets": {
+    "function": "get_client",
+    "function_file": "src/prefect/client/orchestration/__init__.py",
+    "file": "src/integrations/prefect-github/prefect_github/schemas/graphql_schema.py",
+    "callers": 254
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.906,
+     "min_s": 0.898,
+     "rc": 0,
+     "bytes": 835,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.911,
+     "min_s": 0.894,
+     "rc": 0,
+     "bytes": 44955,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 1.675,
+     "min_s": 1.637,
+     "rc": 0,
+     "bytes": 271250,
+     "answered": true
+    }
+   }
+  },
+  "leveldb": {
+   "build": [
+    {
+     "secs": 1.18,
+     "peak_mb": 41,
+     "rc": 0
+    },
+    {
+     "secs": 1.18,
+     "peak_mb": 41,
+     "rc": 0
+    },
+    {
+     "secs": 1.15,
+     "peak_mb": 41,
+     "rc": 0
+    }
+   ],
+   "files": 154,
+   "graph_mb": 3.7,
+   "targets": {
+    "function": "Status.OK",
+    "function_file": "include/leveldb/status.h",
+    "file": "db/db_test.cc",
+    "callers": 78
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.181,
+     "min_s": 0.151,
+     "rc": 0,
+     "bytes": 1671,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.182,
+     "min_s": 0.143,
+     "rc": 0,
+     "bytes": 7607,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.147,
+     "min_s": 0.107,
+     "rc": 0,
+     "bytes": 44454,
+     "answered": true
+    }
+   }
+  },
+  "fmt": {
+   "build": [
+    {
+     "secs": 2.0,
+     "peak_mb": 52,
+     "rc": 0
+    },
+    {
+     "secs": 2.01,
+     "peak_mb": 51,
+     "rc": 0
+    },
+    {
+     "secs": 2.05,
+     "peak_mb": 51,
+     "rc": 0
+    }
+   ],
+   "files": 148,
+   "graph_mb": 5.5,
+   "targets": {
+    "function": "to_unsigned",
+    "function_file": "include/fmt/core.h",
+    "file": "test/gtest/gmock-gtest-all.cc",
+    "callers": 50
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.203,
+     "min_s": 0.192,
+     "rc": 0,
+     "bytes": 3959,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.193,
+     "min_s": 0.154,
+     "rc": 0,
+     "bytes": 7223,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.164,
+     "min_s": 0.159,
+     "rc": 0,
+     "bytes": 24038,
+     "answered": true
+    }
+   }
+  },
+  "zephyr": {
+   "build": [
+    {
+     "secs": 116.53,
+     "peak_mb": 1425,
+     "rc": 0
+    },
+    {
+     "secs": 117.24,
+     "peak_mb": 1424,
+     "rc": 0
+    },
+    {
+     "secs": 114.82,
+     "peak_mb": 1420,
+     "rc": 0
+    }
+   ],
+   "files": 70856,
+   "graph_mb": 325.2,
+   "targets": {
+    "function": "shell_strtoul",
+    "function_file": "subsys/shell/shell_utils.c",
+    "file": "tests/bluetooth/controller/ctrl_isoal/src/sub_sets/isoal_test_rx.c",
+    "callers": 345
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 1.363,
+     "min_s": 1.303,
+     "rc": 0,
+     "bytes": 1376,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 1.354,
+     "min_s": 1.284,
+     "rc": 0,
+     "bytes": 7561,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 5.265,
+     "min_s": 5.217,
+     "rc": 0,
+     "bytes": 177484,
+     "answered": true
+    }
+   }
+  }
+ }
+}
