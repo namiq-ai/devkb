@@ -48,6 +48,12 @@ IMPORT_RE = {
 }
 
 
+def _module_of(path: str) -> str:
+    """A file's dotted module path, lower case: `devkb/cli.py` -> `devkb.cli`, `pkg/__init__.py` -> `pkg`."""
+    stem = re.sub(r"\.[A-Za-z0-9]{1,5}$", "", path).replace("/", ".").lower()
+    return stem[: -len(".__init__")] if stem.endswith(".__init__") else stem
+
+
 def repo_path(path: str) -> str:
     """A path as the graph keys it: without leading `./` and `/`. Not `lstrip("./")`, which strips characters and so
     took the dot off `.github/...` (#54)."""
@@ -159,6 +165,11 @@ class ReadTools:
             tiers.append(("exact", lambda: collect(lambda i: self.short[i].lower() == ql or self.qual[i].lower() == ql, lambda i: 100)))
             if "." in ql:
                 tiers.append(("suffix", lambda: collect(lambda i: self.qual[i].lower().endswith("." + ql), lambda i: 90)))
+                # `module.name` as code writes it (`cli.main`, `devkb.cli.main`): the file's dotted path, then the
+                # qualified name (#100)
+                tiers.append(("module", lambda: collect(
+                    lambda i: ("." + _module_of(self.file[i]) + "." + self.qual[i].lower()).endswith("." + ql),
+                    lambda i: 88)))
             if "*" in q or "?" in q:
                 tiers.append(("glob", lambda: collect(lambda i: fnmatch.fnmatchcase(self.short[i].lower(), ql) or fnmatch.fnmatchcase(self.qual[i].lower(), ql), lambda i: 80)))
         else:

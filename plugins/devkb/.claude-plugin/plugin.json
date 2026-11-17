@@ -1,6 +1,6 @@
 {
   "name": "devkb",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "A knowledge graph of your repository for Claude Code: one call returns who calls a function, the tests to run, or the route handlers behind an error, each with the line that proves it. Built locally; nothing leaves your machine.",
   "author": {"name": "Hung T. Le", "url": "https://github.com/namiq-ai"},
   "homepage": "https://github.com/namiq-ai/devkb",

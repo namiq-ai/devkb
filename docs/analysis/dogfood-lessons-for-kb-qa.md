@@ -151,5 +151,10 @@ memory release that frees nothing).
   names the line (#69), a self-call is not a caller (#70), a `test_*.py` outside the project's test paths is source
   (#71), a caller count says when it is partial (#87), a rejected search pattern is an error, not "no match" (#55).
 
+0.2.9 (final review of 0.2.8 installed from PyPI): the `devkb` command now prints a subcommand's error message, so
+#50's refusal reaches the user instead of a silent exit status 1 (#99, present since 0.1.0: a fix that only its unit
+test saw); `symbol` accepts `module.name` (#100, found twice by dogfooding). Lesson: **review the installed release
+through its real entry point**, not only through the functions the tests call.
+
 Companion reports: `devkb-for-auditing.md` (how much of an audit devkb carried, measured from transcripts, and its
 limits as QAKB requirements) and `bugfix-benchmark.md` (plain against devkb on six of these fixes).
