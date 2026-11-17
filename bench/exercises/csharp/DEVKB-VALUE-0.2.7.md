@@ -12,46 +12,54 @@ now also carries the read tools (`symbol`, `outline`, `uses`, `search_docs`; #39
 
 ## Summary
 
-| devkb arm, all 12 runs | Precision | Recall | Test files | Turns | Median cost vs plain |
-|---|---|---|---|---|---|
-| plain agent (reused) | 0.60 | 0.94 | 0.56 | 12.7 | $0.207 |
-| 0.2.6 (`DEVKB-VALUE.md`) | 0.85 | 0.96 | 0.66 | 7.6 | −40% |
-| **0.2.7, default tools** | **0.82** | **0.96** | 0.75 | 8.8 | **−53%** |
-| 0.2.7, read tools denied | 0.80 | 0.98 | 0.77 | 8.7 | −42% |
+**Correction (after #47).** The first version of this report said criterion 6 was not met (precision 0.82). That was
+the benchmark's truth, not the agent: the compiler truth records calls only, and EF Core's target is reached through
+four properties, so 29 methods that do reach it were scored wrong (`truth-corrections.md`, each path read in the
+source). Scored with those corrections, kept beside the compiler truth in `questions.json`
+(`python bench/cs_value_rescore.py bench/exercises/csharp/questions.json bench/exercises/csharp/runs ...`):
 
-Per question, devkb-arm precision:
+| All 12 runs | Precision, compiler truth (as first published) | Precision, corrected | Recall, corrected | Test files | Turns | Median cost vs plain |
+|---|---|---|---|---|---|---|
+| plain agent (reused) | 0.60 | 0.73 | 0.95 | 0.56 | 12.7 | $0.207 |
+| 0.2.6 (`DEVKB-VALUE.md`) | 0.85 | 0.97 | 0.89 | 0.66 | 7.6 | −40% |
+| **0.2.7, default tools** | 0.82 | **0.98** | **0.94** | 0.75 | 8.8 | **−53%** |
+| 0.2.7, read tools denied | 0.80 | 0.91 | 0.88 | 0.77 | 8.7 | −42% |
+
+Per question, devkb-arm precision, corrected (compiler truth alone in brackets):
 
 | Question | Truth | 0.2.6 | 0.2.7 | 0.2.7, read tools denied |
 |---|---|---|---|---|
-| MediatR `ServiceRegistrar.GetConcreteRequestTypes` | 5 | 1.00 | 1.00 | 1.00 |
-| FluentValidation `ValidationContext.GetFromNonGenericContext` | 9 | 0.88 | 0.90 | 0.86 |
-| Polly `ComponentDisposeHelper.ThrowDisposed` | 10 | 0.89 | 0.88 | 0.72 |
-| Polly `CircuitStateController.EnsureNotDisposed` | 9 | 0.91 | 0.86 | 0.69 |
-| Jellyfin `DynamicHlsHelper.GetOutputVideoCodecProfile` | 10 | 1.00 | 1.00 | 0.95 |
-| EF Core `ModificationCommand.GetTableMapping` | 9 | 0.45 | 0.25 | 0.59 |
+| MediatR `ServiceRegistrar.GetConcreteRequestTypes` | 5 | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
+| FluentValidation `ValidationContext.GetFromNonGenericContext` | 9 | 0.88 (0.88) | 0.90 (0.90) | 0.86 (0.86) |
+| Polly `ComponentDisposeHelper.ThrowDisposed` | 10 | 1.00 (0.89) | 1.00 (0.88) | 0.78 (0.72) |
+| Polly `CircuitStateController.EnsureNotDisposed` | 9 | 1.00 (0.91) | 1.00 (0.86) | 0.90 (0.69) |
+| Jellyfin `DynamicHlsHelper.GetOutputVideoCodecProfile` | 10 | 1.00 (1.00) | 1.00 (1.00) | 0.95 (0.95) |
+| EF Core `ModificationCommand.GetTableMapping` | 9 + 29 | 0.93 (0.45) | 0.96 (0.25) | 0.94 (0.59) |
 
 ## What this shows, and what it does not
 
-- **Criterion 6 of #40 is not met.** The devkb arm's precision is 0.82 against the ≥ 0.85 asked; recall (0.96) meets
-  its ≥ 0.96. The agent is still far more precise than without devkb (0.60) and cheaper than in 0.2.6 (median −53%
-  against −40%).
-- **The drop is not attributable to the read tools.** With them denied, precision is 0.80, not higher. On EF Core the
-  default arm listed 36 methods for 9 callers after 7 `uses` and 5 `outline` calls (0.25), and the arm without them
-  scored 0.59; but on both Polly questions the arm without read tools scored lower (0.72, 0.69), and in one of them
-  (`ThrowDisposed`, read tools denied) the agent never called devkb at all. With 2 runs per question, one question
-  moves by ±0.15 between arms that differ in nothing the agent used; the overall 0.85 → 0.82 is inside that.
+- **Criterion 6 of #40 is met** with the corrected truth: precision 0.98 (≥ 0.85), recall 0.94 against the larger
+  truth (0.96 against the compiler's; the criterion was written for it). Against the compiler truth alone it reads 0.82,
+  and that number measured the truth's gap, not the agent.
+- **What the first version took for a drop.** EF Core's answers come in two sizes: 14–17 names or 33–39. The compiler
+  truth punished the long ones (0.23–0.27) because most of their names reach the target through `ColumnModifications`.
+  0.2.6 drew one of each, 0.2.7 two long ones. Corrected, the long answers are the best: 0.2.7 found 38 and 30 of the
+  38 known callers at precision 0.97 and 0.94 (the `SaveChanges` entry points among them), 0.2.6's long run 32 at 0.94;
+  the short ones found 12–15 at 0.88–1.00.
+- **The read tools help.** Denied, precision is 0.91 and recall 0.88, both below the default arm; most of the
+  difference is the Polly runs without them naming dispose methods that do not reach the target.
 - **Where the C# round reached these questions.** The first pack answer, compared run by run with 0.2.6's: on
   FluentValidation it now resolves 12 symbols where 0.2.6 resolved 1 (`ValidationContext<T>.GetFromNonGenericContext`
-  is a static call on a generic type, round 4's F6, and this question was the miss that motivated it); on MediatR,
-  Polly `EnsureNotDisposed`, Jellyfin and EF Core it is identical (round 3 already resolved those callers); in both
-  Polly `ThrowDisposed` runs the agent asked `callers` instead of a pack. So on five of six questions the agent's
-  precision moved for reasons other than the graph.
+  is a static call on a generic type, round 4's F6, the miss that motivated it); on MediatR, Polly `EnsureNotDisposed`,
+  Jellyfin and EF Core it is identical; in both Polly `ThrowDisposed` runs the agent asked `callers` instead.
+- **Limits.** The corrections cover names agents listed; the full set of EF Core callers through those properties may
+  be larger, so corrected recall is an upper bound. Two names stay unproven and are counted wrong. The lasting fix is
+  in the truth tool (`truth-corrections.md`, last section), not yet run. 2 runs per question.
 - Two devkb limitations the runs exposed are in `docs/specs/csharp-4-dogfood-log.md` (D8: EF Core's fixture copies
-  under `eng/**/fixtures/` make `callers CommandBatchPreparer.BatchCommands` ambiguous; D9: the EF Core exploration).
-- To measure a 0.03 difference in precision, this benchmark needs more runs per question (about 8) than either report
-  has; that is the next step before any claim either way.
+  under `eng/**/fixtures/` make `callers CommandBatchPreparer.BatchCommands` ambiguous; D9: the EF Core exploration,
+  which turned out to find the real callers).
 
-## Result, 0.2.7 with the default tools
+## Result, 0.2.7 with the default tools (compiler truth alone, as first published)
 
 | Question | Arm | Truth | Listed | Precision | Recall | Test files | Turns | Model calls | Cost | Grep | File load | devkb |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -70,7 +78,7 @@ Per question, devkb-arm precision:
 | **All 12 runs** | **plain** |  |  | 0.60 | 0.94 | 0.56 | 12.7 | 9.2 | $0.214 | 9.3 (36.6k) | 2.1 (11.9k) | 0 |
 | **All 12 runs** | **devkb** |  |  | 0.82 | 0.96 | 0.75 | 8.8 | 6.4 | $0.113 | 3.6 (9.4k) | 0.4 (1.3k) | 2.5 (6.1k) |
 
-## Result, 0.2.7 with the read tools denied
+## Result, 0.2.7 with the read tools denied (compiler truth alone)
 
 | Question | Arm | Truth | Listed | Precision | Recall | Test files | Turns | Model calls | Cost | Grep | File load | devkb |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
