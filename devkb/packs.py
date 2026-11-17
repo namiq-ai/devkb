@@ -259,11 +259,29 @@ class Packer:
         out += ["", "## Coverage", self.coverage(sorted(closure, key=self.api._key)[:40], set(tests) | {self.api._key(x).split('::')[0] for x in closure})]
         return "\n".join(out + ["", HOW_TO_USE])
 
+    def _by_module_name(self, name: str):
+        """`module.name` as code writes it (`build_symbols.extract`, `devkb.cli.main`): the one symbol whose file's dotted
+        path followed by its qualified name ends with it, as `symbol` resolves it (#100, #104); None unless exactly one."""
+        if "." not in name or "::" in name:
+            return None
+        from devkb.read_tools import _module_of
+        want = "." + name.lower()
+        hits = []
+        for i, k in enumerate(self.idx.keys):
+            path, sep, qual = k.partition("::")
+            if not sep:
+                continue
+            if ("." + _module_of(path) + "." + qual.lower()).endswith(want):
+                hits.append(i)
+        return hits[0] if len(hits) == 1 else None
+
     def change(self, name: str, path: str = "") -> str:
         i, err = self.api._resolve(f"{path}::{name}" if path and "::" not in name else name)
         if i is None and path:
             cands = [s for s in self.api._by_name(name) if self.api._key(s).startswith(path + "::")]
             i = cands[0] if len(cands) == 1 else None
+        if i is None:
+            i = self._by_module_name(name)
         if i is None:
             return f"# Graph pack: change\n\nThe graph cannot resolve `{name}`" + (f" in `{path}`" if path else "") + ". Search the code."
         parent = self.up({i})
@@ -348,6 +366,8 @@ class Packer:
         if i is None:
             cands = [s for s in self.api._by_name(name) if not path or self.api._key(s).startswith(path + "::")]
             i = cands[0] if len(cands) == 1 else None
+        if i is None:
+            i = self._by_module_name(name)
         if i is None:
             return f"# Graph pack: refactor\n\nThe graph cannot resolve `{name}` unambiguously. Search the code."
         callers = sorted(set(self.idx.sources("CALLS", i)) - {i}, key=self.api._key)  # a recursive call is not a caller (#70)
