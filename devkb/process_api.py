@@ -188,12 +188,21 @@ class ProcessAPI:
     def _key(self, i: int) -> str:
         return self.idx.keys[i]
 
+    def _by_name(self, ref: str) -> list[int]:
+        """Symbols a bare or dotted name can mean. `Store.add` keeps only the symbols whose qualified name ends with it,
+        so two classes that both define `add` are told apart instead of both being 'ambiguous'."""
+        cands = self.idx.short.get(ref.rsplit(".", 1)[-1], [])
+        if "." in ref and len(cands) > 1:
+            qualified = [c for c in cands if (lambda qn: qn == ref or qn.endswith("." + ref))(self._key(c).split("::", 1)[-1])]
+            return qualified or cands
+        return cands
+
     def _resolve(self, ref: str) -> tuple[int | None, dict | None]:
         idx = self.idx
         if "::" in ref:
             i = idx.node("Symbol", ref)
             return (i, None) if i is not None else (None, {"error": f"no symbol {ref}"})
-        cands = idx.short.get(ref.rsplit(".", 1)[-1], [])
+        cands = self._by_name(ref)
         if len(cands) == 1:
             return cands[0], None
         if not cands:

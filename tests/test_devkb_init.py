@@ -94,3 +94,37 @@ def test_init_warns_when_agents_could_not_start_the_devkb_command(monkeypatch, c
     assert "only on the PATH of this virtual environment" in init.server_command_problem()
     monkeypatch.setattr(shutil, "which", lambda name: "/opt/tools/bin/devkb")
     assert init.server_command_problem() is None
+
+
+def test_claude_hook_is_optional_merged_idempotent_and_removed_with_devkb(tmp_path):
+    root = _repo(tmp_path, {})
+    (root / ".claude").mkdir()
+    (root / ".claude" / "settings.json").write_text(json.dumps(
+        {"model": "x", "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "mine"}]}]}}))
+    init.run(root, "lean-pack", hooks=False, dry_run=False)
+    assert "devkb hook" not in (root / ".claude" / "settings.json").read_text(), "off unless asked"
+    init.run(root, "lean-pack", hooks=False, dry_run=False, claude_hook=True)
+    cfg = json.loads((root / ".claude" / "settings.json").read_text())
+    groups = cfg["hooks"]["PreToolUse"]
+    assert cfg["model"] == "x" and groups[0]["hooks"][0]["command"] == "mine"
+    assert groups[1]["matcher"] == "Edit|Write|MultiEdit|NotebookEdit|Bash" and groups[1]["hooks"][0]["command"] == "devkb hook pre-edit"
+    assert init.run(root, "lean-pack", hooks=False, dry_run=False, claude_hook=True) == [], "a second run changes nothing"
+    init.run(root, None, hooks=False, dry_run=False)
+    cfg = json.loads((root / ".claude" / "settings.json").read_text())
+    assert cfg["hooks"]["PreToolUse"] == [{"matcher": "Bash", "hooks": [{"type": "command", "command": "mine"}]}] and cfg["model"] == "x"
+
+
+def test_the_instruction_says_which_tool_for_which_step():
+    block = init.AGENTS_BLOCK
+    for step in ("open a file", "change a function", "error message", "grep", "read the file", "Claude Code the devkb hook"):
+        assert step in block, step
+
+
+def test_a_dotted_name_tells_two_classes_with_the_same_method_apart():
+    from devkb.process_api import ProcessAPI
+    api = ProcessAPI.__new__(ProcessAPI)
+    api.idx = type("I", (), {"short": {"add": [0, 1]}})()
+    api._key = lambda i: ["a.h::Store.add", "a.h::Other.add"][i]
+    assert api._by_name("add") == [0, 1], "a bare name stays ambiguous"
+    assert api._by_name("Store.add") == [0] and api._by_name("Other.add") == [1]
+    assert api._by_name("Nope.add") == [0, 1], "an unknown qualifier does not hide the candidates"

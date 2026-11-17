@@ -98,10 +98,13 @@ devkb pack --project . file path/to/file.py     # before editing a file
 
 ### Your agent
 
-**Claude Code**: nothing more to do. `devkb init` registered the server in `.mcp.json` and pointed `CLAUDE.md` at the
-instructions. Start `claude` in the repository, approve the `devkb` server when asked, and check it with `/mcp`.
-Or skip the install and `devkb init` and use the plugin, which brings the server, its instructions and a hook that builds
-the graph in the background (needs [uv](https://docs.astral.sh/uv/)):
+**Claude Code**: `devkb init` registered the server in `.mcp.json` and pointed `CLAUDE.md` at the instructions, which
+say which tool to use at which step. Start `claude` in the repository, approve the `devkb` server when asked, and check
+it with `/mcp`. Agents told to run a pack before editing mostly do not, so add the hook that does it for them: run
+`devkb init --claude-hook`, and when the agent is about to Edit or Write a file the graph knows, it receives that file's
+pack (the functions other files call, the dependent files, the tests to run) once per session. It never blocks an edit.
+Or skip the install and `devkb init` and use the plugin, which brings the server, its instructions, that hook and a hook
+that builds the graph in the background (needs [uv](https://docs.astral.sh/uv/)):
 
 ```
 /plugin install devkb --marketplace namiq-ai/devkb

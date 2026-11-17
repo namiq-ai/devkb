@@ -1,6 +1,6 @@
 """`devkb init`: integrate devkb into a repository, idempotently, and take it out again.
 
-  devkb init [--project .] [--toolset lean] [--hooks] [--no-build] [--dry-run]
+  devkb init [--project .] [--toolset lean] [--hooks] [--claude-hook] [--no-build] [--dry-run]
   devkb init --remove [--project .]
 
 Writes managed blocks, never whole files, so the repository's own content is untouched and re-running only refreshes
@@ -10,6 +10,7 @@ the block:
   CLAUDE.md     `@AGENTS.md`, so Claude Code reads the same instructions (one place to maintain)
   .mcp.json     the devkb MCP server, merged into any servers already declared
   .gitignore    .devkb/ (the graph is built locally, never committed)
+  .claude/settings.json  with --claude-hook: a PreToolUse hook that gives Claude Code the file's pack at its first edit
   git hooks     with --hooks: rebuild the graph in the background after a commit, merge or checkout
 
 Why instructions and not only a server: in the study, agents left to choose used the graph in 88% of runs that
@@ -29,23 +30,13 @@ BEGIN, END = "<!-- devkb:begin (managed by `devkb init`; edit outside this block
 HASH_BEGIN, HASH_END = "# devkb:begin (managed by `devkb init`)", "# devkb:end"
 HOOKS = ("post-commit", "post-merge", "post-checkout")
 
-AGENTS_BLOCK = """## devkb: before you change code
+AGENTS_BLOCK = """## devkb: ask the graph before you read or change code
 
-This repository has a graph of its code (calls, tests, raised errors, commits, configuration) in `.devkb/`. Ask it
-for a whole answer when the question follows a chain; for a one-hop lookup, search as usual. Each answer lists every
-item with the line of code that proves it, and says what it could not see. Use the MCP server's `pack` tool, or the
-same answer from the `devkb pack` command:
+This repository has a graph of its code in `.devkb/`: calls, tests, raised errors, commits, configuration. One call
+returns what would take a dozen searches and file reads, and every item carries the line of code that proves it. The
+graph does not hold *how the code is written*: to copy a pattern or learn a style, read the file.
 
-1. **Before you edit an existing file**: `pack(kind="file", subject=PATH)` (`devkb pack --project . file PATH`): the
-   functions other files call (your change must keep them working), the files that depend on it, the tests to run.
-2. **Before you change a function's behaviour**: `pack(kind="change", subject=NAME, path=PATH)`: callers at any depth
-   and the tests to run.
-3. **When you start from an error message**: `pack(kind="error", subject=MESSAGE)`: what raises it and the route
-   handlers that reach it.
-4. **Who calls one function directly** (for a signature change): search with grep. It is one hop, and the graph only
-   adds a step (measured: packs saved 66-77% on chains, nothing on one-hop lookups).
-5. **After editing**, run the tests the pack named first, then the full suite. If you edited many files, rebuild
-   first: `devkb build --project .`.
+**Choose by what you are about to do:**
 
 **Instead of grep, to read code**: the graph holds every definition with its exact lines, so ask it rather than guess
 `grep -A25`:
@@ -58,18 +49,25 @@ same answer from the `devkb pack` command:
 - `search_docs(query)` (shell: `devkb docs QUERY`): what the documentation says, with the heading of each hit.
 A symbol in a language that stores no end line (TypeScript, JavaScript) is reported as "end unknown": read from its start.
 
-For questions in between:
 
-| Question | Use |
-|---|---|
-| The impact of a change / who calls a function, at any depth | `impact` / `callers` |
-| An error message to its cause | `rca_trace` |
-| Which tests to run | `tests_to_run`, or `tests_for` a file or function |
-| A commit or a diff to review | `review_pack` |
-| A setting or a service | `config` |
+| You are about to... | Use | You get |
+|---|---|---|
+| open a file to see what depends on it, or edit it | `pack(kind="file", subject=PATH)` (shell: `devkb pack --project . file PATH`) | the functions other files call, the files that depend on it, the tests to run |
+| change a function's behaviour or signature | `pack(kind="change", subject=NAME, path=PATH)` (shell: `devkb pack --project . refactor NAME`) | callers at any depth, tests among them |
+| start from an error message or a failing request | `pack(kind="error", subject="MESSAGE")` | what raises it, the handlers that reach it |
+| find who calls one function directly | search with grep | one hop: a pack adds a step and saves nothing |
+| learn how a pattern is written, to copy it | read the file | the graph does not store this |
+| decide which tests to run | `tests_to_run` or `tests_for` | the tests, ranked |
+| review a commit or a diff | `review_pack` | changed functions, outside callers, untested changes |
+| find a setting or a service | `config` | where it is declared and read |
 
-Rules: an answer marked **Complete** is the whole answer: do not search again or call another tool to check it. If it
-is incomplete, search only the files it names. If it says files changed since the graph was built, re-read those."""
+**How to work:**
+1. Ask first, read second. Run the pack for a file before you read it to judge impact and before your first edit of it.
+   In Claude Code the devkb hook also adds that pack to your first Edit or Write of each file; read it, then continue.
+2. A pack marked **Complete** is the whole answer: do not search again to check it. If it is Incomplete, search only the
+   files it names. If it says files changed since the graph was built, re-read those files.
+3. After editing, run the tests the pack named first, then the full suite. If you edited many files, rebuild first:
+   `devkb build --project .` (a few seconds on most repositories)."""
 
 
 def _between(text: str, begin: str, end: str) -> re.Pattern:
@@ -130,6 +128,31 @@ def _mcp(root: Path, toolset: str | None) -> str | None:
     return json.dumps(cfg, indent=2) + "\n"
 
 
+HOOK_COMMAND = "devkb hook pre-edit"
+
+
+def _settings(root: Path, install: bool) -> str | None:
+    """`.claude/settings.json` with a PreToolUse hook that gives the agent the file's pack at its first edit; other
+    settings and hooks are kept, and removing devkb removes only this entry."""
+    path = root / ".claude" / "settings.json"
+    try:
+        cfg = json.loads(path.read_text()) if path.exists() else {}
+    except ValueError:
+        raise SystemExit(f"{path} is not valid JSON; fix it or add the devkb hook by hand")
+    groups = cfg.setdefault("hooks", {}).setdefault("PreToolUse", [])
+    for g in groups:
+        g["hooks"] = [h for h in g.get("hooks", []) if HOOK_COMMAND not in h.get("command", "")]
+    groups[:] = [g for g in groups if g.get("hooks")]
+    if install:
+        groups.append({"matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+                       "hooks": [{"type": "command", "command": HOOK_COMMAND, "timeout": 30}]})
+    if not groups:
+        cfg["hooks"].pop("PreToolUse")
+    if not cfg["hooks"]:
+        cfg.pop("hooks")
+    return json.dumps(cfg, indent=2) + "\n" if cfg else None
+
+
 def _hooks_dir(root: Path) -> Path:
     out = subprocess.run(["git", "rev-parse", "--git-path", "hooks"], cwd=root, capture_output=True, text=True)
     if out.returncode != 0:
@@ -145,7 +168,7 @@ def _hook(text: str, install: bool) -> str | None:
     return None if out.strip() in ("", "#!/bin/sh") else out
 
 
-def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool) -> list[str]:
+def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool, claude_hook: bool = False) -> list[str]:
     """toolset None removes devkb. Returns the changes made (or planned, with dry_run)."""
     p = Plan(root, dry_run)
     install = toolset is not None
@@ -154,6 +177,8 @@ def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool) -> list[str
     p.write("CLAUDE.md", _set_block(claude, "@AGENTS.md") if install else _drop_block(claude))
     p.write(".gitignore", _set_block(ignore, ".devkb/", HASH_BEGIN, HASH_END) if install else _drop_block(ignore, HASH_BEGIN, HASH_END))
     p.write(".mcp.json", _mcp(root, toolset))
+    if claude_hook or not install:
+        p.write(".claude/settings.json", _settings(root, install))
     hdir = _hooks_dir(root)
     for name in HOOKS:
         path = hdir / name
@@ -187,12 +212,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--project", default=".")
     ap.add_argument("--toolset", default="lean-pack", help="the MCP toolset agents get (lean-pack, lean, dev, core, workflow, all)")
     ap.add_argument("--hooks", action="store_true", help="rebuild the graph after commits, merges and checkouts")
+    ap.add_argument("--claude-hook", action="store_true", help="give Claude Code the file's pack at its first Edit or Write (.claude/settings.json)")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--remove", action="store_true", help="take devkb out of the repository again")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     root = Path(a.project).resolve()
-    changes = run(root, None if a.remove else a.toolset, a.hooks, a.dry_run)
+    changes = run(root, None if a.remove else a.toolset, a.hooks, a.dry_run, a.claude_hook)
     print(("would " if a.dry_run else "") + ("\n".join(changes) if changes else "nothing to change"))
     problem = None if a.remove else server_command_problem()
     if problem:
