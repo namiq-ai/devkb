@@ -17,6 +17,13 @@ Scoring (as for C/C++): method names in backticks, matched to the truth by metho
 method family each, see cs_chain_truth.py). Precision = listed names in the truth / (in the truth + not in the truth
 and not in its uncertain set); recall = truth names listed / truth; test files = truth test files named / truth test
 files. Tool calls, turns, model calls and cost come from the stream-json transcript.
+
+Corrections by hand (a question may carry them; `score(..., compiler_only=True)` ignores them). The compiler truth
+(`bench/roslyn_truth`) records calls and object creations only: a method that reaches the target by *reading a
+property* whose getter does, or through a callback registered as a method group, is invisible to it.
+`truth_property_reads`: names traced to the target through property reads in the pinned source
+(`bench/cs_reach_text.py`, each path read by hand); they count as right. `uncertain_by_hand`: names that reach it only
+through a registered callback, or that are a type or property name rather than a method; neither right nor wrong.
 """
 from __future__ import annotations
 
@@ -193,7 +200,7 @@ def stream_stats(path: Path) -> dict:
             "ctx": ctx, "out": best.get("outputTokens", 0)}
 
 
-def score(q: dict, text: str) -> dict:
+def score(q: dict, text: str, compiler_only: bool = False) -> dict:
     names = set()
     for tok in re.findall(r"`([^`\n]{1,200})`", text):
         tok = re.sub(r"\(.*$", "", tok).strip()
@@ -201,8 +208,10 @@ def score(q: dict, text: str) -> dict:
         last = re.split(r"\.|::", tok)[-1].strip()
         if re.match(r"^[A-Za-z_]\w*$", last) and not tok.endswith((".cs", "/")):
             names.add(last)
-    truth = {t.split(".")[-1] for t in q["truth"]}
-    unsure = {t.split(".")[-1] for t in q.get("uncertain", [])} | {q["name"]}
+    extra_truth = [] if compiler_only else q.get("truth_property_reads", [])
+    extra_unsure = [] if compiler_only else q.get("uncertain_by_hand", [])
+    truth = {t.split(".")[-1] for t in [*q["truth"], *extra_truth]}
+    unsure = {t.split(".")[-1] for t in [*q.get("uncertain", []), *extra_unsure]} | {q["name"]}
     if q.get("production_methods"):
         # only names the compiler knows as production methods count: a type named in prose, a test method listed
         # under the tests, a .NET method are neither right nor wrong
@@ -214,8 +223,8 @@ def score(q: dict, text: str) -> dict:
     return {"listed": len(listed), "right": len(right), "wrong": len(wrong),
             "P": len(right) / (len(right) + len(wrong)) if right or wrong else None,
             "R": len(right) / len(truth) if truth else None,
-            "T": len(named) / len(tests) if tests else None, "wrong_names": sorted(wrong)[:12],
-            "missed": sorted(truth - listed)[:12]}
+            "T": len(named) / len(tests) if tests else None, "wrong_names": sorted(wrong),
+            "missed": sorted(truth - listed)}
 
 
 def report(work: Path, qs: list[dict], out_md: Path) -> None:
@@ -300,7 +309,7 @@ def report(work: Path, qs: list[dict], out_md: Path) -> None:
     w("|" + "---|" * 11)
     for repo, tgt, arm, rep, st, sc in per_run:
         w(f"| {repo} | {tgt.split('.')[-1]} | {arm} | {rep} | {st['turns']} | {st['msgs']} | ${st['cost']:.3f} | "
-          f"{f2(sc['P'])} | {f2(sc['R'])} | {', '.join(sc['wrong_names'][:4])} | {', '.join(sc['missed'][:4])} |")
+          f"{f2(sc['P'])} | {f2(sc['R'])} | {', '.join(sc['wrong_names'])} | {', '.join(sc['missed'][:4])} |")
     w("")
     if tot["plain"] and tot["devkb"]:
         mp = statistics.median([g[1]["cost"] for g in tot["plain"]])

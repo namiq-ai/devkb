@@ -6,7 +6,9 @@ TRUTH_DIR holds `truth-<repo>.json` per repository (the workflow's artifacts). F
 definition whose file is the question's file and whose qualified name ends `.Name` (an overload family). Truth: the
 production methods that reach it through statically bound calls, at any depth. *Uncertain* (neither right nor wrong
 when scored): methods that reach it only through virtual or interface dispatch (they call the base or interface method
-that the target implements or overrides), which do reach it at run time. Tests: the test files holding a method that
+that the target implements or overrides), or only through a method group registered as a callback (the truth's
+`delegates`: they reach it when the callback is invoked), which do reach it at run time. Property and indexer reads are
+edges to the accessor (truth files from before they were, without `accessor_edges`, stop at a property). Tests: the test files holding a method that
 reaches it. The text-visible truth the question had before is kept as `text_truth` for comparison.
 """
 from __future__ import annotations
@@ -32,12 +34,14 @@ REPO_ID = {"MediatR": "mediatr", "FluentValidation": "fluentvalidation", "Polly"
            "efcore": "efcore"}
 
 
-def closure(starts: set[str], callers: dict, bases_of: dict, impls_of: dict, use_dispatch: bool) -> set[str]:
+def closure(starts: set[str], callers: dict, bases_of: dict, impls_of: dict, use_dispatch: bool,
+            holders: dict | None = None) -> set[str]:
     seen, todo = set(starts), list(starts)
     while todo:
         x = todo.pop()
         nxt = set(callers.get(x, ()))
         if use_dispatch:
+            nxt |= (holders or {}).get(x, set())   # who registers it as a callback reaches it when the callback runs
             for b in bases_of.get(x, ()):          # who calls the base/interface method reaches this implementation
                 nxt |= callers.get(b, set())
                 if b not in seen:
@@ -59,7 +63,9 @@ def main() -> int:
             graphs[rid] = json.loads((tdir / f"truth-{rid}.json").read_text())
         g = graphs[rid]
         defs = g["defs"]
-        callers, bases_of, impls_of = defaultdict(set), defaultdict(set), defaultdict(set)
+        callers, bases_of, impls_of, holders = defaultdict(set), defaultdict(set), defaultdict(set), defaultdict(set)
+        for a, b in g.get("delegates", []):
+            holders[b].add(a)
         for a, b in g["edges"]:
             callers[b].add(a)
         for impl, base in g["dispatch"]:
@@ -70,7 +76,7 @@ def main() -> int:
             print("no target found for", q["target"], file=sys.stderr)
             continue
         static = closure(starts, callers, bases_of, impls_of, False)
-        dyn = closure(starts, callers, bases_of, impls_of, True) - static
+        dyn = closure(starts, callers, bases_of, impls_of, True, holders) - static
         label = lambda i: defs[i][3] if i in defs else i                       # noqa: E731
         prod = lambda ids: {i for i in ids if i in defs and is_production(defs[i][0])}  # noqa: E731
         other = lambda ids: {i for i in ids if i in defs and not is_production(defs[i][0])  # noqa: E731
