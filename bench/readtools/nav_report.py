@@ -3,8 +3,8 @@ sys.path.insert(0,"bench/readtools")
 from tool_usage import usage
 E,SP=sys.argv[1],sys.argv[2]
 rows=[]
-for f in sorted(glob.glob(E+"/nav/*.jsonl")):
-    arm,tid,rep=re.match(r".*/(plain|devkb)-(N\d)-r(\d)\.jsonl",f).groups()
+for f in sorted(glob.glob(sys.argv[3]+"/*.jsonl")):
+    arm,tid,rep=re.match(r".*/(plain|main)-(N\d)-r(\d)\.jsonl",f).groups()
     res={}; best={}; cost=0; turns=0; msgs=set(); tools=collections.Counter()
     for l in open(f):
         try:e=json.loads(l)
@@ -29,13 +29,13 @@ m=lambda xs: sum(xs)/len(xs)
 NAMES={"N1":"symbol: exact lines of a function","N2":"symbol: qualified method lines","N3":"symbol: misspelled name","N4":"outline: methods of a class","N5":"uses: files with a constant","N6":"uses: every reference","N7":"search_docs: doc and heading","N8":"symbol glob: names by prefix"}
 print("| Question | Tool it exercises | Arm | Score | Turns | Model calls | Grep | File load | devkb | Text returned | Tokens (ctx / out) | Cost |"); print("|"+"---|"*12)
 for tid in sorted({r['tid'] for r in rows}):
-    for arm in ("plain","devkb"):
+    for arm in ("plain","main"):
         v=[r for r in rows if r['tid']==tid and r['arm']==arm]
         print(f"| {tid} {NAMES[tid] if arm=='plain' else ''} | | {arm} | {m([r['score'] for r in v]):.2f} | {m([r['turns'] for r in v]):.1f} | {m([r['msgs'] for r in v]):.1f} | {m([r['grep'] for r in v]):.1f} | {m([r['load'] for r in v]):.1f} | {m([r['dk'] for r in v]):.1f} | {m([r['text'] for r in v])/1000:.1f}k | {m([r['ctx'] for r in v])/1000:.0f}k / {m([r['out'] for r in v])/1000:.1f}k | ${m([r['cost'] for r in v]):.3f} |")
-for arm in ("plain","devkb"):
+for arm in ("plain","main"):
     v=[r for r in rows if r['arm']==arm]
     print(f"| **All 16 runs** | | **{arm}** | {m([r['score'] for r in v]):.2f} | {m([r['turns'] for r in v]):.1f} | {m([r['msgs'] for r in v]):.1f} | {m([r['grep'] for r in v]):.1f} | {m([r['load'] for r in v]):.1f} | {m([r['dk'] for r in v]):.1f} | {m([r['text'] for r in v])/1000:.1f}k | {m([r['ctx'] for r in v])/1000:.0f}k / {m([r['out'] for r in v])/1000:.1f}k | ${m([r['cost'] for r in v]):.3f} |")
-d=[r for r in rows if r['arm']=='devkb']
+d=[r for r in rows if r['arm']=='main']
 print(); print("runs using a devkb tool:",sum(1 for r in d if r['dk']),"of",len(d),"| by question:",{t:sum(1 for r in d if r['tid']==t and r['dk']) for t in sorted({r['tid'] for r in d})})
 c=collections.Counter()
 for r in d:

@@ -1,119 +1,139 @@
-# Read tools: what the benchmarks show (2026-11-16)
+# Read tools: what the benchmarks show
 
-Tools under test: `symbol`, `outline`, `uses`, `search_docs` (SPEC-DKB-003). Model: Sonnet in every arm. Small samples; directional.
+Last run: 2026-11-16 on `main` at `fa6c892` (read tools #39, language profiles #41, pre-edit hook #42, always-loaded tools #46), against click.
+Tools under test: `symbol`, `outline`, `uses`, `search_docs` (SPEC-DKB-003), served by the plugin's `lean-pack` toolset (12 tools; `symbol`, `outline` and `pack` load with the prompt).
+Model: Sonnet in every arm. 16 runs per arm and configuration: directions, not proofs.
 
-## 1. Zephyr scale: the tools are fast
+## Summary (devkb as shipped, against plain)
 
-First call 1.5 s (name tables), then 30 to 500 ms for `symbol`, 30 ms for `outline`, 0.8 to 1.5 s for `uses` over 70,000 files, 0.3 s for `search_docs`
-(147,307 symbols, 15,912 C/C++ files).
+| Question set | Turns | Cost per run | Score |
+|---|---|---|---|
+| Navigation (8 questions, one lookup each), default settings | 2.4 → 2.1 (-12%) | $0.0096 → $0.0085 steady-state (-11%) | 0.96 and 0.96 |
+| Multi-hop (find a function, list its callees with lines), default settings | 3.88 → 3.25 (-16%) | $0.0482 → $0.0438 (-9%) | F1 0.887 → 0.863 (paired -0.024, 95% interval [-0.073, +0.021]); recall 0.969 → 1.000 |
+| Multi-hop, built-in tools restricted to `Read,Grep,Glob,Bash` | 4.44 → 3.38 (-24%) | $0.0237 → $0.0236 (0%); steady-state -9% | F1 0.885 → 0.902 (paired +0.017, interval [-0.016, +0.054]) |
 
-## 2. Feature builds (adding C/C++ support, 2 runs with the tools): not used
+- **Fewer turns is the robust effect.** The agent calls `symbol` first instead of a grep and a read, and it no longer spends a turn on `ToolSearch` (0 of 48 devkb runs began with it; 15 of 16 did before the tools were marked always-loaded).
+- **Cost is lower by about 10% once the cache is warm, and flat or slightly higher in one-shot runs** (a cold prompt cache is paid once per run, and the devkb prompt is 2 to 3k tokens longer).
+- **No measurable change in correctness.** All intervals include zero. The multi-hop precision is lower in the default configuration (0.835 → 0.794, not significant, not investigated).
+- Not shown: a saving above about 10%, or any gain on questions that one grep already answers (N5 to N8: the agent used a grep in both arms).
 
-The tools were connected (preflight: server connected, a real `symbol` call returned) and the instruction naming them reached the agent (it quoted the section when asked).
-**Both builds made 0 calls to `symbol`, `outline`, `uses` or `search_docs`.** They made 26 and 30 greps, cost $3.43 and $2.68 (earlier devkb arms: $1.78 to $2.69).
+## Method
 
-Why: the greps in these two builds were not definition or caller lookups. Of 63 greps, 34% searched the external reference checkouts (outside any graph), 23% were free-text patterns, 6% were outlines,
-**0% were definition lookups, 0% caller lookups**. The agents read known files with the `Read` tool and offsets. A feature build that writes a new module and inspects outside corpora is not a navigation task,
-and the earlier nine-run analysis (3.4 definition greps per run) does not hold for every task.
+- **Project and instruction:** click at a pinned commit; the devkb arm has `devkb init` output from the code under test (`AGENTS.md` block, `.mcp.json`) and a graph built by it; the plain arm has none of these.
+- **Settings:** `default` is Claude Code with its own settings (tool search on); `lean` adds `--tools Read,Grep,Glob,Bash`, which removes the built-in tools' definitions (about 17k tokens) from both arms.
+- **Questions, each with truth computed from the source** (`bench/readtools/nav_tasks.py`, `hop_tasks.py`): navigation asks for exact lines, a misspelled name, a class's methods, files using a constant, every reference, a doc heading, names by prefix; multi-hop asks for one function's callees (4 to 6) with their files and first lines.
+- **Runs:** two repetitions of each question per arm, shuffled and run six at a time; read-only; all arms interleaved.
+- **Scoring:** navigation by `bench/readtools/nav_score.py`; multi-hop by `hop_score.py`: recall (callee found with its first line = 1, name only = 0.5) and precision (a repository-defined name in the answer is right when the function calls it), F1 of the two. Differences are paired by question and repetition, with a bootstrap interval (`hop_rescore.py`).
+- **Cost:** the reported `total_cost_usd`; "steady-state" prices the first model call's prompt as already cached, as in a running session (`cost_breakdown.py`; rates fitted to 84 reported costs with no error: input $2, cache write $4, cache read $0.10, output $10 per million tokens).
 
-## 3. Navigation questions (8 questions about click, 2 repetitions, plain against devkb with the read tools)
-
-Answers are scored against exact truth from the source (line numbers from the parser, file sets from git, method lists from the AST).
+## 1. Navigation (8 questions, 2 repetitions, default settings)
 
 | Question | Tool it exercises | Arm | Score | Turns | Model calls | Grep | File load | devkb | Text returned | Tokens (ctx / out) | Cost |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| N1 symbol: exact lines of a function | | plain | 1.00 | 3.0 | 3.0 | 1.0 | 1.0 | 0.0 | 2.4k | 74k / 0.4k | $0.035 |
-| N1  | | devkb | 1.00 | 3.0 | 3.0 | 0.0 | 0.0 | 1.0 | 0.2k | 79k / 0.2k | $0.033 |
+| N1 symbol: exact lines of a function | | plain | 1.00 | 3.0 | 3.0 | 1.0 | 1.0 | 0.0 | 2.4k | 74k / 0.3k | $0.034 |
+| N1  | | devkb | 1.00 | 2.0 | 2.0 | 0.0 | 0.0 | 1.0 | 0.2k | 53k / 0.1k | $0.029 |
 | N2 symbol: qualified method lines | | plain | 1.00 | 3.0 | 3.0 | 1.0 | 1.0 | 0.0 | 2.7k | 75k / 0.4k | $0.036 |
-| N2  | | devkb | 1.00 | 3.0 | 3.0 | 0.5 | 0.5 | 0.5 | 1.5k | 79k / 0.3k | $0.036 |
-| N3 symbol: misspelled name | | plain | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.0k | 49k / 0.1k | $0.006 |
-| N3  | | devkb | 1.00 | 3.0 | 3.0 | 0.0 | 0.0 | 1.0 | 0.3k | 79k / 0.2k | $0.010 |
-| N4 outline: methods of a class | | plain | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.6k | 49k / 0.4k | $0.010 |
-| N4  | | devkb | 1.00 | 3.0 | 3.0 | 0.0 | 0.0 | 1.0 | 1.8k | 79k / 0.4k | $0.016 |
-| N5 uses: files with a constant | | plain | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.1k | 49k / 0.2k | $0.008 |
-| N5  | | devkb | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.1k | 52k / 0.2k | $0.008 |
-| N6 uses: every reference | | plain | 0.82 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 1.5k | 49k / 0.5k | $0.013 |
-| N6  | | devkb | 0.66 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 1.5k | 52k / 0.4k | $0.012 |
-| N7 search_docs: doc and heading | | plain | 1.00 | 2.5 | 2.5 | 1.5 | 0.0 | 0.0 | 0.1k | 61k / 0.3k | $0.010 |
-| N7  | | devkb | 1.00 | 3.0 | 3.0 | 1.0 | 0.0 | 0.0 | 0.0k | 78k / 0.2k | $0.011 |
-| N8 symbol glob: names by prefix | | plain | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.5k | 49k / 0.3k | $0.009 |
-| N8  | | devkb | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.5k | 52k / 0.3k | $0.009 |
-| **All 16 runs** | | **plain** | 0.98 | 2.3 | 2.3 | 1.1 | 0.2 | 0.0 | 1.0k | 57k / 0.3k | $0.016 |
-| **All 16 runs** | | **devkb** | 0.96 | 2.6 | 2.6 | 0.6 | 0.1 | 0.4 | 0.7k | 69k / 0.3k | $0.017 |
+| N2  | | devkb | 1.00 | 2.0 | 2.0 | 0.0 | 0.0 | 1.0 | 0.3k | 53k / 0.1k | $0.033 |
+| N3 symbol: misspelled name | | plain | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.0k | 49k / 0.1k | $0.025 |
+| N3  | | devkb | 1.00 | 2.0 | 2.0 | 0.0 | 0.0 | 1.0 | 0.3k | 53k / 0.1k | $0.029 |
+| N4 outline: methods of a class | | plain | 0.98 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.6k | 49k / 0.4k | $0.029 |
+| N4  | | devkb | 1.00 | 2.0 | 2.0 | 0.0 | 0.0 | 1.0 | 1.7k | 54k / 0.3k | $0.058 |
+| N5 uses: files with a constant | | plain | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.1k | 49k / 0.2k | $0.026 |
+| N5  | | devkb | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.2k | 53k / 0.3k | $0.031 |
+| N6 uses: every reference | | plain | 0.70 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 1.5k | 49k / 0.3k | $0.029 |
+| N6  | | devkb | 0.71 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 1.5k | 54k / 0.3k | $0.033 |
+| N7 search_docs: doc and heading | | plain | 1.00 | 3.0 | 3.0 | 2.0 | 0.0 | 0.0 | 0.1k | 74k / 0.3k | $0.034 |
+| N7  | | devkb | 1.00 | 3.0 | 3.0 | 1.0 | 0.0 | 0.0 | 0.0k | 80k / 0.3k | $0.033 |
+| N8 symbol glob: names by prefix | | plain | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.5k | 49k / 0.3k | $0.028 |
+| N8  | | devkb | 1.00 | 2.0 | 2.0 | 1.0 | 0.0 | 0.0 | 0.5k | 54k / 0.3k | $0.032 |
+| **All 16 runs** | | **plain** | 0.96 | 2.4 | 2.4 | 1.1 | 0.2 | 0.0 | 1.0k | 59k / 0.3k | $0.030 |
+| **All 16 runs** | | **devkb** | 0.96 | 2.1 | 2.1 | 0.5 | 0.0 | 0.5 | 0.6k | 57k / 0.2k | $0.035 |
 
-runs using a devkb tool: 7 of 16 | by question: {'N1': 2, 'N2': 1, 'N3': 2, 'N4': 2, 'N5': 0, 'N6': 0, 'N7': 0, 'N8': 0}
-tools: {'devkb:symbol': 5, 'devkb:outline': 2}
+runs using a devkb tool: 8 of 16 | by question: {'N1': 2, 'N2': 2, 'N3': 2, 'N4': 2, 'N5': 0, 'N6': 0, 'N7': 0, 'N8': 0}
+tools: {'devkb:symbol': 6, 'devkb:outline': 2}
+
+- The tools were used where they fit (N1 to N4: exact lines, a qualified method, a misspelled name, a class's methods) and not where one grep is the right tool (N5 to N8).
+- The two exact-lines questions (N1, N2) returned 0.2 to 0.3k of text instead of 2.4 to 2.7k and took 2 turns instead of 3.
+- The reported cost is higher for devkb ($0.030 → $0.035) because of one expensive N4 run and cold-cache writes; the steady-state cost is 11% lower.
+
+## 2. Multi-hop exploration (8 questions, 2 repetitions)
+
+#### Multi-hop, default configuration
+
+| Question: callees of | Arm | Recall | Precision | F1 | Turns | Grep | File load | devkb | Cost |
+|---|---|---|---|---|---|---|---|---|---|
+| M1 isolation | plain | 0.75 | 0.33 | 0.46 | 4.0 | 2.0 | 1.0 | 0.0 | $0.055 |
+| M1  | devkb | 1.00 | 0.30 | 0.46 | 4.0 | 0.5 | 1.0 | 1.5 | $0.056 |
+| M2 open_stream | plain | 1.00 | 0.92 | 0.95 | 4.0 | 2.0 | 1.0 | 0.0 | $0.046 |
+| M2  | devkb | 1.00 | 0.81 | 0.88 | 3.0 | 0.0 | 0.0 | 2.0 | $0.043 |
+| M3 format_help | plain | 1.00 | 1.00 | 1.00 | 4.0 | 2.0 | 1.0 | 0.0 | $0.041 |
+| M3  | devkb | 1.00 | 0.92 | 0.95 | 3.0 | 0.0 | 0.0 | 2.0 | $0.039 |
+| M4 section | plain | 1.00 | 1.00 | 1.00 | 4.0 | 2.0 | 1.0 | 0.0 | $0.043 |
+| M4  | devkb | 1.00 | 1.00 | 1.00 | 3.0 | 0.0 | 0.0 | 2.0 | $0.041 |
+| M5 write_dl | plain | 1.00 | 0.92 | 0.95 | 3.0 | 2.0 | 0.0 | 0.0 | $0.041 |
+| M5  | devkb | 1.00 | 0.86 | 0.92 | 3.0 | 0.0 | 0.0 | 2.0 | $0.040 |
+| M6 handle_parse_result | plain | 1.00 | 0.84 | 0.92 | 4.0 | 2.0 | 1.0 | 0.0 | $0.071 |
+| M6  | devkb | 1.00 | 1.00 | 1.00 | 3.0 | 0.0 | 0.0 | 2.0 | $0.047 |
+| M7 format_progress_line | plain | 1.00 | 0.83 | 0.90 | 3.5 | 1.5 | 1.0 | 0.0 | $0.042 |
+| M7  | devkb | 1.00 | 0.73 | 0.84 | 3.0 | 0.0 | 0.0 | 2.0 | $0.037 |
+| M8 _pager_contextmanager | plain | 1.00 | 0.83 | 0.91 | 4.5 | 2.5 | 1.0 | 0.0 | $0.047 |
+| M8  | devkb | 1.00 | 0.73 | 0.84 | 4.0 | 1.0 | 0.0 | 2.0 | $0.048 |
+| **All 16 runs** | **plain** | 0.969 | 0.835 | 0.887 | 3.88 | 2.0 | 0.9 | 0.0 | $0.0482 |
+| **All 16 runs** | **devkb** | 1.000 | 0.794 | 0.863 | 3.25 | 0.2 | 0.1 | 1.9 | $0.0438 |
+
+#### Multi-hop, lean configuration
+
+| Question: callees of | Arm | Recall | Precision | F1 | Turns | Grep | File load | devkb | Cost |
+|---|---|---|---|---|---|---|---|---|---|
+| M1 isolation | plain | 1.00 | 0.37 | 0.54 | 4.5 | 2.5 | 1.0 | 0.0 | $0.033 |
+| M1  | devkb | 1.00 | 0.42 | 0.58 | 4.0 | 0.5 | 1.0 | 1.5 | $0.033 |
+| M2 open_stream | plain | 1.00 | 1.00 | 1.00 | 4.5 | 2.0 | 1.5 | 0.0 | $0.023 |
+| M2  | devkb | 1.00 | 0.92 | 0.95 | 3.0 | 0.0 | 0.0 | 2.0 | $0.021 |
+| M3 format_help | plain | 1.00 | 0.77 | 0.87 | 4.0 | 2.0 | 1.0 | 0.0 | $0.018 |
+| M3  | devkb | 1.00 | 1.00 | 1.00 | 3.0 | 0.0 | 0.0 | 2.0 | $0.017 |
+| M4 section | plain | 1.00 | 1.00 | 1.00 | 5.0 | 3.0 | 1.0 | 0.0 | $0.019 |
+| M4  | devkb | 1.00 | 1.00 | 1.00 | 3.0 | 0.0 | 0.0 | 2.0 | $0.015 |
+| M5 write_dl | plain | 1.00 | 1.00 | 1.00 | 4.0 | 2.0 | 1.0 | 0.0 | $0.020 |
+| M5  | devkb | 1.00 | 1.00 | 1.00 | 3.0 | 0.0 | 0.0 | 2.0 | $0.018 |
+| M6 handle_parse_result | plain | 1.00 | 1.00 | 1.00 | 4.5 | 2.5 | 1.0 | 0.0 | $0.028 |
+| M6  | devkb | 1.00 | 0.94 | 0.97 | 4.0 | 0.0 | 1.0 | 2.0 | $0.028 |
+| M7 format_progress_line | plain | 1.00 | 0.67 | 0.80 | 4.0 | 1.5 | 1.5 | 0.0 | $0.019 |
+| M7  | devkb | 1.00 | 0.67 | 0.80 | 3.0 | 0.0 | 0.0 | 2.0 | $0.016 |
+| M8 _pager_contextmanager | plain | 1.00 | 0.77 | 0.87 | 5.0 | 3.0 | 1.0 | 0.0 | $0.030 |
+| M8  | devkb | 1.00 | 0.83 | 0.91 | 4.0 | 1.0 | 0.0 | 2.0 | $0.040 |
+| **All 16 runs** | **plain** | 1.000 | 0.823 | 0.885 | 4.44 | 2.3 | 1.1 | 0.0 | $0.0237 |
+| **All 16 runs** | **devkb** | 1.000 | 0.847 | 0.902 | 3.38 | 0.2 | 0.2 | 1.9 | $0.0236 |
 
 
-## 4. Multi-hop exploration (8 questions about click, 2 repetitions, plain against devkb with the read tools)
+Reading the tables:
+- **Grep fell from 2.0 to 0.2 calls per run and whole-file reads from 0.9 to 0.1**; `symbol` was called 1.9 times per run: once for the function, then once for all its callees (30 of the 62 calls named several functions, comma-separated).
+- **Recall:** devkb gave every callee's first line in every run. Plain gave a constructor's line instead of the class's first line for three classes in M1 (both repetitions), which the scorer counts as name-only (0.969); `symbol` returns the class's own range.
+- **Cost is dominated by the fixed prompt**, not by the tool results: the prompt is 24k tokens in the default configuration (7k with built-ins restricted), written to the cache once and re-read on every call; the tool results of a whole run add about 2k. Removing 2 greps and 0.8 reads saves under $0.001; removing a turn saves about $0.003.
 
-"Find the function F; list every function it calls directly that is defined in `src/click/`, each with its file and first line": one lookup of F and one per callee (4 to 6 callees).
-Truth from the AST (calls written `name()` or `self.name()`, builtins excluded). Score: callee found with its first line = 1, name only = 0.5, then F1 against the repository-defined names the answer lists wrongly.
+## 3. Why turns, and then cost, moved
 
-| Question: callees of | | Arm | Score | Turns | Model calls | Grep | File load | devkb | Text returned | Tokens (ctx / out) | Cost |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| M1 isolation | | plain | 0.63 | 5.0 | 4.0 | 2.5 | 1.5 | 0.0 | 9.1k | 105k / 1.1k | $0.058 |
-| M1  | | devkb | 0.63 | 5.0 | 4.0 | 0.5 | 1.0 | 1.5 | 10.5k | 112k / 0.9k | $0.060 |
-| M2 open_stream | | plain | 1.00 | 4.5 | 4.0 | 2.0 | 1.5 | 0.0 | 4.0k | 101k / 0.9k | $0.047 |
-| M2  | | devkb | 0.96 | 4.0 | 4.0 | 1.0 | 0.0 | 1.0 | 4.4k | 108k / 0.7k | $0.048 |
-| M3 format_help | | plain | 0.84 | 4.0 | 4.0 | 2.0 | 1.0 | 0.0 | 1.9k | 100k / 0.7k | $0.041 |
-| M3  | | devkb | 0.80 | 4.0 | 4.0 | 0.5 | 0.0 | 1.5 | 2.2k | 106k / 0.5k | $0.042 |
-| M4 section | | plain | 0.89 | 4.5 | 4.0 | 2.5 | 1.0 | 0.0 | 1.5k | 100k / 0.7k | $0.041 |
-| M4  | | devkb | 0.89 | 4.0 | 4.0 | 0.5 | 0.0 | 1.5 | 1.4k | 106k / 0.4k | $0.040 |
-| M5 write_dl | | plain | 0.80 | 4.0 | 4.0 | 2.0 | 1.0 | 0.0 | 3.7k | 101k / 0.8k | $0.044 |
-| M5  | | devkb | 0.80 | 4.0 | 4.0 | 0.5 | 0.0 | 1.5 | 3.2k | 107k / 0.5k | $0.044 |
-| M6 handle_parse_result | | plain | 0.52 | 4.0 | 4.0 | 2.0 | 1.0 | 0.0 | 6.0k | 103k / 1.0k | $0.050 |
-| M6  | | devkb | 0.49 | 4.0 | 4.0 | 1.0 | 0.0 | 1.0 | 5.8k | 109k / 0.8k | $0.051 |
-| M7 format_progress_line | | plain | 0.80 | 3.0 | 3.0 | 1.0 | 1.0 | 0.0 | 3.9k | 75k / 0.5k | $0.038 |
-| M7  | | devkb | 0.81 | 3.5 | 3.5 | 0.5 | 0.5 | 1.0 | 3.0k | 93k / 0.5k | $0.042 |
-| M8 _pager_contextmanager | | plain | 0.70 | 4.0 | 3.0 | 2.0 | 1.0 | 0.0 | 3.8k | 77k / 0.9k | $0.045 |
-| M8  | | devkb | 0.73 | 5.0 | 5.0 | 2.0 | 0.0 | 1.0 | 3.6k | 136k / 0.8k | $0.053 |
-| **All 16 runs** | | **plain** | 0.77 | 4.1 | 3.8 | 2.0 | 1.1 | 0.0 | 4.2k | 95k / 0.8k | $0.046 |
-| **All 16 runs** | | **devkb** | 0.76 | 4.2 | 4.1 | 0.8 | 0.2 | 1.2 | 4.3k | 110k / 0.6k | $0.047 |
+1. **Before:** 15 of 16 devkb runs began with a `ToolSearch` call (Claude Code defers MCP tools), so `symbol` replaced a grep but one turn was added: 4.19 turns against plain's 4.12, and cost $0.0474 against $0.0456.
+2. **The fix:** `symbol`, `outline` and `pack` carry `_meta {"anthropic/alwaysLoad": true}` (#46). They load with the prompt, the other tools stay deferred. A skill cannot control this and a plugin cannot set `ENABLE_TOOL_SEARCH`; setting it to `false` also loads Claude Code's own deferred built-ins (+18k tokens).
+3. **Then:** the multi-hop turns fell to 3.25 (-22% against the earlier deferred arm) and cost to $0.0438 against plain's $0.0482. The same pairs, rerun on the current code with new repetitions, are the "default" rows above.
 
-runs using a devkb tool: 15 of 16 | by question: {'M1': 2, 'M2': 2, 'M3': 2, 'M4': 2, 'M5': 2, 'M6': 2, 'M7': 1, 'M8': 2}
-tools: {'devkb:symbol': 20}
+## 4. Scoring corrections
 
+Two scorer flaws made earlier tables of this document wrong; both are fixed in `bench/readtools/` and every number above is rescored.
+- **Multi-hop precision** counted as wrong any repository-defined name outside a truth list that omitted callees whose name several classes share (`consume_value`, `process_value`, `get_parameter_source`), class qualifiers and prose words. The first version showed a score drop of about 0.02 for devkb; with the corrected truth the paired difference is -0.003 [-0.036, +0.032] on the earlier runs and the intervals above on these.
+- **N6 ("every reference")** read only the first line number after each file name, so `core.py: 45, 1561` earned half credit. It now attributes every number on a line to the file name before it. N6 scores 0.70 and 0.71; the remaining gap is references the agents did not list.
 
-**Adoption is near-total when the work is definition lookups: `symbol` in 15 of 16 runs (20 calls), `outline`, `uses` and `search_docs` not needed.** Grep fell from 2.0 to 0.8 calls per run and whole-file reads from 1.1 to 0.2 (the spec's target of at least 60% fewer
-definition and outline greps is met here). Correctness (0.77 and 0.76), turns (4.1 and 4.2) and cost ($0.046 and $0.047) did not change: a `symbol` call takes the same turn a grep did, a plain agent batches
-several names into one grep, and the tool list adds about 15k tokens of context over a run (+16%).
+## 5. Earlier measurements that still hold
 
-## 5b. Why cost did not fall, and the fix tested (multi-hop, 16 runs per arm)
+- **Speed on Zephyr** (147,307 symbols, 15,912 C/C++ files): first call 1.5 s while the name tables load, then 30 to 500 ms for `symbol`, 30 ms for `outline`, 0.8 to 1.5 s for `uses` over 70,000 files, 0.3 s for `search_docs`. As command-line calls (graph loaded each time): 1.6 to 4 s; see `performance-v0.2.6-to-main.md`.
+- **Feature builds** (two runs adding C/C++ support, with the tools connected and the instruction loaded): 0 calls to any read tool. Of 63 greps, 34% searched external reference checkouts outside any graph, 23% were free-text patterns, 6% were outlines and none was a definition or caller lookup; agents read known files with offsets. A feature build is not a navigation task. (Run on earlier code; not repeated.)
 
-Cost per run is mostly a fixed prompt (about 24k tokens in the default Claude Code configuration), which is written to the cache once and re-read on every call; fewer greps and reads cannot move it (`cost_breakdown.py`: prefix write 47-50%, history re-read 17-19%, new tool results 19-24%, output 7%).
-Turns did not fall because deferred MCP tools need a `ToolSearch` call first (15 of 16 devkb runs): one turn spent to save one turn.
+## 6. Conclusion
 
-Turning tool search off reloads Claude Code's own deferred built-ins too (+18k tokens), so a fair test restricts built-ins in both arms (`--tools Read,Grep,Glob,Bash`, tool search off) and gives devkb only `symbol`, `outline`, `pack` (toolset `nav`; `symbol` also takes comma-separated names):
+The read tools are fast and accurate (exact ranges, typo tolerance, qualified names, an honest "end unknown" for TypeScript), agents use them for definition lookups, and since the first-lookup tools load with the prompt they remove a turn instead of adding one: **about 12 to 24% fewer turns and about 10% lower steady-state cost, with no measurable change in correctness.** One-shot cost is flat to slightly lower on multi-hop questions and not lower on single-lookup ones.
+They do not help where one grep already answers (N5 to N8) or where the task is writing code in a repository rather than finding things in it.
 
-| Arm | Score | Turns | Model calls | First-call context | Cost per run |
-|---|---|---|---|---|---|
-| plain, default configuration | 0.772 | 4.12 | 3.75 | 24.3k | $0.0456 |
-| plain, 4 built-ins, tool search off | 0.765 | 4.25 | 3.88 | 7.3k | $0.0241 |
-| nav (3 devkb tools), same | 0.747 | **3.31** | **3.06** | 9.3k | $0.0286 |
-
-Turns and model calls fall 21-22% (symbol 1.9 calls per run, grep 2.1 to 0.1, reads 1.1 to 0.25). Cost is 19% higher in these one-shot runs, because every run writes its cache prefix cold (nav writes 3.2k tokens of prefix against 0.8k) and its `symbol` replies are larger than grep output (475 tokens on average, source requested in half the calls). Score is within noise (0.747 and 0.765).
-Restricting the built-in tool set alone, with no devkb, cut cost 47%.
-
-**Cache warmth, and a 40-line source default (16 runs each).** Nav's higher cost came from three runs that began with a fully cold cache (9.3k tokens written at call 1; plain's prompt was already warm). Re-priced as if the first-call prefix were cached, as in a running session: plain $0.0150 mean ($0.0143 median), nav $0.0140 ($0.0118), 7% and 17% lower. Capping `symbol` source at 40 lines by default did not help (turns 3.44, calls 3.25, steady-state $0.0145 mean, $0.0131 median, score 0.766): agents read more files to finish, so the default stays 80.
-The saving is therefore small and within the noise of 16 runs per arm; the turn reduction (21%) is the robust effect.
-
-## 5. What it says
-
-- **Adoption follows the question.** Where the question is "exact lines of X", "a misspelled name" or "the methods of this class", the agent used `symbol` or `outline` in 7 of 8 runs
-  (and in 0 of 8 runs for "files with this constant", "every reference", "which doc", "names by prefix", where one grep is already the right tool). `uses` and `search_docs` were never chosen.
-- **Same correctness, same cost (here and in section 4).** Scores are 0.98 and 0.96; cost per question $0.016 and $0.017. These questions take plain 2.3 turns and one grep, so there is little to save.
-- **Where it does save is text.** The definition question returned 0.2k of text instead of 2.4k (a `grep -A` plus a read), the pattern the grep analysis predicted; but a tool call is one more turn than a grep on a two-turn question, and
-  the larger tool list adds about 1.5k tokens of context per model call (+21% context here). The two effects cancel.
-- **Tool definitions are a standing cost.** 12 tools at about 1.5k tokens per call; trimming descriptions or the default toolset is the lever if the tools do not pay for themselves on the tasks a team runs.
-
-## 6. Conclusion for the owner
-
-The tools are fast, correct and accurate (exact ranges, typos, qualified names, honest `end unknown` for TypeScript) and agents use them when the question matches. They did not lower cost or raise accuracy on easy navigation
-and were not used in a feature build, so **their value is not yet shown**. The multi-step case (section 4) shows agents switching from grep to `symbol` almost completely, with no change in correctness, turns or cost; the chain benchmark (callers at any depth) is where devkb already saves 37%.
-
-Next steps, in order of expected value:
-1. Batch lookups in one call (`symbol` with several names): plain agents batch alternatives into one grep, so one lookup per call is where the saving is lost (4 to 6 lookups per multi-hop question).
-2. A larger repository and harder questions (a behaviour spread over many files), where grep returns far more text than a range does.
-3. Trim the standing cost: shorter tool descriptions; consider `outline` and `symbol` only in the default set.
-4. For adoption beyond the model's own choice, a hook that offers the tool when a grep for a definition is about to run.
+Open:
+1. Multi-hop precision is lower in the default configuration; look at what a `symbol` reply invites the agent to add.
+2. A larger repository and harder questions (a behaviour spread across many files), where grep returns far more text than a range does.
+3. The prompt cost: the 12-tool `lean-pack` set adds 2 to 3k tokens against plain; the `nav` set (`symbol`, `outline`, `pack`) is about 2k.
+4. A hook that offers the tool just before a definition grep would help questions that one grep answers.
