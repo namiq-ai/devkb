@@ -1051,3 +1051,22 @@ def test_identifiers_starting_with_a_non_ascii_letter_keep_it(tmp_path):
 '''})
     assert {"U.Ärger", "U.Ärger.Älpha", "U.Ärger.Ölpha"} <= names and "U.Ärger.lpha" not in names
     assert {("U.Ärger.Go", "U.Ärger.Älpha"), ("U.Ärger.Go", "U.Ärger.Ölpha")} <= edges
+
+
+def test_extraction_stays_linear_in_unresolved_calls_to_a_common_name(tmp_path):
+    """#60: N types each define `Get()` and call `x.Get()` on receivers it cannot type. Per-file counts were rebuilt
+    per definition, and `_why` built a set of every `Get` per call site: N=3000 took ~8 s; linear, well under 1 s."""
+    import time
+    n = 3000
+    for i in range(n):
+        (tmp_path / f"C{i}.cs").write_text(f"namespace N{i} {{ class C{i} {{ public int Get() => 1; "
+                                           f"void Use(dynamic_ x) {{ x.Get(); y.Get(); z.Get(); }} }} }}\n")
+    for cmd in (["init", "-q"], ["add", "-A", "-f"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+        subprocess.run(["git", *cmd], cwd=tmp_path, check=True)
+    t = time.perf_counter()
+    symbols, _ = csharp_symbols.extract(tmp_path)
+    took = time.perf_counter() - t
+    gets = [s for s in symbols if s["name"] == "Get"]
+    assert len(gets) == n and all(s["unresolved_calls"] == n and s["unresolved_file_count"] == n for s in gets)
+    assert gets[0]["unresolved_files"] == sorted(f"C{i}.cs" for i in range(n))[:20]
+    assert took < 3.0, f"{took:.1f} s for {n} files: quadratic again"

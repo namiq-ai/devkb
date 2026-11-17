@@ -921,6 +921,7 @@ class _Index:
         self._type_view: dict[tuple, dict | None] = {}      # type_sym(): partial declarations merged
         self.implicit: set[str] = set()                 # types declaring a conversion operator (any argument may fit)
         self.enums: set[str] = set()
+        self._several: dict[tuple[str, str], bool] = {}
         for s in symbols:
             self.by_key.setdefault(s["key"], []).append(s)
             if s["kind"] in ("class", "enum"):
@@ -943,6 +944,14 @@ class _Index:
                     self.members.setdefault((s["type_q"], s["name"]), []).append(s)
                 if s.get("ext"):
                     self.ext.setdefault(s["name"], []).append(s)
+
+    def several(self, table: str, name: str) -> bool:
+        """Whether more than one key is named `name` in `table` ("by_name" or "ext"). Cached: a set built per call
+        site was (definitions x call sites) on a repository with many same-named methods (#60)."""
+        k = (table, name)
+        if k not in self._several:
+            self._several[k] = len({c["key"] for c in getattr(self, table).get(name, [])}) > 1
+        return self._several[k]
 
     @staticmethod
     def _one(cands: list[dict]) -> dict | None:
@@ -1369,11 +1378,11 @@ def _why(m, before: str, parts: list[str], rtype: str | None, name: str, index: 
         return "chained"                                         # `a.B().C()`: the receiver is a call's result
     if len(parts) == 1:
         return "bare-not-in-type"                                # inherited from an outside base, or `using static`
-    if len(index.ext.get(name, [])) > 1 and len({c["key"] for c in index.ext[name]}) > 1:
+    if index.several("ext", name):
         return "extension-ambiguous"                             # several extension methods share the name
     if rtype:
         return "receiver-type-lacks-member"
-    if len({c["key"] for c in index.by_name.get(name, [])}) > 1:
+    if index.several("by_name", name):
         return "receiver-unknown-ambiguous"                      # receiver's type unknown, several targets
     return "receiver-unknown-single"
 
@@ -1871,14 +1880,16 @@ def extract(repo_root: Path, stats: dict | None = None) -> tuple[list[dict], lis
                 "caller": s["key"], "callee": callee["key"], "rel": s["rel"], "line": line, "text": text,
                 "confidence": conf})
             call["confidence"] = max(call["confidence"], conf)
+    summary: dict[str, tuple] = {}           # per name, once: per symbol it was (definitions x call sites) (#60)
     for s in symbols:
         if s["kind"] in ("method", "function") and s["name"] in unresolved:
-            files: dict[str, int] = {}
-            for rel, _caller in unresolved[s["name"]]:
-                files[rel] = files.get(rel, 0) + 1
-            s["unresolved_calls"] = sum(files.values())
-            s["unresolved_files"] = sorted(files, key=lambda f: (-files[f], f))[:20]
-            s["unresolved_file_count"] = len(files)
+            if s["name"] not in summary:
+                files: dict[str, int] = {}
+                for rel, _caller in unresolved[s["name"]]:
+                    files[rel] = files.get(rel, 0) + 1
+                summary[s["name"]] = (sum(files.values()), sorted(files, key=lambda f: (-files[f], f))[:20], len(files))
+            n_calls, top, n_files = summary[s["name"]]
+            s["unresolved_calls"], s["unresolved_files"], s["unresolved_file_count"] = n_calls, list(top), n_files
     return symbols, list(calls.values())
 
 
