@@ -209,6 +209,9 @@ class ReadTools:
             rows.append({"i": i, "k": self.idx.keys[i], "kind": p.get("kind"), "ls": ls, "le": le, "range": range_state(f, ls, le),
                          "doc": (p.get("docstring_summary") or "")[:90], "callers": self.api._caller_count(i),
                          "self_call": self.api._calls_itself(i), "value_refs": int(p.get("value_ref_count") or 0),
+                         # calls under this name the resolver left unattributed: the count above is a lower bound (#87)
+                         "unresolved": int(p.get("unresolved_calls") or 0),
+                         "shared_by": len(self.idx.short.get(self.short[i], [])),
                          "how": how if how != "similar" else f"similar {hit[i] / 60:.2f}"})
         return {"query": query, "how": how, "n": len(order), "matches": rows}
 
@@ -443,6 +446,9 @@ def render_symbol(r: dict) -> str:
         out.append(f"{n}. {f}  {m['kind']}  {_span(m)}  {m.get('sig', '')}")
         also = (" (+ itself)" if m.get("self_call") else "") + \
             (f" (+ named without a call at {m['value_refs']} site(s))" if m.get("value_refs") else "")  # #70, #69
+        if m.get("unresolved"):  # the count is a lower bound, as the packs' Coverage says (#87)
+            shared = f"; {m['shared_by']} symbols share the name" if (m.get("shared_by") or 0) > 1 else ""
+            also = f"+{also} (calls under this name from {m['unresolved']} more function(s) not attributed{shared})"
         tail = (f'"{m["doc"]}"   ' if m.get("doc") else "") + (f"callers {m['callers']}{also}   " if m["callers"] or also else "") \
             + f"how {m['how']}"
         out.append(f"   {q}   {tail}")

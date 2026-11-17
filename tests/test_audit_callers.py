@@ -61,6 +61,19 @@ FILES = {
         "def use():\n"
         "    return plain()\n"
     ),
+    "pkg/calc.py": (
+        "class Calc:\n"
+        "    def compute(self, x):\n"
+        "        return x\n"
+        "\n"
+        "\n"
+        "def direct():\n"
+        "    return Calc().compute(1)\n"
+        "\n"
+        "\n"
+        "def via(obj):\n"
+        "    return obj.compute(2)\n"
+    ),
 }
 
 
@@ -111,3 +124,11 @@ def test_a_function_only_called_stays_complete_and_a_parameter_of_the_same_name_
 def test_symbol_says_a_function_with_no_caller_is_named_without_a_call(api):  # #69
     r = api.call("symbol", query="_moved_files")
     assert "callers 0 (+ named without a call at 1 site(s))" in RENDER["symbol"](r)
+
+
+def test_symbol_says_its_caller_count_is_a_lower_bound_when_calls_under_the_name_were_not_attributed(api):  # #87
+    r = api.call("symbol", query="compute")
+    m = r["matches"][0]
+    assert m["callers"] == 1 and m.get("unresolved") == 1, m
+    assert "callers 1+ (calls under this name from 1 more function(s) not attributed)" in RENDER["symbol"](r)
+    assert "not attributed" not in RENDER["symbol"](api.call("symbol", query="plain")), "a fully attributed count says nothing"
