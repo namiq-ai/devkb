@@ -12,7 +12,7 @@ source: owner question 2026-11-18 ("ai coder not only use grep but also find com
 supersedes: []
 superseded_by: null
 extends: SPEC-DKB-005 (the same-question rule), SPEC-DKB-003 (read tools)
-tickets: ["#166 (story 1, C1)", "#167 (story 2, C2)", "#168 (story 3, C3 measurement)"]
+tickets: ["#166 (story 1, C1)", "#167 (story 2, C2)", "#168 (story 3, C3 measurement)", "#171 (story 5, C5)"]
 ---
 
 # SPEC-DKB-006: what devkb can do for exploration other than grep
@@ -57,6 +57,7 @@ behind #131). As with grep, a contribution has to come through the guardrail, no
 | C1 | **Locate-and-read in one step.** A definition search (`grep -n "def X"`, `class X`, the Grep tool on `def X`) for a name that resolves to one symbol is answered with its location **and** body (`symbol --source`), capped at 80 lines (location and span only beyond that). | the `grep -n` call and the `sed -n` read after it | one fewer turn per pair (189 pairs in 72 sessions, about 2.6 per session); no guessed range | **high** |
 | C2 | **Span hint on a cut-short read.** A `sed -n A,Bp`, `head`/`tail -n` or Read-tool range that starts inside a function and stops before its end gets one line alongside: `this range stops at L…; <function> runs L…–L…`. The read itself is unchanged. | the follow-up read | fewer read-on reads (6%) and partial understanding (16% cut short) | medium |
 | C3 | ~~**Folder outline.**~~ **Not pursued** (#168: 70% of 500 listings are followed by no read in that folder within 5 calls; 0.60 reads per listing). **Folder outline.** `ls DIR` / `tree DIR` on a code folder gets, alongside, the folder's files with their top-level symbols (`outline` per file, compact). | some of the cat/sed reads that follow a listing | unknown: measure first (§5) | low |
+| C5 | **Route a code search to the read tool that answers it.** A name inside one file gets the pack filtered to that file, alongside (29% of about 476 code searches); a listing of a file's definitions is answered with `outline FILE` (2%). C1 also covers `def NAME` with `-A`/`-B`/`-C` (17%), clarified on #166. | the repository-wide caller pack beside a single-file search | file-scoped answers for the largest code-search shape | medium, 0.2.13 (#171) |
 | C4 | **File finding.** `find -name`, Glob, `git ls-files \| grep`: devkb adds nothing a file listing does not already give. **find-then-grep** is a grep across a file set, so SPEC-DKB-005 already covers it once a `find … \| xargs grep` command's file set is read as its scope. | — | none beyond SPEC-DKB-005 | not pursued; revisit if other agents' logs show it |
 
 `git log` / `git diff` questions (history of a file or function) are a separate topic: devkb's process graph holds
@@ -102,6 +103,7 @@ commits and tickets, and a spec of its own would come from measuring them.
 |---|---|---|
 | 1. Locate-and-read (C1, R1–R3, R5–R6): #166 | `scripts/devkb_guardrail.py`, `devkb/misses.py`; tests | #162 (SPEC-DKB-005) |
 | 2. Span hint (C2, R4–R6): #167 | `scripts/devkb_guardrail.py`, Read-tool and `sed`/`head`/`tail` parsing; tests | none |
+| 5. Route by question (C5): #171, 0.2.13 | `scripts/devkb_guardrail.py` (`filter_pack` to a file, definitions-listing → `outline`); tests | #162 |
 | 3. Measure listing-then-read (C3): #168 | `bench/exploration/listing_then_read.py`; **decided: not pursued** | none |
 
 ## 7. How this draft was made
