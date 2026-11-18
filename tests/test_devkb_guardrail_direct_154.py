@@ -13,7 +13,7 @@ def test_guardrail_substitutes_the_direct_caller_pack(repo, tmp_path):
     direct = misses.run_query(repo, "refactor", "extract")
     assert direct and direct[0] == "complete"
     ev = {"tool_name": "Grep", "cwd": str(repo), "session_id": "s154", "tool_use_id": "t154",
-          "tool_input": {"pattern": "extract", "path": str(repo)}}
+          "tool_input": {"pattern": "extract", "path": str(repo), "output_mode": "content"}}
     out = json.loads(run(PRE, tmp_path, ev))["hookSpecificOutput"]
     assert out["permissionDecision"] == "deny"
     assert "changing the signature of" in out["permissionDecisionReason"]   # the refactor pack's header
