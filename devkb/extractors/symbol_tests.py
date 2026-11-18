@@ -37,7 +37,7 @@ def _test_functions(tree: ast.AST) -> list[tuple[str, int, set[str], set[tuple[s
     out: list[tuple[str, int, set[str], set[tuple[str | None, str]]]] = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
-            pairs = set(_calls_in_body(node))
+            pairs = {(receiver, short) for receiver, short, _shape in _calls_in_body(node)}
             out.append((node.name, node.lineno, {short for _receiver, short in pairs}, pairs))
     return out
 
