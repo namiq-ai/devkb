@@ -55,7 +55,7 @@ A symbol in a language that stores no end line (TypeScript, JavaScript) is repor
 | open a file to see what depends on it, or edit it | `devkb pack --project . file PATH` (MCP: `pack(kind="file", subject=PATH)`) | the functions other files call, the files that depend on it, the tests to run |
 | change a function's behaviour or signature | `devkb pack --project . refactor NAME` (MCP: `pack(kind="change", subject=NAME, path=PATH)`); `NAME` may be `Class::method` | callers at any depth, tests among them |
 | start from an error message or a failing request | `devkb pack --project . error "MESSAGE"` (MCP: `pack(kind="error", subject="MESSAGE")`) | what raises it, the handlers that reach it |
-| find who calls a function | `devkb uses NAME`; a grep for it is answered from the graph when the answer is Complete | the callers, grouped by function, with the line of each |
+| find who calls a function | `devkb uses NAME` (with the devkb guardrail installed, a grep for it is answered from the graph when the answer is Complete) | the callers, grouped by function, with the line of each |
 | learn how a pattern is written, to copy it | read the file | the graph does not store this |
 | decide which tests to run | `devkb pack --project . file PATH`: its "tests to run" (MCP: `tests_to_run`, `tests_for`) | the tests, ranked |
 | review a diff | `devkb pack --project . file PATH` for each changed file (MCP: `review_pack`) | outside callers and the tests that reach the change |
