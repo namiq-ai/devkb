@@ -557,6 +557,85 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         pass
     return None
 
+SED_READ = re.compile(r"""^\s*sed\s+-n\s+(['"]?)(\d+),(\d+)p\1\s+(\S+)\s*$""")
+HEAD_READ = re.compile(r"^\s*head\s+(?:-n\s*|-)(\d+)\s+(\S+)\s*$")
+TAIL_READ = re.compile(r"^\s*tail\s+-n\s*\+(\d+)\s+(\S+)\s*$")
+
+
+def read_range(tool: str, inp: dict) -> tuple[str, int, int | None] | None:
+    """SPEC-DKB-006 R4: (file, first line, last line or None for to the end) of a read of a line range, or None."""
+    if tool == "Read":
+        f, off, lim = inp.get("file_path"), inp.get("offset"), inp.get("limit")
+        if not f or not (off or lim):
+            return None
+        try:
+            a = max(1, int(off or 1))
+            return f, a, a + int(lim) - 1 if lim else None
+        except (TypeError, ValueError):
+            return None
+    if tool != "Bash":
+        return None
+    cmd = inp.get("command", "")
+    if m := SED_READ.match(cmd):
+        return m.group(4), int(m.group(2)), int(m.group(3))
+    if m := HEAD_READ.match(cmd):
+        return m.group(2), 1, int(m.group(1))
+    if m := TAIL_READ.match(cmd):
+        return m.group(2), int(m.group(1)), None
+    return None
+
+
+def span_hint(ev: dict, tool: str, inp: dict) -> dict | None:
+    """SPEC-DKB-006 R4-R6: a read that starts inside a function or class and stops before its end gets one line with the
+    full span. Never blocks; once per file and range per session; nothing for a file changed since the build."""
+    rng = read_range(tool, inp)
+    if not rng or rng[2] is None:
+        return None
+    f, a, b = rng
+    cwd = Path(ev.get("cwd") or os.getcwd())
+    path = Path(f).expanduser()
+    path = path if path.is_absolute() else cwd / path
+    repo = served_repo(path.parent)
+    if repo is None or not (repo / ".devkb").is_dir():
+        return None
+    from devkb import misses
+    try:
+        rel = path.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError:
+        return None
+    if not path.is_file() or misses.changed_since_build(repo, rel):
+        return None
+    root = str(Path(__file__).resolve().parents[1])
+    env = dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", ""), PYTHONWARNINGS="ignore",
+               DEVKB_TELEMETRY="0")
+    import subprocess
+    try:
+        p = subprocess.run(misses.devkb_command(repo, "outline", rel, "--json", "--limit", "5000"), cwd=repo, env=env,
+                           capture_output=True, text=True, timeout=12)
+        syms = json.loads(p.stdout).get("symbols") or [] if p.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    inside = [s for s in syms if s.get("range") == "exact" and s.get("ls") and s.get("le")
+              and s["kind"] in ("function", "method", "class") and s["ls"] <= a <= s["le"]]
+    if not inside:
+        return None
+    s = min(inside, key=lambda x: x["le"] - x["ls"])
+    if b >= s["le"]:
+        return None
+    sid = "".join(c for c in str(ev.get("session_id") or "") if c.isalnum() or c in "-_")[:80]
+    key = hashlib.sha1(json.dumps([sid, rel, a, b]).encode()).hexdigest()
+    d = Path.home() / ".claude" / "hooks" / ".devkb-guardrail-seen"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        os.close(os.open(d / f"span-{key}", os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        return None
+    except OSError:
+        pass
+    msg = f"this range stops at L{b}; {s['q']} runs L{s['ls']}\u2013L{s['le']}"
+    log_decision(ev, repo, tool, "span-hint", [s["q"]], [], len(msg), f"{rel}:{a}-{b}")
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": msg}}
+
 
 def main() -> int:
     if os.environ.get("DEVKB_GUARDRAIL", "1") == "0":
@@ -568,6 +647,14 @@ def main() -> int:
     tool, inp = ev.get("tool_name", ""), ev.get("tool_input") or {}
     cwd = Path(ev.get("cwd") or os.getcwd())
     pattern = ""
+    if tool == "Read" or (tool == "Bash" and read_range(tool, inp)):
+        try:
+            out = span_hint(ev, tool, inp) if first_copy(ev) else None
+        except Exception:  # noqa: BLE001  a hint must never get in the read's way
+            out = None
+        if out:
+            print(json.dumps(out))
+        return 0
     if tool == "Grep":
         pattern = inp.get("pattern", "")
         paths, why = grep_tool_search(inp, cwd)

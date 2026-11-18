@@ -94,7 +94,7 @@ def test_a_session_is_reminded_once(env):
 
 def test_the_repository_registers_it():
     settings = json.loads((ROOT / ".claude" / "settings.json").read_text())
-    cmds = [h["command"] for m in settings["hooks"]["PreToolUse"] if m["matcher"] == "Grep|Bash" for h in m["hooks"]]
+    cmds = [h["command"] for m in settings["hooks"]["PreToolUse"] if m["matcher"] == "Read|Grep|Bash" for h in m["hooks"]]
     assert any("scripts/devkb_guardrail.py" in c for c in cmds)
     assert "Developing devkb: devkb first, logged" in (ROOT / "AGENTS.md").read_text()
     assert "@AGENTS.md" in (ROOT / "CLAUDE.md").read_text()
