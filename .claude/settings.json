@@ -7,7 +7,19 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/devkb_guardrail.py\" 2>/dev/null || true",
-            "timeout": 5
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Grep|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 20,
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/devkb_guardrail_post.py\" 2>/dev/null || true"
           }
         ]
       }

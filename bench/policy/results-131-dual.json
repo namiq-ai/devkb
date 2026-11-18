@@ -1,0 +1,154 @@
+[
+ {
+  "run": "nonekeep-r1",
+  "round": "1",
+  "arm": "no devkb",
+  "min": 4.083333333333333,
+  "cost": 0.5455165000000002,
+  "turns": 30,
+  "calls": 23,
+  "grep": 14,
+  "read": 2,
+  "nav": 1,
+  "ctx": 1173461,
+  "acc": [
+   0,
+   1,
+   1,
+   1
+  ]
+ },
+ {
+  "run": "nonekeep-r2",
+  "round": "1",
+  "arm": "no devkb",
+  "min": 4.083333333333333,
+  "cost": 0.4753573,
+  "turns": 24,
+  "calls": 21,
+  "grep": 6,
+  "read": 0,
+  "nav": 1,
+  "ctx": 878055,
+  "acc": [
+   0,
+   1,
+   1,
+   1
+  ]
+ },
+ {
+  "run": "nonekeep-r3",
+  "round": "2",
+  "arm": "no devkb",
+  "min": 5.05,
+  "cost": 0.6292973000000001,
+  "turns": 26,
+  "calls": 20,
+  "grep": 7,
+  "read": 2,
+  "nav": 0,
+  "ctx": 1188914,
+  "acc": [
+   0,
+   1,
+   0,
+   0
+  ]
+ },
+ {
+  "run": "nonekeep-r4",
+  "round": "2",
+  "arm": "no devkb",
+  "min": 9.416666666666666,
+  "cost": 0.8696331999999999,
+  "turns": 51,
+  "calls": 37,
+  "grep": 13,
+  "read": 3,
+  "nav": 0,
+  "ctx": 2410509,
+  "acc": [
+   0,
+   1,
+   0,
+   0
+  ]
+ },
+ {
+  "run": "climain-r1",
+  "round": "1",
+  "arm": "devkb CLI",
+  "min": 4.983333333333333,
+  "cost": 0.7727913,
+  "turns": 36,
+  "calls": 23,
+  "grep": 10,
+  "read": 4,
+  "nav": 1,
+  "ctx": 1582387,
+  "acc": [
+   0,
+   1,
+   0,
+   0
+  ]
+ },
+ {
+  "run": "climain-r2",
+  "round": "1",
+  "arm": "devkb CLI",
+  "min": 4.183333333333334,
+  "cost": 0.5298233,
+  "turns": 26,
+  "calls": 18,
+  "grep": 9,
+  "read": 3,
+  "nav": 1,
+  "ctx": 901799,
+  "acc": [
+   0,
+   1,
+   0,
+   0
+  ]
+ },
+ {
+  "run": "climain-r3",
+  "round": "2",
+  "arm": "devkb CLI",
+  "min": 5.483333333333333,
+  "cost": 0.7192587,
+  "turns": 30,
+  "calls": 23,
+  "grep": 9,
+  "read": 1,
+  "nav": 0,
+  "ctx": 1430928,
+  "acc": [
+   0,
+   1,
+   1,
+   1
+  ]
+ },
+ {
+  "run": "climain-r4",
+  "round": "2",
+  "arm": "devkb CLI",
+  "min": 6.316666666666666,
+  "cost": 0.6301037999999999,
+  "turns": 27,
+  "calls": 25,
+  "grep": 10,
+  "read": 0,
+  "nav": 2,
+  "ctx": 1481538,
+  "acc": [
+   0,
+   1,
+   1,
+   1
+  ]
+ }
+]

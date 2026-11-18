@@ -8,6 +8,7 @@
   devkb audit   --project .                 per-relation counts, fan-out and cost of the graph
   devkb coverage --project .                what share of the repository the graph covers
   devkb symbol|outline|uses|docs QUERY      read tools: a definition and its body, a file's outline, where a name is used, what the docs say
+  devkb misses  --project .                 graph misses grep found, as ticket drafts to review and file (#133)
   devkb hook    pre-edit                    Claude Code hook: the file's pack, given to the agent at its first edit
 
 `--project` takes a repository path (or a code listed in DEVKB_REGISTRY). See devkb/project_context.py.
@@ -26,6 +27,7 @@ COMMANDS = {
     "coverage": "devkb.coverage",
     "startup": "devkb.startup",
     "hook": "devkb.hook",
+    "misses": "devkb.misses",
 }
 
 

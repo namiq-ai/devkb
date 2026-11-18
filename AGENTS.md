@@ -57,11 +57,20 @@ This repository is devkb itself, so every session that works on it is also a tes
    devkb answer that turned out wrong, misleading or silently incomplete, with the query and what the source showed.
 4. **A wrong, misleading or silently incomplete answer is a defect.** File one issue per defect (reproduce
    command, actual, expected, where to start, done when) before anyone fixes it.
-5. **The guardrail stays on.** `.claude/settings.json` runs `scripts/devkb_guardrail.py` before Grep and grep / rg /
-   git grep searches: at the first code search of a session it adds one reminder (it never blocks), and it logs the
-   firing to `~/.claude/hooks/devkb-guardrail.log`. `DEVKB_GUARDRAIL=0` turns it off for a benchmark's control arm.
+5. **The guardrail answers from the graph or gets out of the way (#131).** `.claude/settings.json` runs
+   `scripts/devkb_guardrail.py` before Grep and grep / rg / git grep searches. When every name a search asks about
+   resolves in the graph with coverage Complete, devkb's answer is the search's result, in the same call (beside the
+   output when the command does more than search; repeat the identical search for grep's raw lines). Otherwise the
+   search runs untouched, exactly as without devkb. It never refuses. `DEVKB_GUARDRAIL=0` turns it off for a
+   benchmark's control arm.
 
 Why: SPEC-DKB-004 was first written with grep; redone through devkb, the same questions found three devkb defects
 (#114–#116). Use on real work is how devkb's gaps are found. Measured on three fixes (#126): agents asked to keep a
 log wrote none in 6 of 6 runs, and a reminder at every search (about 12 per run) was ignored, so devkb now logs
 itself and the reminder comes once.
+
+6. **Review the graph misses at the end of a task (#133).** When a search passes through to grep because devkb
+   could not answer (cannot-resolve, no-match, incomplete, stale) and grep found code, the guardrail's PostToolUse
+   hook (`scripts/devkb_guardrail_post.py`) appends one line to `.devkb/graph-misses.jsonl` (local only;
+   `DEVKB_MISSLOG=0` turns it off). Run `devkb misses --project .`, check each ticket draft against the source, and
+   file the ones that are real. Nothing is filed automatically.
