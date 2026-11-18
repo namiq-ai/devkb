@@ -276,6 +276,24 @@ class Packer:
                 hits.append(i)
         return hits[0] if len(hits) == 1 else None
 
+    def _by_symbol_rules(self, name: str, path: str = ""):
+        """`symbol`'s exact tiers (exact, qualified, suffix, module), so `Class::method` and `ns::Class::method` resolve as
+        they do there: (index, []) for one match, (None, candidate keys) for several, (None, []) for none."""
+        q = f"{path}::{name}" if path and "::" not in name else name
+        r = self.api._read().resolve(q, limit=8)
+        if r.get("error") or r.get("how") not in ("exact", "qualified", "suffix", "module"):
+            return None, []
+        ms = r["matches"]
+        if r["n"] == 1:
+            return ms[0]["i"], []
+        return None, [m["k"] for m in ms]
+
+    def _unresolved(self, pack: str, name: str, path: str, cands: list[str], tail: str) -> str:
+        head = f"# Graph pack: {pack}\n\nThe graph cannot resolve `{name}`" + (f" in `{path}`" if path else "")
+        if cands:
+            return head + " unambiguously. It could be:\n" + "\n".join(f"- `{k}`" for k in cands) + "\n\nPass one as `path::name`."
+        return head + tail
+
     def change(self, name: str, path: str = "") -> str:
         i, err = self.api._resolve(f"{path}::{name}" if path and "::" not in name else name)
         if i is None and path:
@@ -283,8 +301,11 @@ class Packer:
             i = cands[0] if len(cands) == 1 else None
         if i is None:
             i = self._by_module_name(name)
+        cands: list[str] = []
         if i is None:
-            return f"# Graph pack: change\n\nThe graph cannot resolve `{name}`" + (f" in `{path}`" if path else "") + ". Search the code."
+            i, cands = self._by_symbol_rules(name, path)
+        if i is None:
+            return self._unresolved("change", name, path, cands, ". Search the code.")
         parent = self.up({i})
         hs = self.handlers(parent, {i})
         closure = set(parent) | {i}
@@ -369,8 +390,11 @@ class Packer:
             i = cands[0] if len(cands) == 1 else None
         if i is None:
             i = self._by_module_name(name)
+        cands: list[str] = []
         if i is None:
-            return f"# Graph pack: refactor\n\nThe graph cannot resolve `{name}` unambiguously. Search the code."
+            i, cands = self._by_symbol_rules(name, path)
+        if i is None:
+            return self._unresolved("refactor", name, path, cands, " unambiguously. Search the code.")
         callers = sorted(set(self.idx.sources("CALLS", i)) - {i}, key=self.api._key)  # a recursive call is not a caller (#70)
         by_file: dict[str, list[int]] = {}
         for c in callers:

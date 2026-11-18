@@ -23,9 +23,15 @@ import storybench as sb
 
 B = sb.B
 BASES = {"before": "origin/main", "after": "ce284c4", "after2": os.environ.get("POLICY_BRANCH", "chore/126-devkb-first-on-devkb"),
-         "cli": os.environ.get("POLICY_BRANCH", "chore/126-devkb-first-on-devkb")}   # after2 without the MCP server
+         "cli": os.environ.get("POLICY_BRANCH", "chore/126-devkb-first-on-devkb"),   # after2 without the MCP server
+         "none": "origin/main",                                   # main with every devkb trace removed, devkb denied
+         "cli130": "feat/130-guardrail-enforce",                  # CLI-only, enforcing guardrail (#130)
+         "climain": "origin/main"}                                # main as merged (#129): CLI-only policy, reminder guardrail
 # after2 (the revised #126 + #127): navigation through the branch's own devkb, which records every query
-TOOL = {"after2": str(B / "toolenv-126" / "bin" / "devkb"), "cli": str(B / "toolenv-126" / "bin" / "devkb")}
+TOOL = {"after2": str(B / "toolenv-126" / "bin" / "devkb"), "cli": str(B / "toolenv-126" / "bin" / "devkb"),
+        "cli130": str(B / "toolenv-126" / "bin" / "devkb"), "climain": str(B / "toolenv-126" / "bin" / "devkb")}
+TRACE = ("AGENTS.md", "CLAUDE.md", ".claude", ".mcp.json", "scripts/devkb_guardrail.py",
+         "tests/test_devkb_guardrail.py")   # and the tests of what is removed, so the suite starts green
 PROMPT = """You are working in a clone of devkb (a code-graph tool for coding agents; Python; its venv is .venv, run
 Python as .venv/bin/python). The pinned C/C++ corpus repositories are in ./corpus/ (cJSON, leveldb, fmt), each its own
 git repository. Fix the issue below: change the code, add a regression test that fails before your fix and passes
@@ -46,14 +52,21 @@ def checkout(w: Path, arm: str):
     subprocess.run(["tar", "-x", "-C", str(w)], input=tar, check=True)
     for r in sb.CORPUS_REPOS:
         shutil.copytree(sb.CORPUS / r, w / "corpus" / r, ignore=shutil.ignore_patterns(".devkb"), symlinks=True)
+    spec = w / "docs" / "specs" / "SPEC-DKB-004_cpp-supported.md"     # the story's spec (PR #125, not merged yet)
+    if not spec.exists():
+        spec.write_text(sb.sh(["git", "-C", str(sb.REPO), "show", "spec/dkb-004-cpp-supported:docs/specs/SPEC-DKB-004_cpp-supported.md"]).stdout)
+    if arm == "none":                                # no devkb trace at all
+        for t in TRACE:
+            p = w / t
+            shutil.rmtree(p) if p.is_dir() else p.unlink(missing_ok=True)
     gi = w / ".gitignore"
     gi.write_text(gi.read_text() + "\ncorpus/\n")
     sb.sh(["git", "init", "-q"], cwd=w)
     for c in (["add", "-A"], ["-c", "user.name=bench", "-c", "user.email=bench@example.com", "commit", "-qm", f"devkb ({arm})"]):
         sb.sh(["git", *c], cwd=w)
     sb.sh(["uv", "venv", "-q", ".venv"], cwd=w)
-    sb.sh(["uv", "pip", "install", "-q", "--python", ".venv/bin/python", "-e", ".[dev]"], cwd=w)
-    if arm != "before":                              # what a session in a #126 checkout has: graphs for repo and corpus
+    sb.sh(["uv", "pip", "install", "-q", "--python", ".venv/bin/python", "-e", ".[dev]", "libclang"], cwd=w)
+    if arm not in ("before", "none"):                              # what a session in a #126 checkout has: graphs for repo and corpus
         for p in [w, *(w / "corpus" / r for r in sb.CORPUS_REPOS)]:
             subprocess.run([TOOL.get(arm, sb.DEVKB), "build", "--project", str(p)], capture_output=True)
         sb.check_graphs(w)
@@ -77,15 +90,17 @@ def run_one(issue: str, arm: str, rep: int) -> str:
     else:
         mcp = str(B / "no-mcp.json")
         Path(mcp).write_text(json.dumps({"mcpServers": {}}))
-    cmd = ["claude", "-p", PROMPT.format(title=t["title"], body=t["body"]), "--model", sb.MODEL, "--output-format",
-           "stream-json", "--verbose", "--max-turns", "150", "--permission-mode", "acceptEdits", "--strict-mcp-config",
-           "--mcp-config", mcp, "--allowedTools", *sb.ALLOW, "--disallowedTools", *sb.DENY]
-    env = dict(os.environ, DEVKB_GUARDRAIL="0" if arm == "before" else "1",
+    prompt = (sb.PROMPT if issue == "117" else PROMPT).format(title=t["title"], body=t["body"])
+    deny = sb.DENY + (["Bash(devkb:*)"] if arm == "none" else [])
+    cmd = ["claude", "-p", prompt, "--model", sb.MODEL, "--output-format",
+           "stream-json", "--verbose", "--max-turns", "250" if issue == "117" else "150", "--permission-mode", "acceptEdits", "--strict-mcp-config",
+           "--mcp-config", mcp, "--allowedTools", *sb.ALLOW, "--disallowedTools", *deny]
+    env = dict(os.environ, DEVKB_GUARDRAIL={"before": "0", "none": "0", "cli130": "enforce"}.get(arm, "1"),
                PATH=f"{Path(TOOL.get(arm, sb.DEVKB)).parent}:{w / '.venv' / 'bin'}:{os.environ['PATH']}")
     t0 = time.time()
     with open(out / "stream.jsonl", "w") as fo, open(out / "stderr.log", "w") as fe:
         try:
-            code = subprocess.run(cmd, cwd=w, env=env, stdout=fo, stderr=fe, timeout=2700).returncode
+            code = subprocess.run(cmd, cwd=w, env=env, stdout=fo, stderr=fe, timeout=5400).returncode
         except subprocess.TimeoutExpired:
             code = "timeout"
     (out / "end").write_text(json.dumps({"exit": code, "seconds": round(time.time() - t0)}))
