@@ -172,6 +172,11 @@ class ReadTools:
                 tiers.append(("module", lambda: collect(
                     lambda i: ("." + _module_of(self.file[i]) + "." + self.qual[i].lower()).endswith("." + ql),
                     lambda i: 88)))
+                # `ns::A::f` where the graph keeps `A.f`: drop leading qualifiers (namespaces), keeping `Class.method` at least
+                parts = ql.split(".")
+                for n in range(1, len(parts) - 1):
+                    rest = ".".join(parts[n:])
+                    tiers.append(("suffix", lambda rest=rest: collect(lambda i: self.qual[i].lower() == rest or self.qual[i].lower().endswith("." + rest), lambda i: 85)))
             if "*" in q or "?" in q:
                 tiers.append(("glob", lambda: collect(lambda i: fnmatch.fnmatchcase(self.short[i].lower(), ql) or fnmatch.fnmatchcase(self.qual[i].lower(), ql), lambda i: 80)))
         else:

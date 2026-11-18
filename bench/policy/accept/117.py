@@ -8,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-w = Path(sys.argv[1])
+w = Path(sys.argv[1]).resolve()
 py = str(w / ".venv" / "bin" / "python")
 out = {}
 with tempfile.TemporaryDirectory() as td:
@@ -35,8 +35,10 @@ txt = s.read_text() if s.exists() else ""
 out["precision_sample_md"] = bool(txt)
 out["sample_covers"] = [r for r in ("cJSON", "leveldb", "fmt") if r in txt]
 out["sample_has_interval"] = bool(re.search(r"95\s*%|interval|Wilson", txt, re.I))
-verdicts = list(w.rglob("*adjudicat*.jsonl")) + list(w.rglob("*verdict*.jsonl"))
-out["verdict_rows"] = sum(sum(1 for _ in open(v)) for v in verdicts if ".venv" not in str(v))
+# hand verdicts: any JSONL whose path (file or folder) names verdicts, adjudication or a sample, outside the venv and corpus
+verdicts = {v for v in w.rglob("*.jsonl") if re.search(r"verdict|adjudicat|sample", str(v.relative_to(w)), re.I)
+            and not any(x in v.relative_to(w).parts for x in (".venv", "corpus", ".devkb"))}
+out["verdict_rows"] = sum(sum(1 for _ in open(v)) for v in verdicts)
 out["pass"] = bool(out.get("truth_recursive_edges", 0) > 0 and out.get("quality_reports_not_measured")
                    and out["adjudicate_py"] and len(out["sample_covers"]) == 3 and out["sample_has_interval"]
                    and out["verdict_rows"] >= 300)
