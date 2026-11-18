@@ -177,27 +177,33 @@ def enclosing(repo: Path | None, rel: str, line: int, cache: dict) -> str:
 
 
 def parse_grep(text: str, files: list[str] | None = None, limit: int = 10, names: list[str] | None = None,
-               repo: Path | None = None) -> dict:
+               repo: Path | None = None, single_file: str | None = None) -> dict:
     """What a search found, counting only code: matches in comments, docs or non-code files do not count. Each match
     is kept as `file:line` with its kind and enclosing function (up to MAX_MATCHES), so a miss can be acted on without
-    running the search again (#133); the full output is not stored, only its hash."""
+    running the search again (#133); the full output is not stored, only its hash. A known single file supplies the
+    missing path for lines in grep's `line:text` format."""
     by_file: dict[str, int] = defaultdict(int)
     samples: list[str] = []
     matches: list[dict] = []
     cache: dict = {}
     for line in text.splitlines():
-        m = re.match(r"([^\s:][^:]*?):(?:(\d+):)?(.*)$", line)
-        if not m or Path(m.group(1)).suffix.lower() not in CODE_LANG:
+        prefix, sep, text_after_prefix = line.partition(":")
+        if single_file and sep and prefix.isdecimal():
+            path, number, content = single_file, prefix, text_after_prefix
+        else:
+            m = re.match(r"([^\s:][^:]*?):(?:(\d+):)?(.*)$", line)
+            if not m:
+                continue
+            path, number, content = m.groups()
+        if Path(path).suffix.lower() not in CODE_LANG or COMMENT.match(content):
             continue
-        if COMMENT.match(m.group(3)):
-            continue
-        by_file[m.group(1)] += 1
+        by_file[path] += 1
         if len(samples) < 3:
-            samples.append(f"{m.group(1)}:{m.group(2) or ''}:{m.group(3).strip()}"[:200])
-        if len(matches) < MAX_MATCHES and m.group(2):
-            rel = m.group(1)[2:] if m.group(1).startswith("./") else m.group(1)
-            matches.append({"at": f"{rel}:{m.group(2)}", "kind": match_kind(m.group(3), names or []),
-                            "in": enclosing(repo, rel, int(m.group(2)), cache)})
+            samples.append(f"{path}:{number or ''}:{content.strip()}"[:200])
+        if len(matches) < MAX_MATCHES and number:
+            rel = path.removeprefix("./")
+            matches.append({"at": f"{rel}:{number}", "kind": match_kind(content, names or []),
+                            "in": enclosing(repo, rel, int(number), cache)})
     count = sum(by_file.values())
     for f in files or []:                       # a files-only result: each code file is one match
         if Path(f).suffix.lower() in CODE_LANG and f not in by_file:
