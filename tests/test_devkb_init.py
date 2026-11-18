@@ -69,8 +69,10 @@ def test_the_default_gives_agents_lean_pack_and_instructions_naming_only_its_too
     assert json.loads((root / ".mcp.json").read_text())["mcpServers"]["devkb"]["args"][-1] == "lean-pack"
     agents = (root / "AGENTS.md").read_text()
     named = set(_re.findall(r"`([a-z_]+)`", agents)) & set(TOOLSETS["all"])
-    assert named and named <= set(TOOLSETS["lean-pack"]), named - set(TOOLSETS["lean-pack"])
-    assert 'pack(kind="change"' in agents and "search with grep" in agents, "the measured rule: packs for chains, grep for one hop"
+    cli_forms = _re.findall(r"`devkb (?:pack|symbol|outline|uses|docs|misses)\b", agents)
+    assert cli_forms, "shell-first"
+    for tool in _re.findall(r"MCP: `([a-z_]+)", agents):
+        assert tool in TOOLSETS["lean-pack"], tool
 
 
 def test_the_file_pack_lists_what_depends_on_a_file_and_the_tests_reaching_it(tmp_path, monkeypatch):
@@ -116,8 +118,15 @@ def test_claude_hook_is_optional_merged_idempotent_and_removed_with_devkb(tmp_pa
 
 def test_the_instruction_says_which_tool_for_which_step():
     block = init.AGENTS_BLOCK
-    for step in ("open a file", "change a function", "error message", "grep", "read the file", "Claude Code the devkb hook"):
+    for step in ("open a file", "change a function", "error message", "grep", "read the file",
+                 "devkb pack --project . file PATH", "devkb pack --project . refactor NAME", "devkb pack --project . error",
+                 "devkb uses NAME", "devkb misses --project .", "Class::method", "text matches"):
         assert step in block, step
+    for gone in ("Claude Code the devkb hook", "first Edit or Write", "search with grep"):
+        assert gone not in block, gone
+    for row in block.splitlines():
+        if row.startswith("|") and any(t in row for t in ("`tests_to_run`", "`review_pack`", "`config`")):
+            assert "devkb " in row.split("(MCP:")[0], f"MCP-only row: {row}"
 
 
 def test_a_dotted_name_tells_two_classes_with_the_same_method_apart():
