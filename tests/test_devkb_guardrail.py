@@ -43,7 +43,8 @@ def test_a_search_in_a_served_repository_is_reminded_and_logged(env):
     ctx = json.loads(out)["hookSpecificOutput"]
     assert ctx["hookEventName"] == "PreToolUse" and "ask devkb first" in ctx["additionalContext"]
     log = (env["home"] / ".claude" / "hooks" / "devkb-guardrail.log").read_text().splitlines()
-    assert len(log) == 1 and json.loads(log[0])["tool"] == "Bash"
+    reminders = [json.loads(x) for x in log if json.loads(x).get("action") == "remind"]   # decisions (#149) are other lines
+    assert len(reminders) == 1 and reminders[0]["tool"] == "Bash"
 
 
 @pytest.mark.parametrize("command", ["git grep -n x", "rg x src", "find . -name '*.py' | xargs grep -l x"])

@@ -331,6 +331,8 @@ class Telemetry:
         try:
             with open(self.path, "a") as fh:
                 fh.write(json.dumps({"t": round(time.time(), 3), "tool": tool, "ms": round(ms, 2),
-                                     "bytes": size, "ok": ok, "source": self.source, **extra}) + "\n")
+                                     "bytes": size, "ok": ok, "source": self.source,
+                                     **({"session": os.environ["DEVKB_SESSION"]} if os.environ.get("DEVKB_SESSION") else {}),
+                                     **extra}) + "\n")
         except OSError:
             pass
