@@ -187,13 +187,214 @@ MAX_ANSWER = 8000
 QUESTION = "refactor"
 
 
-def pure_search(tool: str, inp: dict) -> bool:
-    """A call that only searches (the Grep tool, or one shell command whose first stage is the search): replacing its
-    result loses nothing. Anything else keeps running, with devkb's answer added beside it."""
-    if tool == "Grep":
-        return True
-    cmd = inp.get("command", "")
-    return len([p for p in re.split(r"&&|\|\||;|\n", cmd) if p.strip()]) == 1 and bool(search_segments(cmd))
+CODE_EXTS = {".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".inl", ".ipp", ".tpp", ".py", ".js", ".jsx", ".ts",
+             ".tsx", ".mjs", ".cjs", ".go", ".rs", ".java", ".kt", ".cs", ".rb", ".php", ".swift", ".scala", ".lua", ".sh",
+             ".m", ".mm", ".vue", ".pl", ".sql"}
+DOC_TYPES = {"md", "markdown", "txt", "text", "rst", "json", "yaml", "yml", "toml", "xml", "html", "csv", "log", "tex",
+             "org", "ini", "cfg", "lock", "svg", "pdf", "doc", "docx"}
+WILDCARD = re.compile(r"[$`*?\[\]{}~]")
+
+
+def documents_only(globs: list[str]) -> bool:
+    """True when include globs leave only non-code files (`*.md`, `**/*.{md,txt}`). A glob with no extension is unknown."""
+    exts: list[str] = []
+    for g in globs:
+        found = re.findall(r"\.([A-Za-z0-9_+]+)(?=$|[,}])", g)
+        if not found:
+            return False
+        exts += ["." + e.lower() for e in found]
+    return bool(exts) and not any(e in CODE_EXTS for e in exts)
+
+
+def operand_paths(operands: list[str], cwd: Path) -> tuple[list[Path], str | None]:
+    """(resolved paths, why they are not all plain directories). A wildcard operand stands for its fixed prefix."""
+    paths: list[Path] = []
+    why = None
+    for o in operands:
+        wild = bool(WILDCARD.search(o.lstrip("~")))
+        if wild:
+            fixed = []
+            for part in o.split("/"):
+                if WILDCARD.search(part.lstrip("~")):
+                    break
+                fixed.append(part)
+            o = "/".join(fixed) or "."
+            why = why or "glob-operand"
+        try:
+            path = Path(o).expanduser()
+            path = (path if path.is_absolute() else cwd / path).resolve()
+        except (OSError, RuntimeError):
+            why = why or "path-unreadable"
+            continue
+        paths.append(path)
+        if not wild and not path.is_dir():
+            why = why or ("file-operand" if path.is_file() else "path-missing")
+    return paths, why
+
+
+def bash_search(command: str, cwd: Path) -> tuple[list[Path], str | None]:
+    """(the paths the shell search covers, why it is not the plain question `where is NAME used in these folders`; None
+    when it is). Paths are the operands of the search stages, or the directory the search runs in when it names none."""
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = "#"
+        words = list(lexer)
+    except ValueError:
+        return [], "unparsable"
+    stages: list[list[str]] = [[]]
+    ops: list[str] = []
+    for w in words:
+        if re.fullmatch(r"[|&;()<>]+", w):
+            if w in ("|", "||", "&&", ";", "&"):
+                ops.append(w)
+                stages.append([])
+            else:
+                ops.append("syntax")
+        else:
+            stages[-1].append(w)
+    paths: list[Path] = []
+    reasons: list[str] = []
+    searches = 0
+    here = cwd
+    for i, st in enumerate(stages):
+        while st and re.fullmatch(r"\w+=\S*", st[0]):
+            st = st[1:]
+        piped = i > 0 and ops[i - 1] == "|"
+        if st[:1] == ["cd"] and len(st) > 1:
+            p = Path(st[1]).expanduser()
+            here = (p if p.is_absolute() else here / p)
+            continue
+        kind = " ".join(st[:2]) if st[:2] == ["git", "grep"] else (st[0] if st else "")
+        if kind not in ("grep", "egrep", "rg", "git grep") or piped:
+            continue
+        searches += 1
+        args = st[len(kind.split()):]
+        pattern_set = recursive = after = False
+        operands: list[str] = []
+        globs: list[str] = []
+        if kind not in ("grep", "egrep"):
+            reasons.append(f"tool:{kind}")
+        it = iter(args)
+        for a in it:
+            if not after and a == "--":
+                after = True
+            elif not after and a == "-e":
+                if next(it, None) is None:
+                    reasons.append("option:-e")
+                pattern_set = True
+            elif not after and (a == "--color" or a.startswith("--color=")):
+                pass
+            elif not after and (a.startswith("--include=") or a == "--include"):
+                g = a.split("=", 1)[1] if "=" in a else next(it, "")
+                globs.append(g)
+            elif not after and a.startswith("--"):
+                reasons.append(f"option:{a.split('=')[0]}")
+            elif not after and a.startswith("-") and len(a) > 1:
+                for c in a[1:]:
+                    if c in "rR":
+                        recursive = True
+                    elif c not in "nHwEF":
+                        reasons.append(f"option:-{c}")
+                        break
+            elif not pattern_set:
+                pattern_set = True
+            else:
+                operands.append(a)
+        if kind == "rg":
+            recursive = True
+        if not operands:
+            if recursive:
+                paths.append(here.resolve())
+            else:
+                reasons.append("stdin")
+        else:
+            ps, why = operand_paths(operands, here)
+            paths += ps
+            if why:
+                reasons.append(why)
+            if not recursive and why is None:
+                reasons.append("not-recursive")
+        if globs and documents_only(globs):
+            reasons.append("document-glob")
+    if not searches:
+        return [], "no-search"
+    first = []
+    real = [st for st in stages if st and not (st[0] == "cd" and len(st) > 1)]   # a leading `cd DIR &&` only moves
+    if searches > 1 or len(real) > 1 or (len(stages) > 1 and "&&" not in ops):
+        first.append("pipe" if "|" in ops else "compound")
+    if "syntax" in ops:
+        first.append("shell-syntax")
+    reasons = first + reasons
+    return paths, (reasons[0] if reasons else None)
+
+
+def grep_tool_search(inp: dict, cwd: Path) -> tuple[list[Path], str | None]:
+    """The same for a Grep tool call."""
+    why = None
+    mode = inp.get("output_mode") or "files_with_matches"       # the Grep tool's default
+    if mode == "files_with_matches":
+        why = "option:files"                     # a file list is the question `grep -l` asks, not a caller list
+    elif mode != "content":
+        why = f"output_mode:{mode}"
+    elif inp.get("-i"):
+        why = "option:-i"
+    elif any(inp.get(k) for k in ("-A", "-B", "-C", "context")):
+        why = "context"
+    elif inp.get("multiline"):
+        why = "multiline"
+    globs = [inp["glob"]] if inp.get("glob") else []
+    if why is None and ((globs and documents_only(globs)) or str(inp.get("type") or "").lower() in DOC_TYPES):
+        why = "document-glob"
+    paths, pwhy = operand_paths([inp["path"]] if inp.get("path") else ["."], cwd)
+    return paths, why or pwhy
+
+
+def repo_of(paths: list[Path]) -> tuple[Path | None, str | None]:
+    """(the one repository all paths are in, why not)."""
+    repos = {served_repo(p) for p in paths}
+    if not paths or None in repos:
+        return None, "outside-repo"
+    if len(repos) > 1:
+        return None, "several-repos"
+    return repos.pop(), None
+
+
+def scope_of(paths: list[Path], repo: Path) -> list[str] | None:
+    """The repository-relative folders the search is limited to; None when it covers the whole repository."""
+    out = []
+    for p in paths:
+        try:
+            rel = p.relative_to(repo).as_posix()
+        except ValueError:
+            continue
+        if rel == ".":
+            return None
+        out.append(rel)
+    return out or None
+
+
+def filter_pack(text: str, scope: list[str]) -> tuple[str, int]:
+    """Keep the callers (and test files) under `scope`; (filtered text, callers kept). Counts in the headings follow."""
+    def inside(f: str) -> bool:
+        return any(f == d or f.startswith(d + "/") for d in scope)
+    out, section, kept, counts = [], "", 0, {}
+    for line in text.splitlines():
+        if line.startswith("## "):
+            section = line
+        m = re.match(r"- `([^`]+)`", line)
+        if m and (section.startswith("## Files with a direct caller") or section.startswith("## Test files")):
+            if not inside(m.group(1)):
+                continue
+            counts[section[:12]] = counts.get(section[:12], 0) + 1
+            kept += section.startswith("## Files with") and 1 or 0
+        out.append(line)
+    res = "\n".join(out)
+    res = re.sub(r"(## Files with a direct caller \()\d+", lambda m: m.group(1) + str(counts.get("## Files wit", 0)), res)
+    res = re.sub(r"(## Test files among them \()\d+", lambda m: m.group(1) + str(counts.get("## Test file", 0)), res)
+    # a section left empty reads "none"
+    res = re.sub(r"(## Test files among them \(0\)\n)(?!- none)", r"\1- none\n", res)
+    return res, kept
 
 
 def again(ev: dict, inp: dict) -> bool:
@@ -211,7 +412,8 @@ def again(ev: dict, inp: dict) -> bool:
     return False
 
 
-def log_decision(ev: dict, repo: Path, tool: str, action: str, names: list[str], queries: list[dict], chars: int) -> None:
+def log_decision(ev: dict, repo: Path | str, tool: str, action: str, names: list[str], queries: list[dict], chars: int,
+                 reason: str = "", scope: list[str] | None = None) -> None:
     """#149: one line per decision on a navigation search, in the guardrail log: the action, the names, their verdicts
     and the size of the answer in characters."""
     try:
@@ -220,12 +422,14 @@ def log_decision(ev: dict, repo: Path, tool: str, action: str, names: list[str],
         with open(log, "a") as fh:
             fh.write(json.dumps({"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "session": ev.get("session_id"), "tool": tool,
                                  "repo": str(repo), "action": action, "names": names,
-                                 "verdicts": [q["verdict"] for q in queries], "chars": chars}) + "\n")
+                                 "verdicts": [q["verdict"] for q in queries], "chars": chars, "reason": reason,
+                                 "scope": scope}) + "\n")
     except OSError:
         pass
 
 
-def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str) -> dict | None:
+def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, paths: list[Path] | None = None,
+                     why: str | None = None) -> dict | None:
     """#131 + #133. Ask devkb about the names the search asks for. Every name resolved and Complete: return devkb's
     answer as the result (a pure search) or beside it (a compound command), in the same call. Otherwise the search runs
     untouched, and the verdict is kept for the PostToolUse hook, which logs the miss if grep finds code."""
@@ -233,6 +437,9 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str) -
     key = "".join(c for c in str(ev.get("tool_use_id") or "") if c.isalnum() or c in "-_")[:80]
     names = misses.navigation_names(pattern)
     if not names or not (repo / ".devkb").is_dir():
+        return None
+    if why == "document-glob":                   # the graph holds no document text: an answer would only add tokens
+        log_decision(ev, repo, tool, "pass-through", names, [], 0, why)
         return None
     queries, answers = [], []
     for n in names:
@@ -244,16 +451,24 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str) -
     if queries and len(queries) == len(names) and all(q["verdict"] == "complete" for q in queries):
         text = "\n\n".join(answers)
         text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
-        if pure_search(tool, inp):
+        scope = scope_of(paths or [], repo)
+        if why is None and scope:                # narrower than the repository: the answer is filtered to the folders
+            filtered = [filter_pack(a, scope) for a in answers]
+            if not all(k for _, k in filtered):
+                log_decision(ev, repo, tool, "pass-through", names, queries, 0, "nothing-in-scope", scope)
+                return None
+            text = "\n\n".join(a for a, _ in filtered)
+            text = f"(Filtered to {', '.join(d + '/' for d in scope)}: callers elsewhere are left out.)\n\n" + text
+        if why is None:
             if again(ev, inp):
-                log_decision(ev, repo, tool, "repeat", names, queries, len(text))
+                log_decision(ev, repo, tool, "repeat", names, queries, len(text), "repeat", scope)
                 return None                      # the agent asked for the raw matches: let the search run
-            log_decision(ev, repo, tool, "substitute", names, queries, len(text))
+            log_decision(ev, repo, tool, "substitute", names, queries, len(text), "same-question", scope)
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                            "permissionDecisionReason": SUBSTITUTED.format(answers=text)}}
-        log_decision(ev, repo, tool, "alongside", names, queries, len(text))
+        log_decision(ev, repo, tool, "alongside", names, queries, len(text), why)
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=text)}}
-    log_decision(ev, repo, tool, "pass-through", names, queries, 0)
+    log_decision(ev, repo, tool, "pass-through", names, queries, 0, "not-complete")
     if not misses.enabled() or not key or not any(q["verdict"] not in ("complete", "other") for q in queries):
         return None
     built, head = misses.graph_state(repo)
@@ -284,20 +499,24 @@ def main() -> int:
     pattern = ""
     if tool == "Grep":
         pattern = inp.get("pattern", "")
-        candidates = [Path(inp["path"]) if inp.get("path") else cwd]
+        paths, why = grep_tool_search(inp, cwd)
     elif tool == "Bash":
-        segs = search_segments(inp.get("command", ""))
-        if not segs:
+        if not search_segments(inp.get("command", "")):
             return 0
         pattern = bash_pattern(inp.get("command", ""))
-        candidates = [d for s in segs for d in bash_dirs(s, cwd)] + bash_dirs(inp.get("command", ""), cwd)[:1]
+        paths, why = bash_search(inp.get("command", ""), cwd)
+        if not paths:                            # a form the parser does not read (xargs ...): fall back to what it names
+            paths = [d for s in search_segments(inp["command"]) for d in bash_dirs(s, cwd)][:1] or [cwd]
+            why = why or "unread-form"
     else:
         return 0
-    repo = next((r for r in map(served_repo, candidates) if r), None)
-    if repo is None or not first_copy(ev):
+    repo, outside = repo_of(paths)
+    if repo is None:
+        return 0                                 # not one devkb repository: the search is not ours to answer
+    if not first_copy(ev):
         return 0
     try:
-        out = answer_or_record(ev, repo, tool, inp, pattern)
+        out = answer_or_record(ev, repo, tool, inp, pattern, paths, why)
     except Exception:  # noqa: BLE001  devkb must never get in the search's way
         out = None
     if out:
