@@ -55,7 +55,10 @@ def sub(hso):
 
 
 @pytest.mark.parametrize("command", ["grep -rn extract .", "grep -rn extract", "grep -rn extract pkg/ scripts/",
-                                     "grep -rnwE extract --color=auto ."])
+                                     "grep -rnwE extract --color=auto .",
+                                     "grep -rn extract . | head", "grep -rn extract . | head -5",
+                                     "grep -rn extract . | tail -3", "grep -rn extract . | head -n 20 | tail -n5",
+                                     "grep -rn extract . | tail -n +2", "grep -rn extract . | head --lines=8"])
 def test_same_question_is_substituted(repo, tmp_path, command):
     hso, row = decide(repo, tmp_path, "Bash", {"command": command})
     assert sub(hso) and row["action"] == "substitute" and row["reason"] == "same-question"
@@ -77,6 +80,11 @@ def test_nothing_in_scope_passes_through(repo, tmp_path):
 @pytest.mark.parametrize("command,reason", [
     ("grep -rn extract . | wc -l", "pipe"),
     ("grep -rn extract . | grep -v test", "pipe"),
+    ("grep -rn extract . | sort", "pipe"),
+    ("grep -rn extract . | head -c 200", "pipe"),
+    ("grep -rn extract . | tail -f", "pipe"),
+    ("grep -rn extract . | sort | head -5", "pipe"),
+    ("grep -rn extract . | head -5 | wc -l", "pipe"),
     ("grep -rc extract .", "option:-c"),
     ("grep -rl extract .", "option:-l"),
     ("grep -rnv extract pkg/use.py", "option:-v"),
