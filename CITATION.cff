@@ -9,7 +9,7 @@ authors:
 license: Apache-2.0
 repository-code: "https://github.com/namiq-ai/devkb"
 doi: 10.5281/zenodo.24267143
-version: 0.2.11
+version: 0.2.12
 date-released: 2026-11-18
 keywords:
   - coding agents
