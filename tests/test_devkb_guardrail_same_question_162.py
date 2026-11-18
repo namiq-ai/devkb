@@ -80,7 +80,7 @@ def test_nothing_in_scope_passes_through(repo, tmp_path):
     ("grep -rc extract .", "option:-c"),
     ("grep -rl extract .", "option:-l"),
     ("grep -rnv extract pkg/use.py", "option:-v"),
-    ("grep -n -A8 'def extract' pkg/alpha.py", "option:-A"),
+    ("grep -rn -A8 extract .", "option:-A"),   # a uses search with context; a definition search with context is #166
     ("grep -n extract pkg/use.py", "file-operand"),
     ("grep -rn extract . && ls", "compound"),
 ])
