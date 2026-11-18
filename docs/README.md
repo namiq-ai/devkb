@@ -9,6 +9,7 @@
 | [`evaluations/`](evaluations/) | End-to-end evaluations of a language or feature: C/C++ support, language profiles, and the C/C++ final report. |
 | [`BENCHMARK.md`](BENCHMARK.md) | The benchmark protocol and results behind the README numbers. |
 | [`RELEASING.md`](RELEASING.md) | How a release is cut and checked. |
+| [`TRIAGE.md`](TRIAGE.md) | The daemons that triage and handle outside issues and pull requests every 4 hours. |
 | `img/` | Images used by the README. |
 
 Tooling that produced the numbers lives in `bench/` (`bench/readtools/`, `bench/exercises/cpp/`).
