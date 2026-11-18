@@ -44,8 +44,10 @@ A symbol in a language that stores no end line (TypeScript, JavaScript) is repor
 This repository is devkb itself, so every session that works on it is also a test of it.
 
 1. **Ask devkb before searching by text.** For "where is X defined", "who calls / uses X", "what is in this file",
-   "what does changing X touch" and "which tests cover X", use the devkb tools above (the MCP server in `.mcp.json`,
-   or the released `devkb` on your PATH: `devkb symbol|outline|uses|docs|pack ... --project .`). The same applies to
+   "what does changing X touch" and "which tests cover X", use devkb from the shell: the released `devkb` on your
+   PATH, `devkb symbol|outline|uses|docs|pack ... --project .` (the shell forms of the tools above). This repository
+   has no MCP server on purpose: its 12 tool definitions cost about 3k tokens on every model call, and agents chose
+   the shell anyway (`docs/analysis/devkb-none-mcp-cli.md`). The same applies to
    the C/C++ corpus (`~/.cache/devkb/cpp-corpus/<repo>`, `--project` that path). Rebuild with
    `devkb build --project .` when the graph is older than the code you are reading.
 2. **Check the answer against the source** before relying on it. grep, sed and Read remain right for filtering

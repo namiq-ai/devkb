@@ -97,3 +97,4 @@ def test_the_repository_registers_it():
     assert any("scripts/devkb_guardrail.py" in c for c in cmds)
     assert "Developing devkb: devkb first, logged" in (ROOT / "AGENTS.md").read_text()
     assert "@AGENTS.md" in (ROOT / "CLAUDE.md").read_text()
+    assert not (ROOT / ".mcp.json").exists(), "devkb's own repository uses devkb from the shell (CLI-only, #126)"
