@@ -186,6 +186,10 @@ class ProcessAPI:
             reply = getattr(self, tool)(**kw)
         except TypeError as exc:
             reply, ok = {"error": f"bad arguments for {tool}: {exc}"}, False
+        except Exception as exc:  # noqa: BLE001  record the failure (#151), then let it propagate
+            self.tel.log(tool, (time.perf_counter() - t0) * 1000, 0, False, args=asked(kw), outcome="error",
+                         detail=f"{type(exc).__name__}: {exc}"[:200], resolved="")
+            raise
         if "error" in reply:
             ok = False
         else:
@@ -197,7 +201,10 @@ class ProcessAPI:
         reply["_meta"] = {"built": self.idx.built_at[:16], "head": self.idx.git_head[:8], "stale": stale,
                           **({"behind": behind} if stale else {})}
         size = len(json.dumps(reply, separators=(",", ":")))
-        self.tel.log(tool, (time.perf_counter() - t0) * 1000, size, ok, args=asked(kw))
+        from devkb.outcomes import outcome_of_reply  # noqa: PLC0415
+        outcome, detail, resolved = outcome_of_reply(reply)
+        self.tel.log(tool, (time.perf_counter() - t0) * 1000, size, ok, args=asked(kw), outcome=outcome, detail=detail,
+                     resolved=resolved)
         return reply
 
     def _key(self, i: int) -> str:

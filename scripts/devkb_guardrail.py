@@ -165,6 +165,20 @@ def again(ev: dict, inp: dict) -> bool:
     return False
 
 
+def log_decision(ev: dict, repo: Path, tool: str, action: str, names: list[str], queries: list[dict], chars: int) -> None:
+    """#149: one line per decision on a navigation search, in the guardrail log: the action, the names, their verdicts
+    and the size of the answer in characters."""
+    try:
+        log = Path.home() / ".claude" / "hooks" / "devkb-guardrail.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a") as fh:
+            fh.write(json.dumps({"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "session": ev.get("session_id"), "tool": tool,
+                                 "repo": str(repo), "action": action, "names": names,
+                                 "verdicts": [q["verdict"] for q in queries], "chars": chars}) + "\n")
+    except OSError:
+        pass
+
+
 def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str) -> dict | None:
     """#131 + #133. Ask devkb about the names the search asks for. Every name resolved and Complete: return devkb's
     answer as the result (a pure search) or beside it (a compound command), in the same call. Otherwise the search runs
@@ -186,10 +200,14 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str) -
         text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
         if pure_search(tool, inp):
             if again(ev, inp):
+                log_decision(ev, repo, tool, "repeat", names, queries, len(text))
                 return None                      # the agent asked for the raw matches: let the search run
+            log_decision(ev, repo, tool, "substitute", names, queries, len(text))
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                            "permissionDecisionReason": SUBSTITUTED.format(answers=text)}}
+        log_decision(ev, repo, tool, "alongside", names, queries, len(text))
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=text)}}
+    log_decision(ev, repo, tool, "pass-through", names, queries, 0)
     if not misses.enabled() or not key or not any(q["verdict"] not in ("complete", "other") for q in queries):
         return None
     built, head = misses.graph_state(repo)
@@ -239,7 +257,7 @@ def main() -> int:
     try:
         with open(Path.home() / ".claude" / "hooks" / "devkb-guardrail.log", "a") as fh:
             fh.write(json.dumps({"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "session": ev.get("session_id"),
-                                 "tool": tool, "repo": str(repo)}) + "\n")
+                                 "tool": tool, "repo": str(repo), "action": "remind"}) + "\n")
     except OSError:
         pass
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",

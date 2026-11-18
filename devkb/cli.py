@@ -9,7 +9,9 @@
   devkb coverage --project .                what share of the repository the graph covers
   devkb symbol|outline|uses|docs QUERY      read tools: a definition and its body, a file's outline, where a name is used, what the docs say
   devkb misses  --project .                 graph misses grep found, as ticket drafts to review and file (#133)
-  devkb hook    pre-edit                    Claude Code hook: the file's pack, given to the agent at its first edit
+  devkb stats   --project .                 calls by tool and outcome: complete, incomplete, ambiguous, ... (#151)
+  devkb guardrail-stats                     the guardrail's substitutions, pass-throughs and repeats (#149)
+  devkb hook    pre-edit                   Claude Code hook: the file's pack, given to the agent at its first edit
 
 `--project` takes a repository path (or a code listed in DEVKB_REGISTRY). See devkb/project_context.py.
 """
@@ -28,6 +30,7 @@ COMMANDS = {
     "startup": "devkb.startup",
     "hook": "devkb.hook",
     "misses": "devkb.misses",
+    "stats": "devkb.outcomes",
 }
 
 
@@ -53,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run("devkb.build_symbols", rest) or _run("devkb.build", rest)
     if cmd in ("symbol", "outline", "uses", "docs"):
         return _run("devkb.read_tools", [cmd, *rest])
+    if cmd == "guardrail-stats":
+        return _run("devkb.outcomes", ["--guardrail", *rest])
     if cmd not in COMMANDS:
         print(f"devkb: unknown command {cmd!r}\n{__doc__}", file=sys.stderr)
         return 2

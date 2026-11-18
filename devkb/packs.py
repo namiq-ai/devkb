@@ -609,11 +609,22 @@ def logged_pack(p: "Packer", kind: str, subject: str, path: str = "", role: str 
            "refactor": lambda: p.refactor(subject, role, path), "ticket": lambda: p.ticket(subject),
            "pr": lambda: p.pr(subject)}.get(kind)
     if run is None:
-        return f"Unknown kind {kind!r}: use file, refactor, change, error, pr or ticket."
+        text = f"Unknown kind {kind!r}: use file, refactor, change, error, pr or ticket."
+        p.api.tel.log("pack", 0.0, len(text), False, args=asked({"kind": kind, "subject": subject}), outcome="refused",
+                      detail=text[:200], resolved="")
+        return text
+    from devkb.outcomes import outcome_of_pack  # noqa: PLC0415
     t0 = time.perf_counter()
-    text = run()
-    p.api.tel.log("pack", (time.perf_counter() - t0) * 1000, len(text), not text.startswith("devkb pack:"),
-                  args=asked({"kind": kind, "subject": subject, "path": path, "role": role}))
+    args = asked({"kind": kind, "subject": subject, "path": path, "role": role})
+    try:
+        text = run()
+    except Exception as exc:  # noqa: BLE001
+        p.api.tel.log("pack", (time.perf_counter() - t0) * 1000, 0, False, args=args, outcome="error",
+                      detail=f"{type(exc).__name__}: {exc}"[:200], resolved="")
+        raise
+    outcome, detail, resolved = outcome_of_pack(text)
+    p.api.tel.log("pack", (time.perf_counter() - t0) * 1000, len(text), not text.startswith("devkb pack:"), args=args,
+                  outcome=outcome, detail=detail, resolved=resolved)
     return text
 
 
