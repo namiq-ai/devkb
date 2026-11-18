@@ -12,13 +12,13 @@ source: owner question 2026-11-18 ("ai coder not only use grep but also find com
 supersedes: []
 superseded_by: null
 extends: SPEC-DKB-005 (the same-question rule), SPEC-DKB-003 (read tools)
-tickets: ["to be filed when this draft is accepted"]
+tickets: ["#166 (story 1, C1)", "#167 (story 2, C2)", "#168 (story 3, C3 measurement)"]
 ---
 
 # SPEC-DKB-006: what devkb can do for exploration other than grep
 
-Status **draft**: it states the measurement, the candidate contributions and how each would be judged. Tickets are
-filed once the owner accepts the scope. Baseline: `main` at `5ed31a3`.
+Status **draft**: it states the measurement, the candidate contributions and how each would be judged. Stories filed
+as #166, #167 and #168 (2026-11-18). Baseline: `main` at `5ed31a3`.
 
 ## 1. Brief (analyst): how agents actually explore
 
@@ -96,13 +96,13 @@ commits and tickets, and a spec of its own would come from measuring them.
 - **C3** is decided by measurement only: in the same sessions, how often a listing is followed by reads of files in
   that folder.
 
-## 6. Stories (to file on acceptance)
+## 6. Stories
 
 | Story | Scope | Depends on |
 |---|---|---|
-| 1. Locate-and-read (C1, R1–R3, R5–R6) | `scripts/devkb_guardrail.py`, `devkb/misses.py`; tests | #162 (SPEC-DKB-005) |
-| 2. Span hint (C2, R4–R6) | `scripts/devkb_guardrail.py`, Read-tool and `sed`/`head`/`tail` parsing; tests | none |
-| 3. Measure listing-then-read (C3) | bench script over session transcripts; a decision recorded here | none |
+| 1. Locate-and-read (C1, R1–R3, R5–R6): #166 | `scripts/devkb_guardrail.py`, `devkb/misses.py`; tests | #162 (SPEC-DKB-005) |
+| 2. Span hint (C2, R4–R6): #167 | `scripts/devkb_guardrail.py`, Read-tool and `sed`/`head`/`tail` parsing; tests | none |
+| 3. Measure listing-then-read (C3): #168 | bench script over session transcripts; a decision recorded here | none |
 
 ## 7. How this draft was made
 
