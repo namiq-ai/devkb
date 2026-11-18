@@ -36,34 +36,38 @@ This repository has a graph of its code in `.devkb/`: calls, tests, raised error
 returns what would take a dozen searches and file reads, and every item carries the line of code that proves it. The
 graph does not hold *how the code is written*: to copy a pattern or learn a style, read the file.
 
-**Choose by what you are about to do:**
+**Choose by what you are about to do.** Every row gives the shell command; where the devkb MCP server is configured
+(`.mcp.json`), the tool named in brackets does the same.
 
 **Instead of grep, to read code**: the graph holds every definition with its exact lines, so ask it rather than guess
 `grep -A25`:
-- `symbol(query)` (shell: `devkb symbol QUERY --source`): where a name is defined, with exact lines and the signature;
-  `source=True` prints the body. A query can be a name, `Class.method`, `path::name`, a glob `parse_*`, `re:regex`, a
-  prefix or a few words; a typo is tolerated, and below the confidence floor it says there is no match and suggests names.
-- `outline(path)` (shell: `devkb outline PATH`): a file's symbols in order with line ranges, and its imports: look before you read.
-- `uses(name)` (shell: `devkb uses NAME`): where a name, constant, module or key appears, grouped by the symbol that
+- `devkb symbol QUERY --source` (MCP: `symbol`): where a name is defined, with exact lines and the signature, and its
+  body. A query can be a name, `Class.method`, `Class::method`, `path::name`, a glob `parse_*`, `re:regex`, a prefix
+  or a few words; a typo is tolerated, and below the confidence floor it says there is no match and suggests names.
+- `devkb outline PATH` (MCP: `outline`): a file's symbols in order with line ranges, and its imports: look before you read.
+- `devkb uses NAME` (MCP: `uses`): where a name, constant, module or key appears, grouped by the symbol that
   contains each use. Text matches, not resolved references.
-- `search_docs(query)` (shell: `devkb docs QUERY`): what the documentation says, with the heading of each hit.
+- `devkb docs QUERY` (MCP: `search_docs`): what the documentation says, with the heading of each hit.
 A symbol in a language that stores no end line (TypeScript, JavaScript) is reported as "end unknown": read from its start.
 
-
-| You are about to... | Use | You get |
+| You are about to... | Run | You get |
 |---|---|---|
-| open a file to see what depends on it, or edit it | `pack(kind="file", subject=PATH)` (shell: `devkb pack --project . file PATH`) | the functions other files call, the files that depend on it, the tests to run |
-| change a function's behaviour or signature | `pack(kind="change", subject=NAME, path=PATH)` (shell: `devkb pack --project . refactor NAME`) | callers at any depth, tests among them |
-| start from an error message or a failing request | `pack(kind="error", subject="MESSAGE")` | what raises it, the handlers that reach it |
-| find who calls one function directly | search with grep | one hop: a pack adds a step and saves nothing |
+| open a file to see what depends on it, or edit it | `devkb pack --project . file PATH` (MCP: `pack(kind="file", subject=PATH)`) | the functions other files call, the files that depend on it, the tests to run |
+| change a function's behaviour or signature | `devkb pack --project . refactor NAME` (MCP: `pack(kind="change", subject=NAME, path=PATH)`); `NAME` may be `Class::method` | callers at any depth, tests among them |
+| start from an error message or a failing request | `devkb pack --project . error "MESSAGE"` (MCP: `pack(kind="error", subject="MESSAGE")`) | what raises it, the handlers that reach it |
+| find who calls a function | `devkb uses NAME` (with the devkb guardrail installed, a grep for it is answered from the graph when the answer is Complete) | the callers, grouped by function, with the line of each |
 | learn how a pattern is written, to copy it | read the file | the graph does not store this |
-| decide which tests to run | `tests_to_run` or `tests_for` | the tests, ranked |
-| review a commit or a diff | `review_pack` | changed functions, outside callers, untested changes |
-| find a setting or a service | `config` | where it is declared and read |
+| decide which tests to run | `devkb pack --project . file PATH`: its "tests to run" (MCP: `tests_to_run`, `tests_for`) | the tests, ranked |
+| review a diff | `devkb pack --project . file PATH` for each changed file (MCP: `review_pack`) | outside callers and the tests that reach the change |
+| find a setting or a service | `devkb uses KEY` (MCP: `config`) | where the key is declared and read |
+| see where the graph could not answer | `devkb misses --project .` | searches that fell through to grep and found code, as ticket drafts to check and file |
+
+`pack` accepts `Class::method`. When the graph has no answer for a name it does not stop: it gives the text matches
+for it, grouped by function as `uses` does, and says so.
 
 **How to work:**
 1. Ask first, read second. Run the pack for a file before you read it to judge impact and before your first edit of it.
-   In Claude Code the devkb hook also adds that pack to your first Edit or Write of each file; read it, then continue.
+   Nothing does this for you unless you installed a hook with `devkb init --claude-hook`.
 2. A pack marked **Complete** is the whole answer: do not search again to check it. If it is Incomplete, search only the
    files it names. If it says files changed since the graph was built, re-read those files.
 3. After editing, run the tests the pack named first, then the full suite. If you edited many files, rebuild first:
