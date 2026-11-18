@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
 """Compiler-backed call truth for a C/C++ repository, independent of devkb's extractor (libclang).
 
-  truth_clang.py REPO OUT.json [--std c++17] [-I dir ...] [-D name ...]
+  truth_clang.py REPO OUT.json [--std c++17] [-I dir ...] [-D name ...] [--vendored dir ...]
 
 Parses every tracked .c/.cc/.cpp/.cxx file as a translation unit, collects each function definition inside REPO
 (by USR) and each call expression inside such a definition with the USR of the function it refers to. Output:
 {"defs": {usr: [file, start_line, end_line, qualified_name]}, "edges": [[caller_usr, callee_usr], ...]}
-Only edges whose both ends are definitions inside REPO are kept. Needs `libclang` (pip install libclang).
+Only edges whose both ends are definitions inside REPO are kept; recursive edges (a function calling itself) are kept.
+Also written (SPEC-DKB-004 F1): "not_compiled", the translation units that failed to load or produced a fatal diagnostic
+(they contribute no truth and are scored as not measured), and "vendored", the vendored path prefixes excluded from truth
+(from `devkb/bench/cpp_corpus.json`, entry "vendored" of the repository's directory name, plus any `--vendored`).
+Needs `libclang` (pip install libclang).
 """
 import json, subprocess, sys
 from pathlib import Path
 
-SKIP = ("third_party", "/vendor/", "/build/")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from common import is_vendored, vendored_prefixes
+
+SKIP = ("/build/",)
+FATAL = 4      # clang.cindex.Diagnostic.Fatal
 C_EXTS = (".c",)
 CXX_EXTS = (".cc", ".cpp", ".cxx")
 
@@ -20,11 +28,13 @@ def parse_args(argv):
     """`REPO OUT [--std S] [-I dir | -Idir] [-D name[=v] | -Dname[=v]]`: the verification flags (SPEC-DKB-002 story 1.5).
 
     `-D__interrupt= -D__ramfunc=` lets the compiler read the same dialect keywords devkb's scanner tolerates."""
-    opts = {"repo": argv[0], "out": argv[1], "std": "c++17", "incs": [], "defs": []}
+    opts = {"repo": argv[0], "out": argv[1], "std": "c++17", "incs": [], "defs": [], "vendored": []}
     i = 2
     while i < len(argv):
         a = argv[i]
-        if a == "--std":
+        if a == "--vendored":
+            opts["vendored"].append(argv[i + 1]); i += 2
+        elif a == "--std":
             opts["std"] = argv[i + 1]; i += 2
         elif a in ("-I", "-D"):
             opts["incs" if a == "-I" else "defs"].append(argv[i + 1]); i += 2
@@ -70,19 +80,30 @@ def main(argv):
     FUNC = {K.FUNCTION_DECL, K.CXX_METHOD, K.CONSTRUCTOR, K.DESTRUCTOR, K.CONVERSION_FUNCTION, K.FUNCTION_TEMPLATE}
     o = parse_args(argv)
     repo, out, std, incs, defs_ = Path(o["repo"]).resolve(), o["out"], o["std"], o["incs"], o["defs"]
-    files = [f for f in subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True).stdout.split()
-             if f.endswith((".c", ".cc", ".cpp", ".cxx")) and not any(s in "/" + f for s in SKIP)]
+    vendored = vendored_prefixes(repo.name) + o["vendored"]
+    files = [f for f in subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True).stdout.split("\n")
+             if f.endswith((".c", ".cc", ".cpp", ".cxx")) and not any(s in "/" + f for s in SKIP) and not is_vendored(f, vendored)]
+    not_compiled, why = [], {}
     idx = ci.Index.create()
     defs, edges, visible = {}, set(), {}
     def_lang, header_langs = {}, {}      # usr -> language of the translation unit that read it; header -> includer languages
     lines_cache = {}
-    inside = lambda p: p and str(Path(p).resolve()).startswith(str(repo)) and not any(s in p for s in SKIP)
+    def inside(p):
+        if not p or not str(Path(p).resolve()).startswith(str(repo)):
+            return False
+        return not any(s in p for s in SKIP) and not is_vendored(str(Path(p).resolve().relative_to(repo)), vendored)
     for rel in files:
         lang = ["-x", "c", "-std=gnu11"] if rel.endswith(".c") else ["-x", "c++", f"-std={std}"]
-        args = lang + system_includes(not rel.endswith(".c")) + [f"-I{repo}"] + [f"-I{repo / d}" for d in incs] + [f"-D{d}" for d in defs_]
+        args = ["-ferror-limit=0"] + lang + system_includes(not rel.endswith(".c")) + [f"-I{repo}"] + [f"-I{repo / d}" for d in incs] + [f"-D{d}" for d in defs_]
         try:
             tu = idx.parse(str(repo / rel), args=args, options=ci.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES * 0)
         except ci.TranslationUnitLoadError:
+            not_compiled.append(rel)
+            continue
+        fatal = [d for d in tu.diagnostics if d.severity >= FATAL]
+        if fatal:      # e.g. a header of another platform: not measured, not wrong
+            not_compiled.append(rel)
+            why[rel] = f"{fatal[0].location.file}:{fatal[0].location.line}: {fatal[0].spelling}".replace(str(repo) + "/", "")
             continue
         unit_lang = unit_language(rel)
         for inc in tu.get_includes():      # a header's language is the language of the translation units that include it
@@ -121,11 +142,14 @@ def main(argv):
                     pass
                 walk(c, here)
         walk(tu.cursor, None)
-    edges = sorted((a, b) for a, b in edges if a in defs and b in defs and a != b)
+    edges = sorted((a, b) for a, b in edges if a in defs and b in defs)
     macro_only = [list(e) for e in edges if not visible.get(e, True)]
     json.dump({"defs": defs, "edges": [list(e) for e in edges], "macro_only": macro_only, "lang": def_lang,
-               "header_langs": {h: sorted(v) for h, v in header_langs.items()}}, open(out, "w"))
-    print(f"{repo.name}: {len(files)} TUs, {len(defs)} definitions, {len(edges)} call edges between them ({len(macro_only)} only through a macro)")
+               "header_langs": {h: sorted(v) for h, v in header_langs.items()},
+               "not_compiled": sorted(not_compiled), "not_compiled_why": why, "vendored": vendored}, open(out, "w"))
+    recursive = sum(1 for a, b in edges if a == b)
+    print(f"{repo.name}: {len(files)} TUs ({len(not_compiled)} not compiled), {len(defs)} definitions, {len(edges)} call edges between them "
+          f"({recursive} recursive, {len(macro_only)} only through a macro); vendored excluded: {vendored or 'none'}")
 
 
 if __name__ == "__main__":

@@ -32,6 +32,21 @@
       "commit": "7cd4b562b30a9bcd76a7288ad90d5e71dd6f87d2"
     }
   ],
+  "vendored": {
+    "comment": "Directory prefixes (relative to the repository root, whole path components) holding code copied into the tree from another project. SPEC-DKB-004 F1: excluded from the compiler truth and from the score alike. A file is vendored if its path equals a prefix or lies below it.",
+    "cJSON": ["tests/unity"],
+    "fmt": ["test/gtest"],
+    "leveldb": ["third_party"],
+    "tinyxml2": []
+  },
+  "adjudication_repos": [
+    {
+      "comment": "SPEC-DKB-004 story 1: the third C++ repository of the adjudicated sample (small, non-template-heavy, single translation unit). Not a floor-checked corpus repository.",
+      "name": "tinyxml2",
+      "url": "https://github.com/leethomason/tinyxml2.git",
+      "commit": "8224e427b655b83dae5e2298f1e6919523a78737"
+    }
+  ],
   "floors": {
     "cJSON": {
       "precision": 0.95,
