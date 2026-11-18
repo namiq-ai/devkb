@@ -13,6 +13,7 @@ whether the repository has moved on, so an agent knows when to trust it.
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import re
 import subprocess
@@ -319,9 +320,10 @@ class Telemetry:
     """One JSON line per call: tool, milliseconds, reply bytes. This is how the
     API is dogfooded and how the benchmark proves what the graph returned."""
 
-    def __init__(self, devkb_dir: Path, enabled: bool = True) -> None:
+    def __init__(self, devkb_dir: Path, enabled: bool = True, source: str = "mcp") -> None:
         self.path = devkb_dir / TELEMETRY_NAME
-        self.enabled = enabled
+        self.enabled = enabled and os.environ.get("DEVKB_TELEMETRY") != "0"
+        self.source = source                     # who asked: "mcp" (the server) or "cli" (a shell command), #127
 
     def log(self, tool: str, ms: float, size: int, ok: bool, **extra) -> None:
         if not self.enabled:
@@ -329,6 +331,6 @@ class Telemetry:
         try:
             with open(self.path, "a") as fh:
                 fh.write(json.dumps({"t": round(time.time(), 3), "tool": tool, "ms": round(ms, 2),
-                                     "bytes": size, "ok": ok, **extra}) + "\n")
+                                     "bytes": size, "ok": ok, "source": self.source, **extra}) + "\n")
         except OSError:
             pass

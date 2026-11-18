@@ -144,8 +144,14 @@ def project_for(cwd: Path) -> str | None:
     return code
 
 
+def asked(kw: dict) -> dict:
+    """What a call asked, for telemetry (#127): the arguments that were given, each text cut to 200 characters."""
+    return {k: (v[:200] if isinstance(v, str) else v) for k, v in kw.items() if v not in (None, "", False, [], {})}
+
+
 class ProcessAPI:
-    def __init__(self, code: str, use_cache: bool = True, telemetry: bool = True, devkb_dir: Path | None = None) -> None:
+    def __init__(self, code: str, use_cache: bool = True, telemetry: bool = True, devkb_dir: Path | None = None,
+                 telemetry_source: str = "mcp") -> None:
         """`devkb_dir` (or the DEVKB_DIR environment variable) points at a pinned graph
         snapshot instead of the project's live `.devkb/`, which any build overwrites.
         The benchmark relies on this so every run reads the same graph. DEVKB_REPO points at the
@@ -162,7 +168,7 @@ class ProcessAPI:
         self.idx: CompactIndex = load_index(self.ctx.code, self.root, store, use_cache)
         self.stale = Staleness(self.root, self.idx.git_head)
         self.testpaths = pytest_testpaths(self.root)   # where the project says its tests are (#71)
-        self.tel = Telemetry(store, telemetry)
+        self.tel = Telemetry(store, telemetry, telemetry_source)
         self._roles: dict[str, dict[str, list[str]]] | None = None
         self._roles_key: tuple | None = None
         self._cfg: dict = {}
@@ -191,7 +197,7 @@ class ProcessAPI:
         reply["_meta"] = {"built": self.idx.built_at[:16], "head": self.idx.git_head[:8], "stale": stale,
                           **({"behind": behind} if stale else {})}
         size = len(json.dumps(reply, separators=(",", ":")))
-        self.tel.log(tool, (time.perf_counter() - t0) * 1000, size, ok)
+        self.tel.log(tool, (time.perf_counter() - t0) * 1000, size, ok, args=asked(kw))
         return reply
 
     def _key(self, i: int) -> str:

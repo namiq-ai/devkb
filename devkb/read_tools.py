@@ -650,7 +650,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--offset", type=int, default=0, help="outline: skip this many symbols (the next page of a large file)")
     a = ap.parse_args(argv)
     from devkb.process_api import ProcessAPI  # noqa: PLC0415
-    api = ProcessAPI(a.project, telemetry=False)
+    api = ProcessAPI(a.project, telemetry_source="cli")
     tool = {"symbol": "symbol", "outline": "outline", "uses": "uses", "docs": "search_docs"}[a.cmd]
     kw = {"symbol": dict(query=a.query, source=a.source, kind=a.kind, under=a.under, limit=a.limit, lines=a.lines),
           "outline": dict(path=a.query, offset=a.offset), "uses": dict(name=a.query, under=a.under, docs=a.docs),
