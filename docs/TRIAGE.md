@@ -29,6 +29,22 @@ Every triaged item also gets `triaged`. The handling kind is chosen by triage an
 
 When it finishes, the item gets `handled`; when it cannot (the suite fails, no change, wrong kind for the item), `handler-failed` and a line in the local log, and nothing is posted. At most 2 items are handled and 10 triaged per run (`TRIAGE_MAX_HANDLE`, `TRIAGE_MAX_ITEMS`).
 
+## The feedback thread
+
+Issues labelled `user-result` (today #25, "Tell us what you tried devkb on") collect what users did with devkb. Every `triage` run
+also reads the **new comments by outsiders** on those threads (a comment is answered once; the ids are kept in
+`~/devkb-triage/feedback-seen.json`) and, per comment, chooses:
+
+| Action | What happens |
+|---|---|
+| ticket | the comment reports a defect or asks for a capability that fits the scope, and the model checked it against the code: a new issue is filed (labels `from-feedback`, type, priority; at most `handle:plan`, never an automatic fix) with the comment's link and the reporter's words quoted; the thread gets a reply that links it |
+| needs information | a reply with up to five specific questions |
+| reply | thanks and an answer from the docs and code, or a link to the open item it duplicates |
+| ignore | spam; nothing is posted |
+
+The reply addresses the commenter by the login GitHub returned (the one place an `@mention` is allowed). `triage.py feedback` runs only this
+step. Settings: `TRIAGE_FEEDBACK_LABEL` (`user-result`), `TRIAGE_MAX_FEEDBACK` (10 comments per run).
+
 ## What it can never do
 
 - close, merge, approve, or push to `main` (it pushes `auto/*` branches only, and opens drafts);

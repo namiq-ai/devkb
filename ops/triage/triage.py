@@ -3,6 +3,9 @@
 
   triage.py triage [--apply] [--only N]   every 4 hours: judge each new outside item (valid? needs information? duplicate?
                                           invalid? how urgent?), label it and post one comment
+  triage.py feedback [--apply]            read new outside comments on the feedback thread(s) (issues labelled `user-result`,
+                                          e.g. "Tell us what you tried devkb on"): file a ticket when one makes sense,
+                                          ask for what is missing, or thank and answer. Also part of every `triage` run.
   triage.py handle [--apply] [--only N]   pick up items triaged as `handle:*` and work them: review a pull request,
                                           write a plan for a large request, or open a DRAFT pull request for a bug or a
                                           small feature
@@ -22,6 +25,8 @@ HOME = Path(os.environ.get("TRIAGE_HOME", Path.home() / "devkb-triage"))
 MODEL = os.environ.get("TRIAGE_MODEL", "sonnet")
 MAX_TRIAGE = int(os.environ.get("TRIAGE_MAX_ITEMS", "10"))      # per run
 MAX_HANDLE = int(os.environ.get("TRIAGE_MAX_HANDLE", "2"))      # per run: each is a full agent run
+MAX_FEEDBACK = int(os.environ.get("TRIAGE_MAX_FEEDBACK", "10"))    # comments per run
+FEEDBACK_LABEL = os.environ.get("TRIAGE_FEEDBACK_LABEL", "user-result")
 MAX_TURNS = os.environ.get("TRIAGE_MAX_TURNS", "25")
 INSIDERS = {"OWNER", "MEMBER", "COLLABORATOR"}                    # GitHub's author_association values we do not triage
 MARK = "<!-- devkb-triage -->"
@@ -30,7 +35,7 @@ FOOTER = ("\n\n---\n*Triaged automatically by Claude, an AI assistant, for the m
 PRIORITY = {"high": "priority: high", "medium": "priority: medium", "low": "priority: low"}
 TYPE = {"bug": "bug", "enhancement": "enhancement", "question": "question", "docs": "documentation", "pr": None}
 HANDLING = ("draft-pr", "plan", "review", "none")
-STATE_LABELS = {"triaged": "0e8a16", "needs-info": "fbca04", "handled": "5319e7", "handler-failed": "b60205",
+STATE_LABELS = {"from-feedback": "bfdadc", "triaged": "0e8a16", "needs-info": "fbca04", "handled": "5319e7", "handler-failed": "b60205",
                 "priority: high": "d93f0b", "priority: medium": "fbca04", "priority: low": "c2e0c6",
                 **{f"handle:{h}": "1d76db" for h in HANDLING if h != "none"}}
 HERE = Path(__file__).resolve().parent
@@ -72,7 +77,8 @@ def items() -> list[dict]:
 
 
 def comments(n: int) -> list[dict]:
-    return [{"author": c["user"]["login"], "body": c.get("body") or "", "ours": MARK in (c.get("body") or "")}
+    return [{"id": c["id"], "url": c["html_url"], "author": c["user"]["login"], "bot": c["user"]["type"] == "Bot",
+             "assoc": c["author_association"], "body": c.get("body") or "", "ours": MARK in (c.get("body") or "")}
             for c in gh_api(f"issues/{n}/comments?per_page=100")]
 
 
@@ -225,6 +231,111 @@ def log(kind: str, record: dict) -> None:
         f.write(json.dumps(dict(record, at=dt.datetime.now().isoformat(timespec="seconds"))) + "\n")
 
 
+# ---- the feedback thread -------------------------------------------------------------------------------------------
+
+def seen_path() -> Path:
+    return HOME / "feedback-seen.json"
+
+
+def seen() -> set[int]:
+    try:
+        return set(json.loads(seen_path().read_text()))
+    except (OSError, ValueError):
+        return set()
+
+
+def new_outside_comments(thread: list[dict], done: set[int]) -> list[dict]:
+    """Comments by outsiders that neither we nor an earlier run has answered."""
+    return [c for c in thread if c["assoc"] not in INSIDERS and not c["bot"] and not c["ours"] and c["id"] not in done]
+
+
+def validate_feedback(v: dict, known: set[int]) -> dict:
+    action = v.get("action")
+    if action not in ("ticket", "needs_info", "reply", "ignore") or v.get("type") not in ("bug", "enhancement", "docs", "question") \
+            or v.get("priority") not in PRIORITY:
+        raise ValueError(f"verdict outside the vocabulary: {action}/{v.get('type')}/{v.get('priority')}")
+    dup = v.get("duplicate_of")
+    if dup is not None and (not isinstance(dup, int) or dup not in known):
+        raise ValueError(f"duplicate_of {dup!r} is not a known item")
+    t = v.get("ticket") or {}
+    if action == "ticket" and (not str(t.get("title", "")).strip() or len(str(t.get("body", ""))) < 80 or dup):
+        raise ValueError("a ticket needs a title and a body, and is not filed when it duplicates an open item")
+    qs = [str(q)[:300] for q in (v.get("questions") or [])][:5]
+    if action == "needs_info" and not qs:
+        raise ValueError("needs_info without a question")
+    handling = v.get("handling", "none")
+    return {"action": action, "type": v["type"], "priority": v["priority"], "duplicate_of": dup, "questions": qs,
+            "handling": handling if handling in ("plan", "none") else "none",     # an automatic fix is a maintainer's call
+            "ticket": {"title": str(t.get("title", ""))[:120].replace("\n", " "), "body": str(t.get("body", ""))[:6000]},
+            "reply": str(v.get("reply", ""))[:1800]}
+
+
+def feedback_reply(c: dict, v: dict, ticket_url: str | None) -> str:
+    body = sanitize(v["reply"])
+    if ticket_url:
+        body += f"\n\nFiled as {ticket_url}."
+    if v["action"] == "needs_info":
+        body += "\n\nTo go further we need:\n" + "\n".join(f"- {sanitize(q)}" for q in v["questions"])
+    if v["duplicate_of"]:
+        body += f"\n\nThis is already tracked in #{v['duplicate_of']}."
+    return f"{MARK}\n@{c['author']} {body}{FOOTER}"      # the commenter's login comes from the API, never from the text
+
+
+def ticket_body(c: dict, thread_no: int, v: dict) -> str:
+    quoted = textwrap.indent(c["body"].strip()[:1500], "> ")
+    return (f"{sanitize(v['ticket']['body'])}\n\n---\nFrom a user's comment on #{thread_no}: {c['url']}\n"
+            f"Reporter: `{c['author']}`. Their words:\n\n{sanitize(quoted)}\n\n"
+            "*Filed automatically by Claude, an AI assistant, from that comment; a maintainer reads it before anything is built.*")
+
+
+def feedback_pass(apply: bool, everything: list[dict]) -> None:
+    threads = [i for i in everything if FEEDBACK_LABEL in i["labels"] and not i["pr"]]
+    known = {i["number"] for i in everything}
+    titles = "\n".join(f"#{i['number']}: {i['title']}" for i in sorted(everything, key=lambda i: -i["number"])[:200])
+    done = seen()
+    todo = [(t, c) for t in threads for c in new_outside_comments(comments(t["number"]), done)]
+    print(f"{len(todo)} new outside comment(s) on {len(threads)} feedback thread(s) (limit {MAX_FEEDBACK}); "
+          f"{'APPLY' if apply else 'dry run'}")
+    for t, c in todo[:MAX_FEEDBACK]:
+        try:
+            text, cost = claude(prompt("feedback") + f"\n\nOpen items already known (for duplicates):\n{titles}\n\n"
+                                + untrusted({"number": t["number"], "pr": False, "author": c["author"], "title": t["title"],
+                                             "body": c["body"]}, []), TREE, READ_ONLY)
+            v = validate_feedback(json_object(text), known)
+        except (RuntimeError, ValueError) as e:
+            print(f"comment {c['id']}: no verdict ({e})")
+            log("feedback", {"thread": t["number"], "comment": c["id"], "error": str(e)})
+            continue
+        url = None
+        print(f"comment {c['id']} by {c['author']}: {v['action']} {v['type']} {v['priority']} dup={v['duplicate_of']} (${cost:.3f})")
+        if v["action"] == "ticket":
+            print("  ticket:", v["ticket"]["title"], "\n" + textwrap.indent(ticket_body(c, t["number"], v), "    "))
+        if v["action"] != "ignore":
+            print(textwrap.indent(feedback_reply(c, v, "#NEW" if v["action"] == "ticket" else None), "    "))
+        log("feedback", {"thread": t["number"], "comment": c["id"], "verdict": v, "cost": cost, "applied": apply})
+        if not apply:
+            continue
+        if v["action"] == "ticket":
+            labels = ["from-feedback", PRIORITY[v["priority"]]] + ([TYPE[v["type"]]] if TYPE.get(v["type"]) else [])
+            if v["handling"] == "plan":
+                labels.append("handle:plan")
+            args = [x for lab in labels for x in ("--label", lab)]
+            url = run(["gh", "issue", "create", "--repo", REPO, "--title", v["ticket"]["title"], "--body-file", "-", *args],
+                      input=ticket_body(c, t["number"], v)).strip()
+        if v["action"] != "ignore":
+            run(["gh", "issue", "comment", str(t["number"]), "--repo", REPO, "--body-file", "-"],
+                input=feedback_reply(c, v, url))
+        done.add(c["id"])
+        seen_path().write_text(json.dumps(sorted(done)))
+
+
+def cmd_feedback(apply: bool) -> int:
+    update_tree()
+    ensure_labels(apply)
+    feedback_pass(apply, items())
+    return 0
+
+
 def cmd_triage(apply: bool, only: int | None) -> int:
     update_tree()
     ensure_labels(apply)
@@ -266,6 +377,8 @@ def cmd_triage(apply: bool, only: int | None) -> int:
             for lab in remove:
                 run(["gh", "issue", "edit", str(it["number"]), "--repo", REPO, "--remove-label", lab], check=False)
             run(["gh", "issue", "comment", str(it["number"]), "--repo", REPO, "--body-file", "-"], input=comment_text(v))
+    if not only:
+        feedback_pass(apply, everything)
     return 0
 
 
@@ -416,13 +529,13 @@ def cmd_uninstall() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("command", choices=["triage", "handle", "status", "install", "uninstall"])
+    ap.add_argument("command", choices=["triage", "feedback", "handle", "status", "install", "uninstall"])
     ap.add_argument("--apply", action="store_true", default=os.environ.get("TRIAGE_APPLY") == "1",
                     help="write to GitHub (default: dry run; TRIAGE_APPLY=1 sets it)")
     ap.add_argument("--only", type=int, help="work on this issue/PR number only (even if already triaged)")
     a = ap.parse_args(argv)
     HOME.mkdir(parents=True, exist_ok=True)
-    return {"triage": lambda: cmd_triage(a.apply, a.only), "handle": lambda: cmd_handle(a.apply, a.only), "status": cmd_status,
+    return {"triage": lambda: cmd_triage(a.apply, a.only), "feedback": lambda: cmd_feedback(a.apply), "handle": lambda: cmd_handle(a.apply, a.only), "status": cmd_status,
             "install": cmd_install, "uninstall": cmd_uninstall}[a.command]()
 
 

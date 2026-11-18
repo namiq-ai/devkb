@@ -98,3 +98,38 @@ def test_the_json_object_is_found_in_prose_and_code_fences():
     assert triage.json_object('Sure.\n```json\n{"a": {"b": 1}, "c": "}"}\n```') == {"a": {"b": 1}, "c": "}"}
     with pytest.raises(ValueError):
         triage.json_object("no object here")
+
+
+def comment(cid, author="alice", assoc="NONE", bot=False, ours=False, body="x"):
+    return {"id": cid, "url": f"https://github.com/o/r/issues/25#issuecomment-{cid}", "author": author, "bot": bot,
+            "assoc": assoc, "body": body, "ours": ours}
+
+
+def test_the_feedback_thread_yields_only_new_outside_comments():
+    thread = [comment(1, "owner", "OWNER"), comment(2), comment(3, bot=True), comment(4, ours=True), comment(5), comment(6)]
+    assert [c["id"] for c in triage.new_outside_comments(thread, {5})] == [2, 6]
+
+
+FB = {"action": "ticket", "type": "bug", "priority": "high", "duplicate_of": None, "handling": "draft-pr", "questions": [],
+      "ticket": {"title": "pack misses a pointer caller", "body": "b" * 100}, "reply": "Thanks, filed."}
+
+
+def test_a_feedback_verdict_is_checked_and_an_automatic_fix_is_never_chosen_for_it():
+    v = triage.validate_feedback(FB, {25})
+    assert v["handling"] == "none" and v["ticket"]["title"]
+    assert triage.validate_feedback({**FB, "handling": "plan"}, {25})["handling"] == "plan"
+    for bad in ({"action": "delete"}, {"priority": "p0"}, {"duplicate_of": 99}, {"ticket": {"title": "", "body": "b" * 100}},
+                {"ticket": {"title": "t", "body": "short"}}, {"duplicate_of": 25}):          # a duplicate is not filed
+        with pytest.raises(ValueError):
+            triage.validate_feedback({**FB, **bad}, {25})
+    with pytest.raises(ValueError):
+        triage.validate_feedback({**FB, "action": "needs_info", "questions": []}, {25})
+
+
+def test_the_reply_names_the_commenter_from_the_api_not_from_the_text_and_links_the_ticket():
+    c = comment(7, author="alice", body="ping @victim")
+    v = triage.validate_feedback({**FB, "reply": "Thanks @victim, will do"}, set())
+    text = triage.feedback_reply(c, v, "https://github.com/o/r/issues/200")
+    assert text.startswith(triage.MARK + "\n@alice ") and "`@victim`" in text and "issues/200" in text and "Claude" in text
+    body = triage.ticket_body(c, 25, v)
+    assert "issuecomment-7" in body and "`alice`" in body and "> ping `@victim`" in body and "Filed automatically" in body
