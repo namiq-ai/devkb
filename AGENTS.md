@@ -74,3 +74,14 @@ itself and the reminder comes once.
    hook (`scripts/devkb_guardrail_post.py`) appends one line to `.devkb/graph-misses.jsonl` (local only;
    `DEVKB_MISSLOG=0` turns it off). Run `devkb misses --project .`, check each ticket draft against the source, and
    file the ones that are real. Nothing is filed automatically.
+
+7. **Every completed ticket carries its execution result (#139).** When a ticket's PR merges, add a comment headed
+   **Execution result** to the ticket, before reporting the work as finished:
+   - where it was done: the PR number and the merge commit;
+   - what it does now, in user terms, with one concrete example;
+   - the dual-mode table (no devkb against devkb CLI: runs, model calls, cost, and the acceptance columns), with one
+     line on what it shows;
+   - problems found and fixed on the way, including mistakes in the measurement itself;
+   - the follow-ups filed (issue numbers) and where the raw data is.
+
+   Example: #133.
