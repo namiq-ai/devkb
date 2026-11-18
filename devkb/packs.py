@@ -306,6 +306,15 @@ class Packer:
         except Exception:  # noqa: BLE001
             return ""
 
+    def _references(self, i: int) -> list[str]:
+        """#143: a module constant is not called; its uses are the REFERENCES edges and the sites kept on it."""
+        p = self.idx.props[i]
+        if p.get("kind") != "constant":
+            return []
+        sites = p.get("ref_sites") or []
+        n = int(p.get("ref_count") or 0)
+        return ["", f"## Uses of the constant ({n})"] + [f"- `{s}`" for s in sites[:25]] + (["- none the graph attributes"] if not n else [])
+
     def change(self, name: str, path: str = "") -> str:
         i, err = self.api._resolve(f"{path}::{name}" if path and "::" not in name else name)
         if i is None and path:
@@ -326,6 +335,7 @@ class Packer:
         out = [f"# Graph pack: changing `{self.api._key(i)}`", "",
                self.freshness(sorted({self.api._key(x).split('::')[0] for x in closure})), "", f"Defined at `{self.def_line(i)}`."]
         out += self._reachers(parent)
+        out += self._references(i)
         if self.idx.ep_by_owner:
             out += ["", f"## Route handlers that reach it ({len(hs)})"]
         for h, path_ in hs:

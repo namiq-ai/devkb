@@ -337,6 +337,73 @@ def _value_refs(tree: ast.Module) -> list[tuple[str, str | None, str, int]]:
     return out
 
 
+_CONST_NAME = re.compile(r"_{0,2}[A-Z][A-Z0-9_]*")
+_KEY_NAME = re.compile(r"[A-Za-z_]\w*")
+_KEY_READS = ("get",)
+_KEY_WRITES = ("setdefault", "pop")
+
+
+def _str_const(n: ast.AST | None) -> str | None:
+    return n.value if isinstance(n, ast.Constant) and isinstance(n.value, str) and _KEY_NAME.fullmatch(n.value) else None
+
+
+def _uses_in_tree(tree: ast.Module) -> tuple[list[tuple[str, str | None, str, int]], list[tuple[str, str, str, int]]]:
+    """One walk for #143 and #148. Returns (name_refs, key_uses).
+    name_refs: (scope, receiver, name, line) for every UPPER_CASE name read: a bare `NAME` not bound in the enclosing
+    function (receiver None), or `m.NAME` (receiver "m"); extract resolves them to module constants (#143).
+    key_uses: (scope, key, "read"|"write", line) for a string key used in `d["k"]` (read or write by context),
+    `d.get("k")` (read), `d.setdefault/pop("k")` (write), and a `{"k": v}` literal (write): a field a record carries
+    without a class declaring it (#148). Only identifier-like keys; scope is the enclosing function's qualified name,
+    or MODULE_CALLER."""
+    refs: list[tuple[str, str | None, str, int]] = []
+    keys: list[tuple[str, str, str, int]] = []
+
+    def visit(n: ast.AST, scope: list[str], bound: set[str]) -> None:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            head = [*n.decorator_list, *getattr(n, "bases", ()), *getattr(n, "keywords", ())]
+            if not isinstance(n, ast.ClassDef):
+                head += [*n.args.defaults, *(d for d in n.args.kw_defaults if d is not None)]
+            for h in head:
+                visit(h, scope, bound)
+            inner = bound if isinstance(n, ast.ClassDef) else bound | _bound_names(n)
+            for b in n.body:
+                visit(b, [*scope, n.name], inner)
+            return
+        where = ".".join(scope) or MODULE_CALLER
+        if isinstance(n, ast.Name):
+            if isinstance(n.ctx, ast.Load) and n.id not in bound and _CONST_NAME.fullmatch(n.id):
+                refs.append((where, None, n.id, n.lineno))
+        elif isinstance(n, ast.Attribute):
+            if isinstance(n.ctx, ast.Load) and isinstance(n.value, ast.Name) and _CONST_NAME.fullmatch(n.attr):
+                refs.append((where, n.value.id, n.attr, n.lineno))
+        elif isinstance(n, ast.Subscript):
+            k = _str_const(n.slice)
+            if k:
+                keys.append((where, k, "read" if isinstance(n.ctx, ast.Load) else "write", n.lineno))
+        elif isinstance(n, ast.Call):
+            if isinstance(n.func, ast.Attribute) and n.args and (k := _str_const(n.args[0])):
+                if n.func.attr in _KEY_READS:
+                    keys.append((where, k, "read", n.lineno))
+                elif n.func.attr in _KEY_WRITES:
+                    keys.append((where, k, "write", n.lineno))
+        elif isinstance(n, ast.Dict):
+            for kn in n.keys:
+                if (k := _str_const(kn)):
+                    keys.append((where, k, "write", kn.lineno))
+        for c in ast.iter_child_nodes(n):
+            visit(c, scope, bound)
+
+    visit(tree, [], set())
+    return refs, keys
+
+
+def _safe_uses(tree: ast.Module) -> tuple[list, list]:
+    try:
+        return _uses_in_tree(tree)
+    except RecursionError:
+        return [], []
+
+
 def _module_level_calls(tree: ast.Module) -> list[tuple[str | None, str, Shape]]:
     calls: list[tuple[str | None, str, Shape]] = []
 
@@ -1037,9 +1104,49 @@ class _Visitor(ast.NodeVisitor):
             "complexity": None,  # not a meaningful branch-count unit for a class itself
             "bases": [b for b in (_class_ref(x) for x in node.bases) if b],  # ODSF-313, ADR-SDP-DEVKB-006
         })
+        self._fields(node, qn)
         self.stack.append((node.name, True))
         self.generic_visit(node)
         self.stack.pop()
+
+    def _add_simple(self, name: str, kind: str, node: ast.AST, qn: str) -> None:
+        if any(x["qualified_name"] == qn for x in self.symbols):
+            return                                      # a name assigned twice is one symbol, at its first assignment
+        self.symbols.append({
+            "qualified_name": qn, "kind": kind, "docstring_summary": None, "decorators": [],
+            "is_public": not name.startswith("_"),
+            "line_start": node.lineno, "line_end": getattr(node, "end_lineno", node.lineno),
+            "complexity": None,
+        })
+
+    def _fields(self, node: ast.ClassDef, qn: str) -> None:
+        """#148: the fields a record class declares: a dataclass's or NamedTuple's annotated names, and `__slots__`."""
+        heads = [ast.unparse(d) for d in node.decorator_list] + [ast.unparse(b) for b in node.bases]
+        record = any(re.search(r"\b(dataclass|NamedTuple|TypedDict)\b", h) for h in heads)
+        for st in node.body:
+            if record and isinstance(st, ast.AnnAssign) and isinstance(st.target, ast.Name) \
+                    and "ClassVar" not in ast.unparse(st.annotation):
+                self._add_simple(st.target.id, "field", st, f"{qn}.{st.target.id}")
+            elif isinstance(st, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__slots__" for t in st.targets) \
+                    and isinstance(st.value, (ast.Tuple, ast.List)):
+                for e in st.value.elts:
+                    if isinstance(e, ast.Constant) and isinstance(e.value, str) and e.value.isidentifier():
+                        self._add_simple(e.value, "field", e, f"{qn}.{e.value}")
+
+    def _module_const(self, name: str, node: ast.AST) -> None:
+        if not self.stack and _CONST_NAME.fullmatch(name):
+            self._add_simple(name, "constant", node, name)
+
+    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
+        for t in node.targets:
+            if isinstance(t, ast.Name):
+                self._module_const(t.id, node)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: N802
+        if node.value is not None and isinstance(node.target, ast.Name):
+            self._module_const(node.target.id, node)
+        self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: N802
         self._visit_func(node)
@@ -1091,12 +1198,12 @@ def _parse_python_file(
            list[tuple[str, str, str]], str | None, list[tuple[str, str, str | None, int | None]],
            list[tuple[str, str, str | None]], list[tuple[str, str]], str, list[str],
            list[tuple[int, str, str | None, str]], list[str], list[tuple[str, str, str]],
-           list[tuple[str, str | None, str, int]]]:
+           list[tuple[str, str | None, str, int]], list, list]:
     """Returns (symbols, calls, imports, routes, module_docstring, raises,
     logs, middleware_registrations, router_prefix, daemon_entries,
-    import_descriptors, path_literals, typed_calls, value_refs) for one file. An unparseable file yields all-empty,
+    import_descriptors, path_literals, typed_calls, value_refs, name_refs, key_uses) for one file. An unparseable file yields all-empty,
     not a crash, and is named (and recorded in `skipped`, path -> reason)."""
-    empty = [], [], [], [], None, [], [], [], "", [], [], [], [], []
+    empty = [], [], [], [], None, [], [], [], "", [], [], [], [], [], [], []
     try:
         text = path.read_text(errors="replace")
         tree = ast.parse(text, filename=str(path))
@@ -1122,7 +1229,7 @@ def _parse_python_file(
                 sym["returns"] = returns[sym["qualified_name"]]
         return (v.symbols, v.calls, _imports(tree), v.routes, module_docstring, v.raises, v.logs,
                 _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree),
-                _py_literals(tree), typed, _safe_value_refs(tree))
+                _py_literals(tree), typed, _safe_value_refs(tree), *_safe_uses(tree))
     except RecursionError:
         # a generated file nested deeper than the tree walks can follow: skip it, say so, keep the rest (#106)
         _skip(path, "nested too deeply to read", skipped)
@@ -1155,6 +1262,8 @@ def extract(repo_root: Path) -> DevKBGraph:
     per_file_daemon_entries: dict[str, list[str]] = {}
     per_file_typed_calls: dict[str, list[tuple[str, str, str, str]]] = {}
     per_file_value_refs: dict[str, list[tuple[str, str | None, str, int]]] = {}
+    per_file_name_refs: dict[str, list[tuple[str, str | None, str, int]]] = {}
+    per_file_key_uses: dict[str, list[tuple[str, str, str, int]]] = {}
     route_index: dict[str, str] = {}  # "METHOD /path" -> Symbol natural_key
     reexports: dict[str, dict[str, tuple[str, str]]] = {}  # every parsed file's from-imports, symbols or not
     star_modules: dict[str, list[str]] = {}  # file -> modules it imports with `from m import *`
@@ -1163,7 +1272,7 @@ def extract(repo_root: Path) -> DevKBGraph:
     skipped: dict[str, str] = {}   # absolute path -> why the file could not be read (#109)
     for rel_path in _list_python_files(repo_root):
         (symbols, calls, imports, routes, module_doc, raises, logs, middleware, router_prefix,
-         daemon_entries, descriptors, literals, typed_calls, value_refs) = _parse_python_file(repo_root / rel_path, skipped)
+         daemon_entries, descriptors, literals, typed_calls, value_refs, name_refs, key_uses) = _parse_python_file(repo_root / rel_path, skipped)
         # `@typing.overload` signatures and the implementation share one qualified name, and so one Symbol key: keep
         # one entry (the last, the implementation), or every lookup by name sees several and resolves nothing
         # (click's `prompt`: all 13 call sites were left unattributed).
@@ -1193,6 +1302,8 @@ def extract(repo_root: Path) -> DevKBGraph:
         per_file_daemon_entries[rel_path] = daemon_entries
         per_file_typed_calls[rel_path] = typed_calls
         per_file_value_refs[rel_path] = value_refs
+        per_file_name_refs[rel_path] = name_refs
+        per_file_key_uses[rel_path] = key_uses
         for qn, method, path in routes:
             key, owner = f"{method} {path}", f"{rel_path}::{qn}"
             if route_index.get(key, owner) != owner:
@@ -1518,6 +1629,48 @@ def extract(repo_root: Path) -> DevKBGraph:
         ranked = sorted(sites, key=lambda x: (x.rsplit(":", 1)[0], int(x.rsplit(":", 1)[1])))
         g.add_node("Symbol", key, source="ast", value_refs=ranked[:20], value_ref_count=len(ranked),
                    incomplete_reasons=["indirect-reference"])
+
+    # ── #143: a module constant's uses, kept on the constant's Symbol as `ref_sites` / `ref_count` (as value_refs, #69):
+    # no edge, because REFERENCES is Commit -> Ticket and a new verb needs an ADR (ADR-SDP-DEVKB-001). Resolved the way
+    # a call is: the same module, `from m import NAME`, `m.NAME` through `import m`. ───────
+    const_refs: dict[str, dict[str, int]] = {}      # constant key -> {"file:line": line} sites
+    for rel_path, refs in per_file_name_refs.items():
+        if not refs:
+            continue
+        in_file = {s["qualified_name"] for s in per_file_symbols.get(rel_path, [])}
+        own = {s["qualified_name"] for s in per_file_symbols.get(rel_path, []) if s.get("kind") == "constant"}
+        receivers, bare_imports = per_file_import_targets.get(rel_path, ({}, {}))
+        for scope, receiver, name, line in refs:
+            target = None
+            if receiver is None and name in own:
+                target = f"{rel_path}::{name}"
+            elif receiver is None and name in bare_imports and name not in in_file:
+                module, original = bare_imports[name]
+                target = _resolve_cross_file_symbol(module, rel_path, original, per_file_symbols)
+            elif receiver is not None and receiver not in in_file:
+                for module in receivers.get(receiver, []):
+                    target = _resolve_cross_file_symbol(module, rel_path, name, per_file_symbols)
+                    if target:
+                        break
+            if not target or kind_of.get(target) != "constant":
+                continue
+            const_refs.setdefault(target, {})[f"{rel_path}:{line}"] = line
+    for key, sites in const_refs.items():
+        ranked = sorted(sites, key=lambda x: (x.rsplit(":", 1)[0], int(x.rsplit(":", 1)[1])))
+        g.add_node("Symbol", key, source="ast", ref_sites=ranked[:20], ref_count=len(ranked))
+
+    # ── #148: string keys a function reads or writes (`d["k"]`, `d.get("k")`, `{"k": v}`), kept on the function's
+    # Symbol (a File for module level) as {key: [lines]}. No edge: a key is not a symbol, so no new verb. ──────────
+    for rel_path, uses in per_file_key_uses.items():
+        in_file = {s["qualified_name"] for s in per_file_symbols.get(rel_path, [])}
+        grouped: dict[tuple[str, str, str], dict[str, list[int]]] = {}
+        for scope, key, mode, line in uses:
+            node = ("Symbol", f"{rel_path}::{scope}") if scope in in_file else ("File", rel_path)
+            lines_ = grouped.setdefault((*node, "key_reads" if mode == "read" else "key_writes"), {}).setdefault(key, [])
+            if len(lines_) < 5 and line not in lines_:
+                lines_.append(line)
+        for (ntype, nkey, prop), keyed in grouped.items():
+            g.add_node(ntype, nkey, source="ast", **{prop: keyed})
 
     # ── BL-3c: TypeScript/TSX Symbols + their own route-call sites ─────────
     ts_route_calls: list[tuple[str, str, str, str]] = []  # (file, symbol_qn, method, path)

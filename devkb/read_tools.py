@@ -229,7 +229,7 @@ class ReadTools:
             p = self.idx.props[i]; f = self.file[i]; ls, le = p.get("line_start"), p.get("line_end")
             rows.append({"i": i, "k": self.idx.keys[i], "kind": p.get("kind"), "ls": ls, "le": le, "range": range_state(f, ls, le),
                          "doc": (p.get("docstring_summary") or "")[:90], "callers": self.api._caller_count(i),
-                         "self_call": self.api._calls_itself(i), "value_refs": int(p.get("value_ref_count") or 0),
+                         "self_call": self.api._calls_itself(i), "value_refs": int(p.get("value_ref_count") or 0), "refs": int(p.get("ref_count") or 0),
                          # calls under this name the resolver left unattributed: the count above is a lower bound (#87)
                          "unresolved": int(p.get("unresolved_calls") or 0),
                          "shared_by": len(self.idx.short.get(self.short[i], [])),
@@ -237,10 +237,30 @@ class ReadTools:
         return {"query": query, "how": how, "n": len(order), "matches": rows}
 
     # ── symbol ────────────────────────────────────────────────────────────
+    def key_uses(self, name: str, under: str = "") -> list[dict]:
+        """#148: where a string key is written and read, grouped by function: `d["k"]`, `d.get("k")`, `{"k": v}`.
+        Recorded by the Python extractor on the function's Symbol (a File for module-level code)."""
+        out = []
+        for i, p in enumerate(self.idx.props):
+            r, w = (p.get("key_reads") or {}).get(name), (p.get("key_writes") or {}).get(name)
+            if not (r or w):
+                continue
+            f, _, q = self.idx.keys[i].partition("::")
+            if under and not f.startswith(under):
+                continue
+            out.append({"f": f, "in": q or None, "reads": r or [], "writes": w or []})
+        return sorted(out, key=lambda x: (self.api._is_test(x["f"]), x["f"], x["in"] or ""))
+
     def symbol(self, query: str, source: bool = False, kind: str = "", under: str = "", limit: int = 8,
                lines: int = MAX_SOURCE, tests: bool = True) -> dict:
         r = self.resolve(query, kind, under, limit, tests)
-        if r.get("error") or not r["matches"]:
+        if r.get("error"):
+            return r
+        if not r["matches"]:
+            if not kind and re.fullmatch(r"[A-Za-z_]\w*", query.strip()):
+                ku = self.key_uses(query.strip(), under)
+                if ku:
+                    r["key_uses"] = ku
             return r
         max_lines = max(1, min(int(lines), HARD_SOURCE))
         capped = int(lines) > HARD_SOURCE
@@ -484,7 +504,8 @@ class ReadTools:
                 rows.append({"line": ln, "text": text.strip()[:110], "in": inner[0] if inner else None, "approx": bool(inner and inner[1])})
                 shown += 1
             out_files.append({"f": f, "n": len(hs), "test": self.api._is_test(f), "hits": rows})
-        return {"name": q, "mode": mode, "definitions": defs, "n_hits": total, "n_files": len(by_file), "files": out_files,
+        keyed = self.key_uses(q, under) if mode == "word" else []
+        return {"name": q, "mode": mode, "definitions": defs, "key_uses": keyed, "n_hits": total, "n_files": len(by_file), "files": out_files,
                 "omitted_files": max(0, len(ranked) - files), "capped": total >= 6000,
                 "note": "text matches, not resolved references: a match inside a string or comment is still listed"}
 
@@ -550,12 +571,24 @@ def _span(m: dict) -> str:
     return f"L{m['ls']}-{m['le']}" if m["range"] == "exact" else f"L{m['ls']} (end unknown)" if m["range"] == "end unknown" else f"L{m['ls']}"
 
 
+def _render_keys(rows: list[dict]) -> str:
+    out = []
+    for x in rows[:30]:
+        parts = [f"{m} L{','.join(map(str, x[m]))}" for m in ("writes", "reads") if x[m]]
+        out.append(f"{x['f']}  {x['in'] or 'module level'}  " + "; ".join(parts))
+    if len(rows) > 30:
+        out.append(f"({len(rows) - 30} more functions)")
+    return "\n".join(out)
+
+
 def render_symbol(r: dict) -> str:
     if r.get("batch"):
         share = BUDGET // len(r["batch"])
         return "\n\n".join(fit_text(render_symbol(x), share) for x in r["batch"])
     if r.get("error"):
         return r["error"]
+    if not r["matches"] and r.get("key_uses"):
+        return fit_text(f'no symbol named "{r["query"]}"; it is used as a string key:\n' + _render_keys(r["key_uses"]))
     if not r["matches"]:
         out = [f'no symbol named "{r["query"]}"']
         if r.get("suggestions"):
@@ -572,6 +605,7 @@ def render_symbol(r: dict) -> str:
             shared = f"; {m['shared_by']} symbols share the name" if (m.get("shared_by") or 0) > 1 else ""
             also = f"+{also} (calls under this name from {m['unresolved']} more function(s) not attributed{shared})"
         tail = (f'"{m["doc"]}"   ' if m.get("doc") else "") + (f"callers {m['callers']}{also}   " if m["callers"] or also else "") \
+            + (f"references {m['refs']}   " if m.get("refs") else "") \
             + f"how {m['how']}"
         out.append(f"   {q}   {tail}")
         if m.get("moved") is not None:
@@ -636,6 +670,9 @@ def render_uses(r: dict) -> str:
     out = [f'uses "{r["name"]}": text matches, not resolved references; tracked files only, not complete   mode {r["mode"]}']
     for d in r["definitions"][:5]:
         out.append(f"defined: {d['k'].split('::', 1)[0]} {_span(d)} {d['kind']}")
+    if r.get("key_uses"):
+        out.append("as a string key (written / read, by function):")
+        out.append(_render_keys(r["key_uses"]))
     shown = tests_cut = 0
     for f in r["files"]:
         for h in f["hits"]:
