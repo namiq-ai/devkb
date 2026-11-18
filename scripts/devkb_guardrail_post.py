@@ -38,7 +38,8 @@ def main() -> int:
     except (OSError, ValueError):
         return 0
     text, files = response_text(ev.get("tool_response"))
-    misses.record(pending, misses.parse_grep(text, files, names=pending.get("names"), repo=Path(pending["repo"])))
+    misses.record(pending, misses.parse_grep(text, files, names=pending.get("names"), repo=Path(pending["repo"]),
+                                           single_file=pending.get("single_file")))
     return 0
 
 

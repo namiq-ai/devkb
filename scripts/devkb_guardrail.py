@@ -131,6 +131,52 @@ def bash_pattern(command: str) -> str:
     return ""
 
 
+def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
+    """Resolve an explicit file operand for a search that requests numbered output."""
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        words = list(lexer)
+    except ValueError:
+        return None
+    if words[:2] == ["git", "grep"]:
+        words = words[1:]
+    if not words or words[0] not in ("grep", "egrep", "rg"):
+        return None
+    operands = []
+    has_pattern = False
+    has_line_numbers = False
+    after_options = False
+    args = iter(words[1:])
+    for word in args:
+        if re.fullmatch(r"[();<>|&]+", word):
+            return None
+        if not after_options and word == "--":
+            after_options = True
+        elif not after_options and word == "-e":
+            if next(args, None) is None:
+                return None
+            has_pattern = True
+        elif not after_options and word.startswith("-"):
+            # Only flags that take no argument are unambiguous here.
+            if not re.fullmatch(r"-[rRnHhEFiw]+", word):
+                return None
+            has_line_numbers |= "n" in word
+        elif not has_pattern:
+            has_pattern = True
+        else:
+            operands.append(word)
+    if not has_line_numbers or len(operands) != 1 or re.search(r"[$`*?\[\]{}~\r\n]", operands[0]):
+        return None
+    try:
+        path = (cwd / operands[0]).resolve()
+        if path.is_file():
+            return path.relative_to(repo).as_posix()
+    except (OSError, ValueError):
+        pass
+    return None
+
+
 SUBSTITUTED = ("devkb answered this search from the graph: every name it asks about resolved, with coverage Complete, "
                "so this is the search's result (grep was not needed).\n\n{answers}\n\n(For grep's raw lines as well, "
                "repeat the identical command: a repeat runs as a plain search.)")
@@ -211,11 +257,16 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str) -
     if not misses.enabled() or not key or not any(q["verdict"] not in ("complete", "other") for q in queries):
         return None
     built, head = misses.graph_state(repo)
+    single_file = None
+    if tool == "Bash":
+        cwd = Path(ev.get("cwd") or os.getcwd())
+        single_file = single_bash_file(inp.get("command", ""), cwd, repo)
     try:
         PENDING.mkdir(parents=True, exist_ok=True)
         (PENDING / key).write_text(json.dumps({
             "repo": str(repo), "session": ev.get("session_id") or "", "tool": tool, "pattern": pattern, "names": names,
-            "queries": queries, "built": built, "head": head, "version": misses.devkb_version()}))
+            "queries": queries, "built": built, "head": head, "version": misses.devkb_version(),
+            "single_file": single_file}))
     except OSError:
         pass
     return None
