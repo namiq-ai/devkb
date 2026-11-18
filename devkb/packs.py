@@ -294,6 +294,18 @@ class Packer:
             return head + " unambiguously. It could be:\n" + "\n".join(f"- `{k}`" for k in cands) + "\n\nPass one as `path::name`."
         return head + tail
 
+    def _text_matches(self, name: str, path: str = "") -> str:
+        """Fail safe (#131): the graph has no answer, so give the text matches, grouped by function as `uses` does and
+        marked as not resolved, rather than send the agent off to search."""
+        from devkb.read_tools import render_uses
+        try:
+            r = self.api.call("uses", name=name, under=path)
+            if r.get("error") or not r.get("n_hits"):
+                return ""
+            return "\n\n## Text matches (not resolved by the graph)\n" + render_uses(r)
+        except Exception:  # noqa: BLE001
+            return ""
+
     def change(self, name: str, path: str = "") -> str:
         i, err = self.api._resolve(f"{path}::{name}" if path and "::" not in name else name)
         if i is None and path:
@@ -305,7 +317,8 @@ class Packer:
         if i is None:
             i, cands = self._by_symbol_rules(name, path)
         if i is None:
-            return self._unresolved("change", name, path, cands, ". Search the code.")
+            text = self._unresolved("change", name, path, cands, ". Search the code.")
+            return text + self._text_matches(name, path) if not cands else text
         parent = self.up({i})
         hs = self.handlers(parent, {i})
         closure = set(parent) | {i}
