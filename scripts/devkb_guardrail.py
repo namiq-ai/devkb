@@ -8,7 +8,7 @@ Off when DEVKB_GUARDRAIL=0 (benchmark arms without the guardrail). Every firing 
 ~/.claude/hooks/devkb-guardrail.log (time, session, tool, repo) so its effect can be measured.
 
 Registered by this repository's `.claude/settings.json` (#126), and possibly also machine-wide in
-`~/.claude/settings.json`: a tool call is reminded once however many copies run (a marker per tool call).
+`~/.claude/settings.json`: a session is reminded once, at its first code search, however many copies run.
 """
 import hashlib
 import json
@@ -92,6 +92,22 @@ def first_copy(ev: dict) -> bool:
     return True
 
 
+def first_of_session(ev: dict) -> bool:
+    """One reminder per session (#126 measurement: about 12 per run were ignored, so more add cost, not use)."""
+    sid = "".join(c for c in str(ev.get("session_id") or "") if c.isalnum() or c in "-_")[:80]
+    if not sid:
+        return True
+    d = Path.home() / ".claude" / "hooks" / ".devkb-guardrail-seen"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        os.close(os.open(d / f"session-{sid}", os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
 def main() -> int:
     if os.environ.get("DEVKB_GUARDRAIL", "1") == "0":
         return 0
@@ -111,7 +127,7 @@ def main() -> int:
     else:
         return 0
     repo = next((r for r in map(served_repo, candidates) if r), None)
-    if repo is None or not first_copy(ev):
+    if repo is None or not first_copy(ev) or not first_of_session(ev):
         return 0
     try:
         with open(Path.home() / ".claude" / "hooks" / "devkb-guardrail.log", "a") as fh:

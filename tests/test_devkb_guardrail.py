@@ -80,7 +80,15 @@ def test_two_copies_of_the_hook_remind_once(env):
     ev = bash(env["served"], "grep -rn x .", n=7)
     first, second = hook(env, ev), hook(env, ev)
     assert first and second == ""
-    assert hook(env, bash(env["served"], "grep -rn x .", n=8)), "a new tool call is reminded again"
+
+
+def test_a_session_is_reminded_once(env):
+    assert hook(env, bash(env["served"], "grep -rn x .", n=1))
+    assert hook(env, bash(env["served"], "rg y .", n=2)) == "", "a later search in the same session is not reminded"
+    other = dict(bash(env["served"], "grep -rn x .", n=3), session_id="s2")
+    assert hook(env, other), "another session is reminded"
+    log = (env["home"] / ".claude" / "hooks" / "devkb-guardrail.log").read_text().splitlines()
+    assert len(log) == 2
 
 
 def test_the_repository_registers_it():

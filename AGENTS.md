@@ -50,15 +50,16 @@ This repository is devkb itself, so every session that works on it is also a tes
    `devkb build --project .` when the graph is older than the code you are reading.
 2. **Check the answer against the source** before relying on it. grep, sed and Read remain right for filtering
    command output, literal strings, confirming an edit, and questions devkb has no tool for.
-3. **Log every devkb query** in a JSONL beside the deliverable (spec, report, PR), one row per query: `phase`,
-   `query`, `purpose`, `verdict` (`right` / `incomplete-honest` / `incomplete-silent` / `misleading` / `noisy` /
-   `wrong` / `unsupported`), `source_showed`, `devkb` version. Example: `docs/specs/cpp-supported-dogfood.jsonl`.
-   Summarise it in the deliverable under "How devkb was used".
+3. **You do not keep the query log: devkb does.** Every query it answers, from the MCP server or the command line,
+   is recorded in `.devkb/process-api-telemetry.jsonl` with what was asked (#127). In your final report, name any
+   devkb answer that turned out wrong, misleading or silently incomplete, with the query and what the source showed.
 4. **A wrong, misleading or silently incomplete answer is a defect.** File one issue per defect (reproduce
    command, actual, expected, where to start, done when) before anyone fixes it.
-5. **The guardrail stays on.** `.claude/settings.json` runs `scripts/devkb_guardrail.py` before every Grep and every
-   grep / rg / git grep search: it adds a reminder (it never blocks) and appends the firing to
-   `~/.claude/hooks/devkb-guardrail.log`. `DEVKB_GUARDRAIL=0` turns it off for the control arm of a benchmark only.
+5. **The guardrail stays on.** `.claude/settings.json` runs `scripts/devkb_guardrail.py` before Grep and grep / rg /
+   git grep searches: at the first code search of a session it adds one reminder (it never blocks), and it logs the
+   firing to `~/.claude/hooks/devkb-guardrail.log`. `DEVKB_GUARDRAIL=0` turns it off for a benchmark's control arm.
 
 Why: SPEC-DKB-004 was first written with grep; redone through devkb, the same questions found three devkb defects
-(#114–#116). Use on real work is how devkb's gaps are found, and the log makes that use measurable.
+(#114–#116). Use on real work is how devkb's gaps are found. Measured on three fixes (#126): agents asked to keep a
+log wrote none in 6 of 6 runs, and a reminder at every search (about 12 per run) was ignored, so devkb now logs
+itself and the reminder comes once.
