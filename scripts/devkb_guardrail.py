@@ -132,7 +132,7 @@ def bash_pattern(command: str) -> str:
 
 
 def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
-    """Resolve an explicit file operand if the search can only return lines from that file."""
+    """Resolve an explicit file operand for a search that requests numbered output."""
     try:
         lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
         lexer.whitespace_split = True
@@ -145,6 +145,7 @@ def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
         return None
     operands = []
     has_pattern = False
+    has_line_numbers = False
     after_options = False
     args = iter(words[1:])
     for word in args:
@@ -160,11 +161,12 @@ def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
             # Only flags that take no argument are unambiguous here.
             if not re.fullmatch(r"-[rRnHhEFiw]+", word):
                 return None
+            has_line_numbers |= "n" in word
         elif not has_pattern:
             has_pattern = True
         else:
             operands.append(word)
-    if len(operands) != 1 or re.search(r"[$`*?\[\]{}~\r\n]", operands[0]):
+    if not has_line_numbers or len(operands) != 1 or re.search(r"[$`*?\[\]{}~\r\n]", operands[0]):
         return None
     try:
         path = (cwd / operands[0]).resolve()

@@ -196,6 +196,17 @@ def test_many_files_without_a_filename_do_not_guess(repo, tmp_path):
     assert not any(r["session"] == session for r in log(repo))
 
 
+def test_one_file_without_line_numbers_does_not_guess(repo, tmp_path):
+    session = "one-file-without-line-numbers"
+    event = {
+        "tool_name": "Bash", "cwd": str(repo), "session_id": session, "tool_use_id": "one-file",
+        "tool_input": {"command": "grep -rE 'lone_method' pkg/lonecall.py"},
+    }
+    run(PRE, tmp_path, event)
+    run(POST, tmp_path, dict(event, tool_response={"stdout": "12:    return o.lone_method()\n"}))
+    assert not any(r["session"] == session for r in log(repo))
+
+
 def test_the_verdict_is_read_from_the_pack_header_only():
     from devkb import misses
     assert misses.verdict_of("# Graph pack\n\n- `a.py:3: x = 'cannot resolve'`\n\n## Coverage\n**Complete.** ok")[0] == "complete"
