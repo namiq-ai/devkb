@@ -103,7 +103,7 @@ def test_misses_command_groups_and_drafts_tickets_with_reproducible_commands(rep
     out = subprocess.run([sys.executable, "-P", "-m", "devkb.cli", "misses", "--project", str(repo)], cwd=repo, env=e,
                          capture_output=True, text=True, timeout=60).stdout
     assert "nonexistent_zz" in out and "**Severity:**" in out and "**Reproduce:**" in out and "**Done when:**" in out
-    cmd = next(l for l in out.splitlines() if l.startswith("1. `devkb pack change")).split("`")[1]
+    cmd = next(l for l in out.splitlines() if l.startswith("1. `devkb pack refactor")).split("`")[1]
     again = subprocess.run(cmd.replace("devkb ", f"{sys.executable} -P -m devkb.cli ", 1), shell=True, cwd=repo, env=e,
                            capture_output=True, text=True).stdout
     assert "cannot resolve" in again

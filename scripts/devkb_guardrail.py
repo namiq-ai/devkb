@@ -137,6 +137,8 @@ SUBSTITUTED = ("devkb answered this search from the graph: every name it asks ab
 ALONGSIDE = ("devkb's answer for the names this search asks about (resolved, coverage Complete); the command still "
              "ran.\n\n{answers}")
 MAX_ANSWER = 8000
+# A search for a name is a direct-use question (#154): direct callers and the definition, not callers at any depth.
+QUESTION = "refactor"
 
 
 def pure_search(tool: str, inp: dict) -> bool:
@@ -174,10 +176,10 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str) -
         return None
     queries, answers = [], []
     for n in names:
-        r = misses.run_query(repo, "change", n)
+        r = misses.run_query(repo, QUESTION, n)
         if r:
             queries.append({"name": n, "verdict": r[0], "detail": r[1],
-                            "query": f"devkb pack change {shlex.quote(n)} --project {shlex.quote(str(repo))}"})
+                            "query": f"devkb pack {QUESTION} {shlex.quote(n)} --project {shlex.quote(str(repo))}"})
             answers.append(r[2].strip())
     if queries and len(queries) == len(names) and all(q["verdict"] == "complete" for q in queries):
         text = "\n\n".join(answers)

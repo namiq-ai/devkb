@@ -67,13 +67,13 @@ def devkb_command(repo: Path, *args: str) -> list[str]:
 
 
 def run_query(repo: Path, kind: str, name: str, timeout: float = 12) -> tuple[str, str, str] | None:
-    """Run `devkb pack change NAME`; (verdict, detail, answer text), or None when devkb has no graph or fails (then
+    """Run `devkb pack KIND NAME` (refactor: direct callers + definition; change: callers at any depth); (verdict, detail, answer text), or None when devkb has no graph or fails (then
     nothing is substituted and nothing is recorded)."""
     root = str(Path(__file__).resolve().parents[1])
     env = dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", ""), PYTHONWARNINGS="ignore",
                DEVKB_TELEMETRY="0")
     try:
-        p = subprocess.run(devkb_command(repo, "pack", "change", name), cwd=repo, env=env, capture_output=True,
+        p = subprocess.run(devkb_command(repo, "pack", kind, name), cwd=repo, env=env, capture_output=True,
                            text=True, timeout=timeout)
         if p.returncode != 0:
             return None
