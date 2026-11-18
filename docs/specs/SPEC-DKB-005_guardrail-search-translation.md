@@ -101,6 +101,7 @@ Each path is resolved and mapped to its git top level (`git rev-parse --show-top
 |---|---|---|
 | one stage; options within `-r -R -n -H -w -E -F --color[=…]`; Grep tool `output_mode: content`; every path a directory | — | **substitute**, scoped (§3.4) |
 | a pipe or a second stage | `pipe`, `compound` | alongside |
+| only `head` or `tail` after the search (`-n N`, `-N`), #174 | (none: decided as the search alone) | as the search alone |
 | `-c` / `output_mode: count` | `option:count` | alongside |
 | `-l`, `-L` / `output_mode: files_with_matches` | `option:files` | alongside |
 | `-i` / Grep `-i` | `option:case` | alongside |
