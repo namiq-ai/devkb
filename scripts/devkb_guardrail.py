@@ -235,6 +235,23 @@ def operand_paths(operands: list[str], cwd: Path) -> tuple[list[Path], str | Non
     return paths, why
 
 
+def is_trim_stage(st: list[str]) -> bool:
+    """`head` / `tail` with only a line count (`-n N`, `-nN`, `-N`, `--lines=N`): it shortens output, not the question."""
+    if not st or st[0] not in ("head", "tail"):
+        return False
+    args = st[1:]
+    k = 0
+    while k < len(args):
+        a = args[k]
+        if a == "-n" and k + 1 < len(args) and re.fullmatch(r"\+?\d+", args[k + 1]):
+            k += 2
+        elif re.fullmatch(r"-n\+?\d+|-\d+|--lines=\+?\d+", a):
+            k += 1
+        else:
+            return False
+    return True
+
+
 def bash_search(command: str, cwd: Path) -> tuple[list[Path], str | None]:
     """(the paths the shell search covers, why it is not the plain question `where is NAME used in these folders`; None
     when it is). Paths are the operands of the search stages, or the directory the search runs in when it names none."""
@@ -256,6 +273,10 @@ def bash_search(command: str, cwd: Path) -> tuple[list[Path], str | None]:
                 ops.append("syntax")
         else:
             stages[-1].append(w)
+    # `search | head -5`: every stage after the search that only trims lines is the same question (#174)
+    while len(stages) > 1 and ops[-1] == "|" and is_trim_stage(stages[-1]):
+        stages.pop()
+        ops.pop()
     paths: list[Path] = []
     reasons: list[str] = []
     searches = 0
