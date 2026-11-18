@@ -28,59 +28,70 @@ repositories (precision 0.93, recall 0.90) and entered the CI language check. Th
 at the Supported level: `bench/languages.yaml` holds only C#, and the compiler-truth numbers in
 `docs/evaluations/CPP-FINAL-REPORT.md` predate SPEC-DKB-002 and the 0.2.8 audit fixes.
 
-**Baseline, measured for this spec** (`bench/cpp/truth_clang.py` + `bench/cpp/quality.py`, libclang 18, the pinned
-corpus of `devkb/bench/cpp_corpus.json`; numbers as `quality.py` reports them):
+**Baseline, restated by story 1** (`bench/cpp/truth_clang.py` + `bench/cpp/quality.py` + `bench/cpp/adjudicate.py`, libclang 18,
+devkb 0.2.11, the pinned corpus of `devkb/bench/cpp_corpus.json`; the third C++ repository is tinyxml2, pinned there as
+`adjudication_repos`). The truth now keeps recursive calls, excludes vendored paths (`vendored` in the corpus file:
+cJSON `tests/unity`, fmt `test/gtest`, leveldb `third_party`) and lists the translation units it could not compile.
+Numbers as `quality.py` reports them; the sample is `docs/specs/cpp-precision-sample.md`.
 
-| | cJSON (C) | leveldb (C++) | fmt (C++, template-heavy) |
-|---|---|---|---|
-| Truth definitions / call edges | 968 / 2,032 | 1,465 / 2,971 | 4,286 / 3,035 |
-| of which only through a macro expansion | 1,013 (50%) | 362 (12%) | 503 (17%) |
-| devkb edges linked / scored | 1,068 / 936 | 2,159 / 1,802 | 1,825 / 1,388 |
-| **Edge precision (as measured)** | 0.983 | 0.897 | **0.425** |
-| **Edge recall** | **0.453** | **0.545** | **0.208** |
-| Symbol recall | 0.995 | 0.921 | 0.437 |
+| | cJSON (C) | leveldb (C++) | fmt (C++, template-heavy) | tinyxml2 (C++) |
+|---|---|---|---|---|
+| Truth definitions / call edges (recursive among them) | 355 / 835 (8) | 2,024 / 3,898 (0) | 4,084 / 1,778 (3) | 421 / 750 (2) |
+| of which only through a macro expansion | 2 (0.2%) | 525 (13%) | 491 (28%) | 4 (0.5%) |
+| Translation units not compiled (listed, `not_measured`) | 0 | 4 of 77 | 0 of 48 | 0 of 3 |
+| devkb edges linked / scored by the truth | 1,068 / 805 | 2,159 / 1,692 | 1,825 / 1,093 | 450 / 446 |
+| of which not scored: vendored / not measured / unmapped end | 260 / 0 / 3 | 0 / 126 / 341 | 398 / 0 / 334 | 0 / 0 / 4 |
+| Edge precision against the truth (as measured) | 1.000 | 0.967 | **0.381** | 0.814 |
+| **Adjudicated precision** (100 edges, 95% interval) | **1.000** (0.963 to 1.000) | **1.000** (0.963 to 1.000) | **0.930** (0.863 to 0.966) | **0.990** (0.946 to 0.998) |
+| Edge recall | **0.964** | **0.420** | **0.252** | **0.479** |
+| Symbol recall (truth USRs / distinct names) | 1.000 / 1.000 | 0.616 / 0.621 | 0.311 / 0.345 | 0.765 / 0.976 |
 
-**The measured precision is not the real precision.** Every wrong edge was split by `bench/cpp/split_wrong.py`
-(sampled up to 400 per repository):
+*Before story 1* (truth without recursion, without exclusions; leveldb and fmt tests read without gtest):
+cJSON 0.983 / 0.453, leveldb 0.897 / 0.545, fmt 0.425 / 0.208 (precision / recall).
 
-| | cJSON | leveldb | fmt |
-|---|---|---|---|
-| Wrong edges | 16 | 186 | 798 (400 sampled) |
-| callee called in the caller's body, truth has no such call | 16 | 170 | 361 |
-| truth has another target of that name from this caller (a target pick) | 0 | 14 | 39 |
-| callee's name not called in the caller's body (devkb plainly wrong) | 0 | 2 | 0 |
+**The measured precision is not the real precision, and the adjudicated sample says by how much.** On fmt the truth scores
+0.381 and a hand check of 100 edges finds 0.930: of 76 sampled edges the truth called wrong or could not map, 69 are
+right. The 7 errors are real: four calls to `copy` with three arguments sent to `format.h`'s two-argument string-view
+overload instead of `core.h`'s iterator overloads, a member initialiser `begin(std::move(b))` read as a call to a free
+`begin`, a gmock `EXPECT_CALL(alloc, allocate(size))` read as a call, and `::dup2` inside `test::dup2` read as a call to
+itself. On leveldb all 15 hand-judged edges are right; on tinyxml2 15 of 16 (`node->~XMLNode()` linked to the
+constructor). What the truth gets wrong is, as the first draft of this spec said, mostly calls it cannot see: inside
+uninstantiated templates (`RoundUp<4>(p)`, `max_value<uint32_t>()`, `write_exponent<Char>`), behind annotation macros
+(`locks_.Insert` after `LOCKS_EXCLUDED`), and in `TEST_F` bodies it reads as generated classes.
 
-The first row is mostly the truth's fault, and hand checks confirm it:
-- `truth_clang.py:124` drops every recursive edge (`a != b`). All 16 of cJSON's "wrong" edges are recursive calls
-  (`cJSON_Compare` → `cJSON_Compare`).
-- Files that do not compile on the measuring platform contribute no truth. leveldb's `util/env_windows.cc` calls
-  `handle_.get()` on a `ScopedHandle`; devkb's edge is right, but the truth has nothing for the file.
-- Calls that libclang does not resolve are missing. That covers calls inside uninstantiated templates whose
-  arguments depend on a template parameter, and calls to explicit specialisations. fmt's
-  `decimal_point` → `decimal_point_impl<char>` (format.h:1364) and `to_decimal` →
-  `cache_accessor<T>::compute_delta` (format-inl.h:1309) are real calls with no truth edge.
-- Three of three sampled leveldb edges in that row were correct: `BloomTest::Add` → `Slice::ToString`,
-  `DBTest` → `EnvWrapper::RemoveFile` (inherited), and `env_windows.cc` → `ScopedHandle::get`.
+**What the first draft got wrong** (all three found while building the measurement):
+- `truth_clang.py` dropped every recursive edge (`a != b`); cJSON's 16 "wrong" edges were all recursive calls. Kept now.
+- cJSON's "1,013 edges only through a macro" were vendored Unity's assertion macros (`tests/unity`): 260 of devkb's
+  1,068 edges and 730 of its symbols are Unity's. Excluded now, cJSON's recall is **0.964** and its macro-only edges are 2.
+  The macro gap is leveldb's (521 missed) and fmt's (491), not cJSON's.
+- 36 of leveldb's 77 translation units were flagged uncompilable, nearly all for a missing `gtest/gtest.h`: the
+  `third_party/googletest` submodule is empty in a plain clone. With googletest at the pinned submodule commit (`a35bc76`, `-I .../googletest/include`) 4 remain:
+  `util/env_windows.cc` (`windows.h`) and three `benchmarks/` files (`benchmark.h`, `sqlite3.h`, `kcpolydb.h`).
+  Their devkb edges (126) are `not_measured`, neither right nor wrong. fmt compiles in full with `-I include -I test/gtest`.
+- fmt's "1,385 vendored missed definitions" are excluded now; with 2,814 truth USRs still without a devkb symbol,
+  fmt's own `include/` and `test/` still lose: 244 are overloads of `detail::map` and 171 of `uint128::uint128`
+  (several truth USRs, one devkb symbol), the rest are test bodies the `TEST` macros turn into classes. Symbol recall
+  by distinct name (0.345) is the fairer figure; story 5 decides fmt's target from it.
+- `bench/cpp/split_wrong.py`, which this section cited, was not in the repository; the adjudicated sample replaces it.
 
-That row also contains real errors, wherever the true callee is outside the repository (the truth drops it) and
-devkb linked a same-named repository function. Only an adjudicated sample separates the two (F1).
+**Findings that move later stories' targets.** Story 2's "cJSON edge recall ≥ 0.80 (from 0.453)" is met by the truth
+fix alone (0.964); its macro work is measured on leveldb and fmt. N2's 0.70 for C++ is far off on this truth: leveldb
+0.420, tinyxml2 0.479, fmt 0.252. N1 (adjudicated ≥ 0.95) holds on cJSON, leveldb and tinyxml2 and is not shown on fmt
+(point 0.930, interval to 0.966); 4 of its 7 errors are one cause, the overload pick across files.
 
-**fmt's symbol recall is mostly vendored code.** Of the 1,525 truth definitions with no devkb symbol, 1,385 are in
-`test/gtest/` (gmock and gtest), which the truth reads and devkb barely does. About 140 are in fmt's own files.
+**What is really missing** (missed truth edges by callee kind, the F1 truth):
 
-**What is really missing** (missed truth edges by callee kind):
-
-| | cJSON | leveldb | fmt |
-|---|---|---|---|
-| call produced by a macro expansion | 1,013 | 362 | 502 |
-| constructor | 0 | 453 | 241 |
-| method (class member) | 0 | 462 | 989 |
-| free function, same file | 0 | 18 | 370 |
-| free function, other file | 99 | 56 | 301 |
+| | cJSON | leveldb | fmt | tinyxml2 |
+|---|---|---|---|---|
+| call produced by a macro expansion | 2 | 521 | 491 | 4 |
+| constructor | 0 | 506 | 198 | 19 |
+| method (class member) | 0 | 1,068 | 0 | 360 |
+| free function, same file | 0 | 69 | 204 | 6 |
+| free function, other file | 28 | 97 | 437 | 0 |
 
 The scanner already records every `#define` with its body (`cpp_symbols.py:177`). The resolver knows the
-repository's macro names and drops calls to them (`cpp_resolve.py:231`), so the largest gap in C builds on data
-devkb already holds.
+repository's macro names and drops calls to them (`cpp_resolve.py:231`), so the macro gap in leveldb and fmt builds on
+data devkb already holds.
 
 ## 2. Requirements (PM)
 
@@ -132,7 +143,7 @@ Each story is one ticket, filed before the work. Every story keeps `pytest` gree
 | # | Story | Done when |
 |---|---|---|
 | 1 | **Trustworthy C/C++ measurement** (F1) | Truth keeps recursive calls; uncompilable files and vendored code are excluded and listed; `adjudicate.py` and `cpp-precision-sample.md` give adjudicated precision with a 95% interval on cJSON, leveldb, fmt and the third C++ repository; the baseline table above is re-stated on 0.2.11 with those numbers |
-| 2 | **Calls through repository macros** (F2) | cJSON edge recall ≥ 0.80 (from 0.453); adjudicated `cpp-macro` precision ≥ 0.95 on cJSON and leveldb; fixtures: a repository macro calling `f` links its invokers to `f`, a system-header macro is not expanded, nesting stops at depth 4, `#if` variants are marked |
+| 2 | **Calls through repository macros** (F2) | cJSON edge recall ≥ 0.80 (0.964 on the F1 truth, §1: Unity's macros are vendored); leveldb macro-only misses (521) found by ≥ 80%; adjudicated `cpp-macro` precision ≥ 0.95 on cJSON and leveldb; fixtures: a repository macro calling `f` links its invokers to `f`, a system-header macro is not expanded, nesting stops at depth 4, `#if` variants are marked |
 | 3 | **Constructor calls** (F3) | ≥ 80% of leveldb's 453 missed constructor edges found; adjudicated `cpp-constructor` precision ≥ 0.95; fixtures for each form in F3 and for an ambiguous arity (left unresolved) |
 | 4 | **Receiver types and overloads by arity** (F4, F5) | leveldb edge recall ≥ 0.80; method misses on leveldb ≤ 100 (from 462); adjudicated precision of `cpp-typed-receiver` ≥ 0.95; fixtures for each rule in F4 and for an undecidable receiver (no edge) |
 | 5 | **Definitions behind attribute macros** (F6) | symbol recall ≥ 0.95 on fmt's own files (vendored excluded) and on every F7 repository |
