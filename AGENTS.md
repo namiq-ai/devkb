@@ -85,3 +85,14 @@ itself and the reminder comes once.
    - the follow-ups filed (issue numbers) and where the raw data is.
 
    Example: #133.
+
+8. **After a ticket, check the graph misses and follow them up (#141).** Right after its execution result (rule 7):
+   - **Check:** run `devkb misses --project .` here and in every corpus repository the work searched
+     (`~/.cache/devkb/cpp-corpus/<repo>`). A search devkb could not answer that the log missed is a finding too.
+   - **Summarize:** add a **Graph misses** section to the execution-result comment: count by verdict and name, one line
+     on what each group means; "none" if there were none.
+   - **Follow up:** file one ticket per real group (checked against the source), from its `devkb misses` draft. Its first
+     line reads **Follow-up of #N** (the original ticket), and the original's comment lists the new numbers. Noise (a
+     stale graph, a match only in tests or docs) is noted in the summary, not filed.
+   - **Clear:** move the reviewed lines from `.devkb/graph-misses.jsonl` to `.devkb/graph-misses-reviewed.jsonl` with
+     their ticket numbers, so the next check starts clean.
