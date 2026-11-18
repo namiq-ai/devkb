@@ -136,7 +136,8 @@ def pre(repo, home, command, n, session="sub", **extra):
 def test_a_complete_answer_is_the_search_result(repo, tmp_path):
     h = pre(repo, tmp_path, "grep -rn 'def extract' .", 1)
     assert h.get("permissionDecision") == "deny"
-    assert "Defined at `pkg/alpha.py:1" in h["permissionDecisionReason"] and "Complete" in h["permissionDecisionReason"]
+    # #166: a definition search is answered with the location and the body, not the caller pack
+    assert "pkg/alpha.py:1:" in h["permissionDecisionReason"] and "return x" in h["permissionDecisionReason"]
     assert "same search again" not in h["permissionDecisionReason"]
 
 

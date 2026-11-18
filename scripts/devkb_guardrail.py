@@ -180,6 +180,9 @@ def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
 SUBSTITUTED = ("devkb answered this search from the graph: every name it asks about resolved, with coverage Complete, "
                "so this is the search's result (grep was not needed).\n\n{answers}\n\n(For grep's raw lines as well, "
                "repeat the identical command: a repeat runs as a plain search.)")
+READ_ANSWER = ("devkb answered this definition search from the graph: the location as grep would print it, and the body "
+               "(`devkb symbol --source`).\n\n{answers}\n\n(For grep's raw lines, repeat the identical command: a repeat "
+               "runs as a plain search.)")
 ALONGSIDE = ("devkb's answer for the names this search asks about (resolved, coverage Complete); the command still "
              "ran.\n\n{answers}")
 MAX_ANSWER = 8000
@@ -291,11 +294,13 @@ def bash_search(command: str, cwd: Path) -> tuple[list[Path], str | None]:
             elif not after and a.startswith("--"):
                 reasons.append(f"option:{a.split('=')[0]}")
             elif not after and a.startswith("-") and len(a) > 1:
-                for c in a[1:]:
+                for k, c in enumerate(a[1:]):
                     if c in "rR":
                         recursive = True
                     elif c not in "nHwEF":
                         reasons.append(f"option:-{c}")
+                        if c in "ABCm" and k == len(a) - 2:
+                            next(it, None)       # `-A 30`: the value is the next argument, not a path (#172)
                         break
             elif not pattern_set:
                 pattern_set = True
@@ -428,6 +433,32 @@ def log_decision(ev: dict, repo: Path | str, tool: str, action: str, names: list
         pass
 
 
+READ_CAP = 80
+
+
+def definition_answer(repo: Path, name: str, scope: list[str] | None) -> tuple[str, str] | None:
+    """SPEC-DKB-006 R1-R3: (answer, reason) for a definition search, or None when the search should run. One definition in
+    the searched scope: `file:line:` as grep prints it, then the body (at most READ_CAP lines; beyond that the location and
+    span). Several: the locations only. A file changed since the graph was built: None."""
+    from devkb import misses
+    defs = misses.run_definitions(repo, name)
+    if scope:
+        defs = [m for m in defs or [] if any((f := m["k"].split("::", 1)[0]) == d or f.startswith(d + "/") for d in scope)]
+    if not defs or any(not m.get("ls") or misses.changed_since_build(repo, m["k"].split("::", 1)[0]) for m in defs):
+        return None
+    where = [f"{m['k'].split('::', 1)[0]}:{m['ls']}:{m.get('sig', '')}" for m in defs]
+    if len(defs) > 1:
+        return (f"{len(defs)} definitions of {name}; locations only, no body (name one to read it):\n" + "\n".join(where),
+                "locations")
+    m = defs[0]
+    f, src = m["k"].split("::", 1)[0], m.get("source") or {}
+    span = f"{f} lines {m['ls']}-{m['le']}" if m.get("range") == "exact" and m.get("le") else f"{f} from line {m['ls']}"
+    if src.get("lines") is None or src.get("more") or src.get("approx"):
+        why = (f"longer than {READ_CAP} lines" if src.get("more") or src.get("too_long") else "its end is not known")
+        return (f"{where[0]}\n(Body not shown: {name} is {why}. Span: {span}. Read the span you need.)", "over-cap")
+    return (f"{where[0]}\n" + "\n".join(src["lines"]), "one-definition")
+
+
 def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, paths: list[Path] | None = None,
                      why: str | None = None) -> dict | None:
     """#131 + #133. Ask devkb about the names the search asks for. Every name resolved and Complete: return devkb's
@@ -441,6 +472,12 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     if why == "document-glob":                   # the graph holds no document text: an answer would only add tokens
         log_decision(ev, repo, tool, "pass-through", names, [], 0, why)
         return None
+    dname = misses.definition_name(pattern)
+    # a definition search asks where X is defined and what it says: recursive or not, in one file or a folder, and with
+    # context lines (`-A30`), which are the agent reading the body (#166 clarification)
+    lenient = bool(dname) and why in ("not-recursive", "file-operand", "option:-A", "option:-B", "option:-C", "context")
+    if lenient:
+        why = None
     queries, answers = [], []
     for n in names:
         r = misses.run_query(repo, QUESTION, n)
@@ -448,6 +485,19 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
             queries.append({"name": n, "verdict": r[0], "detail": r[1],
                             "query": f"devkb pack {QUESTION} {shlex.quote(n)} --project {shlex.quote(str(repo))}"})
             answers.append(r[2].strip())
+    if dname and why is None:
+        scope = scope_of(paths or [], repo)
+        ans = definition_answer(repo, dname, scope)
+        if ans:                                  # one name, found in the graph: the answer does not need the caller pack
+            if again(ev, inp):
+                log_decision(ev, repo, tool, "repeat", names, queries, len(ans[0]), "repeat", scope)
+                return None
+            log_decision(ev, repo, tool, "read-answer", names, queries, len(ans[0]), f"definition:{ans[1]}", scope)
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                           "permissionDecisionReason": READ_ANSWER.format(answers=ans[0])}}
+    if lenient:
+        log_decision(ev, repo, tool, "pass-through", names, queries, 0, "not-recursive")
+        return None
     if queries and len(queries) == len(names) and all(q["verdict"] == "complete" for q in queries):
         text = "\n\n".join(answers)
         text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"

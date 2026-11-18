@@ -49,6 +49,51 @@ def navigation_names(pattern: str) -> list[str]:
     return names[:3]
 
 
+def definition_name(pattern: str) -> str | None:
+    """The one name a definition search asks for (`def NAME`, `class NAME`, `struct NAME`, `fn NAME`, `function NAME`, or
+    `^\\s*NAME\\s*\\(`), else None: a search for uses, several names or a general regex is not one (SPEC-DKB-006 R1)."""
+    names = navigation_names(pattern)
+    if len(names) != 1 or re.search(r"\\\||\|", pattern):
+        return None
+    n = re.escape(names[0])
+    keyword = rf"(?:^|[\^\s(]|\\[bs][*+]?)(?:async\s+def|def|class|struct|fn|function)(?:\s+|\\s[+*]?)(?:\\b)?{n}(?![\w])"
+    anchored = rf"^\^(?:\\s\*|\s*){n}(?:\\s\*|\s*)\\?\("
+    return names[0] if re.search(keyword, pattern) or re.match(anchored, pattern.strip()) else None
+
+
+def run_definitions(repo: Path, name: str, timeout: float = 12) -> list[dict] | None:
+    """The exact-name definitions of `name` from `devkb symbol NAME --source --json` (the first carries its body), or None."""
+    root = str(Path(__file__).resolve().parents[1])
+    env = dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", ""), PYTHONWARNINGS="ignore",
+               DEVKB_TELEMETRY="0")
+    try:
+        p = subprocess.run(devkb_command(repo, "symbol", name, "--source", "--json", "--limit", "50", "--lines", "80"),
+                           cwd=repo, env=env, capture_output=True, text=True, timeout=timeout)
+        if p.returncode != 0:
+            return None
+        r = json.loads(p.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if r.get("error") or r.get("n", 0) > len(r.get("matches") or []):
+        return None
+    return [m for m in r.get("matches") or [] if m["k"].rsplit(".", 1)[-1].split("::")[-1] == name]
+
+
+def changed_since_build(repo: Path, rel: str) -> bool:
+    """True when the file may differ from what the graph was built from: edited after the build, or no build time known."""
+    built = 0.0
+    for n in ("symbols-manifest.json", "manifest.json"):
+        try:
+            built = (repo / ".devkb" / n).stat().st_mtime
+            break
+        except OSError:
+            pass
+    try:
+        return not built or (repo / rel).stat().st_mtime > built
+    except OSError:
+        return True
+
+
 def verdict_of(text: str) -> tuple[str, str]:
     """(verdict, detail) from the text of `devkb pack change`: complete | incomplete | cannot-resolve | other."""
     head = "\n".join(text.splitlines()[:4])        # the verdict is in the pack's header, never in a caller's source

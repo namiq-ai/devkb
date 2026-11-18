@@ -717,6 +717,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--under", default="")
     ap.add_argument("--limit", type=int, default=8)
     ap.add_argument("--lines", type=int, default=MAX_SOURCE, help="symbol --source: lines to print (default 80, at most 200)")
+    ap.add_argument("--json", action="store_true", help="print the tool's reply as JSON (for the guardrail hook)")
     ap.add_argument("--docs", action="store_true", help="uses: include documentation files")
     ap.add_argument("--offset", type=int, default=0, help="outline: skip this many symbols (the next page of a large file)")
     a = ap.parse_args(argv)
@@ -726,7 +727,8 @@ def main(argv: list[str] | None = None) -> int:
     kw = {"symbol": dict(query=a.query, source=a.source, kind=a.kind, under=a.under, limit=a.limit, lines=a.lines),
           "outline": dict(path=a.query, offset=a.offset), "uses": dict(name=a.query, under=a.under, docs=a.docs),
           "search_docs": dict(query=a.query, under=a.under)}[tool]
-    print(RENDER[tool](api.call(tool, **kw)))
+    reply = api.call(tool, **kw)
+    print(json.dumps(reply, default=str) if a.json else RENDER[tool](reply))
     return 0
 
 
