@@ -1,0 +1,12 @@
+[Unit]
+Description=devkb handler: review, plan or draft pull request for triaged items (Claude CLI, signed-in session)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-%h/.config/devkb-triage.env
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/flock -n %h/.cache/devkb-triage.lock python3 @SCRIPT@ handle
+Nice=10
+TimeoutStartSec=3h
