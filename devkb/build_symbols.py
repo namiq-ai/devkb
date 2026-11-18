@@ -223,12 +223,51 @@ def _dotted(node: ast.expr) -> str | None:
     return None
 
 
-def _calls_in_body(node: ast.AST) -> list[tuple[str | None, str]]:
+Shape = tuple[int, frozenset, bool]  # (positional arguments, keyword names, has a `*args` or `**kwargs` spread)
+
+
+def _call_shape(call: ast.Call) -> Shape:
+    star = any(isinstance(a, ast.Starred) for a in call.args) or any(k.arg is None for k in call.keywords)
+    return len(call.args), frozenset(k.arg for k in call.keywords if k.arg), star
+
+
+def _signature(fn: ast.FunctionDef | ast.AsyncFunctionDef, is_method: bool) -> dict | None:
+    """What a call must look like to reach `fn`: positional parameters (without the bound `self`/`cls`) and which are
+    required, keyword-only ones, and whether `*args`/`**kwargs` take anything else. None when a decorator may change it."""
+    if fn.decorator_list and any(ast.unparse(d) not in ("staticmethod", "classmethod") for d in fn.decorator_list):
+        return None
+    a = fn.args
+    pos = [x.arg for x in (*a.posonlyargs, *a.args)]
+    required = len(pos) - len(a.defaults)
+    if is_method and not any(ast.unparse(d) == "staticmethod" for d in fn.decorator_list) and pos:
+        pos, required = pos[1:], max(required - 1, 0)
+    return {"pos": pos, "required": required, "kwonly": [x.arg for x in a.kwonlyargs],
+            "kwonly_required": [x.arg for x, d in zip(a.kwonlyargs, a.kw_defaults) if d is None],
+            "varargs": a.vararg is not None, "varkw": a.kwarg is not None}
+
+
+def _shape_fits(sig: dict | None, shape: Shape | None) -> bool:
+    """False only when the call cannot bind to the signature: too many positionals, an unknown keyword, or a required
+    parameter given by neither a positional nor a keyword."""
+    if sig is None or shape is None or shape[2]:
+        return True
+    npos, kws, _ = shape
+    if npos > len(sig["pos"]) and not sig["varargs"]:
+        return False
+    names = set(sig["pos"][npos:]) | set(sig["kwonly"])
+    if not sig["varkw"] and any(k not in names for k in kws):
+        return False
+    if any(n not in kws for n in sig["pos"][npos:sig["required"]]):
+        return False
+    return all(n in kws for n in sig["kwonly_required"])
+
+
+def _calls_in_body(node: ast.AST) -> list[tuple[str | None, str, Shape]]:
     """(receiver, short_name) calls made directly within node's own body --
     explicitly NOT descending into a nested function/class def's body, so a
     nested def's own calls get attributed to ITS symbol when the visitor
     reaches it, not double-counted here."""
-    calls: list[tuple[str | None, str]] = []
+    calls: list[tuple[str | None, str, Shape]] = []
 
     def walk(n: ast.AST, top: bool) -> None:
         for child in ast.iter_child_nodes(n):
@@ -237,7 +276,7 @@ def _calls_in_body(node: ast.AST) -> list[tuple[str | None, str]]:
             if isinstance(child, ast.Call):
                 hit = _call_name(child.func)
                 if hit:
-                    calls.append(hit)
+                    calls.append((*hit, _call_shape(child)))
             walk(child, top=False)
 
     walk(node, top=True)
@@ -298,8 +337,8 @@ def _value_refs(tree: ast.Module) -> list[tuple[str, str | None, str, int]]:
     return out
 
 
-def _module_level_calls(tree: ast.Module) -> list[tuple[str | None, str]]:
-    calls: list[tuple[str | None, str]] = []
+def _module_level_calls(tree: ast.Module) -> list[tuple[str | None, str, Shape]]:
+    calls: list[tuple[str | None, str, Shape]] = []
 
     def walk(n: ast.AST) -> None:
         for child in ast.iter_child_nodes(n):
@@ -308,7 +347,7 @@ def _module_level_calls(tree: ast.Module) -> list[tuple[str | None, str]]:
             if isinstance(child, ast.Call):
                 hit = _call_name(child.func)
                 if hit:
-                    calls.append(hit)
+                    calls.append((*hit, _call_shape(child)))
             walk(child)
 
     walk(tree)
@@ -347,8 +386,7 @@ def _import_descriptors(tree: ast.AST) -> list[tuple[int, str, str | None, str]]
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             for alias in node.names:
-                if alias.name != "*":
-                    out.append((node.level or 0, node.module or "", alias.name, alias.asname or alias.name))
+                out.append((node.level or 0, node.module or "", alias.name, alias.asname or alias.name))
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.asname:
@@ -374,6 +412,8 @@ def _import_targets(
     receivers: dict[str, list[str]] = {}
     bare: dict[str, tuple[str, str]] = {}
     for level, module, name, local in descriptors:
+        if name == "*":
+            continue                                   # a star import binds no name; see `_star_modules`
         if level:
             keep = here[: len(here) - (level - 1)] if level - 1 <= len(here) else []
             base = ".".join(keep + ([module] if module else []))
@@ -388,6 +428,58 @@ def _import_targets(
             if base:
                 bare[local] = (base, name)
     return receivers, bare
+
+
+def _star_modules(descriptors: list[tuple[int, str, str | None, str]], rel_path: str) -> list[str]:
+    """Dotted modules the file imports with `from m import *`: any bare name may come from them."""
+    here = rel_path.split("/")[:-1]
+    out = []
+    for level, module, name, _local in descriptors:
+        if name == "*":
+            keep = here[: len(here) - (level - 1)] if level and level - 1 <= len(here) else []
+            out.append(".".join((keep if level else []) + ([module] if module else [])))
+    return out
+
+
+def _module_is(dotted: str, rel_path: str) -> bool:
+    """True when `dotted` could name the file `rel_path` (from the repo root or any ancestor directory of the importer)."""
+    return any(rel_path == g or rel_path.endswith("/" + g) for g in _module_paths(dotted))
+
+
+def _could_reach(sym: dict, sym_file: str, rec: tuple[str, str, str, str | None], ctx: dict) -> bool:
+    """Whether the unattributed call `rec` = (file, caller, called name, receiver) could be a call to the symbol `sym` of
+    `sym_file`: an unqualified call in a module that defines or imports it, `mod.name()` where `mod` is its module, or a
+    call on a receiver of unknown type when the symbol is a method."""
+    rf, _caller, called, receiver, shape = rec
+    if sym.get("kind") in ("function", "method") and not _shape_fits(sym.get("sig"), shape):
+        return False                                   # the call's arguments cannot bind to this definition
+    is_method = sym.get("kind") == "method"
+    short = sym["qualified_name"].rsplit(".", 1)[-1]
+    receivers, bare = ctx["targets"].get(rf, ({}, {}))
+    if receiver is None:
+        if is_method:
+            return False
+        if called in bare:
+            module, original = bare[called]
+            return original == short and _module_is(module, sym_file)
+        if called != short:
+            return False
+        if rf == sym_file:
+            return True
+        return any(_module_is(m, sym_file) for m in ctx["stars"].get(rf, ()))
+    if called != short:
+        return False
+    if receiver in ("self", "cls"):
+        return is_method
+    if receiver in receivers:
+        if not is_method:
+            return any(_module_is(m, sym_file) for m in receivers[receiver])
+        return receiver in bare and _module_is(bare[receiver][0], sym_file) \
+            and sym["qualified_name"].startswith(bare[receiver][1] + ".")
+    if is_method:
+        return True                                    # a receiver whose type is not known may be an instance of its class
+    stem = sym_file.rsplit("/", 1)[-1].removesuffix(".py")
+    return receiver.isidentifier() and receiver == stem  # a module loaded by path and bound to a variable of its name
 
 
 def _py_literals(tree: ast.AST) -> list[str]:
@@ -555,19 +647,22 @@ def _constructed(value: ast.expr | None) -> str | None:
     return _class_ref(value.func) if isinstance(value, ast.Call) else None
 
 
-def _own_body(node: ast.AST):
-    """Nodes of a function's own body, not descending into nested defs or classes (as _calls_in_body)."""
+def _own_body(node: ast.AST, into_lambdas: bool = False):
+    """Nodes of a function's own body, not descending into nested defs or classes (as _calls_in_body); a lambda's body
+    only when asked, as `_calls_in_body` reads it as part of the function that holds it."""
+    skip = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef) + (() if into_lambdas else (ast.Lambda,))
     stack = list(ast.iter_child_nodes(node))
     while stack:
         n = stack.pop()
         yield n
-        if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+        if not isinstance(n, skip):
             stack.extend(ast.iter_child_nodes(n))
 
 
-def _typed_calls(tree: ast.Module) -> list[tuple[str, str, str]]:
-    """[(caller_qualname, class_ref, method)] for calls on a receiver whose class the code states."""
-    out: list[tuple[str, str, str]] = []
+def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> list[tuple[str, str, str, str]]:
+    """[(caller_qualname, class_ref, method)] for calls on a receiver whose class the code states. `returns` collects
+    `Cls.method` -> the class that method hands back, for a call on its result (`ret:Cls#method`)."""
+    out: list[tuple[str, str, str, str]] = []
 
     def params(fn) -> dict[str, str]:
         a = fn.args
@@ -595,12 +690,31 @@ def _typed_calls(tree: ast.Module) -> list[tuple[str, str, str]]:
                     targets, value = n.targets, n.value
                 elif isinstance(n, ast.AnnAssign):
                     targets, value, ann = [n.target], n.value, n.annotation
+                pairs = []
                 for t in targets:
+                    if isinstance(t, ast.Tuple) and isinstance(value, ast.Tuple) and len(t.elts) == len(value.elts):
+                        pairs.extend(zip(t.elts, value.elts))   # `self.api, self.idx = api, api.idx`
+                    else:
+                        pairs.append((t, value))
+                for t, value in pairs:
                     if isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name) and t.value.id == "self":
                         cls = (_annotation_class(ann) or _constructed(value)
                                or (env.get(value.id) if isinstance(value, ast.Name) else None))
                         if cls:
                             types.setdefault(t.attr, cls)
+        # `self._read().symbol(...)`: a method that is annotated `-> Cls`, or returns `self.attr` of a known class,
+        # gives its callers a receiver of that class; stored as `()name` beside the attributes
+        for fn in cls_node.body:
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            ret = _annotation_class(fn.returns)
+            if ret is None:
+                kinds = {types.get(r.value.attr) if isinstance(r.value, ast.Attribute) and isinstance(r.value.value, ast.Name)
+                         and r.value.value.id == "self" else None
+                         for r in _own_body(fn) if isinstance(r, ast.Return) and r.value is not None}
+                ret = kinds.pop() if len(kinds) == 1 else None
+            if ret:
+                types["()" + fn.name] = ret
         return types
 
     def visit_function(fn, qual: str, self_types: dict[str, str], enclosing: str = "",
@@ -622,7 +736,7 @@ def _typed_calls(tree: ast.Module) -> list[tuple[str, str, str]]:
                     cls = _constructed(item.context_expr)
                     if cls and isinstance(item.optional_vars, ast.Name):
                         env[item.optional_vars.id] = cls
-        for n in _own_body(fn):
+        for n in _own_body(fn, into_lambdas=True):
             if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)):
                 continue
             recv, method = n.func.value, n.func.attr
@@ -635,15 +749,27 @@ def _typed_calls(tree: ast.Module) -> list[tuple[str, str, str]]:
                 cls = self_types.get(recv.attr)
             elif isinstance(recv, ast.Call):
                 cls = _constructed(recv)  # `RuntimeStore().add_edge(...)`, built and called in one expression
+                if cls is None and isinstance(recv.func, ast.Attribute):
+                    base, via = recv.func.value, recv.func.attr
+                    if isinstance(base, ast.Name) and base.id == "self":
+                        cls = self_types.get("()" + via)
+                    else:  # `self.api._read().symbol(...)`: the class of `self.api`, then what its `_read` returns
+                        owner = (env.get(base.id) if isinstance(base, ast.Name)
+                                 else self_types.get(base.attr) if isinstance(base, ast.Attribute)
+                                 and isinstance(base.value, ast.Name) and base.value.id == "self" else None)
+                        cls = f"ret:{owner}#{via}" if owner else None
             if cls:
-                out.append((qual, cls, method))
+                out.append((qual, cls, method, recv.id if isinstance(recv, ast.Name) else EXPR))
         return env
 
     def walk(node, stack: list[str], self_types: dict[str, str], cls_qual: str = "",
              outer: dict[str, str] | None = None) -> None:
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.ClassDef):
-                walk(child, stack + [child.name], attr_types(child), ".".join(stack + [child.name]))
+                attrs = attr_types(child)
+                if returns is not None:
+                    returns.update({f"{'.'.join(stack + [child.name])}.{k[2:]}": v for k, v in attrs.items() if k.startswith("()")})
+                walk(child, stack + [child.name], attrs, ".".join(stack + [child.name]))
             elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 qual = ".".join(stack + [child.name])
                 env = visit_function(child, qual, self_types, cls_qual, outer)
@@ -657,11 +783,19 @@ def _typed_calls(tree: ast.Module) -> list[tuple[str, str, str]]:
 
 def _resolve_class(
     cls_ref: str, rel_path: str, per_file_symbols: dict[str, list[dict]],
-    targets: tuple[dict[str, list[str]], dict[str, tuple[str, str]]],
+    targets: tuple[dict[str, list[str]], dict[str, tuple[str, str]]], targets_of: dict | None = None,
 ) -> str | None:
     """`path::Cls` for a class named in `rel_path`: its own file, `from m import Cls`, or `m.Cls` with `import m`."""
     if cls_ref.startswith("self:"):
         return f"{rel_path}::{cls_ref[5:]}"
+    if cls_ref.startswith("ret:"):  # the class a method of a known class returns, named in that class's own file
+        owner, _, method = cls_ref[4:].rpartition("#")
+        key = _resolve_class(owner, rel_path, per_file_symbols, targets, targets_of)
+        if key is None or targets_of is None:
+            return None
+        path, qual = key.split("::", 1)
+        ret = next((x.get("returns") for x in per_file_symbols.get(path, []) if x["qualified_name"] == f"{qual}.{method}"), None)
+        return _resolve_class(ret, path, per_file_symbols, targets_of.get(path, ({}, {})), targets_of) if ret else None
     receivers, bare = targets
     found: str | None = None
     if "." not in cls_ref and any(s["qualified_name"] == cls_ref for s in per_file_symbols.get(rel_path, [])):
@@ -681,11 +815,11 @@ def _resolve_class(
 def _resolve_typed_call(
     cls_ref: str, method: str, rel_path: str, per_file_symbols: dict[str, list[dict]],
     targets: tuple[dict[str, list[str]], dict[str, tuple[str, str]]],
-    bases: dict[str, list[str]] | None = None,
+    bases: dict[str, list[str]] | None = None, targets_of: dict | None = None,
 ) -> str | None:
     """`path::Cls.method` for a method called on an instance of `cls_ref`, or None. The method must be defined on the
     class or, through EXTENDS (ADR-SDP-DEVKB-006), on one of its bases, nearest first."""
-    found = _resolve_class(cls_ref, rel_path, per_file_symbols, targets)
+    found = _resolve_class(cls_ref, rel_path, per_file_symbols, targets, targets_of)
     seen: set[str] = set()
     queue = [found] if found else []
     while queue:
@@ -883,7 +1017,7 @@ class _Visitor(ast.NodeVisitor):
     def __init__(self) -> None:
         self.stack: list[tuple[str, bool]] = []  # (name, is_class)
         self.symbols: list[dict] = []
-        self.calls: list[tuple[str, str | None, str]] = []  # (caller_qualname, receiver, callee_short)
+        self.calls: list[tuple[str, str | None, str, Shape]] = []  # (caller_qualname, receiver, callee_short, shape)
         self.routes: list[tuple[str, str, str]] = []  # (qualname, method, path)
         self.raises: list[tuple[str, str, str | None, int | None]] = []  # (qualname, exc_type, message, status_code)
         self.logs: list[tuple[str, str, str | None]] = []  # (qualname, level, message)
@@ -923,8 +1057,9 @@ class _Visitor(ast.NodeVisitor):
             "is_public": not node.name.startswith("_"),
             "line_start": node.lineno, "line_end": getattr(node, "end_lineno", node.lineno),
             "complexity": _complexity(node),
+            "sig": _signature(node, kind == "method"),
         })
-        self.calls.extend((qn, receiver, callee) for receiver, callee in _calls_in_body(node))
+        self.calls.extend((qn, receiver, callee, shape) for receiver, callee, shape in _calls_in_body(node))
         self.raises.extend((qn, exc_type, message, status_code)
                             for exc_type, message, status_code in _raises_in_body(node))
         self.logs.extend((qn, level, message) for level, message in _logs_in_body(node))
@@ -978,11 +1113,16 @@ def _parse_python_file(
         v = _Visitor()
         v.router_prefix = _router_prefix(tree)
         v.visit(tree)
-        v.calls.extend((MODULE_CALLER, receiver, callee) for receiver, callee in _module_level_calls(tree))
+        v.calls.extend((MODULE_CALLER, receiver, callee, shape) for receiver, callee, shape in _module_level_calls(tree))
         module_docstring = ast.get_docstring(tree)
+        returns: dict[str, str] = {}
+        typed = _typed_calls(tree, returns)
+        for sym in v.symbols:
+            if sym["qualified_name"] in returns:
+                sym["returns"] = returns[sym["qualified_name"]]
         return (v.symbols, v.calls, _imports(tree), v.routes, module_docstring, v.raises, v.logs,
                 _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree),
-                _py_literals(tree), _typed_calls(tree), _safe_value_refs(tree))
+                _py_literals(tree), typed, _safe_value_refs(tree))
     except RecursionError:
         # a generated file nested deeper than the tree walks can follow: skip it, say so, keep the rest (#106)
         _skip(path, "nested too deeply to read", skipped)
@@ -1003,7 +1143,7 @@ def extract(repo_root: Path) -> DevKBGraph:
     # routes before resolving anything -- cross-file resolution needs every
     # file's own symbol table to already exist. ────────────────────────────
     per_file_symbols: dict[str, list[dict]] = {}
-    per_file_calls: dict[str, list[tuple[str, str | None, str]]] = {}
+    per_file_calls: dict[str, list[tuple[str, str | None, str, Shape]]] = {}
     per_file_imports: dict[str, dict[str, str | None]] = {}
     per_file_literals: dict[str, list[str]] = {}
     per_file_import_targets: dict[str, tuple[dict[str, list[str]], dict[str, tuple[str, str]]]] = {}
@@ -1013,10 +1153,11 @@ def extract(repo_root: Path) -> DevKBGraph:
     per_file_middleware: dict[str, list[tuple[str, str]]] = {}
     per_file_router_prefix: dict[str, str] = {}
     per_file_daemon_entries: dict[str, list[str]] = {}
-    per_file_typed_calls: dict[str, list[tuple[str, str, str]]] = {}
+    per_file_typed_calls: dict[str, list[tuple[str, str, str, str]]] = {}
     per_file_value_refs: dict[str, list[tuple[str, str | None, str, int]]] = {}
     route_index: dict[str, str] = {}  # "METHOD /path" -> Symbol natural_key
     reexports: dict[str, dict[str, tuple[str, str]]] = {}  # every parsed file's from-imports, symbols or not
+    star_modules: dict[str, list[str]] = {}  # file -> modules it imports with `from m import *`
     module_callers: dict[str, set[str]] = {}  # called Symbol -> files that call it outside any function
 
     skipped: dict[str, str] = {}   # absolute path -> why the file could not be read (#109)
@@ -1041,6 +1182,8 @@ def extract(repo_root: Path) -> DevKBGraph:
         per_file_calls[rel_path] = calls
         per_file_imports[rel_path] = dict(imports)
         per_file_import_targets[rel_path] = targets
+        if stars := _star_modules(descriptors, rel_path):
+            star_modules[rel_path] = stars
         per_file_literals[rel_path] = literals
         per_file_docstring[rel_path] = module_doc
         per_file_raises[rel_path] = raises
@@ -1194,8 +1337,10 @@ def extract(repo_root: Path) -> DevKBGraph:
 
     # Every call site the resolver leaves unattributed, by the called name, when some symbol in the repository has
     # that name: the coverage a list answer must report instead of looking complete (ODSF-313).
+    repo_class_names = {s["qualified_name"].rsplit(".", 1)[-1] for symbols in per_file_symbols.values() for s in symbols
+                        if s.get("kind") == "class"}
     repo_short_names = {s["qualified_name"].rsplit(".", 1)[-1] for symbols in per_file_symbols.values() for s in symbols}
-    unresolved: set[tuple[str, str, str]] = set()  # (file, caller qualname, called name)
+    unresolved: set[tuple[str, str, str, str | None, Shape]] = set()  # (file, caller qualname, called name, receiver, shape)
 
     # ── Pass 2 (Python, BL-3b): resolve calls -- same-file first (0.8,
     # unchanged from BL-3), then cross-file via THIS file's own import of
@@ -1217,7 +1362,7 @@ def extract(repo_root: Path) -> DevKBGraph:
 
         receivers_here = per_file_import_targets.get(rel_path, ({}, {}))[0]
         receivers_dotted = per_file_import_targets.get(rel_path, ({}, {}))[0]
-        for caller_qn, receiver, callee_short in calls:
+        for caller_qn, receiver, callee_short, shape in calls:
             caller_key = f"{rel_path}::{caller_qn}"
             dotted_hit = None
             if receiver and "." in receiver and receiver != EXPR:
@@ -1272,7 +1417,7 @@ def extract(repo_root: Path) -> DevKBGraph:
                 resolved_key = _resolve_cross_file_symbol(receiver, rel_path, callee_short, per_file_symbols)
             if receiver == EXPR:
                 if callee_short in repo_short_names:
-                    unresolved.add((rel_path, caller_qn, callee_short))  # said in coverage, as before: not attributed
+                    unresolved.add((rel_path, caller_qn, callee_short, receiver, shape))  # said in coverage, as before: not attributed
                 continue
             if resolved_key is None and receiver and receiver not in receivers:
                 resolved_key = _resolve_via_literals(per_file_literals.get(rel_path, []), callee_short, per_file_symbols)
@@ -1280,7 +1425,7 @@ def extract(repo_root: Path) -> DevKBGraph:
                 dotted_module = imports.get(receiver) if receiver else imports.get(callee_short)
                 if dotted_module is None and receiver is None and callee_short not in imports:
                     if callee_short in repo_short_names and len(local_targets) != 1:
-                        unresolved.add((rel_path, caller_qn, callee_short))
+                        unresolved.add((rel_path, caller_qn, callee_short, receiver, shape))
                     continue  # nothing to resolve against
                 if dotted_module:
                     resolved_key = _resolve_cross_file_symbol(dotted_module, rel_path, callee_short, per_file_symbols)
@@ -1292,14 +1437,21 @@ def extract(repo_root: Path) -> DevKBGraph:
                     source="ast-cross-file-import", confidence=0.7,
                     evidence_ref=f"{rel_path}::{caller_qn} calls {receiver + '.' if receiver else ''}{callee_short}",
                 )
-            elif callee_short in repo_short_names:
-                unresolved.add((rel_path, caller_qn, callee_short))
+            elif callee_short in repo_short_names or (receiver is None and callee_short in bare):
+                unresolved.add((rel_path, caller_qn, callee_short, receiver, shape))
 
     # ── ODSF-312: calls on an instance of a class the code names ────────────
     for rel_path, typed in per_file_typed_calls.items():
         targets = per_file_import_targets.get(rel_path, ({}, {}))
-        for caller_qn, cls_ref, method in typed:
-            resolved_key = _resolve_typed_call(cls_ref, method, rel_path, per_file_symbols, targets, class_bases)
+        asked_of: dict[tuple[str, str, str], int] = {}   # how many calls of each kind the caller makes in all
+        for caller_qn, _recv, method, label in ((q, r, m, r if r and r != EXPR and "." not in r else EXPR)
+                                                for q, r, m, _shape in per_file_calls.get(rel_path, ()) if r):
+            asked_of[(caller_qn, method, label)] = asked_of.get((caller_qn, method, label), 0) + 1
+        typed_of: dict[tuple[str, str, str], int] = {}
+        for caller_qn, _cls, method, label in typed:
+            typed_of[(caller_qn, method, label)] = typed_of.get((caller_qn, method, label), 0) + 1
+        for caller_qn, cls_ref, method, label in typed:
+            resolved_key = _resolve_typed_call(cls_ref, method, rel_path, per_file_symbols, targets, class_bases, per_file_import_targets)
             via_base = bool(resolved_key and resolved_key.endswith("#base"))
             resolved_key = resolved_key[: -len("#base")] if via_base else resolved_key
             if resolved_key and resolved_key != f"{rel_path}::{caller_qn}":
@@ -1308,18 +1460,32 @@ def extract(repo_root: Path) -> DevKBGraph:
                     source="ast-typed-receiver-base" if via_base else "ast-typed-receiver", confidence=0.6,
                     evidence_ref=f"{rel_path}::{caller_qn} calls {method} on a {cls_ref.replace('self:', '')}",
                 )
-                unresolved.discard((rel_path, caller_qn, method))
+            known = _resolve_class(cls_ref, rel_path, per_file_symbols, targets, per_file_import_targets)
+            if resolved_key or known or (not cls_ref.startswith("ret:")
+                                         and cls_ref.split(".")[-1] not in repo_class_names):
+                # the receiver's class is known (a class of the repository, or one outside it): a call on it is not a
+                # call to a same-named method of any other class
+                if typed_of[(caller_qn, method, label)] >= asked_of.get((caller_qn, method, label), 0):  # every such call
+                    unresolved -= {r for r in unresolved if r[:3] == (rel_path, caller_qn, method)
+                                   and (r[3] == label or (label == EXPR and r[3] == EXPR))}
 
-    by_name: dict[str, dict[str, int]] = {}
-    for rel_path, _caller, name in unresolved:
-        by_name.setdefault(name, {})[rel_path] = by_name.setdefault(name, {}).get(rel_path, 0) + 1
+    ctx = {"targets": per_file_import_targets, "stars": star_modules}
+    by_target: dict[str, list[tuple]] = {}
+    for rec in unresolved:
+        by_target.setdefault(rec[2], []).append(rec)
+        if rec[3] is None and rec[2] in per_file_import_targets.get(rec[0], ({}, {}))[1]:
+            by_target.setdefault(per_file_import_targets[rec[0]][1][rec[2]][1], []).append(rec)
     for rel_path, symbols in per_file_symbols.items():
         for s in symbols:
-            files = by_name.get(s["qualified_name"].rsplit(".", 1)[-1])
-            if files:
+            short = s["qualified_name"].rsplit(".", 1)[-1]
+            hits = {(r[0], r[1]) for r in by_target.get(short, ()) if _could_reach(s, rel_path, r, ctx)}
+            if hits:
+                files: dict[str, int] = {}
+                for f, _caller in hits:
+                    files[f] = files.get(f, 0) + 1
                 ranked = sorted(files, key=lambda f: (-files[f], f))
                 g.add_node("Symbol", f"{rel_path}::{s['qualified_name']}", source="ast",
-                           unresolved_calls=sum(files.values()), unresolved_files=ranked[:20],
+                           unresolved_calls=len(hits), unresolved_files=ranked[:20],
                            unresolved_file_count=len(ranked))
     for key, files in module_callers.items():
         g.add_node("Symbol", key, source="ast", module_callers=sorted(files))
