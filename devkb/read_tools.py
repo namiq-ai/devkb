@@ -35,6 +35,7 @@ LANG = {".py": "Python", ".pyi": "Python", ".ts": "TypeScript", ".tsx": "TypeScr
         ".cxx": "C++", ".hpp": "C++", ".hh": "C++", ".hxx": "C++", ".xml": "Odoo XML", ".vue": "Vue"}
 APPROX_WINDOW = 40        # lines shown from the start of a symbol whose end is unknown
 START_ONLY = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".xml")   # extractors that do not store an end line
+CXX_SUFFIX = (".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".inl", ".ipp", ".tpp")
 DOC_SUFFIX = (".md", ".markdown", ".rst", ".txt", ".adoc")
 NOT_CODE = (".md", ".markdown", ".rst", ".txt", ".adoc", ".lock", ".json", ".svg", ".min.js", ".map", ".csv", ".ipynb",
             ".jsonl", ".ndjson", ".tsv", ".log")   # data files too (dogfood D4, #40: benchmark transcripts drowned `uses`)
@@ -382,14 +383,35 @@ class ReadTools:
         word = re.escape(name.rsplit(".", 1)[-1])
         if not re.search(rf"\b{word}\b", line):
             return 2
+        if f.endswith(CXX_SUFFIX):
+            m = re.search(rf"\b{word}\s*(?:<[^;(){{}}]*>\s*)?\(", line)   # `f<T>(x)` is a call too
+            if not m:
+                return 1
+            before = line[:m.start()].strip()
+            if before.endswith(("::", ".", "->")) or not before:
+                return 0
+            # a type before the name, with no operator or call keyword in between: a declaration, not a call (#114)
+            if re.fullmatch(r"[\w:<>,*&\s]+", before) and not re.search(
+                    r"\b(return|new|throw|else|case|delete|co_return|co_yield|co_await|sizeof|typeof|not|and|or)\s*$", before):
+                return 1
+            return 0
         return 0 if re.search(rf"(?<!def )(?<!class )(?<!function )(?<!func )\b{word}\s*\(", line) else 1  # a definition is code, not a call
+
+    def _def_spans(self, i: int) -> list[tuple[int, int]]:
+        """Each definition's own line range; a C/C++ node merges overloads and specialisations but records every span."""
+        p = self.idx.props[i]
+        own = [(int(a), int(b)) for a, b in (p.get("overload_spans") or ()) if a]
+        if own:
+            return own
+        return [(p["line_start"], p.get("line_end") or p["line_start"])]
 
     def _enclosing(self, f: str):
         spans = []
         for i in self.idx.sym_by_file.get(f, ()):
             p = self.idx.props[i]
             if p.get("line_start"):
-                spans.append((p["line_start"], p.get("line_end") or p["line_start"], self.qual[i], p.get("kind")))
+                for a, b in self._def_spans(i):
+                    spans.append((a, b, self.qual[i], p.get("kind")))
         spans.sort()
         return spans
 
@@ -431,7 +453,13 @@ class ReadTools:
         if mode == "word":
             r = self.resolve(q, limit=4)
             if r.get("how") in ("exact", "suffix") and r["matches"]:
-                defs = [{"k": m["k"], "kind": m["kind"], "ls": m["ls"], "le": m["le"], "range": m["range"]} for m in r["matches"]]
+                for m in r["matches"]:
+                    sp = self._def_spans(m["i"])
+                    if len(sp) < 2:
+                        sp = [(m["ls"], m["le"])]
+                    f0 = m["k"].split("::", 1)[0]
+                    for a, b in sp:
+                        defs.append({"k": m["k"], "kind": m["kind"], "ls": a, "le": b, "range": range_state(f0, a, b) if len(sp) > 1 else m["range"]})
         ranked = sorted(by_file.items(), key=lambda kv: (self.api._is_test(kv[0]), -len(kv[1]), kv[0]))
         out_files = []; shown = 0
         for f, hs in ranked[:files]:
@@ -439,7 +467,8 @@ class ReadTools:
             keep = hs[:per_file]
             if mode != "regex" and len(hs) > per_file:  # code before comments and docstrings within the cap (#89)
                 prose = self._prose(f)
-                keep = sorted(sorted(hs, key=lambda h: (self._hit_rank(f, h[0], h[1], q, mode, prose), h[0]))[:per_file])
+                ranked_hs = sorted(hs, key=lambda h: (self._hit_rank(f, h[0], h[1], q, mode, prose), h[0]))[:per_file]
+                keep = ranked_hs if f.endswith(CXX_SUFFIX) else sorted(ranked_hs)   # C/C++: calls first, then declarations (#114)
             for ln, text in keep:
                 if shown >= hits:
                     break
@@ -450,7 +479,7 @@ class ReadTools:
                 if best:
                     inner = (best[1], False)
                 else:                                   # a symbol with no known end: the nearest one above the hit
-                    prev = [x for x in spans if x[0] <= ln]
+                    prev = [] if f.endswith(CXX_SUFFIX) else [x for x in spans if x[0] <= ln]   # C/C++ spans are exact: outside them is top level
                     inner = (prev[-1][2], True) if prev else None
                 rows.append({"line": ln, "text": text.strip()[:110], "in": inner[0] if inner else None, "approx": bool(inner and inner[1])})
                 shown += 1

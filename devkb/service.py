@@ -44,7 +44,7 @@ KEEP_PROPS = {
                "module_callers",   # calls made outside any function (import time, class bodies)
                "value_refs", "value_ref_count",  # #69: named without a call (a callback), so callers are not all visible
                "incomplete_reasons", "unattributed_errors",  # ADR-DEVKB-008 §2: C/C++ coverage beyond unresolved calls
-               "framework", "namespace", "overload_count",
+               "framework", "namespace", "overload_count", "overload_spans", "near_files",
                "language", "linkage", "abi_exported", "boundary_kind"),   # ADR-DEVKB-009 §2-3
     "ErrorSignature": ("kind", "label", "message_template", "status_code"),
     "TestCase": ("function", "file", "line", "framework"),
