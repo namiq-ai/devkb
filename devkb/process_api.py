@@ -377,9 +377,10 @@ class ProcessAPI:
             names[name] = len(self.idx.short.get(name, []))
             n += int(p.get("unresolved_calls") or 0)
             listed = p.get("unresolved_files") or []
-            file_total += int(p.get("unresolved_file_count") or len(listed)) - sum(1 for f in listed if shown and f in shown)
+            near = set(p.get("near_files") or ())     # C/C++: where its unqualified callers can be; never dropped from the hint (#116)
+            file_total += int(p.get("unresolved_file_count") or len(listed)) - sum(1 for f in listed if shown and f in shown and f not in near)
             for f in listed:
-                if not shown or f not in shown:
+                if not shown or f not in shown or f in near:
                     files[f] = None
         extra = {"unattributed_errors": unattributed} if unattributed else {}
         if reasons:

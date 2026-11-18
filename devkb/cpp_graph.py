@@ -181,6 +181,15 @@ def add_to_graph(g: DevKBGraph, repo_root: Path, error_sig_key: Callable[[str, s
         by_name.setdefault(name, {})
         by_name[name][rel] = by_name[name].get(rel, 0) + 1
 
+    # Where an unattributed call to a method can hide besides the files that hold one: the file it is defined in and the
+    # files of classes derived from its class (an unqualified call there) (#116).
+    repo_classes = cpp_resolve.Repo(units)
+    derived_files: dict[str, set[str]] = {}
+    for cls_list in repo_classes.classes.values():
+        for cls in cls_list:
+            for anc in repo_classes.ancestors(cls):
+                derived_files.setdefault(anc[1].qn, set()).add(cls[0])
+
     n_symbols = 0
     written: set[str] = set()
     for u in units:
@@ -203,7 +212,8 @@ def add_to_graph(g: DevKBGraph, repo_root: Path, error_sig_key: Callable[[str, s
             key = f"{u.path}::{qn}"
             props: dict = dict(
                 kind=s.kind, qualified_name=qn, namespace=s.namespace or None, line_start=s.line_start, line_end=s.line_end,
-                overload_count=max(1, len(s.def_indexes)), overload_lines=s.overload_lines, is_public=s.is_public,
+                overload_count=max(1, len(s.def_indexes)), overload_lines=s.overload_lines,
+                overload_spans=[list(x) for x in sorted(set(s.spans))[:20]], is_public=s.is_public,
                 docstring_summary=None, decorators=[],
             )
             props["language"] = u.rec.language
@@ -218,6 +228,10 @@ def add_to_graph(g: DevKBGraph, repo_root: Path, error_sig_key: Callable[[str, s
                 files_of = by_name.get(s.short)
                 if files_of:
                     ranked = sorted(files_of, key=lambda f: (-files_of[f], f))
+                    if s.kind in ("function", "method"):
+                        near = {u.path} | (derived_files.get(qn.rsplit(".", 1)[0], set()) if s.kind == "method" else set())
+                        ranked = sorted(near) + [f for f in ranked if f not in near]
+                        props["near_files"] = sorted(near)[:10]
                     props.update(unresolved_calls=sum(files_of.values()), unresolved_files=ranked[:20],
                                  unresolved_file_count=len(ranked))
                 rs = set(reasons.get((u.path, qn), ()))

@@ -1126,6 +1126,7 @@ class Symbolic:
     framework: str | None = None
     linkage: str = ""
     class_ns: str | None = None     # see Def.class_ns; None when overloads disagree
+    spans: list[tuple[int, int]] = field(default_factory=list)   # each definition's own (start, end) line range
 
 
 def finalize(rec: FileRecords) -> dict[str, Symbolic]:
@@ -1144,9 +1145,10 @@ def finalize(rec: FileRecords) -> dict[str, Symbolic]:
         s = out.get(qn)
         if s is None:
             out[qn] = Symbolic(qn, d.short, d.kind, d.namespace, d.line, d.line_end, [d.line], d.is_public, d.virtual,
-                               d.class_chain, [d.index], None, d.linkage, d.class_ns)
+                               d.class_chain, [d.index], None, d.linkage, d.class_ns, [(d.line, d.line_end)])
         else:
             s.overload_lines.append(d.line)
+            s.spans.append((d.line, d.line_end))
             s.line_end = max(s.line_end, d.line_end)
             s.is_public = s.is_public or d.is_public
             s.virtual = s.virtual or d.virtual
