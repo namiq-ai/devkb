@@ -148,10 +148,8 @@ def build(api: ProcessAPI, toolset: str = "all") -> FastMCP:
             p = Packer(api.get() if isinstance(api, _LazyAPI) else api)
         except GraphNotBuilt:
             return "No devkb graph yet: it is being built in the background; ask again in a minute."
-        run = {"file": lambda: p.file(subject), "refactor": lambda: p.refactor(subject, role, path),
-               "change": lambda: p.change(subject, path), "error": lambda: p.error(subject),
-               "pr": lambda: p.pr(subject), "ticket": lambda: p.ticket(subject)}.get(kind)
-        return run() if run else f"Unknown kind {kind!r}: use file, refactor, change, error, pr or ticket."
+        from devkb.packs import logged_pack  # noqa: PLC0415
+        return logged_pack(p, kind, subject, path, role)
 
     def _read(tool_name: str, **kw) -> str:
         from devkb.read_tools import RENDER  # noqa: PLC0415

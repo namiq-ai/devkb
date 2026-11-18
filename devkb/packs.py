@@ -24,12 +24,13 @@ import argparse
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from devkb.cpp_symbols import C_LIMITS_TEXT, CXX_LIMITS_TEXT, is_cxx_path  # noqa: E402
-from devkb.process_api import ProcessAPI  # noqa: E402
+from devkb.process_api import ProcessAPI, asked  # noqa: E402
 from devkb.service import GraphNotBuilt  # noqa: E402
 
 MAX_DEPTH = 6
@@ -556,15 +557,27 @@ def main() -> int:
     ap.add_argument("--path", default="")
     ns = ap.parse_args()
     try:
-        p = Packer(ProcessAPI(ns.project, telemetry=False))
+        p = Packer(ProcessAPI(ns.project, telemetry_source="cli"))
     except GraphNotBuilt as e:
         print(f"devkb pack: {e}", file=sys.stderr)
         return 2
     subject = " ".join(ns.subject)
-    print({"file": lambda: p.file(subject), "error": lambda: p.error(subject), "change": lambda: p.change(subject, ns.path),
-           "refactor": lambda: p.refactor(subject, ns.role, ns.path), "ticket": lambda: p.ticket(subject),
-           "pr": lambda: p.pr(subject)}[ns.kind]())
+    print(logged_pack(p, ns.kind, subject, ns.path, ns.role))
     return 0
+
+
+def logged_pack(p: "Packer", kind: str, subject: str, path: str = "", role: str = "") -> str:
+    """Run one pack and record it in the graph's telemetry, as every other tool call is (#127)."""
+    run = {"file": lambda: p.file(subject), "error": lambda: p.error(subject), "change": lambda: p.change(subject, path),
+           "refactor": lambda: p.refactor(subject, role, path), "ticket": lambda: p.ticket(subject),
+           "pr": lambda: p.pr(subject)}.get(kind)
+    if run is None:
+        return f"Unknown kind {kind!r}: use file, refactor, change, error, pr or ticket."
+    t0 = time.perf_counter()
+    text = run()
+    p.api.tel.log("pack", (time.perf_counter() - t0) * 1000, len(text), not text.startswith("devkb pack:"),
+                  args=asked({"kind": kind, "subject": subject, "path": path, "role": role}))
+    return text
 
 
 if __name__ == "__main__":
