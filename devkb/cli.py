@@ -36,6 +36,7 @@ COMMANDS = {
 
 def _run(module: str, argv: list[str]) -> int:
     sys.argv = [module, *argv]
+    from devkb.service import GraphNotBuilt
     try:
         runpy.run_module(module, run_name="__main__", alter_sys=True)
     except SystemExit as exc:
@@ -43,6 +44,9 @@ def _run(module: str, argv: list[str]) -> int:
             print(exc.code, file=sys.stderr)
             return 1
         return int(exc.code or 0)
+    except GraphNotBuilt as exc:                # one line that says what to do, never a traceback (#212)
+        print(f"devkb: {exc}", file=sys.stderr)
+        return 2
     return 0
 
 
