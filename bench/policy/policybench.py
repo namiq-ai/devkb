@@ -38,7 +38,8 @@ BASES = {"before": "origin/main", "after": "ce284c4", "after2": os.environ.get("
 # from the checkout the agent edits (#225). POLICY_RELEASE / POLICY_MAIN override the refs.
 ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest_release(),
            "main": lambda: os.environ.get("POLICY_MAIN") or "origin/main"}
-HIDDEN = ("bench/policy/accept",)                               # the hidden checks: never in an agent's checkout (#223)
+HIDDEN = ("bench/policy/accept",)
+GROUPS = json.loads((Path(__file__).resolve().parent / "groups.json").read_text())                               # the hidden checks: never in an agent's checkout (#223)
 # after2 (the revised #126 + #127): navigation through the branch's own devkb, which records every query
 TOOL = {"after2": str(B / "toolenv-126" / "bin" / "devkb"), "cli": str(B / "toolenv-126" / "bin" / "devkb"),
         "cli130": str(B / "toolenv-126" / "bin" / "devkb"), "climain": str(B / "toolenv-126" / "bin" / "devkb")}
@@ -164,7 +165,7 @@ def run_one(issue: str, arm: str, rep: int) -> str:
         (out / "end").write_text(json.dumps({"exit": "base-red", "seconds": 0, "error": str(e)[-400:]}))
         return f"refused {tag}: {e}"
     t = json.loads(sb.sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
-    for extra in {"131": ["133"], "114": ["115", "116"], "151": ["149"], "143": ["148"], "137": ["138"]}.get(issue, []):   # tickets done as one job (same code)
+    for extra in GROUPS.get(issue, []):            # tickets done as one job (same code): bench/policy/groups.json
         t2 = json.loads(sb.sh(["gh", "issue", "view", extra, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
         t = {"title": t["title"] + f" (with #{extra})", "body": t["body"] + f"\n\n# Same work: #{extra}, " + t2["title"] + "\n\n" + t2["body"]}
     if arm.startswith("after"):                      # "cli": no MCP server, devkb only through the shell
