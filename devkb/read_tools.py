@@ -256,11 +256,12 @@ class ReadTools:
         r = self.resolve(query, kind, under, limit, tests)
         if r.get("error"):
             return r
+        if (not r["matches"] or r.get("how") not in ("exact", "qualified", "suffix", "module")) and not kind \
+                and re.fullmatch(r"[A-Za-z_]\w*", query.strip()):
+            ku = self.key_uses(query.strip(), under)      # a prefix or fuzzy match does not hide the key's uses (#201)
+            if ku:
+                r["key_uses"] = ku
         if not r["matches"]:
-            if not kind and re.fullmatch(r"[A-Za-z_]\w*", query.strip()):
-                ku = self.key_uses(query.strip(), under)
-                if ku:
-                    r["key_uses"] = ku
             return r
         max_lines = max(1, min(int(lines), HARD_SOURCE))
         capped = int(lines) > HARD_SOURCE
@@ -631,6 +632,8 @@ def render_symbol(r: dict) -> str:
             out.append(f"   {src['too_long']} lines: too long to print; members: " + ", ".join(f"{x['k'].split('::', 1)[1].rsplit('.', 1)[-1]} L{x['ls']}" for x in src["members"][:20]))
     if r["n"] > shown:
         out.append(f"({r['n'] - shown} more matches; narrow with kind= or under=)")
+    if r.get("key_uses"):                       # the name is also a string key (#201): after the approximate matches
+        out += ["", f'"{r["query"]}" is also used as a string key:', _render_keys(r["key_uses"])]
     return fit_text("\n".join(out)) + _stale(r)
 
 
