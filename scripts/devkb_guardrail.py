@@ -170,11 +170,22 @@ def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
             if next(args, None) is None:
                 return None
             has_pattern = True
-        elif not after_options and word.startswith("-"):
-            # Only flags that take no argument are unambiguous here.
-            if not re.fullmatch(r"-[rRnHhEFiw]+", word):
+        elif not after_options and word.startswith("--"):
+            # long options that change neither the pattern nor the file operand (#137)
+            if word == "--line-number":
+                has_line_numbers = True
+            elif not re.fullmatch(r"--(?:recursive|ignore-case|word-regexp|extended-regexp|fixed-strings|basic-regexp|"
+                                  r"perl-regexp|with-filename|no-messages|(?:after|before)-context=\d+|context=\d+|"
+                                  r"max-count=\d+|colou?r(?:=\w+)?)", word):
                 return None
-            has_line_numbers |= "n" in word
+        elif not after_options and word.startswith("-"):
+            # flags without an argument, and the context and count options with theirs (-A3, -A 3, -nA3, -m 5; #137)
+            m = re.fullmatch(r"-([rRnHhEFiwIsPU]*)(?:([ABCm])(\d*))?", word)
+            if not m or word == "-":
+                return None
+            has_line_numbers |= "n" in m.group(1)
+            if m.group(2) and not m.group(3) and not (next(args, None) or "").isdecimal():
+                return None
         elif not has_pattern:
             has_pattern = True
         else:
@@ -1033,9 +1044,15 @@ def record_pending(ev: dict, key: str, repo: Path, tool: str, inp: dict, pattern
         return
     built, head = misses.graph_state(repo)
     single_file = None
+    cwd = Path(ev.get("cwd") or os.getcwd())
     if tool == "Bash":
-        cwd = Path(ev.get("cwd") or os.getcwd())
         single_file = single_bash_file(inp.get("command", ""), cwd, repo)
+    elif tool == "Grep" and inp.get("path"):              # the Grep tool on one file prints `line:text` too (#137)
+        try:
+            f = (cwd / str(inp["path"])).resolve()
+            single_file = f.relative_to(repo.resolve()).as_posix() if f.is_file() else None
+        except (OSError, ValueError):
+            single_file = None
     try:
         PENDING.mkdir(parents=True, exist_ok=True)
         (PENDING / key).write_text(json.dumps({
