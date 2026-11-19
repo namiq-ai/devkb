@@ -3,7 +3,7 @@ import json, sys, re
 from pathlib import Path
 from collections import Counter, defaultdict
 S = Path(__file__).resolve().parent
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "audit"))
+sys.path.insert(0, "/home/namiq/orchestra/ip/devkb-cs4/bench/audit")
 from toolmix import classify, size
 
 def analyse(run):
