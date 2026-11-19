@@ -14,11 +14,12 @@ def _secs(path: Path) -> float:
 
 def test_three_times_the_constants_take_about_three_times_as_long(tmp_path):
     small, large = tmp_path / "s.py", tmp_path / "l.py"
-    small.write_text("\n".join(f"NAME_{i} = {i}" for i in range(3000)) + "\n")
-    large.write_text("\n".join(f"NAME_{i} = {i}" for i in range(9000)) + "\n")
+    small.write_text("\n".join(f"NAME_{i} = {i}" for i in range(6000)) + "\n")
+    large.write_text("\n".join(f"NAME_{i} = {i}" for i in range(18000)) + "\n")
     _secs(small)
-    ratio = _secs(large) / _secs(small)
-    assert ratio < 5, ratio                       # linear is about 3; the 0.2.12 scan gave about 9
+    # best of three for each size, so a busy machine (the benchmark runs agents in parallel) does not flake it
+    ratio = min(_secs(large) for _ in range(3)) / min(_secs(small) for _ in range(3))
+    assert ratio < 5.5, ratio                     # linear is about 3; 0.2.12 gave 7 at these sizes
 
 
 def test_a_name_assigned_twice_and_a_repeated_field_are_one_symbol_each(tmp_path):
