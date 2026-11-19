@@ -20,13 +20,21 @@ A call between C and C++ is never linked here: it is handed to the boundary reso
 it only through `extern "C"` linkage and a unique name (`boundaries.py`).
 
 Never: a bare call to another class's method, a C library name linked across files, a link made because a method
-name is unique, or an edge for a name `#define`d as a macro.
+name is unique, or an edge to a name `#define`d as a macro.
+
+Calls through repository macros (SPEC-DKB-004 F2, #118): a call to a macro `#define`d in the repository is expanded,
+once per build, into the bare and qualified calls its body writes (nested repository macros followed to depth 4, the
+macro's own parameters and `##`-pasted names left out). Each is resolved by the rules above as if written at the
+invocation, from the invoking function's scope, and linked with source `cpp-macro`. A macro defined more than once
+(`#if` variants) gives the union of its bodies, and its edges are marked `variant`. A macro the repository does not
+define (a system header's) is never expanded.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
-from devkb.cpp_symbols import FileRecords, Symbolic, indirect_refs
+from devkb.cpp_symbols import Call, FileRecords, Symbolic, indirect_refs
 
 # The closed list of C library names that are never linked across files (ADR §3).
 C_LIBRARY = frozenset(
@@ -65,12 +73,35 @@ class Edge:
     source: str
     confidence: float
     evidence: str
+    variant: bool = False      # through a macro with several `#if` definitions: true under some configurations
 
 
 _SOURCES = {
     "cpp-same-class": 0.8, "cpp-same-class-base": 0.7, "cpp-same-file": 0.8, "cpp-qualified": 0.9,
     "cpp-typed-receiver": 0.7, "cpp-typed-receiver-base": 0.6, "cpp-unique-free": 0.6,
+    "cpp-macro": 0.5,
 }
+MACRO_DEPTH = 4
+_NOT_CALLED = frozenset("if while for switch return sizeof defined do else case typeof __typeof__ alignof _Alignof "
+                        "decltype static_assert _Static_assert __attribute__ __declspec".split())
+_BODY_CALL = re.compile(r"(?<![\w.>#])(?:((?:[A-Za-z_]\w*\s*::\s*)+))?([A-Za-z_]\w*)\s*\(")
+
+
+def _macro_calls(body: str) -> list[tuple[str, str]]:
+    """(qualifier, name) of each call a `#define` body writes: not member calls, not the macro's parameters, not names
+    pasted with `##`. A function-like macro's text starts with its parameter list (no space after the name)."""
+    params: set[str] = set()
+    pm = re.match(r"([\w\s,.]*)\)", body)
+    if pm and body[:1] and not body[:1].isspace():
+        params = {x.strip() for x in pm.group(1).split(",") if x.strip()}
+        body = body[pm.end():]
+    out = []
+    for m in _BODY_CALL.finditer(body):
+        name = m.group(2)
+        if name in params or name in _NOT_CALLED or "##" in body[max(0, m.start() - 3):m.start()] + body[m.end(2):m.end(2) + 3]:
+            continue
+        out.append((re.sub(r"\s+", "", m.group(1) or "").rstrip(":"), name))
+    return out
 
 
 class Repo:
@@ -78,6 +109,7 @@ class Repo:
 
     def __init__(self, units: list[Unit]) -> None:
         self.units = units
+        self.macro_bodies: dict[str, list[str]] = {}
         self.by_qn: dict[str, list[tuple[str, Symbolic]]] = {}
         self.short_names: set[str] = set()
         self.free: dict[str, list[tuple[str, Symbolic]]] = {}
@@ -96,6 +128,8 @@ class Repo:
             self.aliases |= getattr(u.rec.scanner, "aliases", set())
             self.namespaces |= u.rec.namespaces
             self.macros |= u.rec.define_names
+            for dname, body, _line in (u.rec.masked.defines if u.rec.masked is not None else ()):
+                self.macro_bodies.setdefault(dname, []).append(body)
             for qn, s in u.syms.items():
                 self.by_qn.setdefault(qn, []).append((u.path, s))
                 bits = qn.split(".")
@@ -115,6 +149,28 @@ class Repo:
                 for i in range(1, len(bits)):
                     self.class_suffix.setdefault(".".join(bits[i:]), []).append((u.path, c))
         self._unit = {u.path: u for u in units}
+
+    # macros --------------------------------------------------------------------
+    def expand(self, name: str) -> list[tuple[str, str, bool]]:
+        """(qualifier, name, variant) of the non-macro calls a call to repository macro `name` makes, nested macros
+        followed to MACRO_DEPTH levels; computed once per macro."""
+        cache = self.__dict__.setdefault("_expanded", {})
+        if name not in cache:
+            seen: dict[tuple[str, str], bool] = {}
+
+            def walk(m: str, depth: int, variant: bool) -> None:
+                bodies = self.macro_bodies.get(m, [])
+                variant = variant or len(bodies) > 1
+                for body in bodies:
+                    for q, n in _macro_calls(body):
+                        if not q and n in self.macros:
+                            if depth < MACRO_DEPTH and n != m:
+                                walk(n, depth + 1, variant)
+                            continue
+                        seen[(q, n)] = seen.get((q, n), True) and variant
+            walk(name, 1, False)
+            cache[name] = [(q, n, v) for (q, n), v in seen.items()]
+        return cache[name]
 
     # classes -------------------------------------------------------------------
     def class_by_type(self, t: str, from_ns: str | None = None) -> tuple[str, object] | None:
@@ -224,11 +280,11 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
         for s in u.syms.values():
             if s.kind == "function":
                 free_count[s.short] = free_count.get(s.short, 0) + 1
-        for call in u.rec.calls:
+        for call, via in _with_expansions(u.rec.calls, repo):
             caller_qn = u.qn_of_def[call.caller]
             if caller_qn is None:
                 continue
-            if call.name in repo.macros:
+            if via is None and call.name in repo.macros:
                 # A macro use: never an edge. But a name that is also a repository function (a `#define` stub in an
                 # `#else` branch, as Zephyr's net_if does) may be a real call under another configuration, so it is
                 # counted, never ignored: a pack must not say Complete beside it.
@@ -243,6 +299,10 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
             stop_unresolved = False
 
             def link(callee: str, source: str, detail: str) -> None:
+                if via is not None:                   # a call the macro's body writes, made at the invocation (#118)
+                    edges.append(Edge(ckey, callee, "cpp-macro", _SOURCES["cpp-macro"],
+                                      f"{u.path}:{call.line}: {caller_qn} calls {detail} through macro {via[0]}", via[1]))
+                    return
                 edges.append(Edge(ckey, callee, source, _SOURCES[source], f"{u.path}::{caller_qn} calls {detail}"))
 
             def hand_over() -> bool:
@@ -341,6 +401,15 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
             who = u.qn_of_def[owner] if owner >= 0 and u.qn_of_def[owner] else "<file>"
             unresolved.add((u.path, f"{who}@indirect:{line}", name))
     return edges, unresolved, cross
+
+
+def _with_expansions(calls, repo: Repo):
+    """Each call, and after a call to a repository macro the calls its expansion makes there: (call, (macro, variant))."""
+    for call in calls:
+        yield call, None
+        if call.name in repo.macros and call.name in repo.macro_bodies:
+            for q, n, variant in repo.expand(call.name):
+                yield Call(call.caller, n, "qualified" if q else "bare", q, None, None, call.line), (call.name, variant)
 
 
 def incomplete_reasons(units: list[Unit]) -> dict[tuple[str, str], set[str]]:

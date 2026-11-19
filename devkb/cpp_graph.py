@@ -146,10 +146,12 @@ def add_to_graph(g: DevKBGraph, repo_root: Path, error_sig_key: Callable[[str, s
             return None, False
         return f"{cands[0][0]}::{cands[0][1].qn}", len(cands) > 1 or len(cands[0][1].def_indexes) > 1
 
+    # calls to a repository macro are recorded too: the resolver expands them (SPEC-DKB-004 F2, #118)
+    macro_names = {n for _r, rec, _s, _q in pending for n, _b, _l in rec.masked.defines}
     units: list[cpp_resolve.Unit] = []
     bnd: dict[str, cpp_boundary.FileBoundary] = {}
     for rel, rec, syms, qn_of_def in pending:      # pass 2: calls, errors, indirect references
-        cpp_symbols.scan_bodies(rec, names, function_names)
+        cpp_symbols.scan_bodies(rec, names | macro_names, function_names)
         bnd[rel] = cpp_boundary.extract(rel, rec, syms, qn_of_def, find)
         rec.masked.code, rec.masked.literals = "", {}   # the text is not needed past this point; keep memory flat
         units.append(cpp_resolve.Unit(rel, rec, syms, qn_of_def))
@@ -251,7 +253,7 @@ def add_to_graph(g: DevKBGraph, repo_root: Path, error_sig_key: Callable[[str, s
             n_symbols += 1
     for e in edges:
         g.add_edge("CALLS", "Symbol", e.caller, "Symbol", e.callee, source=e.source, confidence=e.confidence,
-                   evidence_ref=e.evidence)
+                   evidence_ref=e.evidence, extra={"variant": True} if getattr(e, "variant", False) else None)
     foreign = {k: rs for k, rs in result.reasons.items() if k not in written}
     if foreign:                    # a Python function that calls into C and could not be linked: its own reason
         by_key = {n.natural_key: n for n in g.nodes("Symbol") if n.natural_key in foreign}
