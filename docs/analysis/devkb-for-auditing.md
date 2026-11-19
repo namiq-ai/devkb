@@ -130,7 +130,9 @@ cases from the oracle hid the product's gap in that class.
 The first audit with a control arm. Each of three reviewers ran four times on main 3f56ece:
 - **Reviewers:** the search hook (scripts, miss log, read tools); the graph and query tools (Python and C/C++
   resolution, packs, CLI); the triage daemon and the benchmark harness.
-- **Arms:** twice with no devkb (no graph, hook off), and twice with the 0.2.13 hook, its teach line on.
+- **Arms:** twice with no devkb (no graph, hook off), and twice with the 0.2.13 hook as shipped: graph built, the
+  hook on, and its teach line (D1, on by default since #267) on. The teach line appears only on an answer: the
+  reviewers saw it twice.
 - **Prompt:** the same for both arms, with no instruction to ask devkb first: the hook was the only path to the graph.
 - **Model and harness:** Sonnet, the policy benchmark's harness (fresh checkout per run, transcripts recounted with the
   #258 rules).
@@ -140,7 +142,7 @@ The first audit with a control arm. Each of three reviewers ran four times on ma
   by root cause into 34 tickets (#276–#309). One security finding, a bypass of the posted-text sanitiser, is held
   for a private report. Data, scripts and harness: `bench/results/2026-11-19-audit-0.2.13/`.
 
-| | No devkb (6 runs) | devkb 0.2.13 hook (6 runs) |
+| | No devkb (6 runs) | devkb 0.2.13: hook + teach line (6 runs) |
 |---|---|---|
 | Cost | $7.52 | $7.07 |
 | Model calls | 308 | 292 |
