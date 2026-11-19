@@ -1,7 +1,8 @@
 """#126 before/after: does the devkb-repo policy + guardrail change how an agent implements a devkb fix?
 
-  python policybench.py run ISSUE[,ISSUE...] [--reps 2] [--parallel 2]
-  python policybench.py score ISSUE[,ISSUE...]
+  python policybench.py run ISSUE[,ISSUE...] [--reps 3] [--parallel 2]
+  python policybench.py score ISSUE[,ISSUE...]     re-scores every run of each ISSUE with today's hidden check and
+                                                   writes results-ISSUE.jsonl (the input of release_table.py)
 
 before: origin/main as it is (no AGENTS.md/CLAUDE.md/.mcp.json, no graph), guardrail off. devkb is on PATH, as on
         this machine.
@@ -239,13 +240,18 @@ def score(issues):
     with open(B / "results-policy.jsonl", "w") as f:
         for r in rows:
             f.write(json.dumps(r) + "\n")
+    for issue in issues:                              # one file per ticket, every run scored by today's check (#223)
+        with open(B / f"results-{issue}.jsonl", "w") as f:
+            for r in rows:
+                if r["issue"] == issue:
+                    f.write(json.dumps(r) + "\n")
 
 
 if __name__ == "__main__":
     a = sys.argv[1:]
     issues = a[1].split(",")
     if a[0] == "run":
-        reps = int(a[a.index("--reps") + 1]) if "--reps" in a else 2
+        reps = int(a[a.index("--reps") + 1]) if "--reps" in a else 3     # 3 by default: 2 cannot tell a change from noise (#222)
         par = int(a[a.index("--parallel") + 1]) if "--parallel" in a else 2
         arms = os.environ.get("POLICY_ARMS", "before,after").split(",")
         first = int(os.environ.get("POLICY_FIRST_REP", "1"))
