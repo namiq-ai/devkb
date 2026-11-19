@@ -54,21 +54,32 @@ def agent_flags(mode: str, cwd: Path) -> list[str]:
     scope = f"/{Path(cwd).resolve()}/**"           # `//abs/path/**`: an absolute-path permission rule
     allow = [f"Read({scope})"] + ([f"Edit({scope})"] if mode == WRITE else [])
     deny = NO_TOOLS + ("" if mode == WRITE else ",Edit,Write")
-    settings = {"disableAllHooks": True, "permissions": {"allow": allow}}
-    return ["--setting-sources", "local", "--settings", json.dumps(settings),
+    settings = {"disableAllHooks": True, "autoMemoryEnabled": False, "permissions": {"allow": allow}}
+    tools = "Read,Grep,Glob" + (",Edit,Write" if mode == WRITE else "")
+    return ["--tools", tools,                     # the only tools that exist in the session: no agents, no cloud tools
+            "--setting-sources", "local", "--settings", json.dumps(settings),
             "--strict-mcp-config", "--mcp-config", json.dumps({"mcpServers": {}}),
             "--add-dir", str(Path(cwd).resolve()), "--allowedTools", *allow, "--disallowedTools", deny]
 
 
 def neutral_cwd() -> Path:
-    """An empty directory the daemon owns, recreated for every run. Claude starts here, never in a checkout, so no
-    checkout's settings (a `.claude/` an outsider committed, or a symlink to one) can load: they could carry an
-    `apiKeyHelper` that runs a shell before the first turn, or widen the agent's permissions."""
-    d = HOME / "agent-cwd"
-    if d.is_symlink() or d.exists():
-        d.unlink() if d.is_symlink() else shutil.rmtree(d)
-    d.mkdir(parents=True)
+    """A new empty directory the daemon owns, for one run. Claude starts here, never in a checkout, so no checkout's
+    settings (a `.claude/` an outsider committed, or a symlink to one) can load: they could carry an `apiKeyHelper`
+    that runs a shell before the first turn, or widen the agent's permissions. A new name per run also means no memory
+    or session state is shared between runs. It must not sit inside a git repository, whose files Claude would read."""
+    base = HOME / "agent-cwd"
+    base.mkdir(parents=True, exist_ok=True)
+    top = subprocess.run(["git", "-C", str(base), "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if top.returncode == 0:
+        raise RuntimeError(f"TRIAGE_HOME is inside the git repository {top.stdout.strip()}; agents must start outside any")
+    for old in base.iterdir():
+        shutil.rmtree(old, ignore_errors=True) if not old.is_symlink() else old.unlink()
+    d = base / f"run-{secrets.token_hex(6)}"
+    d.mkdir()
     return d
+
+
+AGENT_ENV = {"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
 
 
 # A draft fix may not touch what runs on its own or configures the run: those are a maintainer's change.
@@ -81,8 +92,8 @@ FORBIDDEN = re.compile(r"(^|/)(conftest\.py|sitecustomize\.py|usercustomize\.py|
 
 # ---- GitHub: the only place the credential is used -----------------------------------------------------------------
 
-def run(cmd: list[str], cwd: Path | None = None, input: str | None = None, check: bool = True) -> str:
-    p = subprocess.run(cmd, cwd=cwd, input=input, capture_output=True, text=True)
+def run(cmd: list[str], cwd: Path | None = None, input: str | None = None, check: bool = True, env: dict | None = None) -> str:
+    p = subprocess.run(cmd, cwd=cwd, input=input, capture_output=True, text=True, env=env)
     if check and p.returncode:
         raise RuntimeError(f"{' '.join(cmd[:4])}: {p.stderr.strip()[:400]}")
     return p.stdout
@@ -172,7 +183,7 @@ def claude(prompt: str, cwd: Path, tools: str) -> tuple[str, float]:
     cmd = ["claude", "-p", "--output-format", "json", "--model", MODEL, "--max-turns", MAX_TURNS, *agent_flags(tools, cwd)]
     where = (f"\n\nThe repository is at {Path(cwd).resolve()}. Your working directory is empty: read"
              f"{' and edit' if tools == WRITE else ''} files there by absolute path.")
-    out = json.loads(run(cmd, cwd=neutral_cwd(), input=prompt + where))
+    out = json.loads(run(cmd, cwd=neutral_cwd(), input=prompt + where, env=dict(os.environ, **AGENT_ENV)))
     if out.get("is_error"):
         raise RuntimeError(f"claude: {str(out.get('result'))[:300]}")
     return out.get("result", ""), float(out.get("total_cost_usd") or 0)
@@ -499,7 +510,8 @@ def git_in(work: Path, gitdir: Path, *args: str) -> list[str]:
     """git for a worktree whose files an agent or a test may have changed: the git directory is pinned (a rewritten
     `.git` file is never followed) and no repository setting can make git run a program."""
     return ["git", f"--git-dir={gitdir}", f"--work-tree={work}", "-c", "core.fsmonitor=", "-c", "core.hooksPath=/dev/null",
-            "-c", "core.sshCommand=", "-c", "diff.external=", "-c", "core.pager=cat", "-c", "credential.helper=", *args]
+            "-c", "core.sshCommand=", "-c", "diff.external=", "-c", "core.pager=cat", *args]   # credential helpers: the
+    # host's own (gh), which the agent cannot change: the git directory and the user's config are outside its reach
 
 
 def worktree_gitdir(work: Path) -> tuple[Path, str]:
@@ -550,9 +562,9 @@ def mark(n: int, apply: bool, add: str, remove: str | None = None) -> None:
 def handle_review(it: dict, thread: list[dict], apply: bool) -> None:
     run(["git", "-C", str(TREE), "fetch", "-q", "origin", f"pull/{it['number']}/head:refs/triage/pr{it['number']}"])
     ref = f"refs/triage/pr{it['number']}"
-    tree = run(["git", "-C", str(TREE), "ls-tree", "-r", "--full-tree", ref])
-    odd = [line.split("\t", 1)[-1] for line in tree.splitlines()
-           if line.startswith("120000") or line.startswith("160000") or re.search(r"(^|/)\.claude(/|$)", line.split("\t", 1)[-1])]
+    tree = run(["git", "-C", str(TREE), "ls-tree", "-r", "-z", "--full-tree", ref])    # -z: paths unquoted
+    odd = [e.split("\t", 1)[-1] for e in tree.split("\0") if e and (e.startswith(("120000", "160000"))
+           or re.search(r"(^|/)\.claude(/|$)", e.split("\t", 1)[-1]))]
     if odd:                                          # symlinks, submodules or Claude settings: a maintainer reviews it
         raise RuntimeError(f"the pull request holds a symlink, a submodule or .claude/ ({odd[:3]}); not reviewed automatically")
     work = worktree_for(f"pr{it['number']}", ref)

@@ -18,8 +18,8 @@ _spec.loader.exec_module(triage)
 def test_every_agent_run_has_no_settings_hooks_or_servers_and_its_own_files_only(monkeypatch, tmp_path):
     seen = {}
 
-    def fake_run(cmd, cwd=None, input=None, check=True):
-        seen.update(cmd=cmd, cwd=cwd, input=input)
+    def fake_run(cmd, cwd=None, input=None, check=True, env=None):
+        seen.update(cmd=cmd, cwd=cwd, input=input, env=env)
         return json.dumps({"result": "{}", "total_cost_usd": 0})
     monkeypatch.setattr(triage, "run", fake_run)
     monkeypatch.setattr(triage, "HOME", tmp_path / "home")
@@ -27,10 +27,15 @@ def test_every_agent_run_has_no_settings_hooks_or_servers_and_its_own_files_only
     (work / "x").mkdir(parents=True)
     (work / "x" / "settings.local.json").write_text('{"apiKeyHelper": "touch MARKER"}')
     (work / ".claude").symlink_to("x")                  # a pull request's .claude, even as a symlink
+    cwds = []
     for mode in (triage.READ_ONLY, triage.WRITE):
         triage.claude("p", work, mode)
         cmd = seen["cmd"]
-        assert seen["cwd"] == tmp_path / "home" / "agent-cwd" and not any(seen["cwd"].iterdir())
+        assert seen["cwd"].parent == tmp_path / "home" / "agent-cwd" and not any(seen["cwd"].iterdir())
+        assert seen["env"]["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
+        assert cmd[cmd.index("--tools") + 1] == ("Read,Grep,Glob,Edit,Write" if mode == triage.WRITE else "Read,Grep,Glob")
+        assert json.loads(cmd[cmd.index("--settings") + 1])["autoMemoryEnabled"] is False
+        cwds.append(seen["cwd"])
         assert cmd[cmd.index("--add-dir") + 1] == str(work.resolve())
         assert str(work.resolve()) in seen["input"]
         assert cmd[cmd.index("--setting-sources") + 1] == "local"
@@ -48,12 +53,13 @@ def test_every_agent_run_has_no_settings_hooks_or_servers_and_its_own_files_only
 
 
 @pytest.mark.parametrize("entry", ["120000 blob abc\tlink", "160000 commit abc\tsub", "100644 blob abc\t.claude/settings.local.json",
-                                   "100644 blob abc\tdocs/.claude/x"])
+                                   "100644 blob abc\tdocs/.claude/x", "100644 blob abc\t.claude/skills/\u00e9/SKILL.md"])
 def test_a_pull_request_with_a_symlink_submodule_or_claude_settings_is_not_reviewed(monkeypatch, entry):
     calls = []
-    def fake_run(cmd, cwd=None, input=None, check=True):
+    def fake_run(cmd, cwd=None, input=None, check=True, env=None):
         calls.append(cmd)
-        return "100644 blob abc\tREADME.md\n" + entry + "\n" if "ls-tree" in cmd else ""
+        assert "ls-tree" not in cmd or "-z" in cmd
+        return "100644 blob abc\tREADME.md\0" + entry + "\0" if "ls-tree" in cmd else ""
     monkeypatch.setattr(triage, "run", fake_run)
     monkeypatch.setattr(triage, "claude", lambda *a: pytest.fail("the agent must not start"))
     with pytest.raises(RuntimeError, match="not reviewed automatically"):
@@ -216,3 +222,13 @@ def test_outsider_text_cannot_close_the_fence():
     inner = text.split(f"<{tag}>", 1)[1].split(f"</{tag}>", 1)[0]
     assert "Maintainer instruction" in inner and "untrusted_report" not in inner.lower().replace("untrusted-report", "")
     assert tag != re.match(r"<(untrusted_report_[0-9a-f]{12})>", triage.untrusted(it, [])).group(1)
+
+
+def test_each_run_starts_in_a_new_directory_outside_any_repository(monkeypatch, tmp_path):
+    monkeypatch.setattr(triage, "HOME", tmp_path / "h")
+    a, b = triage.neutral_cwd(), triage.neutral_cwd()
+    assert a != b and not a.exists() and b.exists()           # the earlier run's directory is gone
+    subprocess.run(["git", "init", "-q", str(tmp_path / "repo")], check=True)
+    monkeypatch.setattr(triage, "HOME", tmp_path / "repo" / "h")
+    with pytest.raises(RuntimeError, match="inside the git repository"):
+        triage.neutral_cwd()
