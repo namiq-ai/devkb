@@ -12,7 +12,7 @@ source: owner request 2026-11-18 ("file 1 ticket about the wrong intent translat
 supersedes: []
 superseded_by: null
 extends: "SPEC-DKB-005 (#162, PR #164: when a search may be replaced), SPEC-DKB-006 C1 (#166: the definition answer)"
-tickets: ["#211"]
+tickets: ["#211", "#214", "#215", "#216", "#217", "#218"]
 related: ["#212 (traceback, out of scope)", "#180", "#181", "#182", "#183", "#184", "#185", "#186"]
 ---
 
@@ -190,14 +190,14 @@ agents do switch to direct queries when shown the command at the right moment.
 
 ## 4. Stories
 
-| Story | Scope | Depends on |
-|---|---|---|
-| S1. Classify and log, no behaviour change | `classify()`, `intent` and `question` in the log, stats counting every action and intent; tests for every row of §3.2 | — |
-| S2. Names: case and keywords | R3: case check after resolution; keyword-only patterns give no name; `bash_pattern` skips option values | S1 |
-| S3. Answers by intent | §3.3 table: `locate`, `list-symbols`, `call-sites`, `in-file`, `call-sites-filtered`; the pack leaves the hook | S1, S2 |
-| S4. Compact shape | R5, R6, §3.4: grep-like lines, no fixed text alongside, size budget | S3 |
-| S5. Direct path, first arms | D1 and D2 behind a setting; benchmark arms | S3 |
-| later | D3, D4, from S5's results; a learned classifier only if §6's mismatch rate stops falling | S5 |
+| Story | Ticket | Scope | Depends on |
+|---|---|---|---|
+| S1. Classify and log, no behaviour change | #214 | `classify()`, `intent` and `question` in the log, stats counting every action and intent; tests for every row of §3.2 | — |
+| S2. Names: case and keywords | #215 | R3: case check after resolution; keyword-only patterns give no name; `bash_pattern` skips option values | S1 |
+| S3. Answers by intent | #216 (absorbs #171) | §3.3 table: `locate`, `list-symbols`, `call-sites`, `in-file`, `call-sites-filtered`; the pack leaves the hook | S1, S2 |
+| S4. Compact shape | #217 | R5, R6, §3.4: grep-like lines, no fixed text alongside, size budget | S3 |
+| S5. Direct path, first arms | #218 | D1 and D2 behind a setting; benchmark arms | S3 |
+| later | to file | D3, D4, from S5's results; a learned classifier only if §6's mismatch rate stops falling | S5 |
 
 #212 (the traceback on a repository with no graph) is separate and not blocked by this specification.
 
