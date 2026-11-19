@@ -14,6 +14,7 @@ import concurrent.futures as cf
 import json
 import os
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -129,11 +130,33 @@ def run(issue: str, reps: int, parallel: int):
             print(f.result(), flush=True)
 
 
+_DEVKB_CMD = re.compile(r"(\S*/)?(devkb|python\S*\s+(?:-P\s+)?-m\s+devkb[\w.]*)\s+(symbol|uses|outline|pack|docs|misses|tests|config|flows|review)\b")
+
+
+def devkb_commands(command: str) -> tuple[int, int]:
+    """(navigation queries, self-tests) among the devkb commands in one shell command (#258). A self-test runs the
+    checkout's own devkb (its .venv or `python -m devkb`) or queries a fixture outside the checkout (`--project /tmp/…`):
+    the repository the agents edit is devkb itself, so testing a change is not using devkb to navigate."""
+    nav = own = 0
+    c = re.sub(r"<<-?\s*'?(\w+)'?.*?\n\1\b", "", command or "", flags=re.S)   # heredoc bodies are text
+    c = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", c)                     # quoted strings are text
+    for seg in re.split(r"&&|\|\||;|\||\n", c):
+        seg = re.sub(r"^\s*(?:cd\s+\S+\s*|[A-Z_]+=\S+\s+)*", "", seg)
+        if not _DEVKB_CMD.match(seg):
+            continue
+        p = re.search(r"--project[ =](\S+)", seg)
+        if ".venv" in seg.split()[0] or "-m devkb" in seg or (p and p.group(1).startswith(("/tmp", "/var/folders"))):
+            own += 1
+        else:
+            nav += 1
+    return nav, own
+
+
 def transcript(path: Path) -> dict:
     sys.path.insert(0, str(REPO / "bench" / "audit"))
     from toolmix import classify, devkb_queries, size  # noqa: PLC0415
     kinds, calls, chars, msgs = {}, Counter(), Counter(), set()
-    res, session, dq = {}, None, 0
+    res, session, dq, nav, own, outs = {}, None, 0, 0, 0, {}
     for line in open(path):
         try:
             e = json.loads(line)
@@ -148,6 +171,7 @@ def transcript(path: Path) -> dict:
             continue
         if e.get("type") == "assistant" and m.get("id"):
             msgs.add(m["id"])
+            outs[m["id"]] = max(outs.get(m["id"], 0), (m.get("usage") or {}).get("output_tokens", 0))
         for x in m.get("content") or []:
             if not isinstance(x, dict):
                 continue
@@ -156,16 +180,24 @@ def transcript(path: Path) -> dict:
                 kinds[x["id"]] = k
                 calls[k] += 1
                 dq += 1 if x["name"].startswith("mcp__devkb") else devkb_queries(x.get("input", {}).get("command", ""))
+                if x["name"].startswith("mcp__devkb"):
+                    nav += 1
+                elif x["name"] == "Bash":
+                    n, o = devkb_commands(x.get("input", {}).get("command", ""))
+                    nav, own = nav + n, own + o
             elif x.get("type") == "tool_result" and x.get("tool_use_id") in kinds:
                 chars[kinds[x["tool_use_id"]]] += size(x.get("content", ""))
     u = res.get("usage") or {}
     ctx = sum(u.get(k, 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
     for mu in (res.get("modelUsage") or {}).values():    # cumulative per model, when present
         ctx = max(ctx, sum(mu.get(k, 0) for k in ("inputTokens", "cacheReadInputTokens", "cacheCreationInputTokens")))
+    out = sum(mu.get("outputTokens", 0) for mu in (res.get("modelUsage") or {}).values()) or sum(outs.values())
     fired, actions = guardrail_actions(session)
-    return {"session": session, "turns": res.get("num_turns", 0), "cost": res.get("total_cost_usd", 0),
-            "model_calls": len(msgs), "ctx_tokens": ctx, "out_tokens": u.get("output_tokens", 0),
-            "devkb_queries": dq, "calls": dict(calls), "chars": dict(chars), "guardrail_fired": fired,
+    # turns: the result's num_turns counts only the last turn of a session (#258); each assistant message is one
+    # model call. out_tokens: modelUsage holds the session's totals; per-message usage in the stream is partial.
+    return {"session": session, "turns": len(msgs), "cost": res.get("total_cost_usd", 0),
+            "model_calls": len(msgs), "ctx_tokens": ctx, "out_tokens": out,
+            "devkb_queries": dq, "devkb_nav": nav, "devkb_selftest": own, "calls": dict(calls), "chars": dict(chars), "guardrail_fired": fired,
             "guardrail_actions": actions}
 
 

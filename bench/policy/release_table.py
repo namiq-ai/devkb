@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 
 B = Path(__file__).resolve().parent
+sys.path.insert(0, str(B))
+import storybench as sb  # noqa: E402  (the one rule for devkb commands, #258)
 NONE = ("none", "nonekeep")
 ORDER = ("nonekeep", "none", "release", "climain", "cli130", "main")
 
@@ -45,18 +47,8 @@ def counts(run: str) -> tuple[int, int, int]:
                 if x["name"].startswith("mcp__devkb"):
                     nav += 1
                     continue
-                c = x.get("input", {}).get("command", "") or ""
-                c = re.sub(r"<<-?\s*'?(\w+)'?.*?\n\1\b", "", c, flags=re.S)     # heredoc bodies are text
-                c = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", c)              # quoted strings are text
-                for seg in re.split(r"&&|\|\||;|\||\n", c):
-                    seg = re.sub(r"^\s*(?:cd\s+\S+\s*|[A-Z_]+=\S+\s+)*", "", seg)
-                    mm = re.match(r"(\S*/)?(devkb|python\S*\s+(?:-P\s+)?-m\s+devkb[\w.]*)\s+(symbol|uses|outline|pack|docs|misses)\b", seg)
-                    if not mm:
-                        continue
-                    if ".venv" in seg.split()[0] or "-m devkb" in seg:
-                        own += 1
-                    else:
-                        nav += 1
+                n, o = sb.devkb_commands(x.get("input", {}).get("command", "") or "")
+                nav, own = nav + n, own + o
             elif x.get("type") == "tool_result":
                 c = x.get("content")
                 c = c if isinstance(c, str) else json.dumps(c)
@@ -84,17 +76,18 @@ def guard_rows(session: str) -> list[dict]:
 
 
 def per_run(r: dict) -> dict:
-    nav, _, sub = counts(r["run"])
+    nav, own, sub = counts(r["run"])
     a = r.get("acceptance") or {}
     g = guard_rows(r.get("session", ""))
-    return {"turns": r["turns"], "grep": r["calls"].get("search", 0), "nav": nav, "sub": sub, "ctx": r["ctx_tokens"],
+    return {"turns": r["turns"], "grep": r["calls"].get("search", 0), "nav": nav, "own": own, "sub": sub, "ctx": r["ctx_tokens"],
+            "out": r.get("out_tokens", 0),
             "cost": r["cost"], "wall": r["seconds"] / 60, "ok": bool(a.get("pass")), "suite": bool(r["suite_pass"]),
             "answers": len(g), "answer_chars": sum(x.get("answer_chars") or x.get("chars") or 0 for x in g)}
 
 
 def summary(xs: list[dict]) -> dict:
     out = {"n": len(xs), "ok": sum(x["ok"] for x in xs), "suite": sum(x["suite"] for x in xs)}
-    for k in ("turns", "grep", "nav", "sub", "ctx", "cost", "wall", "answers", "answer_chars"):
+    for k in ("turns", "grep", "nav", "own", "sub", "ctx", "out", "cost", "wall", "answers", "answer_chars"):
         vals = [x[k] for x in xs]
         out[k] = st.mean(vals)
         out[k + "_lo"], out[k + "_hi"] = min(vals), max(vals)
@@ -132,8 +125,8 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
     problems = [p for t, rows in pairs if (p := check_hashes(t, rows))]
     if problems and not allow_mixed:
         raise SystemExit("refused, re-score first:\n  " + "\n  ".join(problems))
-    lines = ["| Ticket | Arm | Runs | Wall min | Context k | Cost $ | Grep | devkb nav | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
-             "|" + "---|" * 13]
+    lines = ["| Ticket | Arm | Runs | Wall min | Turns | Context k | Output k | Cost $ | Grep | devkb nav | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
+             "|" + "---|" * 16]
     per_arm: dict[str, list[dict]] = {}
     diffs: dict[str, dict[str, list[float]]] = {}
     for t, rows in pairs:
@@ -151,8 +144,8 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
                 diffs.setdefault(a, {"cost": [], "ctx": []})
                 diffs[a]["cost"].append(m["cost"] - base["cost"])
                 diffs[a]["ctx"].append(m["ctx"] - base["ctx"])
-            lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {m['n']} | {fmt_range(m, 'wall')} | "
-                         f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | "
+            lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {m['n']} | {fmt_range(m, 'wall')} | {m['turns']:.1f} | "
+                         f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {m['out'] / 1e3:.1f} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | {m['own']:.1f} | "
                          f"{m['sub']:.1f} | {m['answers']:.1f} ({m['answer_chars']:.0f}) | {m['ok']}/{m['n']} | {m['suite']}/{m['n']} | {vs} |")
     lines += ["", "| Release, arm | Runs | Cost per run | Context per run | Cost difference vs no devkb (90% interval) | Context difference (90% interval) |",
               "|---|---|---|---|---|---|"]
