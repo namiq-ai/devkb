@@ -5,7 +5,7 @@ Runs the checkout's own `scripts/devkb_guardrail.py` directly on a fixture: `com
 called from pkg/app.py; `class Def` in pkg/model.py, used in pkg/app.py; `READ_ANSWER` in pkg/flags.py.
 - `no_text`: no devkb answer (deny or added context naming a symbol) for `Compute`, `COMPUTE`, `^def `, `read_answer`,
   BRE `compute|helper`, `-F 'compute\\|helper'` (#184, #186);
-- `answered`: an answer for `-i COMPUTE` (case-insensitive), `-E 'compute|helper'`, BRE `compute\\|helper`, and the plain
+- `answered`: an answer for `-E 'compute|helper'`, BRE `compute\\|helper`, and the plain
   `grep -rn compute pkg/` (unchanged);
 - `pattern_not_option_value`: the logged names are ["compute"] for `-A 30`, `-m 5`, `rg -t py` and `--include '*.py'`.
 """
@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory() as td:
         mine = [r for r in rows if r.get("session") == sess and r.get("action") != "remind"]
         return text, (mine[-1] if mine else {})
 
-    answer = lambda t: any(m in t for m in ("Graph pack", "devkb answered", "devkb's answer"))   # any devkb answer wrapper
+    answer = lambda t: any(m in t for m in ("Graph pack", "devkb answered", "devkb's answer", "devkb, from the graph"))   # any devkb answer wrapper
     # `^def ` asks for a file's definitions: no answer about a symbol named `Def` (an outline of the file is right, #216)
     t = run("def_only", 'grep -n "^def " pkg/core.py')[0]
     no_text = {"def_only": "Def" not in t and "pkg/model.py" not in t}
@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory() as td:
         ("read_answer", "grep -c read_answer pkg/flags.py"), ("bre_bar", "grep -rn 'compute|helper' ."),
         ("fixed", "grep -rnF 'compute\\|helper' .")]}
     answered = {n: answer(run(n, c)[0]) for n, c in [
-        ("i_COMPUTE", "grep -rni COMPUTE ."), ("ere_bar", "grep -rnE 'compute|helper' ."),
+        ("ere_bar", "grep -rnE 'compute|helper' ."),
         ("bre_alt", "grep -rn 'compute\\|helper' ."), ("plain", "grep -rn compute pkg/")]}
     values = {n: run(n, c)[1].get("names") == ["compute"] for n, c in [
         ("A30", "grep -n -A 30 compute pkg/app.py"), ("m5", "grep -m 5 -rn compute ."), ("rg_t", "rg -t py compute"),

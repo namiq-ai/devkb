@@ -55,7 +55,7 @@ def test_guardrail_logs_one_line_per_action_and_stats_counts_them(repo, tmp_path
 
     go("extract", 1)                                                   # substitute
     go("extract", 2)                                                   # the identical search again: repeat
-    go("extract", 3, cmd="grep -rn 'extract' . && echo done")          # compound: alongside
+    go("extract", 3, cmd="grep -n '^def ' pkg/alpha.py && echo done")    # a file's definitions: its outline, alongside
     go("lone_method", 4)                                               # incomplete: pass-through
     f = tmp_path / ".claude" / "hooks" / "devkb-guardrail.log"
     rows = [json.loads(x) for x in f.read_text().splitlines()]
