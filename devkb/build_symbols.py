@@ -513,6 +513,23 @@ def _module_is(dotted: str, rel_path: str) -> bool:
     return any(rel_path == g or rel_path.endswith("/" + g) for g in _module_paths(dotted))
 
 
+def _reexported(module: str, name: str, sym_file: str, ctx: dict, sym_short: str | None = None, depth: int = 0) -> bool:
+    """`from module import name` (or `module.name`) reaches the symbol `sym_short` of `sym_file` through a package that
+    re-exports it (`from .records import run` in `pkg/__init__.py`), a bounded number of hops (#192)."""
+    sym_short = sym_short or name
+    if depth > 5:
+        return False
+    for path in _module_paths(module):
+        via = (ctx.get("reexports") or {}).get(path, {}).get(name)
+        if not via:
+            continue
+        if _module_is(via[0], sym_file) and via[1] == sym_short:
+            return True
+        if _reexported(via[0], via[1], sym_file, ctx, sym_short, depth + 1):
+            return True
+    return False
+
+
 def _could_reach(sym: dict, sym_file: str, rec: tuple[str, str, str, str | None], ctx: dict) -> bool:
     """Whether the unattributed call `rec` = (file, caller, called name, receiver) could be a call to the symbol `sym` of
     `sym_file`: an unqualified call in a module that defines or imports it, `mod.name()` where `mod` is its module, or a
@@ -528,7 +545,7 @@ def _could_reach(sym: dict, sym_file: str, rec: tuple[str, str, str, str | None]
             return False
         if called in bare:
             module, original = bare[called]
-            return original == short and _module_is(module, sym_file)
+            return original == short and (_module_is(module, sym_file) or _reexported(module, short, sym_file, ctx))
         if called != short:
             return False
         if rf == sym_file:
@@ -540,7 +557,7 @@ def _could_reach(sym: dict, sym_file: str, rec: tuple[str, str, str, str | None]
         return is_method
     if receiver in receivers:
         if not is_method:
-            return any(_module_is(m, sym_file) for m in receivers[receiver])
+            return any(_module_is(m, sym_file) or _reexported(m, short, sym_file, ctx) for m in receivers[receiver])
         return receiver in bare and _module_is(bare[receiver][0], sym_file) \
             and sym["qualified_name"].startswith(bare[receiver][1] + ".")
     if is_method:
@@ -1600,7 +1617,7 @@ def extract(repo_root: Path) -> DevKBGraph:
                     bucket -= gone
                     unresolved -= gone
 
-    ctx = {"targets": per_file_import_targets, "stars": star_modules}
+    ctx = {"targets": per_file_import_targets, "stars": star_modules, "reexports": reexports}
     by_target: dict[str, list[tuple]] = {}
     for rec in unresolved:
         by_target.setdefault(rec[2], []).append(rec)
