@@ -1,0 +1,1193 @@
+[
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "grep -n \"def extract\" -A30 devkb/build_symbols.py | head -60",
+"chars": 412
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_list_python_files"
+],
+"segment": "grep -n \"def _list_python_files\" -A25 devkb/build_symbols.py | head -45",
+"chars": 1337
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"ReadTools._enclosing"
+],
+"segment": "grep -n \"def _enclosing\" -A25 devkb/read_tools.py",
+"chars": 934
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -n \"overload_lines\" -r devkb | head",
+"chars": 917
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"ReadTools._hit_rank"
+],
+"segment": "grep -n \"def _hit_rank\" -B2 -A32 devkb/read_tools.py",
+"chars": 1053
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -rn \"overload_lines\" devkb/*.py | grep -v \"cpp_symbols\\|cpp_graph\"",
+"chars": 917
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -n \"overload_lines\" devkb/*.py | head -20",
+"chars": 917
+},
+{
+"intent": "locate",
+"answer": "pack",
+"verdict": "partial (Defined-at line only)",
+"names": [
+"NOT_CODE",
+"REGEXY"
+],
+"segment": "grep -n \"^NOT_CODE\\|^REGEXY\" devkb/read_tools.py",
+"chars": 1807
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"READ_TOOLS",
+"ReadTools"
+],
+"segment": "grep -ln \"read_tools\\|ReadTools\" tests/*.py | head -3",
+"chars": 2228
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"ReadTools"
+],
+"segment": "grep -n \"ReadTools(\" tests/test_devkb_read_tools.py devkb/process_api.py | head -3",
+"chars": 1342
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "grep -n \"^def extract_file\" -A12 devkb/cpp_symbols.py | head -30",
+"chars": 1469
+},
+{
+"intent": "list-file-symbols",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Def"
+],
+"segment": "grep -n \"^def \\|^    def \" tests/cpp_support.py | head -20",
+"chars": 971
+},
+{
+"intent": "locate",
+"answer": "pack",
+"verdict": "partial (Defined-at line only)",
+"names": [
+"ReadTools",
+"CPP_EXT"
+],
+"segment": "grep -n \"^class ReadTools\\|^CPP_EXT\" devkb/read_tools.py",
+"chars": 2185
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Def"
+],
+"segment": "grep -n \"class Def\\b\" -A22 devkb/cpp_symbols.py | grep -n \"line\"",
+"chars": 971
+},
+{
+"intent": "locate",
+"answer": "pack",
+"verdict": "partial (Defined-at line only)",
+"names": [
+"REGEXY",
+"NOT_CODE"
+],
+"segment": "grep -n \"^REGEXY\\|^NOT_CODE\" devkb/read_tools.py",
+"chars": 1807
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -n \"overload_lines\" devkb/*.py | grep -v \"cpp_\"",
+"chars": 917
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"ReadTools._enclosing"
+],
+"segment": "grep -n \"_enclosing\" devkb/*.py",
+"chars": 934
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "grep -n \"def uses\" -A6 devkb/process_api.py",
+"chars": 430
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"Symbolic.overload_lines",
+"Symbolic.def_indexes"
+],
+"segment": "grep -n \"overload_lines\\|def_indexes\" devkb/*.py | head -30",
+"chars": 1723
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -n \"overload_lines\" -r devkb tests | grep -v \"cpp_symbols\\|cpp_graph\"",
+"chars": 917
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"is_cxx_path"
+],
+"segment": "grep -n \"is_cxx_path\" devkb/read_tools.py | head -3",
+"chars": 1339
+},
+{
+"intent": "locate",
+"answer": "pack",
+"verdict": "partial (Defined-at line only)",
+"names": [
+"is_cxx_path"
+],
+"segment": "grep -rn \"def is_cxx_path\" devkb",
+"chars": 1339
+},
+{
+"intent": "literal-text",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -n \"overload_lines\" devkb/service.py devkb/ontology.md | head",
+"chars": 917
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"range_state"
+],
+"segment": "grep -n \"def range_state\" -A14 devkb/read_tools.py",
+"chars": 1053
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"ReadTools._hit_rank"
+],
+"segment": "grep -n \"_hit_rank\" devkb/read_tools.py",
+"chars": 1053
+},
+{
+"intent": "locate",
+"answer": "pack",
+"verdict": "partial (Defined-at line only)",
+"names": [
+"Symbolic.overload_lines",
+"_span"
+],
+"segment": "grep -n \"overload_lines\\|def _span\" devkb/*.py | head -30",
+"chars": 1769
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"ReadTools._reply"
+],
+"segment": "grep -n \"def _reply\" -A40 devkb/read_tools.py",
+"chars": 1060
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"is_cxx_path"
+],
+"segment": "grep -n \"def is_cxx_path\" -B2 -A6 devkb/*.py | head -20",
+"chars": 1339
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"finalize",
+"Symbolic"
+],
+"segment": "grep -n \"finalize\\|Symbolic\" devkb/*.py | grep -v \"^devkb/cpp_symbols.py\"",
+"chars": 2056
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"range_state"
+],
+"segment": "grep -n \"range_state\" devkb/read_tools.py | head -3",
+"chars": 1053
+},
+{
+"intent": "list-file-symbols",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Def"
+],
+"segment": "grep -n \"    def \" devkb/packs.py | head -20",
+"chars": 971
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -n \"overload_lines\" -r devkb | grep -v \"cpp_symbols\\|cpp_graph.py:2\"",
+"chars": 917
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"CompactIndex.sym_by_file"
+],
+"segment": "grep -n \"sym_by_file\" devkb/*.py | head -5",
+"chars": 963
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "grep -n \"def finalize\" -A70 devkb/cpp_symbols.py",
+"chars": 1920
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -n \"overload_lines\" -r devkb | grep -v \"^devkb/cpp_symbols.py:11[45]\"",
+"chars": 917
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "def _span",
+"chars": 454
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "def resolve",
+"chars": 467
+},
+{
+"intent": "locate",
+"answer": "read-answer",
+"verdict": "match (larger than asked)",
+"names": [],
+"segment": "grep -n \"def finalize\" devkb/cpp_symbols.py",
+"chars": 1920
+},
+{
+"intent": "list-file-symbols",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Def"
+],
+"segment": "grep -n \"^def \" tests/cpp_support.py",
+"chars": 971
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -n \"overload_lines\" -r devkb | grep -v \"cpp_symbols.py\"",
+"chars": 917
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"range_state"
+],
+"segment": "grep -n \"def range_state\" -A14 devkb/read_tools.py",
+"chars": 1053
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "def _span",
+"chars": 454
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -n \"overload_lines\" -r devkb | grep -v \"cpp_symbols.py\"",
+"chars": 917
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"Symbolic.overload_lines"
+],
+"segment": "grep -rn \"overload_lines\" devkb tests | grep -v \"^devkb/cpp_symbols.py:11[24]\"",
+"chars": 917
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "grep -n \"def api\" -A25 tests/cpp_support.py",
+"chars": 411
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Unit"
+],
+"segment": "grep -n \"class Unit\" -A12 devkb/cpp_resolve.py",
+"chars": 991
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"is_cxx_path"
+],
+"segment": "grep -n \"is_cxx_path\" devkb/process_api.py | head -3",
+"chars": 1339
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Packer.freshness"
+],
+"segment": "grep -n \"def freshness\" -A22 devkb/packs.py",
+"chars": 1015
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"Packer._unresolved"
+],
+"segment": "grep -n \"_unresolved(\" devkb/packs.py",
+"chars": 1021
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"Telemetry"
+],
+"segment": "grep -n \"Telemetry\" -r devkb | head",
+"chars": 993
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"Telemetry"
+],
+"segment": "grep -n \"Telemetry\" -n devkb/service.py | head",
+"chars": 993
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"TELEMETRY_NAME"
+],
+"segment": "grep -n \"TELEMETRY_NAME\" devkb/*.py | head -3",
+"chars": 915
+},
+{
+"intent": "list-file-symbols",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Def"
+],
+"segment": "grep -n \"^def \" devkb/project_context.py",
+"chars": 971
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"Telemetry"
+],
+"segment": "grep -n \"Telemetry\" -r devkb | head",
+"chars": 993
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"Telemetry"
+],
+"segment": "grep -n \"Telemetry\" -r devkb | head",
+"chars": 993
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"first_copy"
+],
+"segment": "grep -n \"first_copy\" scripts/devkb_guardrail.py",
+"chars": 976
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Telemetry"
+],
+"segment": "grep -n \"Telemetry\" -A60 devkb/service.py | head -150",
+"chars": 993
+},
+{
+"intent": "literal-text",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"devkb"
+],
+"segment": "grep -n \"devkb\" .gitignore",
+"chars": 1236
+},
+{
+"intent": "locate",
+"answer": "read-answer",
+"verdict": "match (larger than asked)",
+"names": [],
+"segment": "def resolve",
+"chars": 467
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "def resolve",
+"chars": 467
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "def _resolve",
+"chars": 976
+},
+{
+"intent": "locate",
+"answer": "read-answer",
+"verdict": "match (larger than asked)",
+"names": [],
+"segment": "def resolve",
+"chars": 467
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "def resolve",
+"chars": 467
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "def _resolve",
+"chars": 976
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_module_paths"
+],
+"segment": "grep -n \"^def _module_paths\" -A25 devkb/build_symbols.py",
+"chars": 1135
+},
+{
+"intent": "locate",
+"answer": "pack",
+"verdict": "partial (Defined-at line only)",
+"names": [
+"repo_path"
+],
+"segment": "grep -n \"repo_path\" devkb/*.py | grep \"def repo_path\\|repo_path(\" | head",
+"chars": 1046
+},
+{
+"intent": "list-file-symbols",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_resolve_typed_call",
+"_resolve_class",
+"_module_paths"
+],
+"segment": "grep -n \"def _resolve_typed_call\\|def _resolve_class\\|def _module_paths\\|def _import_targets\" devkb/build_symbols.py",
+"chars": 3106
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"repo_path"
+],
+"segment": "grep -rn \"repo_path\" tests/*.py | grep -v \"def \\|import\" | head -5",
+"chars": 1046
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"repo_path"
+],
+"segment": "grep -rn \"\\brepo_path\\b\" tests/test_boundaries.py | head -5",
+"chars": 1046
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"RENDER"
+],
+"segment": "grep -n \"RENDER\\b\" devkb/*.py | head",
+"chars": 981
+},
+{
+"intent": "read-body",
+"answer": "read-answer",
+"verdict": "match",
+"names": [],
+"segment": "grep -n \"def _read\" -A4 devkb/process_api.py",
+"chars": 376
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_module_level_calls"
+],
+"segment": "grep -n \"def _module_level_calls\" -A22 devkb/build_symbols.py",
+"chars": 1074
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Packer"
+],
+"segment": "grep -n \"class Packer\" -A8 devkb/packs.py | head -14",
+"chars": 3612
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"_calls_in_body",
+"_module_level_calls",
+"_call_name"
+],
+"segment": "grep -rn \"_calls_in_body\\|_module_level_calls\\|_call_name\" --include=*.py . | grep -v \"^./.venv\\|^./corpus\" | grep -v \"def \"",
+"chars": 3042
+},
+{
+"intent": "locate",
+"answer": "pack",
+"verdict": "partial (Defined-at line only)",
+"names": [
+"repo_path"
+],
+"segment": "grep -rn \"def repo_path\\|repo_path(\" devkb --include=*.py | head -20",
+"chars": 1046
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_Visitor"
+],
+"segment": "grep -n \"class _Visitor\" -A60 build_symbols.py | head -150",
+"chars": 916
+},
+{
+"intent": "locate",
+"answer": "pack",
+"verdict": "partial (Defined-at line only)",
+"names": [
+"_import_targets",
+"_resolve_cross_file_symbol",
+"_import_descriptors"
+],
+"segment": "grep -n \"def _import_targets\\|def _resolve_cross_file_symbol\\|def _import_descriptors\\|def _bound_names\" devkb/build_symbols.py",
+"chars": 3487
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"_parse_python_file",
+"_safe_value_refs"
+],
+"segment": "grep -rn \"_parse_python_file\\|_safe_value_refs\" --include=*.py . | grep -v \"^./corpus\" | grep -v \"def \"",
+"chars": 2319
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"Packer._references"
+],
+"segment": "grep -n \"_references\" devkb/packs.py",
+"chars": 915
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_Visitor"
+],
+"segment": "grep -n \"class _Visitor\" -A60 build_symbols.py | head -150",
+"chars": 916
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_import_targets"
+],
+"segment": "grep -n \"def _import_targets\" -A40 build_symbols.py",
+"chars": 1106
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"Edge.evidence_ref"
+],
+"segment": "grep -n \"evidence_ref\" devkb/build_symbols.py | head -3",
+"chars": 889
+},
+{
+"intent": "list-file-symbols",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"build.pack"
+],
+"segment": "grep -n \"pack\" devkb/packs.py | grep \"def \\|class \" | head",
+"chars": 948
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"Packer"
+],
+"segment": "grep -n \"Packer(\" tests/test_devkb_pack_module_names.py | head -3",
+"chars": 3612
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_Visitor"
+],
+"segment": "grep -n \"class _Visitor\" -A60 build_symbols.py | head -150",
+"chars": 916
+},
+{
+"intent": "list-file-symbols",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Def",
+"FIXTURE"
+],
+"segment": "grep -n \"def \\|fixture\" tests/test_devkb_graph_misses_133.py | head -20",
+"chars": 1790
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_Visitor"
+],
+"segment": "grep -n \"class _Visitor\" -A60 build_symbols.py | head -150",
+"chars": 916
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_Visitor"
+],
+"segment": "grep -n \"class _Visitor\" -A70 devkb/build_symbols.py | head -200",
+"chars": 916
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_resolve_cross_file_symbol"
+],
+"segment": "grep -n \"def _resolve_cross_file_symbol\" -A25 devkb/build_symbols.py",
+"chars": 1377
+},
+{
+"intent": "filter",
+"answer": "pack",
+"verdict": "partial (callers, not filtered)",
+"names": [
+"_parse_python_file",
+"_safe_value_refs"
+],
+"segment": "grep -rn \"_parse_python_file\\|_safe_value_refs\" --include=*.py . | grep -v \"^./corpus\\|.venv\"",
+"chars": 2319
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"answer_or_record"
+],
+"segment": "grep -n \"answer_or_record\" -A70 scripts/devkb_guardrail.py | head -170",
+"chars": 1067
+},
+{
+"intent": "literal-text",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"main.stats"
+],
+"segment": "grep -n \"stats\" devkb/cli.py | head",
+"chars": 995
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"verdict_of"
+],
+"segment": "grep -n \"def verdict_of\" -B3 -A30 devkb/misses.py",
+"chars": 1255
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Telemetry"
+],
+"segment": "grep -n \"class Telemetry\" -A45 devkb/*.py | head -90",
+"chars": 993
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Telemetry"
+],
+"segment": "grep -n \"class Telemetry\" -A40 devkb/*.py",
+"chars": 993
+},
+{
+"intent": "in-file-lines",
+"answer": "pack",
+"verdict": "partial (repository callers for a one-file search)",
+"names": [
+"TELEMETRY_NAME"
+],
+"segment": "grep -n \"TELEMETRY_NAME\" devkb/service.py | head -3",
+"chars": 915
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"logged_pack"
+],
+"segment": "grep -n \"^def logged_pack\" -A8 devkb/packs.py",
+"chars": 1452
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"run_query"
+],
+"segment": "grep -n \"def run_query\" -B3 -A60 devkb/misses.py",
+"chars": 1266
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"run_query"
+],
+"segment": "run_query",
+"chars": 1412
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"run_query"
+],
+"segment": "grep -n \"run_query\" -r devkb tests scripts | head -30",
+"chars": 1266
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"run_query"
+],
+"segment": "run_query",
+"chars": 1412
+},
+{
+"intent": "list-file-symbols",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Def"
+],
+"segment": "grep -n \"^def \" test_devkb_guardrail_direct_154.py",
+"chars": 971
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"bash_dirs"
+],
+"segment": "grep -n \"bash_dirs\" scripts/*.py tests/*.py | head",
+"chars": 1025
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"run_query"
+],
+"segment": "grep -n \"def run_query\" -A40 devkb/misses.py",
+"chars": 1266
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"run_query"
+],
+"segment": "grep -n \"def run_query\" -A40 devkb/misses.py | head -80",
+"chars": 1266
+},
+{
+"intent": "locate",
+"answer": "pack",
+"verdict": "partial (Defined-at line only)",
+"names": [
+"MAX_SOURCE",
+"HARD_SOURCE"
+],
+"segment": "grep -n \"^MAX_SOURCE\\|^HARD_SOURCE\" devkb/read_tools.py",
+"chars": 1748
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"_span"
+],
+"segment": "grep -n \"def _span\" -A8 devkb/read_tools.py",
+"chars": 957
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"CompactIndex.built_at"
+],
+"segment": "grep -n \"built_at\" devkb/*.py | head",
+"chars": 894
+},
+{
+"intent": "count",
+"answer": "read-answer",
+"verdict": "mismatch",
+"names": [
+"READ_ANSWER"
+],
+"segment": "grep -c read_answer scripts/devkb_guardrail.py",
+"chars": 1018
+},
+{
+"intent": "call-sites",
+"answer": "pack",
+"verdict": "match",
+"names": [
+"SUBSTITUTED",
+"QUESTION",
+"MAX_ANSWER"
+],
+"segment": "grep -n \"SUBSTITUTED\\|QUESTION\\|MAX_ANSWER\" scripts/devkb_guardrail.py | head",
+"chars": 2634
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"bash_search"
+],
+"segment": "grep -n \"def bash_search\" -A30 scripts/devkb_guardrail.py | grep -n \"why\\|-n\" | head -20",
+"chars": 1201
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"operand_paths"
+],
+"segment": "grep -n \"def operand_paths\" -A25 scripts/devkb_guardrail.py",
+"chars": 1021
+},
+{
+"intent": "list-file-symbols",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Def"
+],
+"segment": "grep -n \"^def \\|^    def \" scripts/devkb_guardrail.py",
+"chars": 971
+},
+{
+"intent": "list-file-symbols",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"Def"
+],
+"segment": "grep -n \"^def \\|^    def \" scripts/devkb_guardrail.py",
+"chars": 971
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"run_definitions",
+"changed_since_build",
+"run_query"
+],
+"segment": "grep -n \"^def \\(run_definitions\\|changed_since_build\\|run_query\\|graph_state\\)\" -A28 devkb/misses.py | head -150",
+"chars": 3232
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"range_state"
+],
+"segment": "grep -n \"def range_state\" -B2 -A25 devkb/read_tools.py",
+"chars": 1053
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"run_definitions",
+"changed_since_build",
+"graph_state"
+],
+"segment": "grep -n \"def run_definitions\\|def changed_since_build\\|def graph_state\\|def run_outline\\|def enabled\" -A30 devkb/misses.py | head -150",
+"chars": 2983
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"decide"
+],
+"segment": "grep -n \"def decide\" -B3 -A30 tests/test_devkb_guardrail_same_question_162.py",
+"chars": 1527
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"decide"
+],
+"segment": "grep -n \"def decide\" -B3 -A30 tests/test_devkb_guardrail_same_question_162.py",
+"chars": 1527
+},
+{
+"intent": "read-body",
+"answer": "pack",
+"verdict": "mismatch",
+"names": [
+"devkb_command"
+],
+"segment": "grep -n \"def devkb_command\" -A15 devkb/misses.py",
+"chars": 1198
+}
+]

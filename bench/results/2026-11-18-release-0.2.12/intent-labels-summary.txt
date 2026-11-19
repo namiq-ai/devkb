@@ -1,0 +1,11 @@
+  38  intent=read-body          answer=pack         mismatch
+  18  intent=call-sites         answer=pack         match
+  14  intent=filter             answer=pack         partial (callers, not filtered)
+  13  intent=read-body          answer=read-answer  match
+  11  intent=in-file-lines      answer=pack         partial (repository callers for a one-file search)
+  10  intent=list-file-symbols  answer=pack         mismatch
+   9  intent=locate             answer=pack         partial (Defined-at line only)
+   3  intent=literal-text       answer=pack         mismatch
+   3  intent=locate             answer=read-answer  match (larger than asked)
+   1  intent=count              answer=read-answer  mismatch
+total 120 {'match': 34, 'mismatch': 52, 'partial': 34} {'match': '34675 chars', 'mismatch': '65747 chars', 'partial': '49503 chars'}
