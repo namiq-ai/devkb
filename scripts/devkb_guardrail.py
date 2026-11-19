@@ -883,6 +883,28 @@ def shaped_answer(intent: str, repo: Path, names: list[str], inp: dict, paths: l
     return lines_text(rows) if rows else None
 
 
+def graph_stale(repo: Path, scope: list[str] | None) -> bool:
+    """The working tree may hold code the graph has not seen (#182): the graph was built at another commit, or git
+    reports a code file in the searched scope as new or changed after the build. Then grep, not the graph, has the
+    answer: a new caller or a second definition would be missing from it."""
+    from devkb import misses
+    built, head = misses.graph_state(repo)
+    if built and head and not head.startswith(built[:7]) and not built.startswith(head[:7]):
+        return True
+    try:
+        p = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=all", "--", *(scope or ["."])],
+                           capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return True
+    if p.returncode:
+        return True
+    for line in p.stdout.splitlines():
+        rel = line[3:].split(" -> ")[-1].strip('"')
+        if Path(rel).suffix.lower() in CODE_EXTS and (line.startswith("??") or misses.changed_since_build(repo, rel)):
+            return True
+    return False
+
+
 def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, paths: list[Path] | None = None,
                      why: str | None = None) -> dict | None:
     """#131 + #133. Ask devkb about the names the search asks for. Every name resolved and Complete: return devkb's
@@ -925,6 +947,9 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
             queries.append({"name": n, "verdict": r[0], "detail": r[1],
                             "query": f"devkb pack {QUESTION} {shlex.quote(n)} --project {shlex.quote(str(repo))}"})
             answers.append(r[2].strip())
+    if (dname and why is None or why is None and intent == "call-sites") and graph_stale(repo, scope_of(paths or [], repo)):
+        log_decision(ev, repo, tool, "pass-through", names, queries, 0, "stale-graph")   # #182: grep has the answer
+        return None
     if dname and why is None:
         scope = scope_of(paths or [], repo)
         ans = definition_answer(repo, dname, scope, search_globs(tool, inp))

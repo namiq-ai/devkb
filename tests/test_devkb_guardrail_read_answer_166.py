@@ -19,7 +19,7 @@ FILES = {
     "pkg/big.py": BIG,
     "pkg/one.py": "def dup(x):\n    return x\n",
     "pkg/two.py": "def dup(x):\n    return -x\n",
-    "pkg/edited.py": "def touched(x):\n    return x\n",
+    "edit/edited.py": "def touched(x):\n    return x\n",   # its own folder: editing it must not make pkg/ stale (#182)
     "pkg/use.py": "from pkg.calc import compute\n\n\ndef go():\n    return compute(3)\n",
 }
 
@@ -68,11 +68,11 @@ def test_several_definitions_give_locations_only(repo, tmp_path):
 
 
 def test_edited_file_gets_no_answer(repo, tmp_path):
-    f = repo / "pkg" / "edited.py"
+    f = repo / "edit" / "edited.py"
     f.write_text("def touched(x):\n    return x * 2\n")
     future = time.time() + 60
     os.utime(f, (future, future))
-    hso, row = decide(repo, tmp_path, "Bash", {"command": 'grep -n "def touched" pkg/'})
+    hso, row = decide(repo, tmp_path, "Bash", {"command": 'grep -n "def touched" edit/'})
     assert (row or {}).get("action") != "read-answer" and "return x * 2" not in text(hso)
 
 
