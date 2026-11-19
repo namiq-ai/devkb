@@ -668,13 +668,15 @@ def answer_fields(answer: str | None) -> dict:
 
 
 def emit(ev: dict, out: dict | None) -> dict | None:
-    """Every hook answer passes here on its way out: the last decision line gets what the agent was given, and with
-    DEVKB_GUARDRAIL_TEACH=1 (SPEC-DKB-007 D1) the answer ends with the devkb command that gives it."""
+    """Every hook answer passes here on its way out: the last decision line gets what the agent was given, and the
+    answer ends with the devkb command that gives it (SPEC-DKB-007 D1, on by default since #267: in the 0.2.13 batch
+    agents then queried devkb directly 1.50 times a run against 0.17, at -11% cost). DEVKB_GUARDRAIL_TEACH=0 turns it
+    off."""
     if not out:
         return out
     h = out.get("hookSpecificOutput", {})
     key = "permissionDecisionReason" if "permissionDecisionReason" in h else "additionalContext"
-    if os.environ.get("DEVKB_GUARDRAIL_TEACH") == "1" and ev.get("_teach"):
+    if os.environ.get("DEVKB_GUARDRAIL_TEACH", "1") != "0" and ev.get("_teach"):
         h[key] = h[key].rstrip() + f"\nNext time ask devkb directly: `{ev['_teach']}`"
     ev["_answer"] = h.get(key, "")
     try:
