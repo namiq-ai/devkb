@@ -67,8 +67,8 @@ def test_same_question_is_substituted(repo, tmp_path, command):
 def test_folder_narrows_the_answer(repo, tmp_path):
     hso, row = decide(repo, tmp_path, "Bash", {"command": "grep -rn extract tests/"})
     text = hso["permissionDecisionReason"]
-    assert sub(hso) and "Filtered to tests/" in text
-    assert "tests/test_alpha.py" in text and "scripts/tool.py" not in text and "pkg/use.py" not in text
+    assert sub(hso) and "tests/test_alpha.py:" in text                  # grep-like lines, from tests/ only (SPEC-DKB-007)
+    assert "scripts/tool.py" not in text and "pkg/use.py" not in text
     assert row["scope"] == ["tests"]
 
 
@@ -78,17 +78,12 @@ def test_nothing_in_scope_passes_through(repo, tmp_path):
 
 
 @pytest.mark.parametrize("command,reason", [
-    ("grep -rn extract . | wc -l", "pipe"),
     ("grep -rn extract . | grep -v test", "pipe"),
     ("grep -rn extract . | sort", "pipe"),
     ("grep -rn extract . | head -c 200", "pipe"),
     ("grep -rn extract . | tail -f", "pipe"),
     ("grep -rn extract . | sort | head -5", "pipe"),
-    ("grep -rn extract . | head -5 | wc -l", "pipe"),
-    ("grep -rc extract .", "option:-c"),
-    ("grep -rl extract .", "option:-l"),
-    ("grep -rnv extract pkg/use.py", "option:-v"),
-    ("grep -rn -A8 extract .", "option:-A"),   # a uses search with context; a definition search with context is #166
+    ("grep -rn -A8 extract .", "body:one-definition"),   # the lines around a name: its body (SPEC-DKB-007 §3.3)
     ("grep -n extract pkg/use.py", "file-operand"),
     ("grep -rn extract . && ls", "compound"),
 ])
@@ -98,17 +93,28 @@ def test_other_questions_get_the_answer_alongside(repo, tmp_path, command, reaso
     assert row["action"] == "alongside" and row["reason"] == reason
 
 
-@pytest.mark.parametrize("inp,reason", [
-    ({"pattern": "extract", "output_mode": "count"}, "output_mode:count"),
-    ({"pattern": "extract", "output_mode": "content", "-i": True}, "option:-i"),
-    ({"pattern": "extract", "output_mode": "content", "-C": 5}, "context"),
-    ({"pattern": "extract", "output_mode": "content", "multiline": True}, "multiline"),
-    ({"pattern": "extract"}, "option:files"),                       # the default output_mode: a file list
-    ({"pattern": "extract", "output_mode": "content", "path": "pkg/use.py"}, "file-operand"),
+@pytest.mark.parametrize("command,intent", [
+    ("grep -rn extract . | wc -l", "count"), ("grep -rn extract . | head -5 | wc -l", "count"),
+    ("grep -rc extract .", "count"), ("grep -rl extract .", "list-files"), ("grep -rnv extract pkg/use.py", "invert"),
 ])
-def test_grep_tool_variants_are_alongside(repo, tmp_path, inp, reason):
+def test_counts_file_lists_and_inverted_searches_get_no_answer(repo, tmp_path, command, intent):
+    hso, row = decide(repo, tmp_path, "Bash", {"command": command})
+    answer = hso.get("permissionDecisionReason", "") + hso.get("additionalContext", "")
+    assert not sub(hso) and (not answer or answer.startswith("devkb guardrail: this is a code search"))  # at most the reminder
+    assert row["action"] == "pass-through" and row["reason"] == f"intent:{intent}"
+
+
+@pytest.mark.parametrize("inp,action,reason", [
+    ({"pattern": "extract", "output_mode": "count"}, "pass-through", "intent:count"),
+    ({"pattern": "extract", "output_mode": "content", "-i": True}, "alongside", "option:-i"),
+    ({"pattern": "extract", "output_mode": "content", "-C": 5}, "alongside", "body:one-definition"),
+    ({"pattern": "extract", "output_mode": "content", "multiline": True}, "pass-through", "intent:unknown"),
+    ({"pattern": "extract"}, "pass-through", "intent:list-files"),   # the default output_mode: a file list
+    ({"pattern": "extract", "output_mode": "content", "path": "pkg/use.py"}, "alongside", "file-operand"),
+])
+def test_grep_tool_variants(repo, tmp_path, inp, action, reason):
     hso, row = decide(repo, tmp_path, "Grep", inp)
-    assert not sub(hso) and row["action"] == "alongside" and row["reason"] == reason
+    assert not sub(hso) and row["action"] == action and row["reason"] == reason
 
 
 def test_grep_tool_plain_and_scoped(repo, tmp_path):

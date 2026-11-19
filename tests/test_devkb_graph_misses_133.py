@@ -148,7 +148,7 @@ def test_repeating_the_search_runs_grep(repo, tmp_path):
 
 def test_a_compound_command_keeps_running_with_the_answer_beside_it(repo, tmp_path):
     h = pre(repo, tmp_path, "ls pkg; grep -rn 'def extract' .", 1)
-    assert "permissionDecision" not in h and "Defined at `pkg/alpha.py:1" in h.get("additionalContext", "")
+    assert "permissionDecision" not in h and "pkg/alpha.py:1:" in h.get("additionalContext", "")
 
 
 def test_an_incomplete_or_unresolved_answer_passes_through(repo, tmp_path):
