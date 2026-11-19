@@ -105,3 +105,7 @@ Calls resolved through the caller's imports, to module-level functions; `self.x(
 class in the same file; route handlers that reach a function through other handlers of their class. A raised message
 is the first positional string or a `detail=` / `message=` / `msg=` / `description=` keyword. Calls on any other object
 are not attributed, and a task is built only where the truth sees every caller. Migration files count as callers.
+
+## Release performance check
+
+`python bench/perf_release.py OLD_TAG NEW_TAG NAME=PATH ...` (for example `v0.2.12 v0.2.13 click=~/repos/click`) unpacks both tags, runs `bench/perf.py` as NEW, OLD, then NEW again, records the load before each pass (and waits until it is under `--max-load`, flagging a pass that starts above it), refuses a work directory on tmpfs, and writes `compare.md`: each change is marked *within noise* when it is no larger than the gap between the two NEW passes (#224).
