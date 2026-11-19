@@ -788,6 +788,28 @@ def read_tool(repo: Path, *args: str) -> dict | None:
         return None
 
 
+KEY_INTENTS = ("call-sites", "call-sites-filtered", "in-file", "unknown")
+
+
+def key_answer(repo: Path, names: list[str], scope: list[str] | None) -> tuple[str, set[str]]:
+    """#175: for names the graph has no symbol for but records as string keys (#148), where each is written and read,
+    by function, inside the searched scope; (text, the names answered). ("", set()) when none is a key there."""
+    parts, got = [], set()
+    for n in names:
+        r = read_tool(repo, "uses", n)
+        rows = [k for k in (r or {}).get("key_uses") or []
+                if scope is None or any(k["f"] == s or k["f"].startswith(s.rstrip("/") + "/") for s in scope)]
+        if not rows:
+            continue
+        got.add(n)
+        lines = []
+        for k in rows:
+            acts = [f"{verb} " + ", ".join(f"L{x}" for x in k[verb]) for verb in ("writes", "reads") if k.get(verb)]
+            lines.append(f"{shown_path(k['f'], repo)}  {k.get('in') or '(module)'}  " + "; ".join(acts))
+        parts.append(f'"{n}" is a string key (no symbol by that name); written and read, by function:\n' + "\n".join(lines))
+    return "\n\n".join(parts), got
+
+
 def use_lines(repo: Path, names: list[str]) -> list[tuple[str, int, str]] | None:
     """(file, line, text) of every line that uses one of the names, as grep prints them, from `uses --json`."""
     out = []
@@ -1030,6 +1052,15 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
                                            "permissionDecisionReason": SUBSTITUTED.format(answers=text)}}
         log_decision(ev, repo, tool, "alongside", names, queries, len(text), why)
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(text))}}
+    no_symbol = [q["name"] for q in queries if q["verdict"] == "no-match"]
+    if no_symbol and intent in KEY_INTENTS:      # a string key the graph records (#148, #175): its uses, beside grep
+        scope = scope_of(paths or [], repo)
+        text, got = key_answer(repo, no_symbol, scope)
+        if text:
+            text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
+            log_decision(ev, repo, tool, "alongside", names, queries, len(text), "key", scope)
+            record_pending(ev, key, repo, tool, inp, pattern, names, [q for q in queries if q["name"] not in got])
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(text))}}
     log_decision(ev, repo, tool, "pass-through", names, queries, 0, "not-complete")
     record_pending(ev, key, repo, tool, inp, pattern, names, queries)
     return None
