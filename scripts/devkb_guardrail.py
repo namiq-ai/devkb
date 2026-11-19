@@ -692,16 +692,27 @@ def emit(ev: dict, out: dict | None) -> dict | None:
     return out
 
 
+def project_arg(repo: Path) -> str:
+    """`--project` as the agent would type it in the directory the search ran in: the repository root relative to it
+    (`.` at the root, `..` from a subfolder), so the suggested command runs where it is pasted (#283)."""
+    try:
+        rel = os.path.relpath(repo.resolve(), (SEARCH_CWD[0] if SEARCH_CWD else repo).resolve())
+    except ValueError:
+        rel = str(repo)
+    return shlex.quote(rel)
+
+
 def teach_command(intent: str, names: list[str], paths: list[Path] | None, repo: Path) -> str | None:
-    """D1: the one devkb command that answers this intent, as the agent would type it."""
-    n = names[0] if names else ""
+    """D1: the one devkb command that answers this intent, as the agent would type it: names and paths shell-quoted,
+    `--project` relative to the search's directory (#283)."""
+    n = shlex.quote(names[0]) if names else ""
     files = [p for p in paths or [] if p.is_file()]
     if intent in ("read-body", "locate") and n:
-        return f"devkb symbol {n} --source --project ."
+        return f"devkb symbol {n} --source --project {project_arg(repo)}"
     if intent == "list-symbols" and files:
-        return f"devkb outline {files[0].resolve().relative_to(repo)} --project ."
+        return f"devkb outline {shlex.quote(str(files[0].resolve().relative_to(repo.resolve())))} --project {project_arg(repo)}"
     if intent in ("call-sites", "call-sites-filtered", "in-file") and n:
-        return f"devkb uses {n} --project ."
+        return f"devkb uses {n} --project {project_arg(repo)}"
     return None
 
 
@@ -1130,6 +1141,8 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         scope = scope_of(paths or [], repo)
         text, got = key_answer(repo, no_symbol, scope)
         if text:
+            if got:                                # teach the command for the answer given: the key's, not names[0] (#283)
+                ev["_teach"] = f"devkb symbol {shlex.quote(sorted(got)[0])} --project {project_arg(repo)}"
             text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
             log_decision(ev, repo, tool, "alongside", names, queries, len(text), "key", scope)
             record_pending(ev, key, repo, tool, inp, pattern, names, [q for q in queries if q["name"] not in got])
@@ -1223,7 +1236,7 @@ def first_open_outline(ev: dict, inp: dict) -> dict | None:
     text = capped(ans)
     ev["_intent"] = "list-symbols"
     log_decision(ev, repo, "Read", "outline-on-open", [], [], len(text), "first-open")
-    ev["_teach"] = f"devkb outline {rel} --project ."
+    ev["_teach"] = f"devkb outline {shlex.quote(str(rel))} --project {project_arg(repo)}"
     return emit(ev, {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=text)}})
 
 
