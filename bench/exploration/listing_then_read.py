@@ -41,13 +41,24 @@ def norm(cwd: str, p: str) -> str:
     return posixpath.normpath(posixpath.join(cwd, p))
 
 
+def rel(root: str, p: str) -> str:
+    """A path inside the session's working directory, relative to it, so absolute Read paths and relative listings
+    compare (#210)."""
+    if root and (p == root or p.startswith(root.rstrip("/") + "/")):
+        return posixpath.relpath(p, root)
+    return p
+
+
 def events(stream: Path):
     """(kind, folder-or-file, extra) per relevant tool call, in order; kind in list | read | defgrep | other."""
+    root = ""
     for line in open(stream, errors="replace"):
         try:
             e = json.loads(line)
         except ValueError:
             continue
+        if e.get("type") == "system" and e.get("subtype") == "init":
+            root = e.get("cwd") or ""
         m = e.get("message")
         if not isinstance(m, dict):
             continue
@@ -56,10 +67,10 @@ def events(stream: Path):
                 continue
             inp = x.get("input") or {}
             if x["name"] == "Glob":
-                yield "list", norm(".", inp.get("path") or "."), "glob"
+                yield "list", rel(root, norm(".", inp.get("path") or ".")), "glob"
                 continue
             if x["name"] == "Read":
-                yield "read", norm(".", inp.get("file_path", "")), "Read"
+                yield "read", rel(root, norm(".", inp.get("file_path", ""))), "Read"
                 continue
             if x["name"] != "Bash":
                 yield "other", "", x["name"]
@@ -73,12 +84,12 @@ def events(stream: Path):
                     dirs = [a for a in w[1:] if not a.startswith("-") and not re.search(r"[<>&~*]", a)] or ["."]
                     for d in dirs:
                         any_ = True
-                        yield "list", norm(cwd, d), head
+                        yield "list", rel(root, norm(cwd, d)), head
                 elif head in READERS:
                     files = [a for a in w[1:] if not a.startswith("-") and Path(a).suffix.lower() in CODE]
                     for f in files:
                         any_ = True
-                        yield "read", norm(cwd, f), head
+                        yield "read", rel(root, norm(cwd, f)), head
                 elif head in ("grep", "rg") and any(a.startswith("-") and "n" in a for a in w[1:]) \
                         and re.search(r"\b(def|class|struct|fn|func|function)\b", " ".join(w[1:])):
                     any_ = True
