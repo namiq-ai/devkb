@@ -82,11 +82,13 @@ def per_run(r: dict) -> dict:
     return {"turns": r["turns"], "grep": r["calls"].get("search", 0), "nav": nav, "own": own, "sub": sub, "ctx": r["ctx_tokens"],
             "out": r.get("out_tokens", 0),
             "cost": r["cost"], "wall": r["seconds"] / 60, "ok": bool(a.get("pass")), "suite": bool(r["suite_pass"]),
+            "flaky": bool(r.get("suite_flaky")),
             "answers": len(g), "answer_chars": sum(x.get("answer_chars") or x.get("chars") or 0 for x in g)}
 
 
 def summary(xs: list[dict]) -> dict:
-    out = {"n": len(xs), "ok": sum(x["ok"] for x in xs), "suite": sum(x["suite"] for x in xs)}
+    out = {"n": len(xs), "ok": sum(x["ok"] for x in xs), "suite": sum(x["suite"] for x in xs),
+           "flaky": sum(x.get("flaky", False) for x in xs)}
     for k in ("turns", "grep", "nav", "own", "sub", "ctx", "out", "cost", "wall", "answers", "answer_chars"):
         vals = [x[k] for x in xs]
         out[k] = st.mean(vals)
@@ -144,9 +146,10 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
                 diffs.setdefault(a, {"cost": [], "ctx": []})
                 diffs[a]["cost"].append(m["cost"] - base["cost"])
                 diffs[a]["ctx"].append(m["ctx"] - base["ctx"])
+            flaky = f" ({m['flaky']} flaky)" if m.get("flaky") else ""       # green only on the re-run (#260)
             lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {m['n']} | {fmt_range(m, 'wall')} | {m['turns']:.1f} | "
                          f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {m['out'] / 1e3:.1f} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | {m['own']:.1f} | "
-                         f"{m['sub']:.1f} | {m['answers']:.1f} ({m['answer_chars']:.0f}) | {m['ok']}/{m['n']} | {m['suite']}/{m['n']} | {vs} |")
+                         f"{m['sub']:.1f} | {m['answers']:.1f} ({m['answer_chars']:.0f}) | {m['ok']}/{m['n']} | {m['suite']}/{m['n']}{flaky} | {vs} |")
     lines += ["", "| Release, arm | Runs | Cost per run | Context per run | Cost difference vs no devkb (90% interval) | Context difference (90% interval) |",
               "|---|---|---|---|---|---|"]
     for a, ms in per_arm.items():
