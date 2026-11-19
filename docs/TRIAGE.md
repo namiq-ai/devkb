@@ -7,7 +7,7 @@ Two user-level systemd timers run the Claude Code CLI (the signed-in session, no
 | `devkb-triage` | 4 hours | Judges each new item from an outsider (not the owner, a member or a collaborator; bots are skipped): is it **valid**, does it **need information**, is it a **duplicate** of an open item, is it **invalid**, how **urgent**. Labels it and posts one comment. |
 | `devkb-handle` | 4 hours, 30 minutes later | Picks up items labelled `handle:*` and works them (below). |
 
-`ops/triage/triage.py` is both. Without `--apply` (or `TRIAGE_APPLY=1`) it writes nothing to GitHub: it prints what it would post.
+`ops/triage/triage.py` is both. Without `--apply` (or `TRIAGE_APPLY=1`) it writes nothing to GitHub: it prints what it would post. A dry run judges each item once, until it changes (the record is `dry-judged.json` in the daemon's home; delete it to judge everything again). Every fetch and push of outside code goes to `TRIAGE_REPO`, the repository the comments go to.
 
 ## What triage decides
 
