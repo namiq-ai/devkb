@@ -74,3 +74,23 @@ def test_score_reuses_a_saved_row_only_while_its_hidden_check_is_unchanged(tmp_p
     (tmp_path / "accept" / "9.py").write_text("print('{\"pass\": false}')\n")
     pb.score(["9"])
     assert called == [out]                                       # the check changed: scored again
+
+
+def test_a_template_is_built_once_by_two_processes_at_the_same_time(tmp_path):
+    import subprocess, sys, textwrap
+    code = textwrap.dedent(f"""
+        import sys, time, os
+        sys.path.insert(0, {str(Path(pb.__file__).parent)!r})
+        import toolenv
+        from pathlib import Path
+        t = Path({str(tmp_path)!r}) / "t"
+        with toolenv.held(Path({str(tmp_path)!r}) / ".t.lock"):
+            if not (t / "ready").exists():
+                t.mkdir(exist_ok=True)
+                (Path({str(tmp_path)!r}) / f"built-{{os.getpid()}}").write_text("")
+                time.sleep(1.5)
+                (t / "ready").write_text("")
+    """)
+    ps = [subprocess.Popen([sys.executable, "-c", code]) for _ in range(2)]
+    assert [p.wait() for p in ps] == [0, 0]
+    assert len(list(tmp_path.glob("built-*"))) == 1

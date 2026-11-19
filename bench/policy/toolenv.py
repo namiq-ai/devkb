@@ -35,10 +35,36 @@ def hook_sha(src: Path) -> str:
 _LOCK = __import__("threading").Lock()
 
 
+class held:
+    """A lock held across threads and processes (a benchmark started while another runs shares templates and tool
+    environments with it): a thread lock, then an exclusive flock on PATH."""
+    _threads: dict = {}
+    _guard = __import__("threading").Lock()
+
+    def __init__(self, path):
+        self.path = Path(path)
+        with held._guard:
+            self.tl = held._threads.setdefault(str(self.path), __import__("threading").Lock())
+
+    def __enter__(self):
+        import fcntl
+        self.tl.acquire()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.f = open(self.path, "a")
+        fcntl.flock(self.f, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        import fcntl
+        fcntl.flock(self.f, fcntl.LOCK_UN)
+        self.f.close()
+        self.tl.release()
+
+
 def build(ref: str) -> dict:
     """{commit, src, bin, hook, hook_sha} for ref, built once and reused; one build at a time, so two runs that need the
     same new commit never install into the same directory together."""
-    with _LOCK:
+    with held(ENVS / f".{resolve(ref)[:12]}.lock"):
         return _build(ref)
 
 
