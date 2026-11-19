@@ -83,8 +83,9 @@ def test_labels_come_from_the_fixed_vocabulary():
 
 def test_posted_text_cannot_mention_people_or_hide_html_comments():
     out = triage.sanitize("ping @someone and @org/team <!-- hidden --> ok `@kept`")
-    assert "@someone" not in out.replace("`@someone`", "") and "`@org/team`" in out
-    assert "hidden" not in out and "`@kept`" in out
+    z = triage.ZWSP
+    assert "@someone" not in out and f"@{z}someone" in out and f"@{z}org/team" in out
+    assert "hidden" not in out and f"`@{z}kept`" in out
     assert len(triage.sanitize("x" * 99999)) <= 3500
 
 
@@ -130,6 +131,6 @@ def test_the_reply_names_the_commenter_from_the_api_not_from_the_text_and_links_
     c = comment(7, author="alice", body="ping @victim")
     v = triage.validate_feedback({**FB, "reply": "Thanks @victim, will do"}, set())
     text = triage.feedback_reply(c, v, "https://github.com/o/r/issues/200")
-    assert text.startswith(triage.MARK + "\n@alice ") and "`@victim`" in text and "issues/200" in text and "Claude" in text
+    assert text.startswith(triage.MARK + "\n@alice ") and f"@{triage.ZWSP}victim" in text and "issues/200" in text and "Claude" in text
     body = triage.ticket_body(c, 25, v)
-    assert "issuecomment-7" in body and "`alice`" in body and "> ping `@victim`" in body and "Filed automatically" in body
+    assert "issuecomment-7" in body and "`alice`" in body and f"> ping @{triage.ZWSP}victim" in body and "Filed automatically" in body
