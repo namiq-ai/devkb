@@ -151,6 +151,12 @@ actually made. Two changes follow:
 - The benchmark's `guardrail_fired` count includes the hook's pass-throughs (#209). The dual-mode tables above use their
   own counter, so their replaced-search column is not affected.
 - The listing-then-read share behind dropping C3 (#168) is 31%, not 30% (#210). The decision stands.
+- **The devkb arm was not purely "devkb as on main"** (#225). Its own `devkb` command and its graph builds came from a
+  tool environment built for #126, while the hook came from the checkout. And every run also loaded the machine's
+  user-level settings, so two guardrail copies ran, and whichever answered first won. The 0.2.13 benchmark builds each
+  arm's devkb from an exact commit and records it, and loads only the checkout's settings.
+- **Hidden checks were readable.** For #114–#132 the agent's checkout contained `bench/policy/accept/`, its own hidden
+  check included (#223). Nothing shows an agent opened one, but those tickets' quality figures are not blind.
 - The `def` noise in alongside answers is not fixed in 0.2.12 for keyword-only patterns: `grep -n "^def " FILE` is
   still answered for `class Def`, because the resolver's exact tier ignores case (#211, #215).
 
