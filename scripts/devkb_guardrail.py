@@ -712,6 +712,26 @@ def log_decision(ev: dict, repo: Path | str, tool: str, action: str, names: list
 READ_CAP = 80
 
 
+SEARCH_CWD: list[Path] = []                       # the search's directory, for paths shown as grep prints them (#191)
+
+
+def search_dir(ev: dict, inp: dict) -> Path:
+    """Where the search runs: the event's directory, after a leading `cd DIR &&`."""
+    cwd = Path(ev.get("cwd") or os.getcwd())
+    m = re.match(r"\s*cd\s+(\S+)\s*&&", inp.get("command", "") or "")
+    return (cwd / m.group(1)) if m else cwd
+
+
+def shown_path(rel: str, repo: Path) -> str:
+    """A repository path as grep prints it from the search's directory: relative to it when inside it."""
+    if SEARCH_CWD:
+        try:
+            return (repo / rel).resolve().relative_to(SEARCH_CWD[0].resolve()).as_posix()
+        except ValueError:
+            pass
+    return rel
+
+
 def definition_answer(repo: Path, name: str, scope: list[str] | None, globs: list[str] | None = None) -> tuple[str, str] | None:
     """SPEC-DKB-006 R1-R3: (answer, reason) for a definition search, or None when the search should run. One definition in
     the searched scope: `file:line:` as grep prints it, then the body (at most READ_CAP lines; beyond that the location and
@@ -726,7 +746,7 @@ def definition_answer(repo: Path, name: str, scope: list[str] | None, globs: lis
                                               for g in globs)]
     if not defs or any(not m.get("ls") or misses.changed_since_build(repo, m["k"].split("::", 1)[0]) for m in defs):
         return None
-    where = [f"{m['k'].split('::', 1)[0]}:{m['ls']}:{m.get('sig', '')}" for m in defs]
+    where = [f"{shown_path(m['k'].split('::', 1)[0], repo)}:{m['ls']}:{m.get('sig', '')}" for m in defs]
     if len(defs) > 1:
         return (f"{len(defs)} definitions of {name}; locations only, no body (name one to read it):\n" + "\n".join(where),
                 "locations")
@@ -807,7 +827,7 @@ def locations(repo: Path, names: list[str], scope: list[str] | None) -> str | No
         defs = misses.run_definitions(repo, n) or []
         if scope:
             defs = [m for m in defs if any((f := m["k"].split("::", 1)[0]) == d or f.startswith(d + "/") for d in scope)]
-        rows += [f"{m['k'].split('::', 1)[0]}:{m['ls']}:{m.get('sig', '')}" for m in defs if m.get("ls")]
+        rows += [f"{shown_path(m['k'].split('::', 1)[0], repo)}:{m['ls']}:{m.get('sig', '')}" for m in defs if m.get("ls")]
     return "\n".join(rows) or None
 
 
@@ -880,6 +900,7 @@ def shaped_answer(intent: str, repo: Path, names: list[str], inp: dict, paths: l
                        if not inv else not any(rx.search(f"{pre}{r[0]}:{r[1]}:{r[2]}") for pre in ("", "./"))
                        for inv, rx in filt)
         rows = [r for r in rows if kept(r)]
+    rows = [(shown_path(f, repo), ln, t) for f, ln, t in rows]
     return lines_text(rows) if rows else None
 
 
@@ -912,6 +933,7 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     untouched, and the verdict is kept for the PostToolUse hook, which logs the miss if grep finds code."""
     from devkb import misses
     key = "".join(c for c in str(ev.get("tool_use_id") or "") if c.isalnum() or c in "-_")[:80]
+    SEARCH_CWD[:] = [search_dir(ev, inp)]
     intent = ev.get("_intent", "unknown")
     names = misses.navigation_names(pattern, ev.get("_dialect", "both"))
     try:
@@ -936,6 +958,7 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     # a definition search asks where X is defined and what it says: recursive or not, in one file or a folder, and with
     # context lines (`-A30`), which are the agent reading the body (#166 clarification)
     lenient = bool(dname) and why in ("not-recursive", "file-operand", "option:-A", "option:-B", "option:-C", "context")
+    real_why = why
     if lenient:
         why = None
     queries, answers = [], []
@@ -960,8 +983,11 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
             log_decision(ev, repo, tool, "read-answer", names, queries, len(ans[0]), f"definition:{ans[1]}", scope)
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                            "permissionDecisionReason": READ_ANSWER.format(answers=ans[0])}}
-    if lenient:
-        log_decision(ev, repo, tool, "pass-through", names, queries, 0, "not-recursive")
+    if lenient:                                  # the real reason, and the miss is still recorded for the post hook (#187)
+        verdicts = {q["verdict"] for q in queries} - {"complete"}
+        reason = real_why if not verdicts else f"verdict:{sorted(verdicts)[0]}"
+        log_decision(ev, repo, tool, "pass-through", names, queries, 0, reason)
+        record_pending(ev, key, repo, tool, inp, pattern, names, queries)
         return None
     if queries and len(queries) == len(names) and all(q["verdict"] == "complete" for q in queries):
         scope = scope_of(paths or [], repo)
@@ -994,8 +1020,17 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         log_decision(ev, repo, tool, "alongside", names, queries, len(text), why)
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(text))}}
     log_decision(ev, repo, tool, "pass-through", names, queries, 0, "not-complete")
+    record_pending(ev, key, repo, tool, inp, pattern, names, queries)
+    return None
+
+
+def record_pending(ev: dict, key: str, repo: Path, tool: str, inp: dict, pattern: str, names: list[str],
+                   queries: list[dict]) -> None:
+    """What the post hook needs to log a graph miss if grep then finds code (#133); nothing when every verdict is
+    complete or unknown, or the miss log is off."""
+    from devkb import misses
     if not misses.enabled() or not key or not any(q["verdict"] not in ("complete", "other") for q in queries):
-        return None
+        return
     built, head = misses.graph_state(repo)
     single_file = None
     if tool == "Bash":
@@ -1009,7 +1044,6 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
             "single_file": single_file}))
     except OSError:
         pass
-    return None
 
 SED_READ = re.compile(r"""^\s*sed\s+-n\s+(['"]?)(\d+),(\d+)p\1\s+(\S+)\s*$""")
 HEAD_READ = re.compile(r"^\s*head\s+(?:-n\s*|-)(\d+)\s+(\S+)\s*$")
