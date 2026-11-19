@@ -231,6 +231,44 @@ def enclosing(repo: Path | None, rel: str, line: int, cache: dict) -> str:
     return ""
 
 
+NOT_ENCLOSING = {"field", "constant", "variable", "key", "import", "parameter", "enum_member"}
+
+
+def graph_spans(repo: Path, rels: list[str]) -> dict[str, list[tuple[int, int, str]]]:
+    """(first line, last line, qualified name) of each function, method or class the graph holds, for each file that is
+    unchanged since the build (#138); files the graph does not have, or that changed, are left out. {} without a graph."""
+    rels = [r for r in dict.fromkeys(rels) if not changed_since_build(repo, r)]
+    if not rels:
+        return {}
+    try:
+        from devkb.process_api import ProcessAPI  # noqa: PLC0415
+        rt = ProcessAPI(str(repo), telemetry=False)._read()
+    except Exception:  # noqa: BLE001  no graph, or one that cannot load: the text scan stays
+        return {}
+    out: dict[str, list[tuple[int, int, str]]] = {}
+    for rel in rels:
+        ids = rt.idx.sym_by_file.get(rel)
+        if not ids:
+            continue
+        spans = []
+        for i in ids:
+            p = rt.idx.props[i]
+            ls, le = p.get("line_start"), p.get("line_end")
+            if ls and le and p.get("kind") not in NOT_ENCLOSING:
+                spans.append((int(ls), int(le), rt.qual[i]))
+        out[rel] = spans
+    return out
+
+
+def enclosing_from_spans(spans: list[tuple[int, int, str]], line: int) -> str:
+    """The innermost definition whose lines hold `line`; "" at the top level or on the definition's own first line."""
+    best = None
+    for ls, le, q in spans:
+        if ls < line <= le and (best is None or ls >= best[0]):
+            best = (ls, le, q)
+    return best[2] if best else ""
+
+
 def parse_grep(text: str, files: list[str] | None = None, limit: int = 10, names: list[str] | None = None,
                repo: Path | None = None, single_file: str | None = None) -> dict:
     """What a search found, counting only code: matches in comments, docs or non-code files do not count. Each match
@@ -257,8 +295,12 @@ def parse_grep(text: str, files: list[str] | None = None, limit: int = 10, names
             samples.append(f"{path}:{number or ''}:{content.strip()}"[:200])
         if len(matches) < MAX_MATCHES and number:
             rel = path.removeprefix("./")
-            matches.append({"at": f"{rel}:{number}", "kind": match_kind(content, names or []),
-                            "in": enclosing(repo, rel, int(number), cache)})
+            matches.append({"at": f"{rel}:{number}", "kind": match_kind(content, names or []), "in": None})
+    # the graph's own definition spans where it has the file, the text scan elsewhere (#138)
+    spans = graph_spans(repo, [m["at"].rsplit(":", 1)[0] for m in matches]) if repo is not None and matches else {}
+    for m in matches:
+        rel, number = m["at"].rsplit(":", 1)
+        m["in"] = enclosing_from_spans(spans[rel], int(number)) if rel in spans else enclosing(repo, rel, int(number), cache)
     count = sum(by_file.values())
     for f in files or []:                       # a files-only result: each code file is one match
         if Path(f).suffix.lower() in CODE_LANG and f not in by_file:
