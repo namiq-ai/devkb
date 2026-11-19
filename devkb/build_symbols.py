@@ -1084,6 +1084,7 @@ class _Visitor(ast.NodeVisitor):
     def __init__(self) -> None:
         self.stack: list[tuple[str, bool]] = []  # (name, is_class)
         self.symbols: list[dict] = []
+        self._names: set[str] = set()                   # the qualified names in self.symbols, for an O(1) check (#195)
         self.calls: list[tuple[str, str | None, str, Shape]] = []  # (caller_qualname, receiver, callee_short, shape)
         self.routes: list[tuple[str, str, str]] = []  # (qualname, method, path)
         self.raises: list[tuple[str, str, str | None, int | None]] = []  # (qualname, exc_type, message, status_code)
@@ -1095,7 +1096,7 @@ class _Visitor(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802
         qn = self._qualname(node.name)
-        self.symbols.append({
+        self._append({
             "qualified_name": qn, "kind": "class",
             "docstring_summary": _first_line(ast.get_docstring(node)),
             "decorators": [ast.unparse(d) for d in node.decorator_list],
@@ -1109,10 +1110,14 @@ class _Visitor(ast.NodeVisitor):
         self.generic_visit(node)
         self.stack.pop()
 
+    def _append(self, sym: dict) -> None:
+        self.symbols.append(sym)
+        self._names.add(sym["qualified_name"])
+
     def _add_simple(self, name: str, kind: str, node: ast.AST, qn: str) -> None:
-        if any(x["qualified_name"] == qn for x in self.symbols):
+        if qn in self._names:
             return                                      # a name assigned twice is one symbol, at its first assignment
-        self.symbols.append({
+        self._append({
             "qualified_name": qn, "kind": kind, "docstring_summary": None, "decorators": [],
             "is_public": not name.startswith("_"),
             "line_start": node.lineno, "line_end": getattr(node, "end_lineno", node.lineno),
@@ -1157,7 +1162,7 @@ class _Visitor(ast.NodeVisitor):
     def _visit_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         qn = self._qualname(node.name)
         kind = "method" if self.stack and self.stack[-1][1] else "function"
-        self.symbols.append({
+        self._append({
             "qualified_name": qn, "kind": kind,
             "docstring_summary": _first_line(ast.get_docstring(node)),
             "decorators": [ast.unparse(d) for d in node.decorator_list],
