@@ -153,8 +153,6 @@ PostToolUse hook for Grep and Bash, each with a 20-second timeout. Do not try to
 
 
 TEMPLATES = B / "templates"
-_TLOCKS: dict[str, object] = {}
-_TLOCK = __import__("threading").Lock()
 
 
 def template_for(arm: str) -> Path:
@@ -163,9 +161,8 @@ def template_for(arm: str) -> Path:
     base = sb.sh(["git", "-C", str(sb.REPO), "rev-parse", f"{BASES[arm]}^{{commit}}"]).stdout.strip()
     envc = toolenv.resolve(ENV_REF[arm]()) if arm in ENV_REF else "none"
     t = TEMPLATES / f"{arm}-{base[:12]}-{envc[:12]}"
-    with _TLOCK:
-        lock = _TLOCKS.setdefault(t.name, __import__("threading").Lock())
-    with lock:                                    # two runs of one arm wait for the same template, never build it twice
+    with toolenv.held(TEMPLATES / f".{t.name}.lock"):   # runs of one arm, in this or another benchmark process, wait
+                                                        # for the same template: never built twice, never deleted in use
         if not (t / ".bench-ready").exists():
             if t.exists():
                 shutil.rmtree(t)
