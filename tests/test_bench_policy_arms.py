@@ -33,3 +33,44 @@ def test_tri_mode_arms_take_devkb_from_a_tool_environment():
 
 def test_runs_never_load_the_users_own_settings():
     assert pb.SOURCES == ["--setting-sources", "project,local"]
+
+
+def test_a_copied_template_points_its_paths_at_the_copy(tmp_path):
+    t = tmp_path / "templates" / "main-x"
+    (t / ".venv" / "bin").mkdir(parents=True)
+    site = t / ".venv" / "lib" / "python3.11" / "site-packages"
+    site.mkdir(parents=True)
+    (t / ".venv" / "bin" / "pytest").write_text(f"#!{t}/.venv/bin/python\n")
+    (site / "__editable___devkb_finder.py").write_text(f"MAPPING = {{'devkb': '{t}/devkb'}}\n")
+    (t / ".devkb").mkdir()
+    (t / ".devkb" / "symbols-manifest.json").write_text(f'{{"root": "{t}"}}')
+    (t / ".bench-ready").write_text("x")
+    import os
+    os.utime(t / ".devkb" / "symbols-manifest.json", (1_000_000, 1_000_000))
+    w = tmp_path / "work" / "p1-main-r1"
+    pb.from_template(t, w)
+    assert str(t) not in (w / ".venv" / "bin" / "pytest").read_text() and str(w) in (w / ".venv" / "bin" / "pytest").read_text()
+    assert str(w) in (w / ".venv" / "lib" / "python3.11" / "site-packages" / "__editable___devkb_finder.py").read_text()
+    assert (w / ".devkb" / "symbols-manifest.json").stat().st_mtime == 1_000_000    # freshness checks compare mtimes
+    assert not (w / ".bench-ready").exists() and (t / ".bench-ready").exists()
+
+
+def test_score_reuses_a_saved_row_only_while_its_hidden_check_is_unchanged(tmp_path, monkeypatch):
+    import hashlib, json
+    monkeypatch.setattr(pb, "B", tmp_path)
+    (tmp_path / "accept").mkdir()
+    (tmp_path / "accept" / "9.py").write_text("print('{}')\n")
+    sha = hashlib.sha256((tmp_path / "accept" / "9.py").read_bytes()).hexdigest()
+    out = tmp_path / "runs" / "p9-main-r1"
+    out.mkdir(parents=True)
+    (out / "end").write_text('{"exit": 0, "seconds": 1}')
+    row = {"run": out.name, "issue": "9", "arm": "main", "acceptance": {"pass": True}, "suite_pass": True, "cost": 0.1,
+           "devkb_queries": 0, "guardrail_fired": 0, "dogfood_log": [], "accept_sha256": sha}
+    (out / "score.json").write_text(json.dumps(row))
+    called = []
+    monkeypatch.setattr(pb, "score_run", lambda issue, o: called.append(o) or dict(row, accept_sha256="new"))
+    pb.score(["9"])
+    assert called == []                                          # same check: the saved row
+    (tmp_path / "accept" / "9.py").write_text("print('{\"pass\": false}')\n")
+    pb.score(["9"])
+    assert called == [out]                                       # the check changed: scored again
