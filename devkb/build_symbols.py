@@ -1452,6 +1452,12 @@ def extract(repo_root: Path) -> DevKBGraph:
                         if s.get("kind") == "class"}
     repo_short_names = {s["qualified_name"].rsplit(".", 1)[-1] for symbols in per_file_symbols.values() for s in symbols}
     unresolved: set[tuple[str, str, str, str | None, Shape]] = set()  # (file, caller qualname, called name, receiver, shape)
+    unresolved_by: dict[tuple[str, str, str], set] = {}   # the same records by (file, caller, called name), so a typed call
+    #                                                        removes its own bucket, not a scan of the whole set (#194)
+
+    def unresolved_add(rec: tuple) -> None:
+        unresolved.add(rec)
+        unresolved_by.setdefault(rec[:3], set()).add(rec)
 
     # ── Pass 2 (Python, BL-3b): resolve calls -- same-file first (0.8,
     # unchanged from BL-3), then cross-file via THIS file's own import of
@@ -1528,7 +1534,7 @@ def extract(repo_root: Path) -> DevKBGraph:
                 resolved_key = _resolve_cross_file_symbol(receiver, rel_path, callee_short, per_file_symbols)
             if receiver == EXPR:
                 if callee_short in repo_short_names:
-                    unresolved.add((rel_path, caller_qn, callee_short, receiver, shape))  # said in coverage, as before: not attributed
+                    unresolved_add((rel_path, caller_qn, callee_short, receiver, shape))  # said in coverage, as before: not attributed
                 continue
             if resolved_key is None and receiver and receiver not in receivers:
                 resolved_key = _resolve_via_literals(per_file_literals.get(rel_path, []), callee_short, per_file_symbols)
@@ -1536,7 +1542,7 @@ def extract(repo_root: Path) -> DevKBGraph:
                 dotted_module = imports.get(receiver) if receiver else imports.get(callee_short)
                 if dotted_module is None and receiver is None and callee_short not in imports:
                     if callee_short in repo_short_names and len(local_targets) != 1:
-                        unresolved.add((rel_path, caller_qn, callee_short, receiver, shape))
+                        unresolved_add((rel_path, caller_qn, callee_short, receiver, shape))
                     continue  # nothing to resolve against
                 if dotted_module:
                     resolved_key = _resolve_cross_file_symbol(dotted_module, rel_path, callee_short, per_file_symbols)
@@ -1549,7 +1555,7 @@ def extract(repo_root: Path) -> DevKBGraph:
                     evidence_ref=f"{rel_path}::{caller_qn} calls {receiver + '.' if receiver else ''}{callee_short}",
                 )
             elif callee_short in repo_short_names or (receiver is None and callee_short in bare):
-                unresolved.add((rel_path, caller_qn, callee_short, receiver, shape))
+                unresolved_add((rel_path, caller_qn, callee_short, receiver, shape))
 
     # ── ODSF-312: calls on an instance of a class the code names ────────────
     for rel_path, typed in per_file_typed_calls.items():
@@ -1577,8 +1583,10 @@ def extract(repo_root: Path) -> DevKBGraph:
                 # the receiver's class is known (a class of the repository, or one outside it): a call on it is not a
                 # call to a same-named method of any other class
                 if typed_of[(caller_qn, method, label)] >= asked_of.get((caller_qn, method, label), 0):  # every such call
-                    unresolved -= {r for r in unresolved if r[:3] == (rel_path, caller_qn, method)
-                                   and (r[3] == label or (label == EXPR and r[3] == EXPR))}
+                    bucket = unresolved_by.get((rel_path, caller_qn, method), set())
+                    gone = {r for r in bucket if r[3] == label or (label == EXPR and r[3] == EXPR)}
+                    bucket -= gone
+                    unresolved -= gone
 
     ctx = {"targets": per_file_import_targets, "stars": star_modules}
     by_target: dict[str, list[tuple]] = {}
