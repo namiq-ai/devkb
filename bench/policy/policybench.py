@@ -214,6 +214,9 @@ def run_one(issue: str, arm: str, rep: int) -> str:
     except RuntimeError as e:                         # a red base (#221): recorded, never run or scored
         (out / "end").write_text(json.dumps({"exit": "base-red", "seconds": 0, "error": str(e)[-400:]}))
         return f"refused {tag}: {e}"
+    except Exception as e:  # noqa: BLE001  a setup that fails is recorded, never a run that silently disappears
+        (out / "end").write_text(json.dumps({"exit": "base-red", "seconds": 0, "error": f"setup: {type(e).__name__}: {e}"[-400:]}))
+        return f"refused {tag}: setup failed: {e}"
     t = json.loads(sb.sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
     for extra in GROUPS.get(issue, []):            # tickets done as one job (same code): bench/policy/groups.json
         t2 = json.loads(sb.sh(["gh", "issue", "view", extra, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
@@ -328,6 +331,14 @@ if __name__ == "__main__":
         par = int(a[a.index("--parallel") + 1]) if "--parallel" in a else 8    # the work is mostly waiting on the API
         arms = os.environ.get("POLICY_ARMS", "before,after").split(",")
         first = int(os.environ.get("POLICY_FIRST_REP", "1"))
+        # one batch, one main: the arms' code and main's devkb are pinned to the commit main is at when the batch starts,
+        # so a merge during the batch never splits its runs across two commits
+        pinned = sb.sh(["git", "-C", str(sb.REPO), "rev-parse", "origin/main"]).stdout.strip()
+        os.environ.setdefault("POLICY_MAIN", pinned)
+        for k, v in BASES.items():
+            if v == "origin/main":
+                BASES[k] = os.environ["POLICY_MAIN"]
+        print(f"batch pinned to main {os.environ['POLICY_MAIN'][:12]}", flush=True)
         jobs = [(i, arm, r) for i in issues for arm in arms for r in range(first, first + reps)]
         random.Random(126).shuffle(jobs)
         with cf.ThreadPoolExecutor(par) as ex:

@@ -32,13 +32,25 @@ def hook_sha(src: Path) -> str:
     return hashlib.sha256((src / "scripts" / "devkb_guardrail.py").read_bytes()).hexdigest()[:16]
 
 
+_LOCK = __import__("threading").Lock()
+
+
 def build(ref: str) -> dict:
-    """{commit, src, bin, hook, hook_sha} for ref, built once and reused."""
+    """{commit, src, bin, hook, hook_sha} for ref, built once and reused; one build at a time, so two runs that need the
+    same new commit never install into the same directory together."""
+    with _LOCK:
+        return _build(ref)
+
+
+def _build(ref: str) -> dict:
     sha = resolve(ref)
     d = ENVS / sha[:12]
     info = d / "toolenv.json"
     if info.exists():
         return json.loads(info.read_text())
+    if d.exists():                                # a build that died half way: start again
+        import shutil
+        shutil.rmtree(d)
     src = d / "src"
     src.mkdir(parents=True, exist_ok=True)
     tar = subprocess.run(["git", "-C", str(sb.REPO), "archive", sha], check=True, capture_output=True).stdout
