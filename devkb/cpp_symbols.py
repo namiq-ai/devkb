@@ -324,6 +324,7 @@ class Def:
     index: int = -1
     linkage: str = ""               # functions and methods: internal | c | cpp (ADR-DEVKB-009 §2)
     class_ns: str | None = None     # methods: the namespace the class is looked up from; None when a qualifier named one (#93)
+    ret: tuple[str, str] | None = None   # the declared return type (type, ptr) when it is a plain or smart-pointer type (#120)
 
 
 @dataclass
@@ -346,6 +347,9 @@ class Call:
     recv: str | None     # receiver identifier for member calls (`this` included), None when not a plain identifier
     recv_local: object   # (type, ptr) when the receiver is a provable local/param, False when local but unprovable, None when not local
     line: int
+    argc: int = -1       # arguments written at the call (#120, F5); -1 when not counted
+    chained: tuple | None = None   # `r.g().f()`: (inner receiver or "" for a bare `g()`, "g", inner recv_local) (#120, F4)
+    field_of: tuple | None = None  # `b.m.f()` / `b->m->f()`: (b, b's recv_local, "m") (#120, F4)
 
 
 @dataclass
@@ -525,11 +529,28 @@ def _decl_type(m: re.Match) -> tuple[str, str] | None:
     return (t, p) if p in ("", "*", "&", "&&") else None
 
 
+_SMART = re.compile(r"(?:\bstd\s*::\s*)?\b(?:unique_ptr|shared_ptr)\s*<\s*(?P<type>(?:::)?" + _IDENT + r"(?:::" + _IDENT
+                    + r")*)\s*>\s*(?:const\s*)?[*&]*\s*" + _VAR_NAME + r"\s*(?=[=;,\[({)]|$)")
+_AUTO = re.compile(r"\bauto\s*(?P<ptr>[*&]*)\s*" + _VAR_NAME + r"\s*=\s*(?:new\s+(?P<new>" + _IDENT + r"(?:::" + _IDENT + r")*)"
+                   r"|(?:std\s*::\s*)?make_(?:unique|shared)\s*<\s*(?P<make>" + _IDENT + r"(?:::" + _IDENT + r")*)\s*>"
+                   r"|(?P<ctor>" + _IDENT + r"(?:::" + _IDENT + r")*)\s*[({])")
+
+
+def _smart(text: str) -> tuple[str, tuple[str, str]] | None:
+    """`std::unique_ptr<T> x` / `std::shared_ptr<T>& x`: (x, (T, "*")) (#120, F4)."""
+    m = _SMART.search(text)
+    return (m.group("name"), (m.group("type").lstrip(":"), "*")) if m else None
+
+
 def _parse_params(text: str) -> dict[str, set]:
     out: dict[str, set] = {}
     for p in _split_top(text):
         p = p.split("=", 1)[0]
         if not p.strip() or p.strip() == "void":
+            continue
+        sm = _smart(p)
+        if sm:
+            out.setdefault(sm[0], set()).add(sm[1])
             continue
         m = _PARAM.match(p)
         if m and m.group("name"):
@@ -543,11 +564,30 @@ def _parse_params(text: str) -> dict[str, set]:
 
 def _parse_locals(body: str, into: dict[str, set]) -> None:
     for m in _LOCAL.finditer(body):
-        if m.group("type") in _TYPE_KEYWORDS:
-            continue
+        if m.group("type") in _TYPE_KEYWORDS or m.group("type") == "auto":
+            continue                       # `auto x = ...` is read below, from its initialiser
         into.setdefault(m.group("name"), set()).add(_decl_type(m))
+    smart_ends = set()
+    for m in _SMART.finditer(body):        # `std::unique_ptr<T> x`: a T (#120, F4)
+        into.setdefault(m.group("name"), set()).add((m.group("type").lstrip(":"), "*"))
+        smart_ends.add(m.end("name"))
     for m in _TEMPL_LOCAL.finditer(body):
-        into.setdefault(m.group(1), set()).add(None)
+        if m.end(1) not in smart_ends:
+            into.setdefault(m.group(1), set()).add(None)
+    for m in re.finditer(r"\bauto\s*[*&]*\s*(" + _IDENT + r")\s*=", body):
+        a = _AUTO.match(body, m.start())   # `auto x = T(...)`, `new T`, `make_unique<T>()`; any other initialiser: unknown
+        t = a and (a.group("new") or a.group("make") or a.group("ctor"))
+        into.setdefault(m.group(1), set()).add((t, "*" if a.group("new") or a.group("make") else "") if t else None)
+
+
+def _return_type(prefix: str) -> tuple[str, str] | None:
+    """The declared return type written before a function's name, when it is one plain type or a smart pointer (#120)."""
+    p = re.sub(r"\b(?:virtual|static|inline|constexpr|explicit|friend|extern|consteval|template\s*<[^>]*>)\b", " ", prefix).strip()
+    sm = re.fullmatch(r"(?:const\s+)?(?:std\s*::\s*)?(?:unique_ptr|shared_ptr)\s*<\s*((?:::)?" + _IDENT + r"(?:::" + _IDENT + r")*)\s*>\s*[&*]?", p)
+    if sm:
+        return (sm.group(1).lstrip(":"), "*")
+    m = re.fullmatch(r"(?:const\s+)?" + _VAR_TYPE + r"\s*", p)
+    return _decl_type(m) if m else None
 
 
 def _norm_name(text: str) -> str:
@@ -719,12 +759,18 @@ class _Scanner:
         _set_access(self.code[start:end], scope)
         if re.match(r"\s*(?:typedef|using|friend|static_assert|template\s*<[^>]*>\s*(?:class|struct)|enum|class|struct|union)\b", h):
             return
+        # a trailing annotation macro (`T* const x GUARDED_BY(mu);`) is not part of a member's declaration (#120)
+        h = re.sub(r"^([^()]*\w)\s+[A-Z][A-Z0-9_]*\s*\([^()]*\)\s*$", r"\1", h)
         if "(" in h:
             mm = next((c for c in _CAND.finditer(h) if _norm_name(c.group("last")) not in _NOT_FUNC), None)
             if mm is not None and not mm.group("qual").strip():
                 short = _norm_name(mm.group("last"))
                 if short not in _NOT_FUNC:
                     rec.methods[short] = rec.methods.get(short, False) or bool(re.search(r"\bvirtual\b|\boverride\b", h))
+            return
+        sm = _smart(h.split("=", 1)[0])
+        if sm and re.match(r"\s*(?:(?:mutable|static|const)\s+)*(?:std\s*::\s*)?(?:unique_ptr|shared_ptr)\b", h):
+            rec.members[sm[0]] = sm[1]
             return
         fm = re.match(r"^\s*(?:(?:mutable|static|const|volatile|constexpr|inline|thread_local|struct|class|enum)\s+)*" + _VAR_TYPE
                       + r"\s*" + _VAR_NAME + r"\s*(?:\[[^\]]*\])?\s*(?:=.*|\{.*|:\s*\d+)?\s*$", h, re.S)
@@ -810,6 +856,7 @@ class _Scanner:
         if in_class and scope.rec is not None and not qparts:
             scope.rec.methods[short] = scope.rec.methods.get(short, False) or virtual
         d.params = hs[open_i + 1:cl]
+        d.ret = _return_type(prefix)
         # constructor initialiser lists sit between the parameters and the body
         d.spans = [(cl + 1 + start, k), (k + 1, close)]
         return True
@@ -846,10 +893,20 @@ class _Scanner:
                 form, qualifier, recv, rl = "qualified", chain.rstrip(":"), None, None
             elif prev == "." or text[max(0, k - 1):k + 1] == "->":
                 form, qualifier = "member", ""
+                chained = field_of = None
                 j = k - (2 if prev == ">" else 1)
                 while j >= 0 and text[j] in " \t\r\n":
                     j -= 1
                 recv, rl = None, None
+                chained = _chained_before(text, j) if j >= 0 and text[j] == ")" else None
+                if chained is not None:            # `r.g().f()`: f's receiver is what g returns (#120, F4)
+                    irecv = chained[0]
+                    irl = None
+                    if irecv and irecv != "this":
+                        types = self.locals_of(d).get(irecv)
+                        if types is not None:
+                            irl = next(iter(types)) if len(types) == 1 and None not in types else False
+                    chained = (irecv, chained[1], irl)
                 e = j
                 while j >= 0 and (text[j].isalnum() or text[j] == "_"):
                     j -= 1
@@ -862,12 +919,22 @@ class _Scanner:
                     if ident == "this":
                         recv = "this"
                     elif before in ("->",) or text[q:q + 1] == ".":
-                        # `this->member.f()` is a member of the caller's class; any other chain is not provable
+                        # `this->member.f()` is a member of the caller's class; `b.m.f()`: m is a member of b's class
                         q2 = q - 2 if before == "->" else q - 1
                         while q2 >= 0 and text[q2] in " \t\r\n":
                             q2 -= 1
                         if text[max(0, q2 - 3):q2 + 1] == "this":
                             recv = ident
+                        else:
+                            b2 = q2
+                            while b2 >= 0 and (text[b2].isalnum() or text[b2] == "_"):
+                                b2 -= 1
+                            base = text[b2 + 1:q2 + 1]
+                            pre = text[max(0, b2 - 1):b2 + 1]
+                            if base and not base[0].isdigit() and pre != "->" and text[b2:b2 + 1] not in (".", ")", "]", ":"):
+                                types = self.locals_of(d).get(base)
+                                brl = None if types is None else (next(iter(types)) if len(types) == 1 and None not in types else False)
+                                field_of = (base, brl, ident)
                     elif text[q:q + 1] != ":" and text[q:q + 1] not in (")", "]"):
                         recv = ident
                     if recv and recv != "this":
@@ -887,7 +954,12 @@ class _Scanner:
                 elif prev in ">*&" and self.cpp and _DECL_PREFIX.match(text, _stmt_start(text, k), a):
                     continue      # `std::vector<int> x(3)`, `Foo *x(p)`, `const Bar& x(y)`: a declaration, not a call (#65)
                 form, qualifier, recv, rl = "bare", "", None, None
-            self.calls.append(Call(d.index, name, form, qualifier, recv, rl, line_of(lo + cm.start())))
+            c = Call(d.index, name, form, qualifier, recv, rl, line_of(lo + cm.start()), _argc(text, cm.end() - 1))
+            if form == "member" and chained is not None and recv is None:
+                c.chained = chained
+            if form == "member" and field_of is not None and recv is None:
+                c.field_of = field_of
+            self.calls.append(c)
         self.errors_in(d, lo, text)
 
     def errors_in(self, d: Def, lo: int, text: str) -> None:
@@ -945,6 +1017,71 @@ class _Scanner:
         for q in re.finditer(r"\"[^\"]*\"", expr):
             out.append(self.m.literals.get(base + q.start(), ""))
         return "".join(out)
+
+
+def _argc(text: str, open_i: int) -> int:
+    """The number of arguments in the call whose `(` is at open_i (masked text: no strings or comments); -1 if unclosed."""
+    depth, n, seen = 0, 0, False
+    for ch in text[open_i:open_i + 4000]:
+        if ch in "([{":
+            depth += 1
+            if depth == 1:
+                continue
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0:
+                return n + 1 if seen else 0
+        elif ch == "," and depth == 1:
+            n += 1
+            continue
+        if depth >= 1 and not ch.isspace():
+            seen = True
+    return -1
+
+
+def _chained_before(text: str, j: int) -> tuple[str, str] | None:
+    """For `X.g(...)` / `X->g(...)` / `g(...)` ending at text[j] == ")": (X or "this" or "", "g"); None if not that shape."""
+    depth = 0
+    i = j
+    while i >= 0:
+        if text[i] == ")":
+            depth += 1
+        elif text[i] == "(":
+            depth -= 1
+            if depth == 0:
+                break
+        i -= 1
+    if i < 0:
+        return None
+    k = i - 1
+    while k >= 0 and text[k] in " \t\r\n":
+        k -= 1
+    e = k
+    while k >= 0 and (text[k].isalnum() or text[k] == "_"):
+        k -= 1
+    inner = text[k + 1:e + 1]
+    if not inner or inner[0].isdigit() or inner in _NOT_FUNC:
+        return None
+    q = k
+    while q >= 0 and text[q] in " \t\r\n":
+        q -= 1
+    if q >= 0 and (text[q] == "." or text[max(0, q - 1):q + 1] == "->"):
+        r = q - (2 if text[q] == ">" else 1)
+        while r >= 0 and text[r] in " \t\r\n":
+            r -= 1
+        re_ = r
+        while r >= 0 and (text[r].isalnum() or text[r] == "_"):
+            r -= 1
+        recv = text[r + 1:re_ + 1]
+        if not recv or recv[0].isdigit():
+            return None
+        before = text[max(0, r - 1):r + 1]
+        if before in ("->",) or text[r:r + 1] in (".", ")", "]"):
+            return None                     # a longer chain: one level only
+        return (recv, inner)
+    if q >= 0 and text[q] == ":":
+        return None                         # `ns::g()`: not a receiver the rules read
+    return ("", inner)
 
 
 _CALL_RE = re.compile(r"([A-Za-z_]\w*)\s*(?:<[\w\s:,*]*(?:<[\w\s:,*]*>[\w\s:,*]*)*>\s*)?\(")

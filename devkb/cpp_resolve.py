@@ -34,7 +34,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from devkb.cpp_symbols import Call, FileRecords, Symbolic, indirect_refs
+from devkb.cpp_symbols import Call, FileRecords, Symbolic, _split_top, indirect_refs
 
 # The closed list of C library names that are never linked across files (ADR §3).
 C_LIBRARY = frozenset(
@@ -149,6 +149,37 @@ class Repo:
                 for i in range(1, len(bits)):
                     self.class_suffix.setdefault(".".join(bits[i:]), []).append((u.path, c))
         self._unit = {u.path: u for u in units}
+        # #120: each symbol's declared return type (one, or None) and its argument counts, from its definitions
+        self.ret: dict[str, tuple[str, str] | None] = {}
+        self.arity: dict[str, list[tuple[int, float]]] = {}
+        for u in units:
+            for qn, s in u.syms.items():
+                defs = [u.rec.defs[i] for i in s.def_indexes if 0 <= i < len(u.rec.defs)]
+                rets = {d.ret for d in defs}
+                self.ret[f"{u.path}::{qn}"] = rets.pop() if len(rets) == 1 else None
+                self.arity[f"{u.path}::{qn}"] = [_arity(d.params) for d in defs]
+
+    def member_type(self, cls: tuple[str, object], name: str, seen: set[str] | None = None):
+        """The declared type of member `name` of a class, or of one of its in-repository bases; None when unknown."""
+        seen = seen if seen is not None else set()
+        if cls[1].qn + "@" + cls[0] in seen:
+            return None
+        seen.add(cls[1].qn + "@" + cls[0])
+        if name in cls[1].members:
+            return cls[1].members[name]
+        for b in cls[1].bases:
+            bc = self.class_by_type(b, cls[1].namespace)
+            if bc is not None:
+                t = self.member_type(bc, name, seen)
+                if t is not None:
+                    return t
+        return None
+
+    def by_arity(self, keys: list[str], argc: int) -> list[str]:
+        """F5: the keys whose definitions accept `argc` arguments; all of them when argc is not known."""
+        if argc < 0:
+            return keys
+        return [k for k in keys if any(lo <= argc <= hi for lo, hi in self.arity.get(k, [(0, float("inf"))]))]
 
     # macros --------------------------------------------------------------------
     def expand(self, name: str) -> list[tuple[str, str, bool]]:
@@ -230,7 +261,7 @@ class Repo:
             return None
         return self._lookup(every, [], from_ns)
 
-    def method_on(self, cls: tuple[str, object], name: str, seen: set[str] | None = None, via_base: bool = False):
+    def method_on(self, cls: tuple[str, object], name: str, seen: set[str] | None = None, via_base: bool = False, argc: int = -1):
         """('hit', key, via_base) | ('declared',) | None: `name` on a class, else on its in-repository bases."""
         path, c = cls
         seen = seen or set()
@@ -243,6 +274,9 @@ class Repo:
             if any(s.class_ns is None for _p, s in found):
                 return ("declared",)
             found = [(p, s) for p, s in found if s.class_ns == c.namespace]
+        if len(found) > 1:              # F5: same-named targets narrowed by the call's argument count
+            keep = set(self.by_arity([f"{p}::{s.qn}" for p, s in found], argc))
+            found = [(p, s) for p, s in found if f"{p}::{s.qn}" in keep] or found
         if len(found) == 1:
             return ("hit", f"{found[0][0]}::{found[0][1].qn}", via_base)
         if found or name in c.methods:
@@ -250,7 +284,7 @@ class Repo:
         for b in c.bases:
             bc = self.class_by_type(b, c.namespace)
             if bc is not None:
-                r = self.method_on(bc, name, seen, True)
+                r = self.method_on(bc, name, seen, True, argc)
                 if r is not None:
                     return r
         return None
@@ -351,15 +385,14 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                     link(next(iter(cands)), "cpp-qualified", f"{call.qualifier}::{n}")
                     continue
             elif call.form == "bare":
-                if chain:
-                    cls = repo.caller_class(u.path, chain, caller_ns)
-                    if cls is not None:
-                        r = repo.method_on(cls, n)
-                        if r and r[0] == "hit":
-                            link(r[1], "cpp-same-class-base" if r[2] else "cpp-same-class", n)
-                            continue
-                        if r:
-                            stop_unresolved = True
+                cls = repo.caller_class(u.path, chain, caller_ns) if chain else _fixture(repo, u.rec.defs[call.caller])
+                if cls is not None:                 # a method's own class, or a TEST_F body's fixture (F4)
+                    r = repo.method_on(cls, n, argc=call.argc)
+                    if r and r[0] == "hit":
+                        link(r[1], "cpp-same-class-base" if r[2] else "cpp-same-class", n)
+                        continue
+                    if r:
+                        stop_unresolved = True
                 if not stop_unresolved:
                     if free_count.get(n) == 1:
                         s = by_def_free[n]
@@ -367,15 +400,45 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                         continue
                     if not free_count.get(n):
                         cands2 = repo.free.get(n, [])
+                        if len(cands2) > 1:          # F5: narrowed by argument count
+                            keep = set(repo.by_arity([f"{p}::{x.qn}" for p, x in cands2], call.argc))
+                            cands2 = [(p, x) for p, x in cands2 if f"{p}::{x.qn}" in keep]
                         if len(cands2) == 1 and n not in C_LIBRARY and cands2[0][1].is_public and repo.language[cands2[0][0]] == "cpp":
                             link(f"{cands2[0][0]}::{cands2[0][1].qn}", "cpp-unique-free", n)
                             continue
                         if hand_over():
                             continue
             else:  # member
-                cls = repo.caller_class(u.path, chain, caller_ns) if chain else None
+                cls = repo.caller_class(u.path, chain, caller_ns) if chain else _fixture(repo, u.rec.defs[call.caller])
+                if call.chained is not None:       # `r.g().f()`: f on what g is declared to return (F4, one level)
+                    irecv, g, irl = call.chained
+                    inner = None
+                    if irecv in ("", "this") and cls is not None:
+                        inner = repo.method_on(cls, g)
+                    else:
+                        t = irl if isinstance(irl, tuple) else (cls[1].members.get(irecv) if irl is None and cls is not None else None)
+                        tc = repo.class_by_type(t[0], caller_ns) if t is not None else None
+                        inner = repo.method_on(tc, g) if tc is not None else None
+                    rt = repo.ret.get(inner[1]) if inner and inner[0] == "hit" else None
+                    target = repo.class_by_type(rt[0], caller_ns) if rt is not None else None
+                    if target is not None:
+                        r = repo.method_on(target, n, argc=call.argc)
+                        if r and r[0] == "hit":
+                            link(r[1], "cpp-typed-receiver-base" if r[2] else "cpp-typed-receiver", f"{g}().{n}")
+                            continue
+                if call.field_of is not None:      # `b.m.f()`: m's type, declared in the class of b (F4, one level)
+                    base, brl, fld = call.field_of
+                    bt = brl if isinstance(brl, tuple) else (cls[1].members.get(base) if brl is None and cls is not None else None)
+                    bc = repo.class_by_type(bt[0], caller_ns) if bt is not None else None
+                    mt = repo.member_type(bc, fld) if bc is not None else None
+                    target = repo.class_by_type(mt[0], caller_ns) if mt is not None else None
+                    if target is not None:
+                        r = repo.method_on(target, n, argc=call.argc)
+                        if r and r[0] == "hit":
+                            link(r[1], "cpp-typed-receiver-base" if r[2] else "cpp-typed-receiver", f"{base}.{fld}.{n}")
+                            continue
                 if call.recv == "this" and cls is not None:
-                    r = repo.method_on(cls, n)
+                    r = repo.method_on(cls, n, argc=call.argc)
                     if r and r[0] == "hit":
                         link(r[1], "cpp-same-class-base" if r[2] else "cpp-same-class", n)
                         continue
@@ -388,7 +451,7 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                     if t is not None:
                         target = repo.class_by_type(t[0], caller_ns)
                         if target is not None:
-                            r = repo.method_on(target, n)
+                            r = repo.method_on(target, n, argc=call.argc)
                             if r and r[0] == "hit":
                                 link(r[1], "cpp-typed-receiver-base" if r[2] else "cpp-typed-receiver", n)
                                 continue
@@ -401,6 +464,22 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
             who = u.qn_of_def[owner] if owner >= 0 and u.qn_of_def[owner] else "<file>"
             unresolved.add((u.path, f"{who}@indirect:{line}", name))
     return edges, unresolved, cross
+
+
+def _arity(params: str) -> tuple[int, float]:
+    """(required, most) arguments a parameter list accepts; `...` accepts any number."""
+    parts = [p for p in _split_top(params or "") if p.strip() and p.strip() != "void"]
+    if any("..." in p for p in parts):
+        return (len([p for p in parts if "=" not in p and "..." not in p]), float("inf"))
+    return (len([p for p in parts if "=" not in p]), len(parts))
+
+
+def _fixture(repo: "Repo", d) -> tuple[str, object] | None:
+    """F4: a `TEST_F(Fixture, Name)` / `TEST_P` body is a method of a subclass of Fixture."""
+    if getattr(d, "kind", "") != "macro" or d.macro_name not in ("TEST_F", "TEST_P"):
+        return None
+    first = (_split_top(d.macro_args) or [""])[0].strip()
+    return repo.class_by_type(first, d.namespace) if first else None
 
 
 def _with_expansions(calls, repo: Repo):
