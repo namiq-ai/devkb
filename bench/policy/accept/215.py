@@ -49,8 +49,11 @@ with tempfile.TemporaryDirectory() as td:
         return text, (mine[-1] if mine else {})
 
     answer = lambda t: any(m in t for m in ("Graph pack", "devkb answered", "devkb's answer"))   # any devkb answer wrapper
-    no_text = {n: not answer(run(n, c)[0]) for n, c in [
-        ("Compute", "grep -rn Compute ."), ("COMPUTE", "grep -rn COMPUTE ."), ("def_only", 'grep -n "^def " pkg/core.py'),
+    # `^def ` asks for a file's definitions: no answer about a symbol named `Def` (an outline of the file is right, #216)
+    t = run("def_only", 'grep -n "^def " pkg/core.py')[0]
+    no_text = {"def_only": "Def" not in t and "pkg/model.py" not in t}
+    no_text |= {n: not answer(run(n, c)[0]) for n, c in [
+        ("Compute", "grep -rn Compute ."), ("COMPUTE", "grep -rn COMPUTE ."),
         ("read_answer", "grep -c read_answer pkg/flags.py"), ("bre_bar", "grep -rn 'compute|helper' ."),
         ("fixed", "grep -rnF 'compute\\|helper' .")]}
     answered = {n: answer(run(n, c)[0]) for n, c in [
