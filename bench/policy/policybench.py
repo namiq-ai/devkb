@@ -276,6 +276,39 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     return f"done {tag} exit={code} {round(time.time() - t0)}s"
 
 
+def _failed_ids(stdout: str) -> list[str]:
+    """Test ids pytest -rfE reports as FAILED or ERROR (the summary lines), in order, without their messages."""
+    ids = []
+    for line in stdout.splitlines():
+        if line.startswith(("FAILED ", "ERROR ")):
+            tid = line.split(" ", 1)[1].split(" - ", 1)[0].strip()
+            if tid and tid not in ids:
+                ids.append(tid)
+    return ids
+
+
+def run_suite(w: Path, timeout: int = 1800) -> dict:
+    """The checkout's full suite, with the ids of what failed; a red suite's failed tests are run once more on their own
+    (#260). Tests that pass on that second run are flaky (load-sensitive): recorded, and not held against the change.
+    The suite counts as green only when every failed test passed the second time."""
+    py = str(w / ".venv/bin/python")
+    t = subprocess.run([py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"], cwd=w, capture_output=True, text=True,
+                       timeout=timeout)
+    last = (t.stdout.strip().splitlines() or [""])[-1]
+    failed = _failed_ids(t.stdout)
+    row = {"suite_pass": t.returncode == 0, "suite": last, "suite_failed": failed, "suite_flaky": []}
+    if t.returncode == 0 or not failed:                 # green, or red with nothing to re-run (a crash): as it is
+        return row
+    r = subprocess.run([py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider", *failed], cwd=w, capture_output=True,
+                       text=True, timeout=timeout)
+    still = _failed_ids(r.stdout) if r.returncode != 0 else []
+    if r.returncode != 0 and not still:                 # the re-run itself broke: nothing can be called flaky
+        still = failed
+    row.update(suite_failed=still, suite_flaky=[x for x in failed if x not in still], suite_pass=not still,
+               suite_first=last)
+    return row
+
+
 def score_run(issue: str, out: Path) -> dict | None:
     """One run's row: the full suite, the hidden check, the transcript. None for a refused run or a missing checkout."""
     _, arm, rep = out.name.split("-")
@@ -286,8 +319,7 @@ def score_run(issue: str, out: Path) -> dict | None:
     if end.get("exit") in ("base-red", "error"):
         return None
     base = (w / ".bench-base").read_text().strip()
-    t = subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=w,
-                       capture_output=True, text=True, timeout=1800)
+    suite = run_suite(w)
     acc = B / "accept" / (f"{issue}-group.py" if (B / "accept" / f"{issue}-group.py").exists() else f"{issue}.py")
     arm_meta = json.loads((out / "arm.json").read_text()) if (out / "arm.json").exists() else {}
     a = subprocess.run([sys.executable, str(acc), str(w)], capture_output=True, text=True, timeout=1800)
@@ -296,8 +328,7 @@ def score_run(issue: str, out: Path) -> dict | None:
             and '"verdict"' in p.read_text(errors="replace")[:4000]]
     changed = sb.sh(["git", "diff", "--name-only", base], cwd=w).stdout.split()
     return {"run": out.name, "issue": issue, "arm": arm, "rep": rep, "exit": end["exit"],
-            "seconds": end["seconds"], "suite_pass": t.returncode == 0,
-            "suite": (t.stdout.strip().splitlines() or [""])[-1],
+            "seconds": end["seconds"], **suite,
             "acceptance": json.loads(a.stdout.strip().splitlines()[-1]) if a.stdout.strip() else {"error": a.stderr[-300:]},
             "dogfood_log": [str(p.relative_to(w)) for p in logs if str(p.relative_to(w)) in changed or
                             sb.sh(["git", "status", "--porcelain", str(p.relative_to(w))], cwd=w).stdout],
