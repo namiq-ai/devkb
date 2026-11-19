@@ -461,8 +461,16 @@ class ReadTools:
             proc = subprocess.run(cmd, cwd=self.root, capture_output=True, text=True, timeout=25)
         except (OSError, subprocess.TimeoutExpired) as e:
             return {"error": f"search failed: {e}"}
+        if proc.returncode not in (0, 1) and mode == "regex" and not q.lower().startswith("re:"):
+            # a name with a regex character that is not a valid regex (`ProcessAPI(`): search it literally (#128)
+            args, mode = ["-F", "-e", q], "text"
+            cmd = ["git", "grep", "-n", "-I", "--no-color", "--max-count=60", *args, "--", *(spec or ["."]), *excl]
+            try:
+                proc = subprocess.run(cmd, cwd=self.root, capture_output=True, text=True, timeout=25)
+            except (OSError, subprocess.TimeoutExpired) as e:
+                return {"error": f"search failed: {e}"}
         if proc.returncode not in (0, 1):
-            return {"error": (proc.stderr or "git grep failed").strip()[:200]}
+            return {"error": "devkb could not search the code: " + (proc.stderr or "git grep failed").strip()[:200]}
         by_file: dict[str, list[tuple[int, str]]] = defaultdict(list)
         total = 0
         for line in proc.stdout.splitlines()[:6000]:
