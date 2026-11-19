@@ -57,7 +57,18 @@ def agent_flags(mode: str, cwd: Path) -> list[str]:
     settings = {"disableAllHooks": True, "permissions": {"allow": allow}}
     return ["--setting-sources", "local", "--settings", json.dumps(settings),
             "--strict-mcp-config", "--mcp-config", json.dumps({"mcpServers": {}}),
-            "--allowedTools", *allow, "--disallowedTools", deny]
+            "--add-dir", str(Path(cwd).resolve()), "--allowedTools", *allow, "--disallowedTools", deny]
+
+
+def neutral_cwd() -> Path:
+    """An empty directory the daemon owns, recreated for every run. Claude starts here, never in a checkout, so no
+    checkout's settings (a `.claude/` an outsider committed, or a symlink to one) can load: they could carry an
+    `apiKeyHelper` that runs a shell before the first turn, or widen the agent's permissions."""
+    d = HOME / "agent-cwd"
+    if d.is_symlink() or d.exists():
+        d.unlink() if d.is_symlink() else shutil.rmtree(d)
+    d.mkdir(parents=True)
+    return d
 
 
 # A draft fix may not touch what runs on its own or configures the run: those are a maintainer's change.
@@ -158,9 +169,10 @@ def wants_handling(it: dict) -> str | None:
 
 def claude(prompt: str, cwd: Path, tools: str) -> tuple[str, float]:
     """One headless Claude Code run with the signed-in CLI. Tools are restricted by `tools`; there is no network tool."""
-    shutil.rmtree(Path(cwd) / ".claude", ignore_errors=True) if Path(cwd) != TREE else None
     cmd = ["claude", "-p", "--output-format", "json", "--model", MODEL, "--max-turns", MAX_TURNS, *agent_flags(tools, cwd)]
-    out = json.loads(run(cmd, cwd=cwd, input=prompt))
+    where = (f"\n\nThe repository is at {Path(cwd).resolve()}. Your working directory is empty: read"
+             f"{' and edit' if tools == WRITE else ''} files there by absolute path.")
+    out = json.loads(run(cmd, cwd=neutral_cwd(), input=prompt + where))
     if out.get("is_error"):
         raise RuntimeError(f"claude: {str(out.get('result'))[:300]}")
     return out.get("result", ""), float(out.get("total_cost_usd") or 0)
@@ -234,6 +246,9 @@ def sanitize(text: str) -> str:
     while prev != text:                       # '<!<!-- -->-- x -->' is a comment again after one pass
         prev, text = text, re.sub(r"<!--.*?-->", "", text, flags=re.S)
     text = text.replace("<!--", "&lt;!--")    # an unclosed opener would hide everything after it
+    text = re.sub(r"!\[([^\]]*)\]\([^)]*\)", r"\1", text)                 # images fetch a URL when the page renders
+    text = re.sub(r"<\s*(img|picture|source|video|audio|iframe|object|embed)\b[^>]*>", "", text, flags=re.I)
+    text = re.sub(r"^\s*\[[^\]]*\]:\s*\S.*$", "", text, flags=re.M)           # reference definitions render as nothing
     # A zero-width space after every @ before a name: GitHub never reads it as a mention, whatever Markdown is around
     # it (backslashes, code spans, a cut at the length limit), and it reads the same.
     return _MENTION.sub("@" + ZWSP, text.strip()[:3500])
@@ -534,7 +549,13 @@ def mark(n: int, apply: bool, add: str, remove: str | None = None) -> None:
 
 def handle_review(it: dict, thread: list[dict], apply: bool) -> None:
     run(["git", "-C", str(TREE), "fetch", "-q", "origin", f"pull/{it['number']}/head:refs/triage/pr{it['number']}"])
-    work = worktree_for(f"pr{it['number']}", f"refs/triage/pr{it['number']}")
+    ref = f"refs/triage/pr{it['number']}"
+    tree = run(["git", "-C", str(TREE), "ls-tree", "-r", "--full-tree", ref])
+    odd = [line.split("\t", 1)[-1] for line in tree.splitlines()
+           if line.startswith("120000") or line.startswith("160000") or re.search(r"(^|/)\.claude(/|$)", line.split("\t", 1)[-1])]
+    if odd:                                          # symlinks, submodules or Claude settings: a maintainer reviews it
+        raise RuntimeError(f"the pull request holds a symlink, a submodule or .claude/ ({odd[:3]}); not reviewed automatically")
+    work = worktree_for(f"pr{it['number']}", ref)
     diff = run(["gh", "pr", "diff", str(it["number"]), "--repo", REPO], check=False)[:80000]
     text, cost = claude(prompt("review") + "\n\n" + untrusted(it, thread, "\n--- diff:\n" + diff), work, READ_ONLY)
     post(it["number"], json_object(text)["review"], apply)

