@@ -197,10 +197,24 @@ def from_template(t: Path, w: Path) -> None:
 
 
 def run_one(issue: str, arm: str, rep: int) -> str:
+    """One run; any error after setup (a GitHub call that fails, a crashed agent wrapper) is recorded as the run's end,
+    never raised into the batch loop, where it stopped every later progress line."""
+    try:
+        return _run_one(issue, arm, rep)
+    except Exception as e:  # noqa: BLE001
+        tag = f"p{issue}-{arm}-r{rep}"
+        out = B / "runs" / tag
+        out.mkdir(parents=True, exist_ok=True)
+        if not (out / "end").exists():
+            (out / "end").write_text(json.dumps({"exit": "error", "seconds": 0, "error": f"{type(e).__name__}: {e}"[-400:]}))
+        return f"error {tag}: {type(e).__name__}: {e}"
+
+
+def _run_one(issue: str, arm: str, rep: int) -> str:
     tag = f"p{issue}-{arm}-r{rep}"
     out = B / "runs" / tag
-    if (out / "end").exists():
-        return f"skip {tag}"
+    if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") != "error":
+        return f"skip {tag}"                          # a run that ended in an error is run again
     out.mkdir(parents=True, exist_ok=True)
     w = B / "work" / tag
     try:
@@ -261,7 +275,7 @@ def score_run(issue: str, out: Path) -> dict | None:
     if not (w / ".bench-base").exists() or not (out / "end").exists():
         return None
     end = json.loads((out / "end").read_text())
-    if end.get("exit") == "base-red":
+    if end.get("exit") in ("base-red", "error"):
         return None
     base = (w / ".bench-base").read_text().strip()
     t = subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=w,
@@ -300,8 +314,9 @@ def score(issues):
             _, arm, rep = out.name.split("-")
             if only and arm not in only:
                 continue
-            if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") == "base-red":
-                print(out.name, "REFUSED (red base, not scored)", flush=True)
+            ex = json.loads((out / "end").read_text()).get("exit") if (out / "end").exists() else None
+            if ex in ("base-red", "error"):
+                print(out.name, "REFUSED (red base, not scored)" if ex == "base-red" else "ERROR (not scored; run again)", flush=True)
                 continue
             saved = json.loads((out / "score.json").read_text()) if (out / "score.json").exists() else None
             r = saved if saved and saved.get("accept_sha256") == sha and os.environ.get("POLICY_RESCORE") != "1" else score_run(issue, out)
