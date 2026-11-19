@@ -298,3 +298,14 @@ def test_a_failed_post_never_files_the_same_ticket_again(monkeypatch, tmp_path):
     triage.feedback_pass(True, [thread])
     triage.feedback_pass(True, [thread])
     assert created == [1]
+
+
+def test_an_interpreter_reached_through_directory_symlinks_runs_in_the_sandbox(tmp_path, monkeypatch):
+    real = tmp_path / "py-3.11.17" / "bin"
+    real.mkdir(parents=True)
+    (real / "python3.11").symlink_to(sys.executable)
+    (tmp_path / "py-3.11").symlink_to("py-3.11.17")               # uv's layout: a version link to the real directory
+    monkeypatch.setenv("TRIAGE_PYTHON", str(tmp_path / "py-3.11" / "bin" / "python3.11"))
+    links = triage.interpreter_links()
+    assert ["--symlink", "py-3.11.17", str(tmp_path / "py-3.11")] == links[links.index(str(tmp_path / "py-3.11")) - 2:
+                                                                           links.index(str(tmp_path / "py-3.11")) + 1]
