@@ -156,7 +156,11 @@ def run_one(issue: str, arm: str, rep: int) -> str:
         return f"skip {tag}"
     out.mkdir(parents=True, exist_ok=True)
     w = B / "work" / tag
-    checkout(w, arm)
+    try:
+        checkout(w, arm)
+    except RuntimeError as e:                         # a red base (#221): recorded, never run or scored
+        (out / "end").write_text(json.dumps({"exit": "base-red", "seconds": 0, "error": str(e)[-400:]}))
+        return f"refused {tag}: {e}"
     t = json.loads(sb.sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
     for extra in {"131": ["133"], "114": ["115", "116"], "151": ["149"], "143": ["148"], "137": ["138"]}.get(issue, []):   # tickets done as one job (same code)
         t2 = json.loads(sb.sh(["gh", "issue", "view", extra, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
@@ -201,6 +205,9 @@ def score(issues):
             if (only and arm not in only) or not (w / ".bench-base").exists() or not (out / "end").exists():
                 continue                                  # another arm set, or a run whose checkout is gone
             end = json.loads((out / "end").read_text())
+            if end.get("exit") == "base-red":
+                print(out.name, "REFUSED (red base, not scored)", flush=True)
+                continue
             base = (w / ".bench-base").read_text().strip()
             t = subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=w,
                                capture_output=True, text=True, timeout=1800)
