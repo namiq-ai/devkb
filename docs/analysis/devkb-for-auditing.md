@@ -8,7 +8,7 @@ a QA knowledge base (#36) will be asked, so the measurements below are its start
 |---|---|---|---|
 | 1 | changes v0.2.5 → main (≈6,600 lines: C/C++, C#, read tools, hook, init, packs) | 3 (devkb-first added mid-run) | 22 (#50–#71) |
 | 2 | code from v0.2.0 → v0.2.5 still on main (plugin hooks/config, init, bench; 825 surviving C# lines) | 2 (devkb-first from the start, every query logged with a verdict) | 14 (#72–#85) |
-| 3 | changes v0.2.12 → 0.2.13 (116 commits: the search hook, the graph and C/C++ resolver, the triage daemon, the benchmark harness) | 3 areas × 2 arms (no devkb / the 0.2.13 hook, no ask-first instruction) × 2 runs: the first controlled comparison (§4) | 101 findings in 34 tickets (#276–#309), plus 1 held back as a security report |
+| 3 | changes v0.2.12 → 0.2.13 (116 commits: the search hook, the graph and C/C++ resolver, the triage daemon, the benchmark harness) | 3 areas × 2 arms (no devkb / the 0.2.13 hook, no ask-first instruction) × 2 runs: the first controlled comparison (§4) | 101 findings in 34 tickets (#276–#309), plus 1 security finding: GHSA-2f68-qq22-rcgx, fixed in #314 |
 
 Every finding was reproduced by a script before it was reported; the high ones were reproduced a second time
 independently. Measured from the reviewers' transcripts (`toolmix.py`: tool calls by kind and the characters each
@@ -139,8 +139,8 @@ The first audit with a control arm. Each of three reviewers ran four times on ma
 - **Findings:** each came with a script that exits 1 while the defect is present. All 103 were run twice on a clean
   checkout of main: all 103 exit 1 both times without a crash.
 - **Tickets:** each reproduction's output was read against the specifications and the code, and the findings grouped
-  by root cause into 34 tickets (#276–#309). One security finding, a bypass of the posted-text sanitiser, is held
-  for a private report. Data, scripts and harness: `bench/results/2026-11-19-audit-0.2.13/`.
+  by root cause into 34 tickets (#276–#309). One security finding, a bypass of the posted-text sanitiser, went through a private
+  advisory: GHSA-2f68-qq22-rcgx, fixed in #314 after three adversarial review rounds, and published. Data, scripts and harness: `bench/results/2026-11-19-audit-0.2.13/`.
 
 | | No devkb (6 runs) | devkb 0.2.13: hook + teach line (6 runs) |
 |---|---|---|
