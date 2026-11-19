@@ -92,13 +92,13 @@ def run_definitions(repo: Path, name: str, timeout: float = 12) -> list[dict] | 
 
 def changed_since_build(repo: Path, rel: str) -> bool:
     """True when the file may differ from what the graph was built from: edited after the build, or no build time known."""
-    built = 0.0
+    times = []
     for n in ("symbols-manifest.json", "manifest.json"):
         try:
-            built = (repo / ".devkb" / n).stat().st_mtime
-            break
+            times.append((repo / ".devkb" / n).stat().st_mtime)
         except OSError:
             pass
+    built = min(times) if times else 0.0              # the older part decides: an answer may read either (#273)
     try:
         return not built or (repo / rel).stat().st_mtime > built
     except OSError:

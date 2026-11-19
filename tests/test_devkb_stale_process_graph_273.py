@@ -47,3 +47,14 @@ def test_no_answer_uses_an_older_process_graphs_line_numbers(tmp_path):
     h = json.loads(out).get("hookSpecificOutput", {}) if out.strip().startswith("{") else {}
     text = h.get("permissionDecisionReason", "") + h.get("additionalContext", "")
     assert "pkg/core.py:1:" not in text                     # the old line of LIMIT is never shown
+
+
+def test_an_uncommitted_edit_after_the_older_part_is_a_change(tmp_path):
+    import time
+    (tmp_path / ".devkb").mkdir()
+    (tmp_path / ".devkb" / "manifest.json").write_text("{}")         # the process graph, built first
+    time.sleep(0.05)
+    (tmp_path / "core.py").write_text("x = 1\n")                      # edited after it
+    time.sleep(0.05)
+    (tmp_path / ".devkb" / "symbols-manifest.json").write_text("{}")  # then only the symbol index rebuilt
+    assert misses.changed_since_build(tmp_path, "core.py")
