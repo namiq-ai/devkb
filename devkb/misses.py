@@ -145,20 +145,24 @@ def run_query(repo: Path, kind: str, name: str, timeout: float = 12) -> tuple[st
 
 
 def graph_state(repo: Path) -> tuple[str, str]:
-    """(commit the graph was built at, repository HEAD)."""
-    built = ""
+    """(commit the graph was built at, repository HEAD). The graph has two parts, the symbol index and the process graph,
+    each with its own manifest, and an answer may read either: when they were built at different commits, the one that
+    is not HEAD is the graph's commit, so a stale part makes the whole graph stale (#273)."""
+    heads = []
     for n in ("symbols-manifest.json", "manifest.json"):
         try:
-            built = json.loads((repo / ".devkb" / n).read_text()).get("git_head", "") or built
+            h = json.loads((repo / ".devkb" / n).read_text()).get("git_head", "")
         except (OSError, ValueError):
-            pass
-        if built:
-            break
+            h = ""
+        if h:
+            heads.append(h)
     try:
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True,
                               timeout=5).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         head = ""
+    same = lambda h: bool(head) and (head.startswith(h[:7]) or h.startswith(head[:7]))
+    built = next((h for h in heads if not same(h)), heads[0] if heads else "")
     return built, head
 
 
