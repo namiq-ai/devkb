@@ -1,6 +1,7 @@
 """#218 (SPEC-DKB-007 S5) and #214's added scope: every answer's hash, size and first line are logged (and kept in full
-with DEVKB_GUARDRAIL_KEEP=1); D1 (DEVKB_GUARDRAIL_TEACH=1) ends an answer with the devkb command that gives it; D2
-(DEVKB_GUARDRAIL_OUTLINE=1) gives the first whole-file Read of a long code file its outline. Both are off by default."""
+with DEVKB_GUARDRAIL_KEEP=1); D1 ends an answer with the devkb command that gives it, on by default since #267
+(DEVKB_GUARDRAIL_TEACH=0 turns it off); D2 (DEVKB_GUARDRAIL_OUTLINE=1) gives the first whole-file Read of a long code file
+its outline, off by default (#218 dropped it)."""
 import json
 import os
 import subprocess
@@ -60,11 +61,22 @@ def test_every_answer_is_logged_by_hash_size_and_first_line_and_kept_only_when_a
     assert (keep / f"{rows[-1]['answer_sha1']}.txt").read_text() == text(h)
 
 
-def test_teach_is_off_by_default_and_adds_one_line_when_on(repo, tmp_path):
-    plain, _ = hook(repo, tmp_path, "Bash", {"command": "grep -rn compute pkg/"})
-    taught, _ = hook(repo, tmp_path, "Bash", {"command": "grep -rn compute pkg/"}, DEVKB_GUARDRAIL_TEACH="1")
+def test_teach_is_on_by_default_and_the_setting_0_gives_the_plain_answer(repo, tmp_path):
+    taught, _ = hook(repo, tmp_path, "Bash", {"command": "grep -rn compute pkg/"})
+    plain, _ = hook(repo, tmp_path, "Bash", {"command": "grep -rn compute pkg/"}, DEVKB_GUARDRAIL_TEACH="0")
     assert "Next time ask devkb" not in text(plain)
     assert text(taught) == text(plain).rstrip() + "\nNext time ask devkb directly: `devkb uses compute --project .`"
+
+
+@pytest.mark.parametrize("command, taught", [
+    ('grep -n "def compute" -A20 pkg/core.py', "devkb symbol compute --source --project ."),       # read-body
+    ('grep -rn "def compute" pkg/', "devkb symbol compute --source --project ."),                   # locate
+    ('grep -n "^def " pkg/core.py', "devkb outline pkg/core.py --project ."),                       # list-symbols
+    ("grep -rn compute pkg/", "devkb uses compute --project ."),                                     # call-sites
+])
+def test_each_answer_kind_names_its_command_by_default(repo, tmp_path, command, taught):
+    h, _ = hook(repo, tmp_path, "Bash", {"command": command})
+    assert text(h).rstrip().endswith(f"Next time ask devkb directly: `{taught}`"), text(h)[-300:]
 
 
 def test_outline_on_first_open_is_off_by_default_and_once_per_file_when_on(repo, tmp_path):

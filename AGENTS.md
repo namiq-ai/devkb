@@ -68,8 +68,9 @@ This repository is devkb itself, so every session that works on it is also a tes
    `scripts/devkb_guardrail.py` before Grep and grep / rg / git grep searches. When every name a search asks about
    resolves in the graph with coverage Complete, devkb's answer is the search's result, in the same call (beside the
    output when the command does more than search; repeat the identical search for grep's raw lines). Otherwise the
-   search runs untouched, exactly as without devkb. It never refuses. `DEVKB_GUARDRAIL=0` turns it off for a
-   benchmark's control arm.
+   search runs untouched, exactly as without devkb. It never refuses. Each answer ends with the devkb command that
+   gives it, so the next such question can go to devkb directly (#267; `DEVKB_GUARDRAIL_TEACH=0` turns that line
+   off). `DEVKB_GUARDRAIL=0` turns the guardrail off for a benchmark's control arm.
 7. **Every completed ticket carries its execution result (#139), then its graph misses (#133, #141).** When a ticket's
    PR merges, add a comment headed **Execution result** before reporting the work as finished:
    - where it was done: the PR number and the merge commit;
