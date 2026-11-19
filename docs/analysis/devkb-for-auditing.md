@@ -154,6 +154,23 @@ The first audit with a control arm. Each of three reviewers ran four times on ma
 | Hook decisions | — | 17: 15 passed through, 1 answer beside grep, 1 span hint |
 | devkb queries the reviewers ran | 8 (the repository's own tool, which they audit) | 6 |
 
+Per run (transcripts recounted with the #258 rules; *read* is text returned by file and diff reads):
+
+| Run | Arm | Cost | Model calls | Context k tokens | Output k tokens | Minutes | grep calls | Reads | Read k chars | Run calls | devkb queries | Findings | Defect groups |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| graph and query tools r1 | no devkb | $0.57 | 29 | 1,361 | 22.0 | 3.4 | 4 | 1 | 0 | 32 | 0 | 4 | 4 |
+| graph and query tools r2 | no devkb | $1.04 | 71 | 4,131 | 33.0 | 6.0 | 9 | 4 | 15 | 38 | 1 | 8 | 6 |
+| graph and query tools r1 | devkb | $0.99 | 50 | 2,960 | 36.1 | 7.0 | 8 | 3 | 8 | 39 | 0 | 7 | 7 |
+| graph and query tools r2 | devkb | $1.11 | 57 | 3,620 | 39.8 | 7.3 | 13 | 2 | 7 | 39 | 0 | 7 | 6 |
+| search hook r1 | no devkb | $1.68 | 61 | 6,288 | 40.3 | 15.1 | 16 | 17 | 164 | 25 | 7 | 11 | 7 |
+| search hook r2 | no devkb | $2.03 | 85 | 7,933 | 56.1 | 12.3 | 12 | 13 | 93 | 56 | 0 | 10 | 7 |
+| search hook r1 | devkb | $0.85 | 42 | 2,811 | 21.5 | 9.8 | 8 | 7 | 52 | 21 | 1 | 4 | 4 |
+| search hook r2 | devkb | $1.99 | 88 | 8,801 | 46.8 | 10.7 | 25 | 17 | 124 | 36 | 5 | 12 | 7 |
+| triage and harness r1 | no devkb | $1.16 | 32 | 3,026 | 40.5 | 5.1 | 8 | 7 | 113 | 32 | 0 | 9 | 8 |
+| triage and harness r2 | no devkb | $1.04 | 30 | 2,631 | 35.9 | 4.6 | 8 | 6 | 93 | 14 | 0 | 9 | 9 |
+| triage and harness r1 | devkb | $1.11 | 27 | 2,540 | 41.1 | 5.3 | 5 | 8 | 120 | 15 | 0 | 13 | 13 |
+| triage and harness r2 | devkb | $1.01 | 28 | 2,510 | 34.0 | 4.7 | 8 | 6 | 114 | 9 | 0 | 9 | 8 |
+
 Per area, the number of the area's defect groups each run found:
 
 | Area | Groups | No devkb, runs 1 and 2 | devkb, runs 1 and 2 |
