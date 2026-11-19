@@ -1,0 +1,29 @@
+=== perf v0.2.12-a 16:36:14 load 1.83 1.74 2.07
+click [15.5, 15.38, 15.59] 6.5 MB {'pack file': 0.19, 'pack change': 0.193, 'query about': 0.197, 'symbol': 0.192, 'outline': 0.172, 'uses': 0.254}
+mealie [77.8, 75.9, 72.28] 26.6 MB {'pack file': 0.274, 'pack change': 0.238, 'query about': 0.486, 'symbol': 0.268, 'outline': 0.265, 'uses': 0.363}
+prefect [475.41, 452.26, 444.91] 128.9 MB {'pack file': 0.607, 'pack change': 0.654, 'query about': 2.288, 'symbol': 0.951, 'outline': 0.887, 'uses': 1.169}
+leveldb [1.29, 1.28, 1.28] 4.0 MB {'pack file': 0.179, 'pack change': 0.173, 'query about': 0.147, 'symbol': 0.171, 'outline': 0.169, 'uses': 0.198}
+fmt [2.24, 2.27, 2.29] 6.0 MB {'pack file': 0.195, 'pack change': 0.183, 'query about': 0.171, 'symbol': 0.174, 'outline': 0.19, 'uses': 0.217}
+zephyr [162.1, 164.31, 160.85] 440.0 MB {'pack file': 1.387, 'pack change': 1.417, 'query about': 7.684, 'symbol': 3.568, 'outline': 2.394, 'uses': 4.485}
+=== perf v0.2.11 17:14:59 load 2.15 2.29 2.51
+click [14.02, 14.01, 13.86] 6.4 MB {'pack file': 0.189, 'pack change': 0.186, 'query about': 0.19, 'symbol': 0.184, 'outline': 0.179, 'uses': 0.262}
+mealie [73.26, 73.81, 73.71] 26.2 MB {'pack file': 0.254, 'pack change': 0.245, 'query about': 0.508, 'symbol': 0.281, 'outline': 0.261, 'uses': 0.363}
+prefect [207.59, 201.57, 207.32] 129.5 MB {'pack file': 0.57, 'pack change': 0.6, 'query about': 2.54, 'symbol': 0.895, 'outline': 0.82, 'uses': 1.05}
+leveldb [1.19, 1.14, 1.19] 3.9 MB {'pack file': 0.145, 'pack change': 0.153, 'query about': 0.144, 'symbol': 0.173, 'outline': 0.17, 'uses': 0.197}
+fmt [2.24, 2.24, 2.17] 5.7 MB {'pack file': 0.183, 'pack change': 0.179, 'query about': 0.159, 'symbol': 0.155, 'outline': 0.188, 'uses': 0.209}
+zephyr [138.25, 139.16, 140.92] 421.3 MB {'pack file': 1.232, 'pack change': 1.241, 'query about': 7.181, 'symbol': 2.787, 'outline': 1.755, 'uses': 3.668}
+=== perf v0.2.12-b 17:39:25 load 1.92 2.15 2.36
+click [16.01, 15.96, 14.3] 6.5 MB {'pack file': 0.201, 'pack change': 0.186, 'query about': 0.197, 'symbol': 0.183, 'outline': 0.177, 'uses': 0.25}
+mealie [78.02, 79.2, 79.11] 26.6 MB {'pack file': 0.273, 'pack change': 0.263, 'query about': 0.512, 'symbol': 0.295, 'outline': 0.263, 'uses': 0.373}
+prefect [447.11, 447.26, 441.61] 128.9 MB {'pack file': 0.607, 'pack change': 0.647, 'query about': 2.321, 'symbol': 0.965, 'outline': 0.885, 'uses': 1.161}
+leveldb [1.32, 1.29, 1.27] 4.0 MB {'pack file': 0.181, 'pack change': 0.188, 'query about': 0.15, 'symbol': 0.178, 'outline': 0.177, 'uses': 0.196}
+fmt [2.3, 2.25, 2.26] 6.0 MB {'pack file': 0.196, 'pack change': 0.184, 'query about': 0.164, 'symbol': 0.201, 'outline': 0.194, 'uses': 0.213}
+zephyr [164.09, 163.52, 165.88] 440.0 MB {'pack file': 1.314, 'pack change': 1.31, 'query about': 7.432, 'symbol': 4.513, 'outline': 2.597, 'uses': 5.71}
+=== graph_info 18:17:57
+click 4856 10416 16.7
+mealie 23296 47453 92.8
+prefect 92964 188436 439.0
+leveldb 2222 4379 1.4
+fmt 4047 6006 2.4
+zephyr 253145 486067 162.2
+=== done 18:29:56

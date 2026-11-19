@@ -1,0 +1,432 @@
+{
+ "label": "v0.2.12-b",
+ "code": "/home/namiq/orchestra/ip/devkb-bench/release-check-0.2.12/code-v0.2.12",
+ "repos": {
+  "click": {
+   "build": [
+    {
+     "secs": 16.01,
+     "peak_mb": 56,
+     "rc": 0
+    },
+    {
+     "secs": 15.96,
+     "peak_mb": 57,
+     "rc": 0
+    },
+    {
+     "secs": 14.3,
+     "peak_mb": 57,
+     "rc": 0
+    }
+   ],
+   "files": 179,
+   "graph_mb": 6.5,
+   "targets": {
+    "function": "echo",
+    "function_file": "src/click/utils.py",
+    "file": "src/click/core.py",
+    "callers": 59
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.201,
+     "min_s": 0.193,
+     "rc": 0,
+     "bytes": 7477,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.186,
+     "min_s": 0.173,
+     "rc": 0,
+     "bytes": 9477,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.197,
+     "min_s": 0.182,
+     "rc": 0,
+     "bytes": 387502,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 0.183,
+     "min_s": 0.153,
+     "rc": 0,
+     "bytes": 290,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 0.177,
+     "min_s": 0.144,
+     "rc": 0,
+     "bytes": 5887,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 0.25,
+     "min_s": 0.218,
+     "rc": 0,
+     "bytes": 3411,
+     "answered": true
+    }
+   }
+  },
+  "mealie": {
+   "build": [
+    {
+     "secs": 78.02,
+     "peak_mb": 163,
+     "rc": 0
+    },
+    {
+     "secs": 79.2,
+     "peak_mb": 163,
+     "rc": 0
+    },
+    {
+     "secs": 79.11,
+     "peak_mb": 163,
+     "rc": 0
+    }
+   ],
+   "files": 1781,
+   "graph_mb": 26.6,
+   "targets": {
+    "function": "require",
+    "function_file": "mealie/routes/_base/permissions.py",
+    "file": "tests/integration_tests/user_recipe_tests/test_recipe_crud.py",
+    "callers": 61
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.273,
+     "min_s": 0.269,
+     "rc": 0,
+     "bytes": 1113,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.263,
+     "min_s": 0.252,
+     "rc": 0,
+     "bytes": 27741,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.512,
+     "min_s": 0.509,
+     "rc": 0,
+     "bytes": 78054,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 0.295,
+     "min_s": 0.283,
+     "rc": 0,
+     "bytes": 254,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 0.263,
+     "min_s": 0.249,
+     "rc": 0,
+     "bytes": 5915,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 0.373,
+     "min_s": 0.366,
+     "rc": 0,
+     "bytes": 5901,
+     "answered": true
+    }
+   }
+  },
+  "prefect": {
+   "build": [
+    {
+     "secs": 447.11,
+     "peak_mb": 610,
+     "rc": 0
+    },
+    {
+     "secs": 447.26,
+     "peak_mb": 609,
+     "rc": 0
+    },
+    {
+     "secs": 441.61,
+     "peak_mb": 611,
+     "rc": 0
+    }
+   ],
+   "files": 5542,
+   "graph_mb": 128.9,
+   "targets": {
+    "function": "get_client",
+    "function_file": "src/prefect/client/orchestration/__init__.py",
+    "file": "src/integrations/prefect-github/prefect_github/schemas/graphql_schema.py",
+    "callers": 254
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.607,
+     "min_s": 0.559,
+     "rc": 0,
+     "bytes": 835,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.647,
+     "min_s": 0.636,
+     "rc": 0,
+     "bytes": 39880,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 2.321,
+     "min_s": 2.309,
+     "rc": 0,
+     "bytes": 270074,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 0.965,
+     "min_s": 0.942,
+     "rc": 0,
+     "bytes": 2655,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 0.885,
+     "min_s": 0.883,
+     "rc": 0,
+     "bytes": 5910,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 1.161,
+     "min_s": 1.136,
+     "rc": 0,
+     "bytes": 3892,
+     "answered": true
+    }
+   }
+  },
+  "leveldb": {
+   "build": [
+    {
+     "secs": 1.32,
+     "peak_mb": 43,
+     "rc": 0
+    },
+    {
+     "secs": 1.29,
+     "peak_mb": 43,
+     "rc": 0
+    },
+    {
+     "secs": 1.27,
+     "peak_mb": 43,
+     "rc": 0
+    }
+   ],
+   "files": 154,
+   "graph_mb": 4.0,
+   "targets": {
+    "function": "Status.OK",
+    "function_file": "include/leveldb/status.h",
+    "file": "db/db_test.cc",
+    "callers": 78
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.181,
+     "min_s": 0.176,
+     "rc": 0,
+     "bytes": 1731,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.188,
+     "min_s": 0.185,
+     "rc": 0,
+     "bytes": 7738,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.15,
+     "min_s": 0.148,
+     "rc": 0,
+     "bytes": 44585,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 0.178,
+     "min_s": 0.176,
+     "rc": 0,
+     "bytes": 595,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 0.177,
+     "min_s": 0.17,
+     "rc": 0,
+     "bytes": 5342,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 0.196,
+     "min_s": 0.162,
+     "rc": 0,
+     "bytes": 2798,
+     "answered": true
+    }
+   }
+  },
+  "fmt": {
+   "build": [
+    {
+     "secs": 2.3,
+     "peak_mb": 54,
+     "rc": 0
+    },
+    {
+     "secs": 2.25,
+     "peak_mb": 55,
+     "rc": 0
+    },
+    {
+     "secs": 2.26,
+     "peak_mb": 54,
+     "rc": 0
+    }
+   ],
+   "files": 148,
+   "graph_mb": 6.0,
+   "targets": {
+    "function": "to_unsigned",
+    "function_file": "include/fmt/core.h",
+    "file": "test/gtest/gmock-gtest-all.cc",
+    "callers": 50
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 0.196,
+     "min_s": 0.174,
+     "rc": 0,
+     "bytes": 4032,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 0.184,
+     "min_s": 0.164,
+     "rc": 0,
+     "bytes": 7288,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 0.164,
+     "min_s": 0.129,
+     "rc": 0,
+     "bytes": 24171,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 0.201,
+     "min_s": 0.19,
+     "rc": 0,
+     "bytes": 189,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 0.194,
+     "min_s": 0.191,
+     "rc": 0,
+     "bytes": 5908,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 0.213,
+     "min_s": 0.185,
+     "rc": 0,
+     "bytes": 2890,
+     "answered": true
+    }
+   }
+  },
+  "zephyr": {
+   "build": [
+    {
+     "secs": 164.09,
+     "peak_mb": 1756,
+     "rc": 0
+    },
+    {
+     "secs": 163.52,
+     "peak_mb": 1764,
+     "rc": 0
+    },
+    {
+     "secs": 165.88,
+     "peak_mb": 1756,
+     "rc": 0
+    }
+   ],
+   "files": 70856,
+   "graph_mb": 440.0,
+   "targets": {
+    "function": "shell_strtoul",
+    "function_file": "subsys/shell/shell_utils.c",
+    "file": "tests/bluetooth/controller/ctrl_isoal/src/sub_sets/isoal_test_rx.c",
+    "callers": 345
+   },
+   "queries": {
+    "pack file": {
+     "median_s": 1.314,
+     "min_s": 1.295,
+     "rc": 0,
+     "bytes": 1701,
+     "answered": true
+    },
+    "pack change": {
+     "median_s": 1.31,
+     "min_s": 1.287,
+     "rc": 0,
+     "bytes": 7717,
+     "answered": true
+    },
+    "query about": {
+     "median_s": 7.432,
+     "min_s": 7.327,
+     "rc": 0,
+     "bytes": 177847,
+     "answered": true
+    },
+    "symbol": {
+     "median_s": 4.513,
+     "min_s": 4.36,
+     "rc": 0,
+     "bytes": 263,
+     "answered": true
+    },
+    "outline": {
+     "median_s": 2.597,
+     "min_s": 2.368,
+     "rc": 0,
+     "bytes": 539,
+     "answered": true
+    },
+    "uses": {
+     "median_s": 5.71,
+     "min_s": 5.547,
+     "rc": 0,
+     "bytes": 4563,
+     "answered": true
+    }
+   }
+  }
+ }
+}
