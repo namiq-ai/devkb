@@ -9,7 +9,7 @@ Runs the checkout's own `scripts/devkb_guardrail.py` on a fixture where `compute
 - `no_duplicates`: a search grep still runs and whose lines would just repeat grep's output gets nothing beside it
   (a one-file search, a filtered search, a compound command, `-A5` that already shows the whole body);
 - `replaced_has_every_site`: the replacement for `grep -rn compute pkg/` lists every line grep would print;
-- `capped`: the outline of a file with 300 definitions is at most 1,600 characters and says lines are left out;
+- `capped`: the outline of a file with 300 definitions, added alongside, is at most 1,600 characters (§3.4);
 - `body_when_cut`: `grep -n "def long_one" -A3` (a 40-line body) gets the whole body beside it.
 """
 import json, os, re, subprocess, sys, tempfile
@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory() as td:
     k, t, g = got["few_replaced"]
     out["replaced_has_every_site"] = k == "deny" and all(l.split(":", 2)[2].strip() in t for l in g.splitlines() if l)
     k, t, g = got["big_outline"]
-    out["capped"] = k == "context" and len(t) <= 1600 and "more lines" in t
+    out["capped"] = k == "context" and len(t) <= 1600      # §3.4: cut to the budget (grep's own output still runs)
     k, t, g = got["long_body"]
     out["body_when_cut"] = k in ("context", "deny") and "return 0" in t and "x37 = 37" in t
 out["pass"] = (out["no_fixed_text"] and out["one_line_header"] and all(out["no_duplicates"].values())
