@@ -152,6 +152,53 @@ registers `scripts/devkb_guardrail.py` as the PreToolUse hook and `scripts/devkb
 PostToolUse hook for Grep and Bash, each with a 20-second timeout. Do not try to change the settings file."""
 
 
+TEMPLATES = B / "templates"
+_TLOCKS: dict[str, object] = {}
+_TLOCK = __import__("threading").Lock()
+
+
+def template_for(arm: str) -> Path:
+    """One prepared checkout per arm and base commit (files, corpus, venv, graphs, base suite checked), made once and
+    copied for each run: the 4-5 minutes of setup a run used to repeat (POLICY_TEMPLATES=0 turns it off)."""
+    base = sb.sh(["git", "-C", str(sb.REPO), "rev-parse", f"{BASES[arm]}^{{commit}}"]).stdout.strip()
+    envc = toolenv.resolve(ENV_REF[arm]()) if arm in ENV_REF else "none"
+    t = TEMPLATES / f"{arm}-{base[:12]}-{envc[:12]}"
+    with _TLOCK:
+        lock = _TLOCKS.setdefault(t.name, __import__("threading").Lock())
+    with lock:                                    # two runs of one arm wait for the same template, never build it twice
+        if not (t / ".bench-ready").exists():
+            if t.exists():
+                shutil.rmtree(t)
+            checkout(t, arm)                      # raises on a red base: then every run of this arm is refused
+            (t / ".bench-ready").write_text(base + "\n")
+    return t
+
+
+def from_template(t: Path, w: Path) -> None:
+    """Copy a prepared checkout and point its absolute paths (venv scripts, the editable install's finder, the graph
+    files) at the copy, so the run's devkb is the code its agent edits, not the template's."""
+    if w.exists():
+        shutil.rmtree(w)
+    w.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["cp", "-a", "--reflink=auto", str(t), str(w)], check=True)
+    (w / ".bench-ready").unlink(missing_ok=True)
+    old, new = str(t), str(w)
+    files = [*(w / ".venv" / "bin").glob("*"), *(w / ".venv").glob("lib/python*/site-packages/__editable__*"),
+             *(w / ".venv").glob("lib/python*/site-packages/*.pth"), *(w / ".venv").glob("lib/python*/site-packages/*.dist-info/*"),
+             w / ".venv" / "pyvenv.cfg", *w.glob(".devkb/*"), *w.glob("corpus/*/.devkb/*")]
+    for f in files:
+        if not f.is_file() or f.is_symlink() or f.stat().st_size > 200_000_000:
+            continue
+        try:
+            data = f.read_bytes()
+        except OSError:
+            continue
+        if old.encode() in data:
+            st = f.stat()
+            f.write_bytes(data.replace(old.encode(), new.encode()))
+            os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns))   # keep mtimes: the graph's freshness checks compare them
+
+
 def run_one(issue: str, arm: str, rep: int) -> str:
     tag = f"p{issue}-{arm}-r{rep}"
     out = B / "runs" / tag
@@ -160,7 +207,10 @@ def run_one(issue: str, arm: str, rep: int) -> str:
     out.mkdir(parents=True, exist_ok=True)
     w = B / "work" / tag
     try:
-        checkout(w, arm)
+        if os.environ.get("POLICY_TEMPLATES", "1") == "1":
+            from_template(template_for(arm), w)
+        else:
+            checkout(w, arm)
     except RuntimeError as e:                         # a red base (#221): recorded, never run or scored
         (out / "end").write_text(json.dumps({"exit": "base-red", "seconds": 0, "error": str(e)[-400:]}))
         return f"refused {tag}: {e}"
@@ -195,48 +245,69 @@ def run_one(issue: str, arm: str, rep: int) -> str:
         except subprocess.TimeoutExpired:
             code = "timeout"
     (out / "end").write_text(json.dumps({"exit": code, "seconds": round(time.time() - t0)}))
+    try:                                              # scored now, while other agents run, not in a tail after the batch
+        r = score_run(issue, out)
+        if r:
+            (out / "score.json").write_text(json.dumps(r) + "\n")
+    except Exception as e:  # noqa: BLE001  `score` scores it later
+        (out / "score-error.txt").write_text(str(e)[-2000:])
     return f"done {tag} exit={code} {round(time.time() - t0)}s"
 
 
+def score_run(issue: str, out: Path) -> dict | None:
+    """One run's row: the full suite, the hidden check, the transcript. None for a refused run or a missing checkout."""
+    _, arm, rep = out.name.split("-")
+    w = B / "work" / out.name
+    if not (w / ".bench-base").exists() or not (out / "end").exists():
+        return None
+    end = json.loads((out / "end").read_text())
+    if end.get("exit") == "base-red":
+        return None
+    base = (w / ".bench-base").read_text().strip()
+    t = subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=w,
+                       capture_output=True, text=True, timeout=1800)
+    acc = B / "accept" / (f"{issue}-group.py" if (B / "accept" / f"{issue}-group.py").exists() else f"{issue}.py")
+    arm_meta = json.loads((out / "arm.json").read_text()) if (out / "arm.json").exists() else {}
+    a = subprocess.run([sys.executable, str(acc), str(w)], capture_output=True, text=True, timeout=1800)
+    logs = [p for p in w.rglob("*.jsonl") if ".venv" not in p.parts and "corpus" not in p.parts
+            and ".devkb" not in p.parts and p.stat().st_mtime > float(end.get("start", 0) or 0)
+            and '"verdict"' in p.read_text(errors="replace")[:4000]]
+    changed = sb.sh(["git", "diff", "--name-only", base], cwd=w).stdout.split()
+    return {"run": out.name, "issue": issue, "arm": arm, "rep": rep, "exit": end["exit"],
+            "seconds": end["seconds"], "suite_pass": t.returncode == 0,
+            "suite": (t.stdout.strip().splitlines() or [""])[-1],
+            "acceptance": json.loads(a.stdout.strip().splitlines()[-1]) if a.stdout.strip() else {"error": a.stderr[-300:]},
+            "dogfood_log": [str(p.relative_to(w)) for p in logs if str(p.relative_to(w)) in changed or
+                            sb.sh(["git", "status", "--porcelain", str(p.relative_to(w))], cwd=w).stdout],
+            "diff": sb.sh(["git", "diff", "--shortstat", base], cwd=w).stdout.strip(),
+            "accept_sha256": hashlib.sha256(acc.read_bytes()).hexdigest(),          # which check scored it (#223)
+            "base_green": arm_meta.get("base_green"), "base_suite": arm_meta.get("base_suite"),   # #221
+            "devkb_commit": arm_meta.get("devkb_commit"), "hook_sha": arm_meta.get("hook_sha"),   # #225
+            "telemetry": sum(len((d / ".devkb" / "process-api-telemetry.jsonl").read_text().splitlines())
+                             for d in [w, *(w / "corpus" / r for r in sb.CORPUS_REPOS)]
+                             if (d / ".devkb" / "process-api-telemetry.jsonl").exists()),
+            **sb.transcript(out / "stream.jsonl")}
+
+
 def score(issues):
+    """Every run's row: the one saved when the run ended, unless its hidden check changed since (or POLICY_RESCORE=1)."""
     rows = []
     for issue in issues:
         only = set(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))
+        acc = B / "accept" / (f"{issue}-group.py" if (B / "accept" / f"{issue}-group.py").exists() else f"{issue}.py")
+        sha = hashlib.sha256(acc.read_bytes()).hexdigest() if acc.exists() else ""
         for out in sorted((B / "runs").glob(f"p{issue}-*")):
             _, arm, rep = out.name.split("-")
-            w = B / "work" / out.name
-            if (only and arm not in only) or not (w / ".bench-base").exists() or not (out / "end").exists():
-                continue                                  # another arm set, or a run whose checkout is gone
-            end = json.loads((out / "end").read_text())
-            if end.get("exit") == "base-red":
+            if only and arm not in only:
+                continue
+            if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") == "base-red":
                 print(out.name, "REFUSED (red base, not scored)", flush=True)
                 continue
-            base = (w / ".bench-base").read_text().strip()
-            t = subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=w,
-                               capture_output=True, text=True, timeout=1800)
-            acc = B / "accept" / (f"{issue}-group.py" if (B / "accept" / f"{issue}-group.py").exists() else f"{issue}.py")
-            arm_meta = json.loads((out / "arm.json").read_text()) if (out / "arm.json").exists() else {}
-            a = subprocess.run([sys.executable, str(acc), str(w)], capture_output=True,
-                               text=True, timeout=1800)
-            logs = [p for p in w.rglob("*.jsonl") if ".venv" not in p.parts and "corpus" not in p.parts
-                    and ".devkb" not in p.parts and p.stat().st_mtime > float(end.get("start", 0) or 0)
-                    and '"verdict"' in p.read_text(errors="replace")[:4000]]
-            changed = sb.sh(["git", "diff", "--name-only", base], cwd=w).stdout.split()
-            rows.append({"run": out.name, "issue": issue, "arm": arm, "rep": rep, "exit": end["exit"],
-                         "seconds": end["seconds"], "suite_pass": t.returncode == 0,
-                         "suite": (t.stdout.strip().splitlines() or [""])[-1],
-                         "acceptance": json.loads(a.stdout.strip().splitlines()[-1]) if a.stdout.strip() else {"error": a.stderr[-300:]},
-                         "dogfood_log": [str(p.relative_to(w)) for p in logs if str(p.relative_to(w)) in changed or
-                                         sb.sh(["git", "status", "--porcelain", str(p.relative_to(w))], cwd=w).stdout],
-                         "diff": sb.sh(["git", "diff", "--shortstat", base], cwd=w).stdout.strip(),
-                         "accept_sha256": hashlib.sha256(acc.read_bytes()).hexdigest(),          # which check scored it (#223)
-                         "base_green": arm_meta.get("base_green"), "base_suite": arm_meta.get("base_suite"),   # #221
-                         "devkb_commit": arm_meta.get("devkb_commit"), "hook_sha": arm_meta.get("hook_sha"),   # #225
-                         "telemetry": sum(len((d / ".devkb" / "process-api-telemetry.jsonl").read_text().splitlines())
-                                          for d in [w, *(w / "corpus" / r for r in sb.CORPUS_REPOS)]
-                                          if (d / ".devkb" / "process-api-telemetry.jsonl").exists()),
-                         **sb.transcript(out / "stream.jsonl")})
-            r = rows[-1]
+            saved = json.loads((out / "score.json").read_text()) if (out / "score.json").exists() else None
+            r = saved if saved and saved.get("accept_sha256") == sha and os.environ.get("POLICY_RESCORE") != "1" else score_run(issue, out)
+            if not r:
+                continue
+            rows.append(r)
             print(r["run"], "pass" if r["acceptance"].get("pass") else "FAIL", "suite" if r["suite_pass"] else "SUITE-RED",
                   f"${r['cost']:.2f}", "devkb", r["devkb_queries"], "guard", r["guardrail_fired"], "log", r["dogfood_log"], flush=True)
     with open(B / "results-policy.jsonl", "w") as f:
@@ -254,7 +325,7 @@ if __name__ == "__main__":
     issues = a[1].split(",")
     if a[0] == "run":
         reps = int(a[a.index("--reps") + 1]) if "--reps" in a else 3     # 3 by default: 2 cannot tell a change from noise (#222)
-        par = int(a[a.index("--parallel") + 1]) if "--parallel" in a else 2
+        par = int(a[a.index("--parallel") + 1]) if "--parallel" in a else 8    # the work is mostly waiting on the API
         arms = os.environ.get("POLICY_ARMS", "before,after").split(",")
         first = int(os.environ.get("POLICY_FIRST_REP", "1"))
         jobs = [(i, arm, r) for i in issues for arm in arms for r in range(first, first + reps)]
