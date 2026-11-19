@@ -94,3 +94,12 @@ def test_a_template_is_built_once_by_two_processes_at_the_same_time(tmp_path):
     ps = [subprocess.Popen([sys.executable, "-c", code]) for _ in range(2)]
     assert [p.wait() for p in ps] == [0, 0]
     assert len(list(tmp_path.glob("built-*"))) == 1
+
+
+def test_an_error_in_a_run_is_recorded_and_never_stops_the_batch(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setattr(pb, "B", tmp_path)
+    monkeypatch.setattr(pb, "_run_one", lambda *a: (_ for _ in ()).throw(RuntimeError("gh: HTTP 502")))
+    assert pb.run_one("9", "main", 1).startswith("error p9-main-r1")
+    end = json.loads((tmp_path / "runs" / "p9-main-r1" / "end").read_text())
+    assert end["exit"] == "error" and "502" in end["error"]
