@@ -108,11 +108,21 @@ def render_stats(repo: Path) -> str:
     return "\n".join(out)
 
 
-ACTIONS = ("substitute", "alongside", "pass-through", "repeat")
+ACTIONS = ("substitute", "read-answer", "alongside", "span-hint", "remind", "pass-through", "repeat")   # every action (#214)
 
 
 def guardrail_log() -> Path:
     return Path.home() / ".claude" / "hooks" / "devkb-guardrail.log"
+
+
+def intents(rows: list[dict]) -> list[str]:
+    """Intents by action (#214): which questions the searches asked, and what the hook did with each."""
+    c = Counter((r.get("intent") or "unrecorded", r["action"]) for r in rows)
+    kinds = sorted({i for i, _ in c}, key=lambda i: -sum(n for (j, _a), n in c.items() if j == i))
+    acts = [a for a in ACTIONS if any(a == b for _i, b in c)]
+    lines = ["intent by action:", "| intent | " + " | ".join(acts) + " |", "|---|" + "---|" * len(acts)]
+    lines += [f"| {i} | " + " | ".join(str(c[(i, a)]) for a in acts) + " |" for i in kinds]
+    return lines
 
 
 def render_guardrail(log: Path | None = None, repo: str = "") -> str:
@@ -131,7 +141,7 @@ def render_guardrail(log: Path | None = None, repo: str = "") -> str:
             lines.append("  repeats suggest the answer was not enough")
         return lines
 
-    out = [f"{len(rows)} guardrail decision(s) in {log}", "", "total:", *block(rows)]
+    out = [f"{len(rows)} guardrail decision(s) in {log}", "", "total:", *block(rows), "", *intents(rows)]
     for s in sorted({str(r.get("session")) for r in rows}):
         out += ["", f"session {s}:", *block([r for r in rows if str(r.get("session")) == s])]
     return "\n".join(out)

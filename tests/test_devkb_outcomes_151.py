@@ -68,4 +68,5 @@ def test_guardrail_logs_one_line_per_action_and_stats_counts_them(repo, tmp_path
     e = dict(os.environ, PYTHONPATH=str(ROOT), PYTHONWARNINGS="ignore", HOME=str(tmp_path))
     out = subprocess.run([sys.executable, "-P", "-m", "devkb.cli", "guardrail-stats"], cwd=repo, env=e,
                          capture_output=True, text=True, timeout=60).stdout
-    assert "substitute 1, alongside 1, pass-through 1, repeat 1" in out and "incomplete 1" in out and "session g1" in out
+    assert "substitute 1, read-answer 0, alongside 1, span-hint 0, remind 1, pass-through 1, repeat 1" in out  # every action (#214)
+    assert "incomplete 1" in out and "session g1" in out and "intent by action:" in out

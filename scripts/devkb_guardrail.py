@@ -438,6 +438,65 @@ def again(ev: dict, inp: dict) -> bool:
     return False
 
 
+KEYWORDS = {"def", "class", "struct", "enum", "union", "interface", "fn", "func", "function", "void", "static", "inline",
+            "virtual", "async", "public", "private", "protected", "pub"}
+
+
+def classify(tool: str, inp: dict, pattern: str, why: str | None, paths: list[Path] | None = None) -> str:
+    """What a search asks (SPEC-DKB-007 §3.2), from the whole search: pattern, flags, operands, pipes and the tool; the
+    names alone never decide it (#214). First match wins. It reads no graph and changes no answer."""
+    from devkb import misses
+    cmd = inp.get("command", "") if tool == "Bash" else ""
+    why = why or ""
+    bare = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", cmd)     # quoted text cannot hold an option or a pipe
+    first = bare.split("|", 1)[0]
+    ctx = (tool == "Grep" and any(inp.get(k) for k in ("-A", "-B", "-C", "context"))) or \
+        bool(re.search(r"(?:^|\s)-(?:[A-Za-z]*[ABC]\s*\d|-(?:after|before)?-?context)", first))
+    words = re.findall(r"[A-Za-z_][\w.:]*", re.sub(r"\\[sbdwSBDW<>]", " ", pattern))
+    if why == "document-glob" or (paths and all(p.is_file() and p.suffix.lower() not in CODE_EXTS for p in paths)):
+        return "non-code"                         # documents, or named files that hold no code (`.gitignore`, `*.md`)
+    if why in ("option:-c",) or why.startswith("output_mode:count") or re.search(r"\|\s*wc\b", cmd):
+        return "count"
+    if why in ("option:-l", "option:-L", "option:files") or why.startswith("output_mode:files"):
+        return "list-files"
+    if why == "option:-v":
+        return "invert"
+    if words and all(w in KEYWORDS for w in words):
+        return "list-symbols"                     # `^def `, `"    def "`, `^def \|^class `: a file's definitions
+    filt = [f for opts, _q, f in re.findall(r"\|\s*(?:e|f)?grep\s+((?:-\S+\s+)*)(['\"])(.*?)\2", cmd) if "v" not in opts]
+    for fw in (re.findall(r"[A-Za-z_]\w*", f) for f in filt):
+        if fw and all(w in KEYWORDS for w in fw):
+            return "list-symbols"                 # `grep X file | grep "def \|class "`: the definitions that mention X
+        if fw and fw[0] in KEYWORDS and len(fw) > 1:
+            return "locate"                       # `grep X | grep "def X"`: where X is defined
+    defn = misses.definition_name(pattern) or (misses.navigation_names(pattern)
+                                                and re.search(r"(?<![\w])(?:def|class|struct|fn|function)(?:\s|\\s)", pattern))
+    if defn:
+        return "read-body" if ctx else "locate"
+    if ctx and misses.navigation_names(pattern):
+        return "read-body"                        # the lines around a name: the body it sits in
+    if re.match(r"\^\s*(?:\\s\*)?[A-Za-z_]", pattern):
+        return "locate"                           # a name anchored at line start: where it is defined
+    if not misses.navigation_names(pattern):
+        return "literal"
+    if why == "file-operand" or why == "not-recursive":
+        return "in-file"
+    if why == "pipe" and re.search(r"\|\s*(?:e|f)?grep\b", cmd):
+        return "call-sites-filtered"
+    if why in ("", "pipe", "compound", "option:-i", "context", "glob-operand"):
+        return "call-sites"
+    return "unknown"
+
+
+def question_of(action: str, queries: list[dict]) -> str:
+    """The graph question the hook asked for this decision."""
+    if action == "read-answer":
+        return "symbol --source"
+    if action == "span-hint":
+        return "outline"
+    return f"pack {QUESTION}" if queries else "none"
+
+
 def log_decision(ev: dict, repo: Path | str, tool: str, action: str, names: list[str], queries: list[dict], chars: int,
                  reason: str = "", scope: list[str] | None = None) -> None:
     """#149: one line per decision on a navigation search, in the guardrail log: the action, the names, their verdicts
@@ -449,7 +508,8 @@ def log_decision(ev: dict, repo: Path | str, tool: str, action: str, names: list
             fh.write(json.dumps({"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "session": ev.get("session_id"), "tool": tool,
                                  "repo": str(repo), "action": action, "names": names,
                                  "verdicts": [q["verdict"] for q in queries], "chars": chars, "reason": reason,
-                                 "scope": scope}) + "\n")
+                                 "scope": scope, "intent": ev.get("_intent", "unknown"),
+                                 "question": question_of(action, queries)}) + "\n")
     except OSError:
         pass
 
@@ -671,6 +731,10 @@ def main() -> int:
     repo, outside = repo_of(paths)
     if repo is None:
         return 0                                 # not one devkb repository: the search is not ours to answer
+    try:
+        ev["_intent"] = classify(tool, inp, pattern, why, paths)
+    except Exception:  # noqa: BLE001  classifying is for the log only
+        ev["_intent"] = "unknown"
     if not first_copy(ev):
         return 0
     try:
@@ -685,7 +749,8 @@ def main() -> int:
     try:
         with open(Path.home() / ".claude" / "hooks" / "devkb-guardrail.log", "a") as fh:
             fh.write(json.dumps({"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "session": ev.get("session_id"),
-                                 "tool": tool, "repo": str(repo), "action": "remind"}) + "\n")
+                                 "tool": tool, "repo": str(repo), "action": "remind",
+                                 "intent": ev.get("_intent", "unknown")}) + "\n")
     except OSError:
         pass
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
