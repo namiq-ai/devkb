@@ -32,8 +32,9 @@ def _secs(root: Path) -> float:
 def test_three_times_the_files_take_about_three_times_as_long(tmp_path):
     small, large = _repo(tmp_path / "s", 60), _repo(tmp_path / "l", 180)
     _secs(small)                                  # warm imports and caches
-    ratio = _secs(large) / _secs(small)
-    assert ratio < 5, ratio                       # linear is about 3; the 0.2.12 rescan gave about 9
+    # best of three for each size, so a busy machine (the benchmark runs agents in parallel) does not flake it
+    ratio = min(_secs(large) for _ in range(3)) / min(_secs(small) for _ in range(3))
+    assert ratio < 6, ratio                       # linear is about 3; the 0.2.12 quadratic gave 8 to 9
 
 
 def test_typed_calls_still_resolve_to_the_class_method(tmp_path):

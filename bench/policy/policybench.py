@@ -111,13 +111,14 @@ def checkout(w: Path, arm: str):
         sb.sh(["git", "-c", "user.name=bench", "-c", "user.email=bench@example.com", "commit", "-qm", "register the PostToolUse hook"], cwd=w)
     base_suite = subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-x"], cwd=w,
                                 capture_output=True, text=True, timeout=1800)
-    meta = {"arm": arm, "base_suite": (base_suite.stdout.strip().splitlines() or [""])[-1],
+    failed = [l.split(" - ")[0] for l in base_suite.stdout.splitlines() if l.startswith(("FAILED ", "ERROR "))]
+    meta = {"arm": arm, "base_suite": (base_suite.stdout.strip().splitlines() or [""])[-1], "base_failed": failed[:5],
             "base_green": base_suite.returncode == 0,
             "devkb_commit": env["commit"] if env else None, "hook_sha": env["hook_sha"] if env else None}
     (w / ".bench-arm.json").write_text(json.dumps(meta) + "\n")
     (w / ".bench-base").write_text(sb.sh(["git", "rev-parse", "HEAD"], cwd=w).stdout.strip())
     if not meta["base_green"]:                        # a red base would be counted against the agent (#221)
-        raise RuntimeError(f"{w.name}: the checkout's own suite is red before the agent starts: {meta['base_suite']}")
+        raise RuntimeError(f"{w.name}: the checkout's own suite is red before the agent starts: {meta['base_suite']} {failed[:3]}")
 
 
 def remove_dependents(tests: Path) -> None:
