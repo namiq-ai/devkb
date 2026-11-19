@@ -617,6 +617,9 @@ def collect_reexports(repo_root: Path, rel_paths: list[str]) -> dict[str, dict[s
     return out
 
 
+NOT_CALLABLE = ("field", "constant")             # symbols #143 and #148 added that a call never targets
+
+
 def _resolve_cross_file_symbol(
     dotted_module: str, caller_rel_path: str, short_name: str, per_file_symbols: dict[str, list[dict]],
     _depth: int = 0,
@@ -634,7 +637,7 @@ def _resolve_cross_file_symbol(
 
     def _match(guess: str) -> str | None:
         hits = [s["qualified_name"] for s in per_file_symbols.get(guess) or []
-                if s["qualified_name"].rsplit(".", 1)[-1] == short_name]
+                if s["qualified_name"].rsplit(".", 1)[-1] == short_name and s.get("kind") != "field"]   # #193
         if len(hits) == 1:
             return f"{guess}::{hits[0]}"
         if hits:
@@ -1400,6 +1403,8 @@ def extract(repo_root: Path) -> DevKBGraph:
         bare_by_short: dict[str, list[str]] = {}  # what a bare `name()` can mean: never a method, only `self.name()` is
         method_by_short: dict[str, list[str]] = {}  # what `self.name()` / `cls.name()` can mean in this file
         for s in symbols:
+            if s.get("kind") in NOT_CALLABLE:            # a field or a constant is never what `name()` calls (#193)
+                continue
             short = s["qualified_name"].rsplit(".", 1)[-1]
             local_by_short.setdefault(short, []).append(s["qualified_name"])
             (method_by_short if s.get("kind") == "method" else bare_by_short).setdefault(short, []).append(s["qualified_name"])
@@ -1477,6 +1482,8 @@ def extract(repo_root: Path) -> DevKBGraph:
         bare_by_short: dict[str, list[str]] = {}  # what a bare `name()` can mean: never a method, only `self.name()` is
         method_by_short: dict[str, list[str]] = {}  # what `self.name()` / `cls.name()` can mean in this file
         for s in symbols:
+            if s.get("kind") in NOT_CALLABLE:            # a field or a constant is never what `name()` calls (#193)
+                continue
             short = s["qualified_name"].rsplit(".", 1)[-1]
             local_by_short.setdefault(short, []).append(s["qualified_name"])
             (method_by_short if s.get("kind") == "method" else bare_by_short).setdefault(short, []).append(s["qualified_name"])
