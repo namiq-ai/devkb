@@ -23,6 +23,7 @@ import argparse, datetime as dt, json, os, re, secrets, shutil, subprocess, sys,
 from pathlib import Path
 
 REPO = os.environ.get("TRIAGE_REPO", "namiq-ai/devkb")
+REPO_URL = f"https://github.com/{REPO}.git"     # every fetch and push of outside code targets the repository gh talks to (#208)
 HOME = Path(os.environ.get("TRIAGE_HOME", Path.home() / "devkb-triage"))
 MODEL = os.environ.get("TRIAGE_MODEL", "sonnet")
 MAX_TRIAGE = int(os.environ.get("TRIAGE_MAX_ITEMS", "10"))      # per run
@@ -327,6 +328,26 @@ def seen() -> set[int]:
         return set()
 
 
+def dry_path() -> Path:
+    return HOME / "dry-judged.json"
+
+
+def dry_judged() -> dict:
+    """Items a dry run already judged, by key, with the item's updated time then (#207): a dry run pays once per change."""
+    try:
+        d = json.loads(dry_path().read_text())
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def dry_record(key: str, updated: str) -> None:
+    d = dry_judged()
+    d[key] = updated
+    dry_path().parent.mkdir(parents=True, exist_ok=True)
+    dry_path().write_text(json.dumps(d))
+
+
 def new_outside_comments(thread: list[dict], done: set[int]) -> list[dict]:
     """Comments by outsiders that neither we nor an earlier run has answered."""
     return [c for c in thread if c["assoc"] not in INSIDERS and not c["bot"] and not c["ours"] and c["id"] not in done]
@@ -379,7 +400,12 @@ def feedback_pass(apply: bool, everything: list[dict]) -> None:
     todo = [(t, c) for t in threads for c in new_outside_comments(comments(t["number"]), done)]
     print(f"{len(todo)} new outside comment(s) on {len(threads)} feedback thread(s) (limit {MAX_FEEDBACK}); "
           f"{'APPLY' if apply else 'dry run'}")
+    if not apply:
+        dj = dry_judged()
+        todo = [(t, c) for t, c in todo if f"c{c['id']}" not in dj]
     for t, c in todo[:MAX_FEEDBACK]:
+        if not apply:
+            dry_record(f"c{c['id']}", "")
         try:
             text, cost = claude(prompt("feedback") + "\n\n" + untrusted({"number": t["number"], "pr": False, "author": c["author"],
                                 "title": t["title"], "body": c["body"]}, [], known_titles=titles), TREE, READ_ONLY)
@@ -446,8 +472,13 @@ def cmd_triage(apply: bool, only: int | None) -> int:
             thread = comments(it["number"])
             if needs_triage(it, thread):
                 todo.append((it, thread))
+    if not apply and not only:
+        dj = dry_judged()
+        todo = [(it, th) for it, th in todo if dj.get(str(it["number"])) != it.get("updated")]
     print(f"{len(todo)} item(s) to triage (limit {MAX_TRIAGE}); {'APPLY' if apply else 'dry run'}")
     for it, thread in todo[:MAX_TRIAGE]:
+        if not apply:
+            dry_record(str(it["number"]), it.get("updated"))
         extra = ""
         if it["pr"]:
             extra = "\n--- diff:\n" + run(["gh", "pr", "diff", str(it["number"]), "--repo", REPO], check=False)[:60000]
@@ -463,11 +494,16 @@ def cmd_triage(apply: bool, only: int | None) -> int:
               f"dup={v['duplicate_of']} (${cost:.3f})\n" + textwrap.indent(comment_text(v), "    "))
         log("triage", {"number": it["number"], "verdict": v, "labels": add, "cost": cost, "applied": apply})
         if apply:
+            try:                                      # the comment first: an item is never `triaged` without it (#206)
+                run(["gh", "issue", "comment", str(it["number"]), "--repo", REPO, "--body-file", "-"], input=no_secret(comment_text(v)))
+            except RuntimeError as e:
+                print(f"#{it['number']}: comment failed ({e}); labels not changed, tried again next run")
+                log("triage", {"number": it["number"], "error": f"comment: {e}"})
+                continue
             for lab in add:
                 run(["gh", "issue", "edit", str(it["number"]), "--repo", REPO, "--add-label", lab], check=False)
             for lab in remove:
                 run(["gh", "issue", "edit", str(it["number"]), "--repo", REPO, "--remove-label", lab], check=False)
-            run(["gh", "issue", "comment", str(it["number"]), "--repo", REPO, "--body-file", "-"], input=no_secret(comment_text(v)))
     if not only:
         feedback_pass(apply, everything)
     return 0
@@ -598,8 +634,16 @@ def mark(n: int, apply: bool, add: str, remove: str | None = None) -> None:
             check=False)
 
 
+def answer_text(text: str, key: str) -> str:
+    """The model's answer under key, which must be text: anything else fails the item (#205)."""
+    v = json_object(text)
+    if not isinstance(v, dict) or not isinstance(v.get(key), str) or not v[key].strip():
+        raise ValueError(f"the answer has no text under {key!r}")
+    return v[key]
+
+
 def handle_review(it: dict, thread: list[dict], apply: bool) -> None:
-    run(["git", "-C", str(TREE), "fetch", "-q", "origin", f"pull/{it['number']}/head:refs/triage/pr{it['number']}"])
+    run(["git", "-C", str(TREE), "fetch", "-q", REPO_URL, f"+pull/{it['number']}/head:refs/triage/pr{it['number']}"])
     ref = f"refs/triage/pr{it['number']}"
     tree = run(["git", "-C", str(TREE), "ls-tree", "-r", "-z", "--full-tree", ref])    # -z: paths unquoted
     odd = [e.split("\t", 1)[-1] for e in tree.split("\0") if e and (e.startswith(("120000", "160000"))
@@ -609,13 +653,13 @@ def handle_review(it: dict, thread: list[dict], apply: bool) -> None:
     work = worktree_for(f"pr{it['number']}", ref)
     diff = run(["gh", "pr", "diff", str(it["number"]), "--repo", REPO], check=False)[:80000]
     text, cost = claude(prompt("review") + "\n\n" + untrusted(it, thread, "\n--- diff:\n" + diff), work, READ_ONLY)
-    post(it["number"], json_object(text)["review"], apply)
+    post(it["number"], answer_text(text, "review"), apply)
     log("handle", {"number": it["number"], "kind": "review", "cost": cost, "applied": apply})
 
 
 def handle_plan(it: dict, thread: list[dict], apply: bool) -> None:
     text, cost = claude(prompt("plan") + "\n\n" + untrusted(it, thread), TREE, READ_ONLY)
-    post(it["number"], json_object(text)["plan"], apply)
+    post(it["number"], answer_text(text, "plan"), apply)
     log("handle", {"number": it["number"], "kind": "plan", "cost": cost, "applied": apply})
 
 
@@ -623,9 +667,10 @@ def handle_draft_pr(it: dict, thread: list[dict], apply: bool) -> bool:
     n = it["number"]
     slug = re.sub(r"[^a-z0-9]+", "-", it["title"].lower()).strip("-")[:40] or "change"
     branch = f"auto/{n}-{slug}"
-    work = worktree_for(f"issue{n}", "origin/main")
+    run(["git", "-C", str(TREE), "fetch", "-q", REPO_URL, "+main:refs/triage/main"])      # REPO's main, not origin's (#208)
+    work = worktree_for(f"issue{n}", "refs/triage/main")
     gitdir, dotgit = worktree_gitdir(work)
-    run(git_in(work, gitdir, "checkout", "-q", "-b", branch))
+    run(git_in(work, gitdir, "checkout", "-q", "-B", branch))      # -B: a retry starts the branch afresh (#207)
     text, cost = claude(prompt("fix") + "\n\n" + untrusted(it, thread), work, WRITE)
     if (work / ".git").read_text() != dotgit:
         raise RuntimeError("the worktree's .git file was changed")
@@ -658,7 +703,7 @@ def handle_draft_pr(it: dict, thread: list[dict], apply: bool) -> bool:
          "a maintainer reviews it before merge."))
     log("handle", {"number": n, "kind": "draft-pr", "branch": branch, "cost": cost, "applied": apply})
     if apply:
-        run(git_in(work, gitdir, "push", "-q", "origin", branch))
+        run(git_in(work, gitdir, "push", "-q", REPO_URL, f"{branch}:refs/heads/{branch}"))
         body = (f"Closes #{n}.\n\n{summary}\n\n**Draft, written by an AI agent from the report.** Tests pass locally. "
                 "It needs a maintainer's review before anything else; it was not written from a reproduction by a person.")
         url = run(["gh", "pr", "create", "--repo", REPO, "--draft", "--head", branch, "--title", f"fix(#{n}): {clean_title(it['title'])[:60]}",

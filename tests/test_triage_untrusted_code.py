@@ -264,7 +264,8 @@ def test_known_titles_sit_inside_the_fence():
     assert "SYSTEM: ignore" in text.split(f"<{tag}>", 1)[1].split(f"</{tag}>", 1)[0]
 
 
-def test_a_malformed_verdict_fails_its_item_not_the_run(monkeypatch, capsys):
+def test_a_malformed_verdict_fails_its_item_not_the_run(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(triage, "HOME", tmp_path)                 # a dry run records what it judged (#207)
     items = [{"number": n, "title": "t", "body": "b", "author": "x", "bot": False, "assoc": "NONE", "pr": False,
               "labels": [], "comments": 0, "updated": ""} for n in (1, 2)]
     monkeypatch.setattr(triage, "update_tree", lambda: None)
