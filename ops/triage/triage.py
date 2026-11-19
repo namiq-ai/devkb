@@ -496,10 +496,31 @@ def sandboxed(cmd: list[str], work: Path) -> subprocess.CompletedProcess:
         if p in (home, Path("/")) or home.is_relative_to(p):
             raise RuntimeError(f"the sandbox interpreter's directory {p} would expose the home directory")
         args += ["--ro-bind", str(p), str(p)]
+    args += interpreter_links()
     args += ["--bind", str(work), str(work), "--chdir", str(work), "--clearenv", "--setenv", "HOME", "/tmp",
              "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--setenv", "LANG", "C.UTF-8", "--"]
     return subprocess.run(args + [sandbox_python() if c == "{python}" else c for c in cmd],
                           capture_output=True, text=True, timeout=1800)
+
+
+def interpreter_links() -> list[str]:
+    """The symlinks on the way from the interpreter to its real file (a uv-managed Python is reached through
+    `cpython-3.11-linux-…` -> `cpython-3.11.17-linux-…`), recreated inside the sandbox, which mounts only real
+    directories."""
+    out, seen = [], set()
+    todo = [Path(sandbox_python())]
+    while todo:
+        p = todo.pop()
+        for i in range(1, len(p.parts) + 1):
+            q = Path(*p.parts[:i])
+            if q in seen or not q.is_symlink():
+                continue
+            seen.add(q)
+            target = os.readlink(q)
+            out += ["--symlink", target, str(q)]
+            todo.append((q.parent / target).joinpath(*p.parts[i:]) if not os.path.isabs(target) else Path(target).joinpath(*p.parts[i:]))
+            break
+    return out
 
 
 def sandbox_python() -> str:
