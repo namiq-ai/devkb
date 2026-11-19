@@ -69,3 +69,9 @@ def test_a_search_for_four_names_is_never_replaced_and_logs_every_name(repo, tmp
 def test_a_complete_short_list_still_replaces(repo, tmp_path):
     h, row = decide(repo, tmp_path, "grep -rn handler pkg/")       # one definition, one call: nothing left out
     assert h.get("permissionDecision") == "deny" and row["action"] == "substitute"
+
+
+@pytest.mark.parametrize("cmd", ["grep -rn handler .", "grep -rn handler"])
+def test_a_repository_wide_search_reaching_docs_is_never_replaced(repo, tmp_path, cmd):
+    h, row = decide(repo, tmp_path, cmd)                  # docs/guide.md mentions handler: grep prints that line
+    assert h.get("permissionDecision") != "deny" and row["reason"] == "non-code-path"

@@ -834,13 +834,32 @@ def use_lines(repo: Path, names: list[str]) -> list[tuple[str, int, str]] | None
 NON_CODE = (".md", ".rst", ".txt", ".adoc", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".xml", ".html", ".csv")
 
 
-def names_non_code(paths: list[Path] | None, repo: Path) -> bool:
-    """The search names a docs or configuration path (a non-code file, or a folder named docs/doc/config): grep prints
-    those files' lines and the graph holds no document text, so the search is never replaced (#276)."""
+def names_non_code(paths: list[Path] | None, repo: Path, names: list[str] | None = None,
+                   scope: list[str] | None = None) -> bool:
+    """The search reaches docs or configuration where grep prints a line for one of its names: a named non-code path,
+    or a non-code file in the search's scope (the whole repository for `.` or no path) that holds a name. The graph
+    holds no document text, so such a search is never replaced (#276)."""
     for p in paths or []:
         if p.suffix.lower() in NON_CODE or p.name.lower() in ("docs", "doc", "config", "conf", "etc"):
             return True
-    return False
+    if not names:
+        return False
+    args = ["git", "-C", str(repo), "grep", "-l", "-I", "-F"]
+    for n in names:
+        args += ["-e", n]
+    try:
+        p = subprocess.run([*args, "--", *(scope or ["."])], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return True                                # cannot tell: do not replace
+    if p.returncode not in (0, 1):
+        return True
+    return any(is_non_code(f) for f in p.stdout.splitlines())
+
+
+def is_non_code(path: str) -> bool:
+    """A documentation or configuration file: by suffix, or a bare README / LICENSE / CHANGELOG / NOTICE."""
+    p = Path(path)
+    return p.suffix.lower() in NON_CODE or p.name.lower() in ("readme", "license", "changelog", "notice")
 
 
 def longer_definitions(repo: Path, pattern: str, name: str, scope: list[str] | None) -> bool:
@@ -1087,7 +1106,7 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
         if why is None and intent != "call-sites":
             why = f"intent:{intent}"                # only a repository- or folder-wide name search is replaced
-        if why is None and (cut or partial or names_non_code(paths, repo)):
+        if why is None and (cut or partial or names_non_code(paths, repo, found, scope)):
             # a replacement must hold every line grep prints: not when lines were left out, names were not asked
             # about, or the search names docs or configuration (#276, #278); the answer goes beside grep instead
             why = "cut" if cut else "partial-names" if partial else "non-code-path"
