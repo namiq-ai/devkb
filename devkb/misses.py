@@ -30,19 +30,29 @@ def enabled() -> bool:
     return os.environ.get("DEVKB_MISSLOG", "1") != "0"
 
 
-def navigation_names(pattern: str) -> list[str]:
+KEYWORDS = {"def", "class", "struct", "enum", "union", "interface", "fn", "func", "function", "void", "static", "inline",
+            "virtual", "async", "return", "import", "from", "public", "private", "protected", "const", "let", "var"}
+ALTERNATION = {"bre": r"\\\|", "ere": r"(?<!\\)\|", "fixed": None, "both": r"\\\||\|"}
+
+
+def navigation_names(pattern: str, dialect: str = "both") -> list[str]:
     """The identifiers a search asks about: `A\\|B\\|C`, `\\bfoo\\(`, `Footer::DecodeFrom`. Empty when the pattern is
-    a general regex or a phrase rather than names (then it is not a navigation search)."""
+    a general regex or a phrase rather than names (then it is not a navigation search).
+
+    Alternation is read per grep dialect (#186, #215): `\\|` in a basic regex (grep), `|` in an extended one (grep -E,
+    egrep, rg, the Grep tool), neither in a fixed string (grep -F), where a `|` is just a character. A language keyword
+    on its own (`^def `) is never a name (#215)."""
     p = re.sub(r"\\[bB<>]", "", pattern.strip())
     p = re.sub(r"\\s[*+]?|\\\(|\(\)|\\\)", " ", p)
-    parts = re.split(r"\\\||\|", p)
+    alt = ALTERNATION.get(dialect, ALTERNATION["both"])
+    parts = re.split(alt, p) if alt else [p]
     names: list[str] = []
     for part in parts:
         part = part.strip().strip("()^$ ").strip()
         part = re.sub(r"^(?:async\s+def|def|class|struct|enum|union|interface|fn|func|function|void|static|inline|virtual)\s+",
                       "", part)                     # `def name`, `class Name`: the search for a definition (#131)
         part = re.sub(r"\s*\(\s*$", "", part)
-        if not IDENT.fullmatch(part) or len(part) < 3:
+        if part in KEYWORDS or not IDENT.fullmatch(part) or len(part) < 3:
             return []
         if part not in names:
             names.append(part)
