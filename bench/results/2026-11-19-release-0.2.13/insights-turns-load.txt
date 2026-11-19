@@ -1,0 +1,14 @@
+runs 252
+cost vs turns: r = 0.92
+cost vs context: r = 0.98
+cost vs output tokens: r = 0.99
+turns vs grep calls: r = 0.81
+per model call: cost $0.0166 median, context 40.8k tokens median
+context share of tokens: 98.9%
+
+fixed load = context of the session's first model call (system prompt, tools, AGENTS/CLAUDE.md, ticket):
+  nonekeep  first call 26.7k tokens (median, 72 runs); last call 46.8k; fixed load x turns = 67% of the run's context
+  release   first call 26.7k tokens (median, 72 runs); last call 48.4k; fixed load x turns = 66% of the run's context
+  main      first call 26.7k tokens (median, 72 runs); last call 46.0k; fixed load x turns = 68% of the run's context
+  teach     first call 26.6k tokens (median, 18 runs); last call 60.2k; fixed load x turns = 55% of the run's context
+  outline   first call 26.6k tokens (median, 18 runs); last call 56.6k; fixed load x turns = 57% of the run's context

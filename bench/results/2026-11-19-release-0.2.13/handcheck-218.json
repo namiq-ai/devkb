@@ -1,0 +1,222 @@
+[
+ {
+  "i": 1,
+  "action": "outline-on-open",
+  "intent": "list-symbols",
+  "names": [],
+  "repo": "p205-outline-r1",
+  "sha": "7f856cc7f7f3baaf7403801c4c6fa9e8a8738f4f",
+  "chars": 1524
+ },
+ {
+  "i": 2,
+  "action": "outline-on-open",
+  "intent": "list-symbols",
+  "names": [],
+  "repo": "p120-outline-r1",
+  "sha": "3ca19f13cd081596b662935b8809ef8d399198c0",
+  "chars": 878
+ },
+ {
+  "i": 3,
+  "action": "outline-on-open",
+  "intent": "list-symbols",
+  "names": [],
+  "repo": "p137-outline-r3",
+  "sha": "c00f0c78eaf5571598083ec64a31271f6adb5cd7",
+  "chars": 1527
+ },
+ {
+  "i": 4,
+  "action": "outline-on-open",
+  "intent": "list-symbols",
+  "names": [],
+  "repo": "p137-outline-r3",
+  "sha": "56ef234eff17f284df1e833d48a9511bb4ccf055",
+  "chars": 931
+ },
+ {
+  "i": 5,
+  "action": "outline-on-open",
+  "intent": "list-symbols",
+  "names": [],
+  "repo": "p120-outline-r3",
+  "sha": "0a81301862f2e62037aed9f9a513a33e4b8d8ac7",
+  "chars": 434
+ },
+ {
+  "i": 6,
+  "action": "alongside",
+  "intent": "read-body",
+  "names": [
+   "single_bash_file"
+  ],
+  "repo": "p137-teach-r3",
+  "sha": "fc1342356afdd7a83fe103dbd482f1ac3584814b",
+  "chars": 1606
+ },
+ {
+  "i": 7,
+  "action": "alongside",
+  "intent": "locate",
+  "names": [
+   "key_uses",
+   "read_tool",
+   "use_lines"
+  ],
+  "repo": "p175-teach-r1",
+  "sha": "708fc04bbda980ebbcc90ebaffd48be859d67ccd",
+  "chars": 405
+ },
+ {
+  "i": 8,
+  "action": "alongside",
+  "intent": "read-body",
+  "names": [
+   "single_bash_file"
+  ],
+  "repo": "p137-outline-r1",
+  "sha": "55583f6ce7a91b383a4a7984945420d438ef188b",
+  "chars": 1523
+ },
+ {
+  "i": 9,
+  "action": "alongside",
+  "intent": "locate",
+  "names": [
+   "define_names",
+   "defines",
+   "FileRecords"
+  ],
+  "repo": "p118-main-r2",
+  "sha": "bc0335a19824aee00b46074743a5ff4517b85ae7",
+  "chars": 229
+ },
+ {
+  "i": 10,
+  "action": "read-answer",
+  "intent": "locate",
+  "names": [
+   "graph_state"
+  ],
+  "repo": "p182-main-r3",
+  "sha": "fd0bc9a242974d7919f86be09d667cadc48c13b7",
+  "chars": 911
+ },
+ {
+  "i": 11,
+  "action": "alongside",
+  "intent": "locate",
+  "names": [
+   "recv_local",
+   "Call",
+   "Symbolic"
+  ],
+  "repo": "p120-teach-r2",
+  "sha": "c85f81ddc150d64ba2e49f61bdb2f1db23d47e21",
+  "chars": 360
+ },
+ {
+  "i": 12,
+  "action": "alongside",
+  "intent": "locate",
+  "names": [
+   "recv_local",
+   "recv",
+   "Call"
+  ],
+  "repo": "p120-main-r1",
+  "sha": "ccb27993eb048c7af653a2a13e30f6dc472d76bf",
+  "chars": 378
+ },
+ {
+  "i": 13,
+  "action": "alongside",
+  "intent": "locate",
+  "names": [
+   "answer_or_record",
+   "changed_since_build",
+   "graph_state"
+  ],
+  "repo": "p182-main-r1",
+  "sha": "c1c2f6a0b449756dd35b03192289936461f5417c",
+  "chars": 189
+ },
+ {
+  "i": 14,
+  "action": "alongside",
+  "intent": "locate",
+  "names": [
+   "ProcessAPI"
+  ],
+  "repo": "p137-outline-r2",
+  "sha": "ee650b4ba4be96ace747ecfac2c3fe46abaddb74",
+  "chars": 89
+ },
+ {
+  "i": 15,
+  "action": "alongside",
+  "intent": "locate",
+  "names": [
+   "_IDENT"
+  ],
+  "repo": "p118-main-r2",
+  "sha": "234169a73215e19bf2becff234d8cbe8d3b392e8",
+  "chars": 96
+ },
+ {
+  "i": 16,
+  "action": "alongside",
+  "intent": "read-body",
+  "names": [
+   "answer_or_record"
+  ],
+  "repo": "p182-main-r3",
+  "sha": "b41eb0667230c1a7c68cd7285cc8ae36c2993613",
+  "chars": 321
+ },
+ {
+  "i": 17,
+  "action": "read-answer",
+  "intent": "read-body",
+  "names": [
+   "run_query"
+  ],
+  "repo": "p175-outline-r3",
+  "sha": "a765c1e68408853dd2b951cef4a2c029ef57834e",
+  "chars": 1641
+ },
+ {
+  "i": 18,
+  "action": "alongside",
+  "intent": "locate",
+  "names": [
+   "recv_local",
+   "Call",
+   "ClassRec"
+  ],
+  "repo": "p120-outline-r2",
+  "sha": "1b259cb10b18cdc0e739af642fd33b8206733ad7",
+  "chars": 282
+ },
+ {
+  "i": 19,
+  "action": "alongside",
+  "intent": "read-body",
+  "names": [
+   "ReadTools"
+  ],
+  "repo": "p137-teach-r3",
+  "sha": "1ba537fb4fdeaf9f3fcc12c628c8efafb3c7ae17",
+  "chars": 279
+ },
+ {
+  "i": 20,
+  "action": "alongside",
+  "intent": "list-symbols",
+  "names": [],
+  "repo": "p120-teach-r3",
+  "sha": "29b10034a208269b627a03d3dde2de491e45b73b",
+  "chars": 957
+ }
+]
