@@ -1,0 +1,220 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs,multirow,amsmath,graphicx,xcolor,url}
+% Double-anonymous review: \anontrue hides the author, the affiliation and the artifact location.
+\newif\ifanon
+\anonfalse
+
+\begin{document}
+\title{Beyond Grep: Intent-Aware Interception and At-the-Moment Teaching for Coding Agents\\(An Exploratory Study)}
+
+\ifanon
+\author{\IEEEauthorblockN{Anonymous author(s)}\IEEEauthorblockA{Anonymous institution}}
+\else
+\author{\IEEEauthorblockN{Hung T. Le}\IEEEauthorblockA{Independent researcher, Austin, Texas, USA \quad letronghung@gmail.com}}
+\fi
+
+\maketitle
+
+\begin{abstract}
+Coding agents explore a repository with text search, and code-intelligence tools offered beside that search go largely
+unused: in 72 of our sessions agents never called a symbol lookup on their own. We study a different delivery: a hook
+that intercepts the agent's own \texttt{grep}, classifies what the search asks (13 intent classes), asks a code graph
+the question that answers it, and returns the answer beside or instead of the search, shaped like grep's output. We
+report an exploratory study, not pre-registered. On 973 recorded agent searches, answers to a different question than
+the search asked fell from 52 of 120 to none of 43 judged, and answer text from 150k to 41k characters. Over 24
+implementation tickets (216 runs, one model) the hook raised the share of runs passing a hidden acceptance check and the
+suite from 71\% to 79\%, and lowered cost per successful run by 7\%, at unchanged cost per run. One line appended to each
+answer, naming the graph command that gives it, raised direct graph queries from 0.17 to 1.50 per run and lowered cost
+per successful run by 19\% against the hook alone. Cost tracked turns ($r=0.92$), and two-thirds of all context was a
+fixed load re-read every turn, so an answer is worth the turns it saves, not its size. We list the measurement errors we
+made and corrected, and pre-specify the confirmatory study these results call for.
+\end{abstract}
+
+\begin{IEEEkeywords}
+coding agents, LLM agents, code search, code graph, tool adoption, agent-computer interface, cost, empirical study
+\end{IEEEkeywords}
+
+\section{Introduction}
+LLM coding agents~\cite{jimenez2024swebench,yang2024sweagent} navigate code with \texttt{grep}, file reads and line
+ranges, and pay again for every read on each later turn. Code graphs~\cite{liu2024codexgraph,ouyang2025repograph} and
+precomputed context~\cite{le2026precomputed} can answer the questions behind those searches more directly. But
+availability is not adoption: an agent offered graph tools often does not call them. CodeCompass reports that 58\% of
+trials with graph access made no graph call~\cite{paipuru2026codecompass}; in the 72 sessions behind this study, agents
+called a symbol lookup zero times. Our earlier pre-registered study found that a graph pays when its content is
+delivered in the prompt rather than behind tools~\cite{le2026precomputed}. Here we ask what to do in everyday use, where
+nothing is precomputed for the task: \emph{deliver the graph's answer inside the tool call the agent already makes}.
+
+Intercepting a search is safe only if the graph answers the \emph{same question}. A naive interceptor sees an identifier
+and returns what the graph knows about it; we found that the earlier version of our hook did exactly that, and answered
+a different question than the search asked 52 times in 120. This paper studies three mechanisms and their effect on
+quality and cost:
+\begin{itemize}
+\item \textbf{Intent-preserving interception}: classify each search into one of 13 intents, map each intent to one graph
+  question and an answer shaped like grep's output, and pass the search through untouched whenever equivalence is not
+  established (Section~\ref{sec:system}).
+\item \textbf{Teaching at the moment of need}: end each answer with the graph command that produced it, so that the next
+  such question can go to the graph directly (Section~\ref{sec:teach}).
+\item \textbf{A cost model for agent exploration}: turns, not answer size, drive cost, because a fixed load dominates the
+  context re-read on every turn (Section~\ref{sec:cost}).
+\end{itemize}
+The evidence is exploratory: one model, one agent, tickets from the tool's own repository, three runs per arm. We report
+it with its noise, the errors we made in measuring it (Section~\ref{sec:measure}), and the confirmatory design it
+motivates (Section~\ref{sec:plan}).
+
+\section{Related work}\label{sec:related}
+\textbf{Agent-computer interfaces.} SWE-agent showed that the design of the agent's tools changes its success on
+repository tasks~\cite{yang2024sweagent}. SWE-Edit separates inspection from editing into subagents with clean contexts
+and reports both higher resolve rates and lower inference cost~\cite{zhang2026sweedit}; like us it attacks the context an
+agent accumulates, by a different route. \textbf{Structure-aware search.} AutoCodeRover and SpecRover search code by
+program structure and infer the intended behaviour of what they visit~\cite{zhang2024autocoderover,ruan2025specrover};
+LocAgent and RepoGraph build graphs for localisation~\cite{chen2025locagent,ouyang2025repograph}. These systems
+\emph{replace} the agent's search with their own; we keep the agent's own commands and add to them. \textbf{Graph
+navigation and adoption.} CodeCompass serves structural dependencies over MCP and finds both a benefit on dependencies
+with little lexical overlap and an adoption problem~\cite{paipuru2026codecompass}; it argues for explicit prompting. Our
+teach line is a different intervention: no instruction up front, a one-line hint inside the answer the agent is already
+reading. \textbf{Our earlier study} measured process-graph packs under pre-registration~\cite{le2026precomputed}; this
+paper concerns the interception path, which needs no per-task precomputation.
+
+\section{Intent-preserving interception}\label{sec:system}
+The hook runs before each \texttt{Grep}, \texttt{grep}/\texttt{rg}/\texttt{git grep} command and \texttt{Read} call
+in Claude Code, on a repository with a built graph (symbols, calls, references, string-key uses, tests). For each
+search it:
+\begin{enumerate}
+\item \textbf{parses} the command part that searches (pipes, \texttt{-e} lists, \texttt{-A/-B/-C}, \texttt{-c},
+  \texttt{-l}, \texttt{-v}, \texttt{--include}, globs, scope operands), and the grep dialect, so that \texttt{a|b} is an
+  alternation only where grep reads it as one;
+\item \textbf{classifies} the intent: read a body, locate a definition, list a file's symbols, call sites (plain,
+  filtered by a pipe, in one file), count, list files, invert, literal text, non-code, unknown, not a search;
+\item \textbf{asks} the graph the intent's question: a definition and its body, a file outline, or name uses with calls
+  first; nothing for counts, file lists, inverted and literal searches;
+\item \textbf{shapes} the answer as \texttt{file:line: text} lines with one wrapper line, within 1{,}500 characters, and
+  adds nothing when its lines would only repeat grep's;
+\item \textbf{decides}: \emph{replace} the search when the answer is complete and the graph is current;
+  \emph{alongside} when it is useful but not complete; \emph{pass through} otherwise.
+\end{enumerate}
+The graph is treated as stale, and never replaces a search, when it was built at another commit or the searched scope
+holds changed code files. The specification states falsifiable requirements: at most 5\% of answers to a different
+question on a replay corpus, and no answer beside grep larger than grep's own output.
+
+\section{Method}\label{sec:method}
+\textbf{Replay.} 973 searches recorded in earlier benchmark sessions (Claude Code, Sonnet) are replayed through each hook
+version on the same checkout. Answers were labelled \emph{same}, \emph{partly} or \emph{different} question against
+the search, by rules first and an LLM judge after; disagreements were resolved by hand.
+
+\textbf{Tri-mode benchmark.} For each of 24 implementation tickets of the 0.2.13 release (graph build, call
+resolution, the hook itself, a triage daemon, the benchmark harness), three arms ran on the same commit: no graph
+(\emph{none}), the previous release's hook (\emph{v0.2.12}), and the hook as it stood on the main branch when that
+batch ran (\emph{main}), three runs each, Sonnet, a fresh checkout per run. A run passes when a hidden acceptance check,
+removed from the agent's checkout and written before the batch, and the full test suite both pass. Each devkb arm took
+its tool from an environment built at an exact commit, not from the checkout the agent edited.
+
+\textbf{Direct-path arms.} On the last 6 tickets two more arms ran: the hook with the teach line (D1) and the hook with a
+file outline on first open (D2), 18 runs per arm.
+
+\textbf{Counting.} Turns are distinct assistant messages; tokens are the session totals the client reports; a graph
+command counts as navigation when run before the agent's first edit of the tool's own code, and as a self-test after it
+(the agents edit the repository that contains the tool).
+
+\section{Results}\label{sec:results}
+\subsection{Does the hook answer the question the search asks?}
+\begin{table}[t]\centering\small
+\caption{Replay of 973 recorded searches through each hook version.}\label{tab:replay}
+\resizebox{\columnwidth}{!}{\begin{tabular}{lrrr}\toprule
+Hook & Answered & Same question & Answer text\\\midrule
+v0.2.12 (identifier $\rightarrow$ callers) & 120 & 34 (52 different) & 150k chars\\
++ one question per intent & 110 & 100 of 101 judged & 92k\\
++ grep-shaped, no repeats & 52 & 42 of 43 judged$^\ast$ & 41k\\\bottomrule
+\multicolumn{4}{l}{\footnotesize $^\ast$ the 43rd was a judge artefact; 70 answers dropped as repeats of grep's lines.}
+\end{tabular}}\end{table}
+Table~\ref{tab:replay}: mapping each intent to its own question removed the wrong-question answers; shaping removed
+answers that only repeated grep's output. The hook answers fewer searches, which is the intended outcome: the dropped
+answers were noise.
+
+\subsection{Quality and cost on implementation tickets}
+\begin{table}[t]\centering\small
+\caption{24 tickets, 72 runs per arm (Sonnet). Pass = hidden check and suite.}\label{tab:tri}
+\resizebox{\columnwidth}{!}{\begin{tabular}{lrrrr}\toprule
+Arm & Passed & Cost/run & Cost/pass & Turns vs none\\\midrule
+none & 51 (71\%) & \$0.370 & \$0.522 & --\\
+v0.2.12 hook & 58 (81\%) & \$0.383 & \$0.475 & $-5.2\%$\\
+main hook & 57 (79\%) & \$0.383 & \$0.484 & $-4.7\%$\\\bottomrule
+\end{tabular}}\end{table}
+Both hook arms pass 6--7 more runs than no graph (Table~\ref{tab:tri}). Cost per run does not move: $+3.5\%$ on the
+arithmetic mean, $-0.6\%$ on the geometric mean of per-ticket ratios; cost per successful run falls 7--9\%. With three
+runs per arm a single ticket's difference of up to about 20\% is within noise; we read only the release-wide figures.
+The current hook does not beat v0.2.12 on these tickets: the intent work made answers right and small, which shows on
+the replay, not as more passing runs on small tickets.
+
+\subsection{Teaching at the moment of need}\label{sec:teach}
+\begin{table}[t]\centering\small
+\caption{Last 6 tickets, 18 runs per arm. Ratios vs the hook alone are geometric means over tickets.}\label{tab:teach}
+\resizebox{\columnwidth}{!}{\begin{tabular}{lrrrr}\toprule
+Arm & Graph queries/run & Passed & Cost/pass & Cost vs hook\\\midrule
+none & 0.28$^\dagger$ & 13 & \$0.610 & \\
+hook & 0.17 (3 of 18 runs) & 14 & \$0.607 & --\\
+hook + D1 teach & \textbf{1.50} (9 of 18) & 15 & \textbf{\$0.491} & $-11\%$\\
+hook + D2 outline & 0.47 (4 of 17) & 12 & \$0.710 & $+1\%$\\\bottomrule
+\multicolumn{5}{l}{\footnotesize $^\dagger$ the repository's own tool, which the tickets edit; no graph is built in this arm.}
+\end{tabular}}\end{table}
+A single line at the end of each answer (\emph{``Next time ask devkb directly: \texttt{devkb symbol X -{}-source}''})
+increased direct graph queries ninefold, in half the runs, and lowered context ($-15\%$), turns ($-10\%$) and cost
+(Table~\ref{tab:teach}). Agents ran the command they were shown, before editing anything. An outline added on a file's
+first open did not change behaviour and added grep calls ($+18\%$). In 20 hand-checked saved answers, 20 answered the
+question their intent named; one may be partial.
+
+\subsection{Where the cost goes}\label{sec:cost}
+Over 252 runs, cost correlates with turns ($r=0.92$) and context ($r=0.98$); context is 98.9\% of all tokens. A model
+call costs a median \$0.017 and re-reads 41k tokens. Of those, 26.7k are present from the first call (system prompt,
+tool definitions, repository instructions, ticket) and identical with or without the graph; re-read on every turn, this
+fixed load is 55--68\% of a run's context. A 1{,}500-character answer is about 1\% of one turn's context. The hook's own
+latency, measured on 150 recorded searches, is 0.1\,s for a pass-through and 0.8\,s for an answer, against about 17\,s
+per model call. Three consequences: an answer is valuable to the extent it removes a turn; shrinking the fixed load
+saves more than shrinking answers (each 1k tokens removed is about 2.5\% of every turn); and interception adds no fixed
+load, unlike tool definitions.
+
+\section{Measuring agents is itself error-prone}\label{sec:measure}
+We report the errors we made, because each would have changed a conclusion. \textbf{Over-specified acceptance checks.}
+Six of 24 hidden checks asked for more than their tickets stated (an implementation detail, a marker string, one of two
+outcomes the ticket allowed); runs that solved the ticket scored 0 of 9. Each check was re-read against the ticket,
+corrected, shown to fail on the base commit and pass on a reference fix, and every run re-judged. \textbf{Counting.} The
+client's final message reports the last turn only: turns read 1 and output tokens 59 where the session made 15 calls
+and 4{,}849 tokens. Per-message usage in the stream is partial too. A first rule that counted every invocation of the
+tool's own binary as a self-test hid the D1 effect entirely (0.00 queries in every arm). \textbf{Concurrency and load.}
+Two benchmark processes building the same checkout template corrupted 12 runs; running two batches at once doubled
+suite times and made 4 of 9 suites fail that pass alone. Each is fixed in the harness (cross-process locks, per-run error
+records, a re-run of failed tests with flaky tests reported apart).
+
+\section{Threats to validity}\label{sec:threats}
+\textbf{Exploratory.} The hypotheses were formed during the work; nothing here was pre-registered. \textbf{One model
+and agent} (Claude Code, Sonnet). \textbf{Self-hosting}: the tickets are the tool's own, so agents may use the tool to
+test their change; we separate navigation from self-tests by the first edit, a rule we had to correct once.
+\textbf{Small samples}: three runs per arm; D1 rests on 6 tickets of \$0.25--0.85 each. \textbf{Moving treatment}: the
+main arm's hook changed between batches as the release progressed. \textbf{Author}: one author built the tool, the
+tickets, the checks and the benchmark. \textbf{Quality} is a hidden check plus a suite, not review effort,
+maintainability or defects escaped.
+
+\section{Planned confirmatory study}\label{sec:plan}
+We will pre-register: \textbf{H1} intent-preserving interception answers the search's question in at least 95\% of
+replayed searches; \textbf{H2} it reduces turns per successful task against native tools; \textbf{H3} the teach line
+increases direct graph queries; \textbf{H4} the full configuration lowers cost per successful task; \textbf{H5} without
+lowering the pass rate (H4 and H5 are tested jointly). Design: at least 100 held-out tasks from 8--12 repositories in
+Python, TypeScript, Go and Java (the open-source registry of~\cite{le2026precomputed} as a start), five runs per arm,
+paired by task, a mixed-effects model with task as a random effect, effect sizes with 95\% intervals; arms: native
+tools; graph tools only; interception; interception + teach; at least two models and two agents. Acceptance checks are
+reviewed against the task text before any run.
+
+\section{Conclusion}
+Delivering code intelligence inside the search an agent already makes improved task success without adding cost, once
+the hook answered the question each search asked. Telling the agent, inside that answer, which command gave it changed
+behaviour more than any instruction we had placed up front, and cut cost per successful run by a fifth in a small
+sample. Because a fixed load dominates every turn, the next gains are in removing turns and shrinking that load, not in
+smaller answers. These are exploratory findings; the study above is designed to confirm or refute them.
+
+\section*{Artifact}
+\ifanon Withheld for review.\else The tool, the hidden checks, the harness, per-run results and the analysis scripts are at
+\url{https://github.com/namiq-ai/devkb} (\texttt{bench/results/2026-11-19-release-0.2.13/}, \texttt{docs/analysis/release-0.2.13.md}).\fi
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+\end{document}
