@@ -21,7 +21,8 @@ with tempfile.TemporaryDirectory() as td:
                                      capture_output=True, text=True, timeout=300).stdout
     c, f = pack("change", "RETRIES"), pack("refactor", "RETRIES")
     out = {"change_readers": "pkg/use_from.py::f" in c, "change_tests": "tests/test_f.py" in c,
-           "change_star_incomplete": "**Complete.**" not in c and "pkg/use_star.py" in c,
+           # the ticket: the star-import read "is attributed, or the pack says Incomplete and names that file"
+           "change_star_incomplete": "pkg/use_star.py" in c and ("pkg/use_star.py::h" in c or "**Complete.**" not in c),
            "refactor_readers": "pkg/use_from.py" in f and "**Complete.**" not in f}
 out["pass"] = all(out.values())
 print(json.dumps(out))
