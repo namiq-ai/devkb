@@ -634,6 +634,64 @@ def question_of(action: str, queries: list[dict]) -> str:
     return f"pack {QUESTION}" if queries else "none"
 
 
+KEEP = Path.home() / ".claude" / "hooks" / ".devkb-guardrail-answers"
+
+
+def answer_fields(answer: str | None) -> dict:
+    """What the agent was given (#214 scope, #218): a hash, the size and the first content line of every answer, and
+    with DEVKB_GUARDRAIL_KEEP=1 (benchmarks) the full text in a file named by its hash. Claude Code's session record does
+    not keep text a hook adds, so without this nobody can read back what an agent was told."""
+    if not answer:
+        return {}
+    sha = hashlib.sha1(answer.encode()).hexdigest()
+    lines = [l for l in answer.splitlines()[1:] if l.strip()] or answer.splitlines()
+    if os.environ.get("DEVKB_GUARDRAIL_KEEP") == "1":
+        try:
+            KEEP.mkdir(parents=True, exist_ok=True)
+            f = KEEP / f"{sha}.txt"
+            if not f.exists():
+                f.write_text(answer)
+        except OSError:
+            pass
+    return {"answer_sha1": sha, "answer_chars": len(answer), "answer_head": (lines[0] if lines else "")[:160]}
+
+
+def emit(ev: dict, out: dict | None) -> dict | None:
+    """Every hook answer passes here on its way out: the last decision line gets what the agent was given, and with
+    DEVKB_GUARDRAIL_TEACH=1 (SPEC-DKB-007 D1) the answer ends with the devkb command that gives it."""
+    if not out:
+        return out
+    h = out.get("hookSpecificOutput", {})
+    key = "permissionDecisionReason" if "permissionDecisionReason" in h else "additionalContext"
+    if os.environ.get("DEVKB_GUARDRAIL_TEACH") == "1" and ev.get("_teach"):
+        h[key] = h[key].rstrip() + f"\nNext time ask devkb directly: `{ev['_teach']}`"
+    ev["_answer"] = h.get(key, "")
+    try:
+        log = Path.home() / ".claude" / "hooks" / "devkb-guardrail.log"
+        lines = log.read_text().splitlines()
+        if lines:
+            last = json.loads(lines[-1])
+            if last.get("session") == ev.get("session_id") and "answer_sha1" not in last:
+                last.update(answer_fields(ev["_answer"]))
+                log.write_text("\n".join(lines[:-1] + [json.dumps(last)]) + "\n")
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+def teach_command(intent: str, names: list[str], paths: list[Path] | None, repo: Path) -> str | None:
+    """D1: the one devkb command that answers this intent, as the agent would type it."""
+    n = names[0] if names else ""
+    files = [p for p in paths or [] if p.is_file()]
+    if intent in ("read-body", "locate") and n:
+        return f"devkb symbol {n} --source --project ."
+    if intent == "list-symbols" and files:
+        return f"devkb outline {files[0].resolve().relative_to(repo)} --project ."
+    if intent in ("call-sites", "call-sites-filtered", "in-file") and n:
+        return f"devkb uses {n} --project ."
+    return None
+
+
 def log_decision(ev: dict, repo: Path | str, tool: str, action: str, names: list[str], queries: list[dict], chars: int,
                  reason: str = "", scope: list[str] | None = None) -> None:
     """#149: one line per decision on a navigation search, in the guardrail log: the action, the names, their verdicts
@@ -834,6 +892,10 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     key = "".join(c for c in str(ev.get("tool_use_id") or "") if c.isalnum() or c in "-_")[:80]
     intent = ev.get("_intent", "unknown")
     names = misses.navigation_names(pattern, ev.get("_dialect", "both"))
+    try:
+        ev["_teach"] = teach_command(intent, names, paths, repo)
+    except (ValueError, OSError):
+        ev["_teach"] = None
     if intent == "list-symbols" and (repo / ".devkb").is_dir():   # a file's definitions: its outline, not a pack
         ans = outline_answer(repo, paths)
         if ans:
@@ -952,6 +1014,39 @@ def read_range(tool: str, inp: dict) -> tuple[str, int, int | None] | None:
     return None
 
 
+OUTLINE_MIN_LINES = 120                          # a short file is read faster than its outline
+
+
+def first_open_outline(ev: dict, inp: dict) -> dict | None:
+    """SPEC-DKB-007 D2: the first whole-file Read of a code file in a session gets the file's outline beside it, once per
+    file; nothing for a short file, a non-code file, or a file changed since the build."""
+    path = Path(inp.get("file_path", "")).expanduser()
+    repo = served_repo(path.parent) if path.is_absolute() else None
+    if repo is None or not (repo / ".devkb").is_dir() or not path.is_file() or path.suffix.lower() not in CODE_EXTS:
+        return None
+    from devkb import misses
+    rel = path.resolve().relative_to(repo.resolve()).as_posix()
+    if misses.changed_since_build(repo, rel) or sum(1 for _ in open(path, errors="replace")) < OUTLINE_MIN_LINES:
+        return None
+    SEEN = Path.home() / ".claude" / "hooks" / ".devkb-guardrail-seen"
+    mark = SEEN / ("open-" + hashlib.sha1(f"{ev.get('session_id')}|{rel}".encode()).hexdigest()[:24])
+    try:
+        SEEN.mkdir(parents=True, exist_ok=True)
+        os.close(os.open(mark, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        return None
+    except OSError:
+        pass
+    ans = outline_answer(repo, [path])
+    if not ans:
+        return None
+    text = capped(ans)
+    ev["_intent"] = "list-symbols"
+    log_decision(ev, repo, "Read", "outline-on-open", [], [], len(text), "first-open")
+    ev["_teach"] = f"devkb outline {rel} --project ."
+    return emit(ev, {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=text)}})
+
+
 def span_hint(ev: dict, tool: str, inp: dict) -> dict | None:
     """SPEC-DKB-006 R4-R6: a read that starts inside a function or class and stops before its end gets one line with the
     full span. Never blocks; once per file and range per session; nothing for a file changed since the build."""
@@ -1014,6 +1109,14 @@ def main() -> int:
     tool, inp = ev.get("tool_name", ""), ev.get("tool_input") or {}
     cwd = Path(ev.get("cwd") or os.getcwd())
     pattern = ""
+    if tool == "Read" and os.environ.get("DEVKB_GUARDRAIL_OUTLINE") == "1" and not read_range(tool, inp):
+        try:
+            out = first_open_outline(ev, inp) if first_copy(ev) else None
+        except Exception:  # noqa: BLE001  an outline must never get in the read's way
+            out = None
+        if out:
+            print(json.dumps(out))
+        return 0
     if tool == "Read" or (tool == "Bash" and read_range(tool, inp)):
         try:
             out = span_hint(ev, tool, inp) if first_copy(ev) else None
@@ -1046,7 +1149,7 @@ def main() -> int:
     if not first_copy(ev):
         return 0
     try:
-        out = answer_or_record(ev, repo, tool, inp, pattern, paths, why)
+        out = emit(ev, answer_or_record(ev, repo, tool, inp, pattern, paths, why))
     except Exception:  # noqa: BLE001  devkb must never get in the search's way
         out = None
     if out:

@@ -22,7 +22,8 @@ def test_the_hidden_checks_are_never_in_a_checkout():
 
 
 def test_tri_mode_arms_take_devkb_from_a_tool_environment():
-    assert set(pb.ENV_REF) == {"release", "main"}
+    assert set(pb.ENV_REF) == {"release", "main", "teach", "outline"}          # #218 adds the direct-path arms
+    assert pb.ARM_ENV["teach"]["DEVKB_GUARDRAIL_TEACH"] == "1" and pb.ARM_ENV["outline"]["DEVKB_GUARDRAIL_OUTLINE"] == "1"
     env = {"hook": "/e/src/scripts/devkb_guardrail.py", "post": "/nonexistent/post.py", "bin": "/e/.venv/bin/devkb"}
     hooks = toolenv.hooks_settings(env)
     cmd = hooks["PreToolUse"][0]["hooks"][0]["command"]

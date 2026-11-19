@@ -65,16 +65,36 @@ def counts(run: str) -> tuple[int, int, int]:
     return nav, own, subst
 
 
+GUARD_LOG = Path.home() / ".claude" / "hooks" / "devkb-guardrail.log"
+_LOG: list[dict] | None = None
+
+
+def guard_rows(session: str) -> list[dict]:
+    """The guardrail's decision lines for one run's session (#218): what the hook did and what the agent was given."""
+    global _LOG
+    if _LOG is None:
+        _LOG = []
+        if GUARD_LOG.exists():
+            for line in open(GUARD_LOG, errors="replace"):
+                try:
+                    _LOG.append(json.loads(line))
+                except ValueError:
+                    pass
+    return [r for r in _LOG if session and r.get("session") == session and r.get("action") not in (None, "remind", "pass-through")]
+
+
 def per_run(r: dict) -> dict:
     nav, _, sub = counts(r["run"])
     a = r.get("acceptance") or {}
+    g = guard_rows(r.get("session", ""))
     return {"turns": r["turns"], "grep": r["calls"].get("search", 0), "nav": nav, "sub": sub, "ctx": r["ctx_tokens"],
-            "cost": r["cost"], "wall": r["seconds"] / 60, "ok": bool(a.get("pass")), "suite": bool(r["suite_pass"])}
+            "cost": r["cost"], "wall": r["seconds"] / 60, "ok": bool(a.get("pass")), "suite": bool(r["suite_pass"]),
+            "answers": len(g), "answer_chars": sum(x.get("answer_chars") or x.get("chars") or 0 for x in g)}
 
 
 def summary(xs: list[dict]) -> dict:
     out = {"n": len(xs), "ok": sum(x["ok"] for x in xs), "suite": sum(x["suite"] for x in xs)}
-    for k in ("turns", "grep", "nav", "sub", "ctx", "cost", "wall"):
+    for k in ("turns", "grep", "nav", "sub", "ctx", "cost", "wall", "answers", "answer_chars"):
         vals = [x[k] for x in xs]
         out[k] = st.mean(vals)
         out[k + "_lo"], out[k + "_hi"] = min(vals), max(vals)
@@ -112,8 +132,8 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
     problems = [p for t, rows in pairs if (p := check_hashes(t, rows))]
     if problems and not allow_mixed:
         raise SystemExit("refused, re-score first:\n  " + "\n  ".join(problems))
-    lines = ["| Ticket | Arm | Runs | Wall min | Context k | Cost $ | Grep | devkb nav | Replaced | Hidden check | Suite | vs no devkb |",
-             "|" + "---|" * 12]
+    lines = ["| Ticket | Arm | Runs | Wall min | Context k | Cost $ | Grep | devkb nav | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
+             "|" + "---|" * 13]
     per_arm: dict[str, list[dict]] = {}
     diffs: dict[str, dict[str, list[float]]] = {}
     for t, rows in pairs:
@@ -133,7 +153,7 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
                 diffs[a]["ctx"].append(m["ctx"] - base["ctx"])
             lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {m['n']} | {fmt_range(m, 'wall')} | "
                          f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | "
-                         f"{m['sub']:.1f} | {m['ok']}/{m['n']} | {m['suite']}/{m['n']} | {vs} |")
+                         f"{m['sub']:.1f} | {m['answers']:.1f} ({m['answer_chars']:.0f}) | {m['ok']}/{m['n']} | {m['suite']}/{m['n']} | {vs} |")
     lines += ["", "| Release, arm | Runs | Cost per run | Context per run | Cost difference vs no devkb (90% interval) | Context difference (90% interval) |",
               "|---|---|---|---|---|---|"]
     for a, ms in per_arm.items():
