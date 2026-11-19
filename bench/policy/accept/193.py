@@ -32,10 +32,14 @@ REC = "from dataclasses import dataclass\n\n\n@dataclass\nclass Job:\n    run: i
 out = {}
 with tempfile.TemporaryDirectory() as td:
     a = repo(Path(td) / "a", {"pkg/__init__.py": "", "pkg/records.py": REC + "\n\ndef caller():\n    return run()\n"})
-    out["same_file"] = "pkg/records.py:" in cli(a, "pack", "refactor", "run") and "caller" in cli(a, "pack", "refactor", "run")
+    # the ticket asks that run() resolve to the function (callers 1, as in v0.2.11), not that a bare `run` pick it: the
+    # function is named exactly, and the field must never take the call
+    fn, fld = cli(a, "pack", "refactor", "pkg/records.py::run"), cli(a, "pack", "refactor", "pkg/records.py::Job.run")
+    out["same_file"] = "return run()" in fn and "return run()" not in fld
     b = repo(Path(td) / "b", {"pkg/__init__.py": "", "pkg/records.py": REC, "app/__init__.py": "",
                               "app/user.py": "from pkg.records import run\n\n\ndef caller():\n    return run()\n"})
-    out["cross_file"] = "app/user.py" in cli(b, "pack", "refactor", "run")
+    out["cross_file"] = ("app/user.py" in cli(b, "pack", "refactor", "pkg/records.py::run")
+                         and "app/user.py" not in cli(b, "pack", "refactor", "pkg/records.py::Job.run"))
     c = repo(Path(td) / "c", {"pkg/__init__.py": "from .records import run\n", "pkg/records.py": REC, "app/__init__.py": "",
                               "app/user.py": "from pkg import run\n\n\ndef caller():\n    return run()\n",
                               "tests/__init__.py": "", "tests/test_user.py": "from app.user import caller\n\n\ndef test_caller():\n    assert caller() == 1\n"})
