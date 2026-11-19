@@ -289,6 +289,25 @@ def _calls_in_body(node: ast.AST) -> list[tuple[str | None, str, Shape]]:
 MODULE_CALLER = "<module>"
 
 
+def _declared_global(fn: ast.AST) -> set[str]:
+    """Names a function declares `global` or `nonlocal` in its own body."""
+    return {name for n in _own_body(fn) if isinstance(n, (ast.Global, ast.Nonlocal)) for name in n.names}
+
+
+def _assigned_names(stmt: ast.AST) -> set[str]:
+    """Names one statement of a class body binds (assignment, annotated or augmented assignment, for target, import),
+    not looking into nested functions or classes."""
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return {stmt.name}
+    out: set[str] = set()
+    for n in ast.walk(stmt):
+        if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
+            out.add(n.id)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            out.update((al.asname or al.name).split(".")[0] for al in n.names)
+    return out
+
+
 def _bound_names(fn: ast.AST) -> set[str]:
     """Names a function binds itself (parameters, assignments, loop and comprehension targets, local imports), not
     looking into nested defs: a load of one of these is the local, never a module-level function of that name."""
@@ -365,11 +384,22 @@ def _uses_in_tree(tree: ast.Module) -> tuple[list[tuple[str, str | None, str, in
                 head += [*n.args.defaults, *(d for d in n.args.kw_defaults if d is not None)]
             for h in head:
                 visit(h, scope, bound)
-            inner = bound if isinstance(n, ast.ClassDef) else bound | _bound_names(n)
+            if isinstance(n, ast.ClassDef):
+                # a class body's own assignments shadow the module name for the statements after them, but not inside
+                # its methods, which skip class scope (#199)
+                own: set[str] = set()
+                for b in n.body:
+                    visit(b, [*scope, n.name], bound if isinstance(b, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else bound | own)
+                    own |= _assigned_names(b)
+                return
+            inner = bound | (_bound_names(n) - _declared_global(n))   # `global X`: X is the module's, read or written (#198)
             for b in n.body:
                 visit(b, [*scope, n.name], inner)
             return
         where = ".".join(scope) or MODULE_CALLER
+        if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name) and n.target.id not in bound \
+                and _CONST_NAME.fullmatch(n.target.id):
+            refs.append((where, None, n.target.id, n.lineno))   # `X += 1` reads X first (#198)
         if isinstance(n, ast.Name):
             if isinstance(n.ctx, ast.Load) and n.id not in bound and _CONST_NAME.fullmatch(n.id):
                 refs.append((where, None, n.id, n.lineno))
@@ -1163,9 +1193,15 @@ class _Visitor(ast.NodeVisitor):
             self._add_simple(name, "constant", node, name)
 
     def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
-        for t in node.targets:
+        todo = list(node.targets)
+        while todo:                                 # `HOST, PORT = ...`, `[A, *REST] = ...`: each name is a constant (#200)
+            t = todo.pop(0)
             if isinstance(t, ast.Name):
                 self._module_const(t.id, node)
+            elif isinstance(t, (ast.Tuple, ast.List)):
+                todo += t.elts
+            elif isinstance(t, ast.Starred):
+                todo.append(t.value)
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: N802
