@@ -190,14 +190,11 @@ def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
     return None
 
 
-SUBSTITUTED = ("devkb answered this search from the graph: every name it asks about resolved, with coverage Complete, "
-               "so this is the search's result (grep was not needed).\n\n{answers}\n\n(For grep's raw lines as well, "
-               "repeat the identical command: a repeat runs as a plain search.)")
-READ_ANSWER = ("devkb answered this definition search from the graph: the location as grep would print it, and the body "
-               "(`devkb symbol --source`).\n\n{answers}\n\n(For grep's raw lines, repeat the identical command: a repeat "
-               "runs as a plain search.)")
-ALONGSIDE = ("devkb's answer for the names this search asks about (resolved, coverage Complete); the command still "
-             "ran.\n\n{answers}")
+# One line of wrapper each (SPEC-DKB-007 R5, #217): the rest is content.
+SUBSTITUTED = "devkb answered this search from the graph (Complete); repeat the command for grep's own lines.\n{answers}"
+READ_ANSWER = "devkb answered this definition search from the graph; repeat the command for grep's own lines.\n{answers}"
+ALONGSIDE = "devkb, from the graph (the command still ran):\n{answers}"
+ALONGSIDE_CAP = 1500                             # an answer beside grep's output never costs more than a short page (§3.4)
 MAX_ANSWER = 8000
 # A search for a name is a direct-use question (#154): direct callers and the definition, not callers at any depth.
 QUESTION = "refactor"
@@ -546,6 +543,35 @@ def dialect_of(tool: str, inp: dict) -> tuple[str, bool]:
     return "both", False
 
 
+def context_lines(tool: str, inp: dict) -> int:
+    """The trailing context the search prints (`-A N`, `-C N`, the Grep tool's -A/-C), 0 when none."""
+    if tool == "Grep":
+        return int(inp.get("-A") or inp.get("-C") or inp.get("context") or 0)
+    m = re.findall(r"(?:^|\s)-(?:[A-Za-z]*)([AC])\s*(\d+)", re.sub(r"'[^']*'|\"[^\"]*\"", "''", search_part(inp.get("command", ""))))
+    return max((int(n) for _k, n in m), default=0)
+
+
+def body_lines(answer: str) -> int:
+    """How many lines the definition answer's body spans (its span when the body is not shown)."""
+    m = re.search(r"lines (\d+)-(\d+)", answer)
+    if m and "Body not shown" in answer:
+        return int(m.group(2)) - int(m.group(1)) + 1
+    return max(0, len(answer.splitlines()) - 1)
+
+
+def capped(text: str, cap: int = ALONGSIDE_CAP) -> str:
+    """At most `cap` characters, cut at a line, saying how many lines are left out."""
+    if len(text) <= cap:
+        return text
+    lines, out, size = text.splitlines(), [], 0
+    for l in lines:
+        if size + len(l) + 1 > cap - 60:
+            break
+        out.append(l)
+        size += len(l) + 1
+    return "\n".join(out) + f"\n... {len(lines) - len(out)} more lines (grep's own output has them)"
+
+
 def search_part(cmd: str) -> str:
     """The `&&` / `;` / newline part of a command that holds its first search, quotes intact: what the pattern, the
     options and the pipes of the search are read from (a `-A6` in another part is not this search's)."""
@@ -812,7 +838,7 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         ans = outline_answer(repo, paths)
         if ans:
             log_decision(ev, repo, tool, "alongside", names, [], len(ans), "outline")
-            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=ans)}}
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(ans))}}
         return None
     if not names or not (repo / ".devkb").is_dir():
         return None
@@ -854,12 +880,16 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         scope = scope_of(paths or [], repo)
         if intent == "read-body":                # the lines around a name (or several definitions): the bodies
             got = [definition_answer(repo, n, scope, search_globs(tool, inp)) for n in names]
-            if all(got):
+            if all(got) and all(context_lines(tool, inp) < body_lines(x[0]) for x in got):   # grep's context cuts it short
                 body = "\n\n".join(x[0] for x in got)
                 body = body if len(body) <= MAX_ANSWER else body[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
                 log_decision(ev, repo, tool, "alongside", names, queries, len(body), f"body:{got[0][1]}", scope)
-                return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=body)}}
+                return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(body))}}
         found = [resolved_name(a) or n for n, a in zip(names, answers)] if ev.get("_nocase") else names
+        if intent == "read-body" or (why is not None and intent in ("call-sites", "call-sites-filtered", "in-file")):
+            # grep runs and prints these very lines: the same lines beside them only cost tokens (#217)
+            log_decision(ev, repo, tool, "pass-through", names, queries, 0, f"duplicate:{intent}")
+            return None
         text = shaped_answer(intent, repo, found, inp, paths, scope, tool)
         if not text:                             # nothing in the searched scope: grep may still find a mention there
             log_decision(ev, repo, tool, "pass-through", names, queries, 0, "nothing-in-scope", scope)
@@ -875,7 +905,7 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                            "permissionDecisionReason": SUBSTITUTED.format(answers=text)}}
         log_decision(ev, repo, tool, "alongside", names, queries, len(text), why)
-        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=text)}}
+        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(text))}}
     log_decision(ev, repo, tool, "pass-through", names, queries, 0, "not-complete")
     if not misses.enabled() or not key or not any(q["verdict"] not in ("complete", "other") for q in queries):
         return None

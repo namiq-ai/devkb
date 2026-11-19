@@ -78,19 +78,21 @@ def test_nothing_in_scope_passes_through(repo, tmp_path):
 
 
 @pytest.mark.parametrize("command,reason", [
-    ("grep -rn extract . | grep -v test", "pipe"),
-    ("grep -rn extract . | sort", "pipe"),
-    ("grep -rn extract . | head -c 200", "pipe"),
-    ("grep -rn extract . | tail -f", "pipe"),
-    ("grep -rn extract . | sort | head -5", "pipe"),
-    ("grep -rn -A8 extract .", "body:one-definition"),   # the lines around a name: its body (SPEC-DKB-007 §3.3)
-    ("grep -n extract pkg/use.py", "file-operand"),
-    ("grep -rn extract . && ls", "compound"),
+    ("grep -rn extract . | grep -v test", "duplicate:call-sites-filtered"),
+    ("grep -rn extract . | sort", "duplicate:call-sites"),
+    ("grep -rn extract . | head -c 200", "duplicate:call-sites"),
+    ("grep -rn extract . | tail -f", "duplicate:call-sites"),
+    ("grep -rn extract . | sort | head -5", "duplicate:call-sites"),
+    ("grep -rn -A8 extract .", "duplicate:read-body"),   # -A8 already shows extract's whole body
+    ("grep -n extract pkg/use.py", "duplicate:in-file"),
+    ("grep -rn extract . && ls", "duplicate:call-sites"),
 ])
-def test_other_questions_get_the_answer_alongside(repo, tmp_path, command, reason):
+def test_lines_grep_prints_anyway_are_not_added_beside_it(repo, tmp_path, command, reason):
+    """SPEC-DKB-007 R5 (#217): grep runs and prints these lines; the same lines beside them would only cost tokens."""
     hso, row = decide(repo, tmp_path, "Bash", {"command": command})
-    assert not sub(hso) and "additionalContext" in hso
-    assert row["action"] == "alongside" and row["reason"] == reason
+    answer = hso.get("permissionDecisionReason", "") + hso.get("additionalContext", "")
+    assert not sub(hso) and (not answer or answer.startswith("devkb guardrail: this is a code search"))
+    assert row["action"] == "pass-through" and row["reason"] == reason
 
 
 @pytest.mark.parametrize("command,intent", [
@@ -106,11 +108,11 @@ def test_counts_file_lists_and_inverted_searches_get_no_answer(repo, tmp_path, c
 
 @pytest.mark.parametrize("inp,action,reason", [
     ({"pattern": "extract", "output_mode": "count"}, "pass-through", "intent:count"),
-    ({"pattern": "extract", "output_mode": "content", "-i": True}, "alongside", "option:-i"),
-    ({"pattern": "extract", "output_mode": "content", "-C": 5}, "alongside", "body:one-definition"),
+    ({"pattern": "extract", "output_mode": "content", "-i": True}, "pass-through", "duplicate:call-sites"),
+    ({"pattern": "extract", "output_mode": "content", "-C": 5}, "pass-through", "duplicate:read-body"),
     ({"pattern": "extract", "output_mode": "content", "multiline": True}, "pass-through", "intent:unknown"),
     ({"pattern": "extract"}, "pass-through", "intent:list-files"),   # the default output_mode: a file list
-    ({"pattern": "extract", "output_mode": "content", "path": "pkg/use.py"}, "alongside", "file-operand"),
+    ({"pattern": "extract", "output_mode": "content", "path": "pkg/use.py"}, "pass-through", "duplicate:in-file"),
 ])
 def test_grep_tool_variants(repo, tmp_path, inp, action, reason):
     hso, row = decide(repo, tmp_path, "Grep", inp)
