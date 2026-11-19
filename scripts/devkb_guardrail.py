@@ -459,7 +459,7 @@ def classify(tool: str, inp: dict, pattern: str, why: str | None, paths: list[Pa
     """What a search asks (SPEC-DKB-007 §3.2), from the whole search: pattern, flags, operands, pipes and the tool; the
     names alone never decide it (#214). First match wins. It reads no graph and changes no answer."""
     from devkb import misses
-    cmd = inp.get("command", "") if tool == "Bash" else ""
+    cmd = search_part(inp.get("command", "")) if tool == "Bash" else ""
     why = why or ""
     bare = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", cmd)     # quoted text cannot hold an option or a pipe
     first = bare.split("|", 1)[0]
@@ -546,13 +546,32 @@ def dialect_of(tool: str, inp: dict) -> tuple[str, bool]:
     return "both", False
 
 
+def search_part(cmd: str) -> str:
+    """The `&&` / `;` / newline part of a command that holds its first search, quotes intact: what the pattern, the
+    options and the pipes of the search are read from (a `-A6` in another part is not this search's)."""
+    plain = re.sub(r"<<-?\s*'?(\w+)'?.*?\n\1\b", "", cmd, flags=re.S)
+    blank = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", lambda m: "''" if m.group(0)[0] == "'" else '""' , plain)
+    keep = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", lambda m: "\0" * len(m.group(0)), plain)   # same offsets, quotes masked
+    bounds, last = [], 0
+    for m in re.finditer(r"&&|\|\||;|\n", keep):
+        bounds.append((last, m.start()))
+        last = m.end()
+    bounds.append((last, len(plain)))
+    for a, b in bounds:
+        part = plain[a:b]
+        stages = [x.strip() for x in re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", part).split("|")]
+        if SEARCH.search(stages[0]) or any(x.startswith("xargs") and SEARCH.search(x) for x in stages[1:]):
+            return part.strip()
+    return cmd
+
+
 def search_flags(tool: str, inp: dict) -> set[str]:
     """The output-changing options of the first search: c (count), l/L (file names), v (invert), as letters."""
     if tool == "Grep":
         mode = inp.get("output_mode", "files_with_matches")
         return {"count"} if mode == "count" else {"files"} if mode == "files_with_matches" else set()
     try:
-        words = shlex.split(inp.get("command", ""), comments=True)
+        words = shlex.split(search_part(inp.get("command", "")), comments=True)
     except ValueError:
         return set()
     out: set[str] = set()
@@ -735,7 +754,7 @@ def search_globs(tool: str, inp: dict) -> list[str]:
         out = [g for g in re.split(r"[,\s]+", inp.get("glob") or "") if g]
         return out + TYPE_GLOBS.get(str(inp.get("type") or ""), [f"*.{inp['type']}"] if inp.get("type") else [])
     try:
-        w = shlex.split(inp.get("command", ""), comments=True)
+        w = shlex.split(search_part(inp.get("command", "")), comments=True)
     except ValueError:
         return []
     out = []
@@ -769,7 +788,7 @@ def shaped_answer(intent: str, repo: Path, names: list[str], inp: dict, paths: l
         rows = [r for r in rows if r[0] in files]
         return lines_text(rows, one_file=len(files) == 1) if rows else None
     if intent == "call-sites-filtered":
-        filt = pipe_filters(inp.get("command", ""))
+        filt = pipe_filters(search_part(inp.get("command", "")))
         if filt is None:
             return None
         def kept(r):                              # grep prints `./f` for a search of `.`: a filter may expect either
@@ -833,11 +852,13 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         return None
     if queries and len(queries) == len(names) and all(q["verdict"] == "complete" for q in queries):
         scope = scope_of(paths or [], repo)
-        if intent == "read-body" and len(names) == 1:     # the lines around a name: the body it is defined in
-            ans = definition_answer(repo, names[0], scope, search_globs(tool, inp))
-            if ans:
-                log_decision(ev, repo, tool, "alongside", names, queries, len(ans[0]), f"body:{ans[1]}", scope)
-                return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=ans[0])}}
+        if intent == "read-body":                # the lines around a name (or several definitions): the bodies
+            got = [definition_answer(repo, n, scope, search_globs(tool, inp)) for n in names]
+            if all(got):
+                body = "\n\n".join(x[0] for x in got)
+                body = body if len(body) <= MAX_ANSWER else body[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
+                log_decision(ev, repo, tool, "alongside", names, queries, len(body), f"body:{got[0][1]}", scope)
+                return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=body)}}
         found = [resolved_name(a) or n for n, a in zip(names, answers)] if ev.get("_nocase") else names
         text = shaped_answer(intent, repo, found, inp, paths, scope, tool)
         if not text:                             # nothing in the searched scope: grep may still find a mention there
