@@ -286,6 +286,9 @@ class Packer:
         ms = r["matches"]
         if r["n"] == 1:
             return ms[0]["i"], []
+        code = [m for m in ms if m.get("kind") not in ("field", "constant")]
+        if len(code) == 1 and r["n"] <= len(ms):     # a function and a field of the same name: a change pack means the
+            return code[0]["i"], []                  # function, which is what can be called (#193)
         return None, [m["k"] for m in ms]
 
     def _unresolved(self, pack: str, name: str, path: str, cands: list[str], tail: str) -> str:
