@@ -16,3 +16,9 @@ bench-work/
 # devkb:begin (managed by `devkb init`)
 .devkb/
 # devkb:end
+
+# benchmark runs and tool environments (bench/policy)
+bench/policy/work/
+bench/policy/runs/
+bench/policy/toolenvs/
+bench/policy/toolenv-*/
