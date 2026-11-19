@@ -123,12 +123,23 @@ def bash_pattern(command: str) -> str:
             break
     else:
         return ""
+    skip = False
     for i, w in enumerate(words):
+        if skip:                                 # the value of an option that takes one (#215): never the pattern
+            skip = False
+            continue
         if w == "-e" and i + 1 < len(words):
             return words[i + 1]
+        if w in VALUE_OPTIONS or (re.fullmatch(r"-[A-Za-z]*[ABCmtgT]", w) and not w.startswith("--")):
+            skip = True
+            continue
         if not w.startswith("-"):
             return w
     return ""
+
+
+VALUE_OPTIONS = {"--include", "--exclude", "--exclude-dir", "--type", "-t", "--glob", "-g", "--max-count", "-m",
+                 "--after-context", "--before-context", "--context", "-A", "-B", "-C", "--type-not", "-T", "-f", "--file"}
 
 
 def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
@@ -488,6 +499,38 @@ def classify(tool: str, inp: dict, pattern: str, why: str | None, paths: list[Pa
     return "unknown"
 
 
+def same_case(name: str, pack: str) -> bool:
+    """The pack answers for the name as written, case included (#184, #215): its resolved key's last component is the
+    searched name's last component. devkb's resolver also matches other cases, which a case-sensitive grep never does."""
+    m = re.search(r"changing the signature of `([^`]+)`", pack)
+    if not m:
+        return True
+    last = lambda k: re.split(r"::|\.", k)[-1]
+    return last(m.group(1)) == last(name)
+
+
+def dialect_of(tool: str, inp: dict) -> tuple[str, bool]:
+    """(alternation dialect, case-insensitive) of the search: grep is a basic regex unless -E/-P (or egrep), -F is a
+    fixed string; rg, git grep -E and the Grep tool are extended."""
+    if tool == "Grep":
+        return "ere", bool(inp.get("-i"))
+    try:
+        words = shlex.split(inp.get("command", ""), comments=True)
+    except ValueError:
+        return "both", False
+    for i, w in enumerate(words):
+        if w in ("grep", "egrep", "fgrep", "rg"):
+            flags = "".join(x[1:] for x in words[i + 1:] if x.startswith("-") and not x.startswith("--"))
+            longs = [x for x in words[i + 1:] if x.startswith("--")]
+            nocase = "i" in flags or "--ignore-case" in longs or (w == "rg" and ("S" in flags or "--smart-case" in longs))
+            if w == "fgrep" or "F" in flags or "--fixed-strings" in longs:
+                return "fixed", nocase
+            if w in ("egrep", "rg") or "E" in flags or "P" in flags or "--extended-regexp" in longs:
+                return "ere", nocase
+            return "bre", nocase
+    return "both", False
+
+
 def question_of(action: str, queries: list[dict]) -> str:
     """The graph question the hook asked for this decision."""
     if action == "read-answer":
@@ -547,7 +590,7 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     untouched, and the verdict is kept for the PostToolUse hook, which logs the miss if grep finds code."""
     from devkb import misses
     key = "".join(c for c in str(ev.get("tool_use_id") or "") if c.isalnum() or c in "-_")[:80]
-    names = misses.navigation_names(pattern)
+    names = misses.navigation_names(pattern, ev.get("_dialect", "both"))
     if not names or not (repo / ".devkb").is_dir():
         return None
     if why == "document-glob":                   # the graph holds no document text: an answer would only add tokens
@@ -562,6 +605,8 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     queries, answers = [], []
     for n in names:
         r = misses.run_query(repo, QUESTION, n)
+        if r and r[0] == "complete" and not ev.get("_nocase") and not same_case(n, r[2]):
+            r = ("other-case", f"devkb resolved {n!r} to a symbol spelled differently; grep is case-sensitive", "")
         if r:
             queries.append({"name": n, "verdict": r[0], "detail": r[1],
                             "query": f"devkb pack {QUESTION} {shlex.quote(n)} --project {shlex.quote(str(repo))}"})
@@ -735,6 +780,7 @@ def main() -> int:
         ev["_intent"] = classify(tool, inp, pattern, why, paths)
     except Exception:  # noqa: BLE001  classifying is for the log only
         ev["_intent"] = "unknown"
+    ev["_dialect"], ev["_nocase"] = dialect_of(tool, inp)
     if not first_copy(ev):
         return 0
     try:
