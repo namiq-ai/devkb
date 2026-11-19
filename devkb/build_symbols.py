@@ -289,6 +289,13 @@ def _calls_in_body(node: ast.AST) -> list[tuple[str | None, str, Shape]]:
 MODULE_CALLER = "<module>"
 
 
+def _is_environ(node: ast.AST) -> bool:
+    """`os.environ` / `environ` / `os.environ.copy()`: environment lookups, not record keys."""
+    while isinstance(node, ast.Call):
+        node = node.func.value if isinstance(node.func, ast.Attribute) else node.func
+    return (isinstance(node, ast.Attribute) and node.attr == "environ") or (isinstance(node, ast.Name) and node.id == "environ")
+
+
 def _declared_global(fn: ast.AST) -> set[str]:
     """Names a function declares `global` or `nonlocal` in its own body."""
     return {name for n in _own_body(fn) if isinstance(n, (ast.Global, ast.Nonlocal)) for name in n.names}
@@ -411,11 +418,23 @@ def _uses_in_tree(tree: ast.Module) -> tuple[list[tuple[str, str | None, str, in
             if k:
                 keys.append((where, k, "read" if isinstance(n.ctx, ast.Load) else "write", n.lineno))
         elif isinstance(n, ast.Call):
-            if isinstance(n.func, ast.Attribute) and n.args and (k := _str_const(n.args[0])):
+            env = isinstance(n.func, ast.Attribute) and _is_environ(n.func.value)   # os.environ.get("X") is not a record key
+            if isinstance(n.func, ast.Attribute) and n.args and (k := _str_const(n.args[0])) and not env:
                 if n.func.attr in _KEY_READS:
                     keys.append((where, k, "read", n.lineno))
                 elif n.func.attr in _KEY_WRITES:
                     keys.append((where, k, "write", n.lineno))
+            if (isinstance(n.func, ast.Attribute) and n.func.attr == "update" and not env) or \
+                    (isinstance(n.func, ast.Name) and n.func.id == "dict"):
+                for kw in n.keywords:                      # d.update(owner=...), dict(owner=...): writes (#202)
+                    if kw.arg and re.fullmatch(r"[A-Za-z_]\w*", kw.arg):
+                        keys.append((where, kw.arg, "write", n.lineno))
+        elif isinstance(n, ast.Compare):
+            if isinstance(n.left, ast.Constant) and (k := _str_const(n.left)) \
+                    and any(isinstance(op, (ast.In, ast.NotIn)) for op in n.ops):
+                keys.append((where, k, "read", n.lineno))  # `"status" in rec`: a read of the key (#202)
+        elif isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Subscript) and (k := _str_const(n.target.slice)):
+            keys.append((where, k, "read", n.lineno))      # rec["count"] += 1 reads, then writes (#202)
         elif isinstance(n, ast.Dict):
             for kn in n.keys:
                 if (k := _str_const(kn)):
