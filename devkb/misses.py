@@ -56,7 +56,8 @@ def navigation_names(pattern: str, dialect: str = "both") -> list[str]:
             return []
         if part not in names:
             names.append(part)
-    return names[:3]
+    return names                                    # every name: the hook asks about at most 3 and never replaces a
+                                                    # search that names more (#278)
 
 
 def definition_name(pattern: str) -> str | None:
