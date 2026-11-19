@@ -50,7 +50,8 @@ with tempfile.TemporaryDirectory() as td:
         ("read_body", B('grep -n "def compute" -A20 pkg/core.py'), "deny", ["return x * 2"], ["Graph pack"]),
         ("body_of_name", B("grep -n compute -A10 pkg/core.py"), "context", ["return x * 2"], ["Graph pack"]),
         ("locate_two", B('grep -n "def compute\\|def helper" pkg/core.py'), "context", ["pkg/core.py:1:", "pkg/core.py:5:"], ["Graph pack", "return x"]),
-        ("list_symbols", B('grep -n "^def " pkg/core.py'), "context", ["compute", "helper", "L1-"], ["Graph pack"]),
+        # the ticket: alongside, "replace only when the file is unchanged since the build" (it is, here): either kind
+        ("list_symbols", B('grep -n "^def " pkg/core.py'), ("context", "deny"), ["compute", "helper", "L1-"], ["Graph pack"]),
         ("call_sites", B("grep -rn compute ."), "deny", ["pkg/app.py:5:", "tests/test_core.py:"], ["Graph pack", "more)"]),
         ("call_sites_tests", B("grep -rn compute tests/"), "deny", ["tests/test_core.py:"], ["pkg/app.py"]),
         ("in_file", B("grep -n compute pkg/app.py"), "context", ["5:", "6:"], ["Graph pack", "tests/", "pkg/core.py"]),
@@ -67,7 +68,7 @@ with tempfile.TemporaryDirectory() as td:
     res = {}
     for name, (tool, inp), want, has, hasnt in cases:
         kind, text = run(name, tool, inp)
-        res[name] = kind == want and all(x in text for x in has) and not any(x in text for x in hasnt)
+        res[name] = (kind in want if isinstance(want, tuple) else kind == want) and all(x in text for x in has) and not any(x in text for x in hasnt)
         if not res[name]:
             out.setdefault("why", {})[name] = f"{kind}: {text[:160]!r}"
     # #171: a stale file gets no outline
