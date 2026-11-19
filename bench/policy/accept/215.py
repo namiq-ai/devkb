@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory() as td:
         mine = [r for r in rows if r.get("session") == sess and r.get("action") != "remind"]
         return text, (mine[-1] if mine else {})
 
-    answer = lambda t: "Graph pack" in t or "devkb answered" in t or "definition" in t.lower() and "pkg/" in t
+    answer = lambda t: any(m in t for m in ("Graph pack", "devkb answered", "devkb's answer"))   # any devkb answer wrapper
     no_text = {n: not answer(run(n, c)[0]) for n, c in [
         ("Compute", "grep -rn Compute ."), ("COMPUTE", "grep -rn COMPUTE ."), ("def_only", 'grep -n "^def " pkg/core.py'),
         ("read_answer", "grep -c read_answer pkg/flags.py"), ("bre_bar", "grep -rn 'compute|helper' ."),
