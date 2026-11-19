@@ -1,0 +1,102 @@
+[
+ {
+  "id": "uses-cap-hides-callers",
+  "title": "A call-site answer that replaces grep lists every call site grep prints, not the first few of `uses`",
+  "severity": "high",
+  "where": "scripts/devkb_guardrail.py:815 (use_lines) / read_tool at :779",
+  "actual": "`grep -rn compute_total aaa` (8 calls) is denied and the 'Complete' answer carries 3 lines. `devkb uses` caps its hits (\"showing 5 of 7 hits ... omitted\") and the hook takes that capped --json list, then filters by scope after the cap. On this repository `grep -rn changed_since_build scripts` is denied with 3 of 5 lines (L1138 and L1177 missing).",
+  "expected": "Either the answer holds every line grep would print (no cap, scope applied before any cap) or the search runs untouched / the answer says what was omitted (SPEC-DKB-007 R6: never collapsed, a call site grep prints is never left out).",
+  "why_it_matters": "The agent is told the search was answered Complete and does not repeat it, so it misses callers when changing a function: the exact failure the guardrail exists to prevent.",
+  "repro": "audit/repro/uses-cap-hides-callers.py"
+ },
+ {
+  "id": "deny-hides-substring-matches",
+  "title": "A plain `grep NAME` is not replaced by an answer that drops the substring matches grep prints",
+  "severity": "high",
+  "where": "scripts/devkb_guardrail.py:1043-1052 (shaped_answer / substitute)",
+  "actual": "`grep -rn fetch_rows lib` is denied; the answer lists the exact-word uses only. `prefetch_rows` and `stop_fetch_rows` lines that grep prints are hidden. Same on this repo: `grep -rn _unresolved devkb scripts` hides devkb/cpp_resolve.py:333,395,396 (`stop_unresolved`).",
+  "expected": "The search is replaced only when the graph answer equals grep's lines for the pattern as written (word match, `-w`), otherwise it runs, or the answer is placed beside it.",
+  "why_it_matters": "A replacement that hides lines grep would print makes the agent conclude there is nothing else; the lines are really there.",
+  "repro": "audit/repro/deny-hides-substring-matches.py"
+ },
+ {
+  "id": "deny-hides-doc-matches",
+  "title": "A search that names a docs or config folder is not replaced by an answer without those folders' lines",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:1043-1052; document-glob rule at :985",
+  "actual": "`grep -rn handler pkg docs` is denied; docs/guide.md:1, which grep prints, is absent from the 'Complete' answer (the graph has no document text). The document-glob rule only covers --include/glob, not an operand that is a docs folder, nor a whole-repo `grep -rn NAME .`.",
+  "expected": "Pass through (or answer beside grep) when the searched scope contains non-code files that can match.",
+  "why_it_matters": "Docs, config and README mentions of a name are what agents search for when renaming; they are silently dropped.",
+  "repro": "audit/repro/deny-hides-doc-matches.py"
+ },
+ {
+  "id": "deny-long-body-no-lines",
+  "title": "A definition search with -A/-B/-C on a function longer than 80 lines is not denied with an answer that has no body",
+  "severity": "high",
+  "where": "scripts/devkb_guardrail.py:769-771 (definition_answer over-cap), :1009-1018",
+  "actual": "`grep -n \"def build_everything\" -A30 pkg/big.py` on a 122-line function is denied with `pkg/big.py:1:def ...` and '(Body not shown: ... longer than 80 lines. Span: ... Read the span you need.)'. The 30 lines grep would print are not delivered, and the agent must issue another call. Seen in a real agent search (audit/searches.jsonl line 15 (index 14): `grep -n \"def extract\" -A30 devkb/build_symbols.py | head -60`).",
+  "expected": "When the body cannot be shown, let grep run (or deliver at least the requested context lines); never deny with only a location for a search that asked for lines.",
+  "why_it_matters": "A denied call with no content costs a turn and the guardrail's whole point (fewer calls) is inverted.",
+  "repro": "audit/repro/deny-long-body-no-lines.py"
+ },
+ {
+  "id": "deny-before-context-hides-decorator",
+  "title": "`grep -B N` on a definition is not denied with an answer that starts at the definition line",
+  "severity": "low",
+  "where": "scripts/devkb_guardrail.py:1009-1018 (read-answer ignores -B)",
+  "actual": "`grep -n \"def handler\" -B3 pkg/mod.py` prints the decorator `@decorator` (line 7) and two lines before it; the denied answer starts at line 8.",
+  "expected": "The answer includes the requested preceding lines (decorators, comments) or the search runs.",
+  "why_it_matters": "-B is how agents read decorators/docstring headers above a definition; the replacement silently drops exactly those lines.",
+  "repro": "audit/repro/deny-before-context-hides-decorator.py"
+ },
+ {
+  "id": "deny-larger-than-trimmed-output",
+  "title": "An answer to a search limited by `| head -N` or Grep `head_limit` is never larger than the limited output",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:1043-1052 (is_trim_stage at :200 discards the limit; head_limit ignored)",
+  "actual": "`grep -rn handler pkg | head -2` and Grep `{pattern: handler, head_limit: 2}` are each denied with a 5-line answer; the search would print 2 lines.",
+  "expected": "The answer is cut to N lines (R5: never larger than grep's own output), or the search runs.",
+  "why_it_matters": "The agent asked for a small sample to save tokens; the hook returns more than asked.",
+  "repro": "audit/repro/deny-larger-than-trimmed-output.py"
+ },
+ {
+  "id": "list-symbols-answer-larger-than-grep",
+  "title": "A `grep -n \"^class \" file` is answered with the classes, not the file's whole outline",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:869-883 (outline_answer), :978",
+  "actual": "`grep -n \"^class \" pkg/mod.py` matches 1 line; the added answer lists 7 symbols (constants, functions, methods). In the replay of audit/searches.jsonl (index 94: `grep -n \"^def \\|^class \" devkb/cpp_symbols.py | sed -n 20,80p`) the outline lists constants and fields that the grep never prints and ignores the `sed` window.",
+  "expected": "The outline is filtered to the kinds the keyword pattern names (def/function, class) and cut to grep's size (SPEC-DKB-007 R5).",
+  "why_it_matters": "An answer to a different, larger question: up to 1500 characters added to a one-line result.",
+  "repro": "audit/repro/list-symbols-answer-larger-than-grep.py"
+ },
+ {
+  "id": "four-names-answered-for-three",
+  "title": "A search for four or more names is not replaced by an answer for the first three",
+  "severity": "high",
+  "where": "devkb/misses.py:59 (`return names[:3]`), used at scripts/devkb_guardrail.py:973",
+  "actual": "`grep -rn 'alpha_one\\|beta_two\\|gamma_three\\|delta_four' lib` is denied 'Complete'; the 4th name is silently dropped, so `lib/a.py:13:def delta_four():` is missing.",
+  "expected": "More than three names: pass through (or answer all of them).",
+  "why_it_matters": "A silent truncation behind a Complete label; the dropped name's lines never reach the agent.",
+  "repro": "audit/repro/four-names-answered-for-three.py"
+ },
+ {
+  "id": "stale-rename-still-replaces-grep",
+  "title": "A graph built before a file was renamed does not replace grep",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:942-962 (graph_stale)",
+  "actual": "After the build, `git mv pkg/use.py pkg/client.py`; `grep -rn handler pkg` is still denied and the answer leaves out every line from pkg/client.py (graph_stale checks the new path with changed_since_build, which is false for an unmodified renamed file, and never looks at the old path). #182's rule is incomplete for renames.",
+  "expected": "A rename or delete in the searched scope makes the graph stale: grep runs.",
+  "why_it_matters": "The stale-graph guarantee of #182 fails exactly where a refactor happens: moved files.",
+  "repro": "audit/repro/stale-rename-still-replaces-grep.py"
+ },
+ {
+  "id": "teach-line-unquoted-path",
+  "title": "The 'Next time ask devkb directly' command is runnable when the file path has a space",
+  "severity": "low",
+  "where": "scripts/devkb_guardrail.py:695-705 (teach_command)",
+  "actual": "For `grep -n '^def ' 'my dir/with space.py'` the line reads `devkb outline my dir/with space.py --project .` (3 arguments). Names and paths are not shell-quoted; `--project .` is also wrong after `cd subdir &&`.",
+  "expected": "shlex.quote the path and name; resolve the project instead of `.`.",
+  "why_it_matters": "The suggested command (#267, on by default) is what the agent copies; a broken one costs a failed call.",
+  "repro": "audit/repro/teach-line-unquoted-path.py"
+ }
+]

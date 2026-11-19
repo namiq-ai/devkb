@@ -1,0 +1,781 @@
+[
+ {
+  "key": "g-replace-not-grep",
+  "title": "A search the hook replaces gets every line grep would print: no capped call sites, substring matches, definition lines, comments or docs dropped",
+  "priority": "high",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aguardrail-main-r2",
+    "replace-hides-lines"
+   ],
+   [
+    "aguardrail-main-r2",
+    "replace-hides-substring-matches"
+   ],
+   [
+    "aguardrail-main-r1",
+    "replace-hides-comment-mentions"
+   ],
+   [
+    "aguardrail-nonekeep-r1",
+    "replace_hides_uses"
+   ],
+   [
+    "aguardrail-nonekeep-r2",
+    "uses-cap-hides-callers"
+   ],
+   [
+    "aguardrail-nonekeep-r2",
+    "deny-hides-substring-matches"
+   ],
+   [
+    "aguardrail-nonekeep-r2",
+    "deny-hides-doc-matches"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/276"
+ },
+ {
+  "key": "g-def-prefix",
+  "title": "A definition search is not replaced when grep also prints definitions of longer names that start with the same text",
+  "priority": "high",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aguardrail-main-r1",
+    "def-prefix-hides-lines"
+   ],
+   [
+    "aguardrail-nonekeep-r1",
+    "definition_prefix_hides"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/277"
+ },
+ {
+  "key": "g-names-cut-3",
+  "title": "A search for four or more names is never replaced by an answer for the first three",
+  "priority": "high",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aguardrail-nonekeep-r2",
+    "four-names-answered-for-three"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/278"
+ },
+ {
+  "key": "g-stale-rename",
+  "title": "A graph built before a file was renamed never replaces a search",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aguardrail-nonekeep-r2",
+    "stale-rename-still-replaces-grep"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/279"
+ },
+ {
+  "key": "g-def-shapes",
+  "title": "A definition search is answered in the shape its grep options ask for: a location for a plain search, the asked-for lines for -A/-B, the body in every defining file",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aguardrail-main-r1",
+    "def-answer-larger-than-grep"
+   ],
+   [
+    "aguardrail-main-r2",
+    "locate-gets-body"
+   ],
+   [
+    "aguardrail-nonekeep-r1",
+    "locate_answers_whole_body"
+   ],
+   [
+    "aguardrail-main-r2",
+    "long-def-denied-without-body"
+   ],
+   [
+    "aguardrail-nonekeep-r2",
+    "deny-long-body-no-lines"
+   ],
+   [
+    "aguardrail-main-r2",
+    "scoped-definition-no-body"
+   ],
+   [
+    "aguardrail-nonekeep-r1",
+    "definition_second_has_no_body"
+   ],
+   [
+    "aguardrail-nonekeep-r1",
+    "before_context_hidden"
+   ],
+   [
+    "aguardrail-nonekeep-r2",
+    "deny-before-context-hides-decorator"
+   ],
+   [
+    "aguardrail-nonekeep-r1",
+    "context_callsite_gets_body"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/280"
+ },
+ {
+  "key": "g-head",
+  "title": "An answer to a search cut by `| head -N` or Grep `head_limit` is never larger than the cut output",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aguardrail-main-r2",
+    "answer-larger-than-head"
+   ],
+   [
+    "aguardrail-nonekeep-r1",
+    "head_trim_ignored"
+   ],
+   [
+    "aguardrail-nonekeep-r2",
+    "deny-larger-than-trimmed-output"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/281"
+ },
+ {
+  "key": "g-outline-shape",
+  "title": "A listing of one kind of definition gets only that kind, never a whole outline or another language's definitions",
+  "priority": "low",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aguardrail-main-r2",
+    "outline-wider-than-grep"
+   ],
+   [
+    "aguardrail-nonekeep-r1",
+    "list_symbols_wrong_kinds"
+   ],
+   [
+    "aguardrail-nonekeep-r2",
+    "list-symbols-answer-larger-than-grep"
+   ],
+   [
+    "aguardrail-main-r2",
+    "keyword-literal-gets-outline"
+   ],
+   [
+    "aguardrail-main-r1",
+    "def-pattern-lists-other-language"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/282"
+ },
+ {
+  "key": "g-teach",
+  "title": "The teach line's command runs as written, from the search's directory, for the answer it follows",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aguardrail-main-r2",
+    "teach-command-wrong-dir"
+   ],
+   [
+    "aguardrail-nonekeep-r1",
+    "teach_line_other_name"
+   ],
+   [
+    "aguardrail-nonekeep-r2",
+    "teach-line-unquoted-path"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/283"
+ },
+ {
+  "key": "g-log-stats",
+  "title": "The guardrail log names the graph question an answer came from, and guardrail-stats counts every decision kind",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aguardrail-nonekeep-r1",
+    "logged_question_wrong"
+   ],
+   [
+    "aguardrail-main-r2",
+    "stats-omit-outline-on-open"
+   ],
+   [
+    "aguardrail-nonekeep-r1",
+    "stats_omits_outline_on_open"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/284"
+ },
+ {
+  "key": "g-misslog",
+  "title": "A one-file grep with a pipe, a redirection or a leading cd is logged as a graph miss, and a miss names its Allman-style C/C++ function",
+  "priority": "medium",
+  "labels": [
+   "bug",
+   "graph-miss"
+  ],
+  "members": [
+   [
+    "aguardrail-main-r2",
+    "miss-single-file-forms"
+   ],
+   [
+    "aguardrail-main-r2",
+    "miss-enclosing-allman"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/285"
+ },
+ {
+  "key": "r-star-reexport",
+  "title": "A call through a star re-export (`from .sub import *`) is attributed, or the pack says Incomplete",
+  "priority": "high",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "agraph-main-r2",
+    "star-reexport-callers-missing"
+   ],
+   [
+    "agraph-nonekeep-r1",
+    "star-reexport-call-unattributed"
+   ],
+   [
+    "agraph-nonekeep-r2",
+    "star-reexport-complete"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/286"
+ },
+ {
+  "key": "r-const-reads",
+  "title": "A module constant's reads are attributed exactly: local bindings that shadow it are not reads, and a read through a dotted module path is",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "agraph-main-r1",
+    "constant-shadowed-locals"
+   ],
+   [
+    "agraph-main-r2",
+    "lambda-param-shadows-constant"
+   ],
+   [
+    "agraph-main-r2",
+    "class-default-arg-shadow"
+   ],
+   [
+    "agraph-nonekeep-r2",
+    "const-lambda-param"
+   ],
+   [
+    "agraph-nonekeep-r2",
+    "const-except-match-binding"
+   ],
+   [
+    "agraph-nonekeep-r1",
+    "constant-dotted-read-unattributed"
+   ],
+   [
+    "agraph-nonekeep-r2",
+    "const-dotted-module-read"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/287"
+ },
+ {
+  "key": "r-environ-key",
+  "title": "`os.environ['K']` and `'K' in os.environ` are not counted as a record's string-key reads",
+  "priority": "low",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "agraph-main-r1",
+    "environ-subscript-counted-as-key"
+   ],
+   [
+    "agraph-nonekeep-r2",
+    "key-environ-subscript"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/288"
+ },
+ {
+  "key": "r-quadratic-names",
+  "title": "Build time stays linear when many symbols share a name and many calls to it are unresolved",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "agraph-main-r1",
+    "build-quadratic-same-name-defs"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/289"
+ },
+ {
+  "key": "r-macro-scope",
+  "title": "A repository macro is expanded only where it is visible: in files that include its header, and not after `#undef` or a redeclaration",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "agraph-main-r1",
+    "macro-after-undef"
+   ],
+   [
+    "agraph-main-r2",
+    "cpp-macro-leaks-into-unrelated-file"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/290"
+ },
+ {
+  "key": "r-cpp-overload-pack",
+  "title": "A pack for an overloaded C++ method offers choices an agent can tell apart, or covers every overload",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "agraph-main-r1",
+    "cpp-overload-ambiguity-identical"
+   ],
+   [
+    "agraph-main-r2",
+    "cpp-overload-candidates-indistinguishable"
+   ],
+   [
+    "agraph-nonekeep-r1",
+    "cpp-overload-pack-ambiguous"
+   ],
+   [
+    "agraph-nonekeep-r2",
+    "cpp-overload-ambiguous-choices"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/291"
+ },
+ {
+  "key": "r-cpp-footer",
+  "title": "A C/C++ pack's notes are true: the limits footer says macros are expanded, and a Run line is a runnable command or absent",
+  "priority": "low",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "agraph-main-r1",
+    "cpp-pack-stale-limits"
+   ],
+   [
+    "agraph-nonekeep-r2",
+    "cpp-pack-stale-macro-footer"
+   ],
+   [
+    "agraph-main-r2",
+    "cpp-pack-empty-run-command"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/292"
+ },
+ {
+  "key": "r-nograph-commands",
+  "title": "`devkb audit`, `coverage` and `query` on a repository with no graph print one line naming `devkb build --project PATH`",
+  "priority": "low",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "agraph-main-r1",
+    "audit-no-graph-traceback"
+   ],
+   [
+    "agraph-main-r2",
+    "audit-no-graph-traceback"
+   ],
+   [
+    "agraph-nonekeep-r1",
+    "audit-no-graph-traceback"
+   ],
+   [
+    "agraph-nonekeep-r2",
+    "nograph-audit-query-coverage"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/293"
+ },
+ {
+  "key": "o-malformed-starves",
+  "title": "An item whose model answer is malformed is backed off, not judged and paid for again on every run ahead of the others",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "triage-malformed-starves"
+   ],
+   [
+    "aops-main-r2",
+    "triage-malformed-answer-starves-queue"
+   ],
+   [
+    "aops-nonekeep-r1",
+    "triage_failed_items_starve_queue"
+   ],
+   [
+    "aops-nonekeep-r2",
+    "triage-failed-item-retried-every-run"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/294"
+ },
+ {
+  "key": "o-label-recomment",
+  "title": "A failed label edit after the triage comment does not make the next run comment on the same item again",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "triage-label-failure-recomments"
+   ],
+   [
+    "aops-main-r2",
+    "triage-label-failure-repeats-comment"
+   ],
+   [
+    "aops-nonekeep-r1",
+    "triage_label_failure_duplicate_comment"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/295"
+ },
+ {
+  "key": "o-feedback-lost",
+  "title": "A transient GitHub error while filing a feedback ticket leaves the comment to be handled on the next run",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "feedback-ticket-failure-loses-comment"
+   ],
+   [
+    "aops-main-r2",
+    "feedback-create-failure-loses-comment"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/296"
+ },
+ {
+  "key": "o-draft-retry-push",
+  "title": "A draft-pr issue can be retried after an earlier attempt pushed its branch but did not open the PR",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "draft-pr-retry-remote-branch"
+   ],
+   [
+    "aops-main-r2",
+    "draft-pr-retry-push-rejected"
+   ],
+   [
+    "aops-nonekeep-r1",
+    "triage_push_retry"
+   ],
+   [
+    "aops-nonekeep-r2",
+    "triage-draft-pr-retry-push-rejected"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/297"
+ },
+ {
+  "key": "o-sandbox-timeout",
+  "title": "A hanging test in the sandbox fails its item instead of aborting the whole handle run",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "handle-sandbox-timeout-aborts-run"
+   ],
+   [
+    "aops-nonekeep-r1",
+    "triage_handle_timeout"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/298"
+ },
+ {
+  "key": "o-read-tree-origin",
+  "title": "With TRIAGE_REPO set, the tree the triage, plan and feedback agents read is that repository's main",
+  "priority": "low",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "triage-repo-override-reads-origin"
+   ],
+   [
+    "aops-nonekeep-r2",
+    "triage-read-tree-from-origin"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/299"
+ },
+ {
+  "key": "o-verdict-text",
+  "title": "A verdict is validated and posted text carries no closing keyword in any form GitHub honours",
+  "priority": "low",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "triage-duplicate-of-true"
+   ],
+   [
+    "aops-nonekeep-r2",
+    "triage-duplicate-of-boolean"
+   ],
+   [
+    "aops-nonekeep-r1",
+    "triage_closing_keyword_gh_form"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/300"
+ },
+ {
+  "key": "b-flaky-order",
+  "title": "A suite that fails the same way on every full run is red, even when the failed test passes on its own",
+  "priority": "high",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "flaky-rule-hides-order-dependence"
+   ],
+   [
+    "aops-main-r2",
+    "suite-order-failure-scored-green"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/301"
+ },
+ {
+  "key": "b-nav-rule",
+  "title": "A devkb query is a self-test only after an edit of the checkout's own devkb code, and a quoted fixture path counts as a fixture",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-nonekeep-r1",
+    "bench_edit_rule_matches_parent_dir"
+   ],
+   [
+    "aops-nonekeep-r1",
+    "bench_selftest_quoted_project"
+   ],
+   [
+    "aops-nonekeep-r2",
+    "bench-quoted-fixture-project-counted-as-navigation"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/302"
+ },
+ {
+  "key": "b-timeout-free",
+  "title": "A run cut off by the timeout is not recorded with zero cost and zero context",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "timeout-run-scored-as-free"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/303"
+ },
+ {
+  "key": "b-table-nav-stored",
+  "title": "The release table uses the stored devkb navigation counts when the transcript is not in the harness folder",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "release-table-nav-from-missing-transcript"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/304"
+ },
+ {
+  "key": "b-setup-retry",
+  "title": "A run whose setup failed by accident, or whose base was red, is set up again in the next batch",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "base-red-run-never-rerun"
+   ],
+   [
+    "aops-main-r2",
+    "bench-setup-failure-recorded-as-base-red"
+   ],
+   [
+    "aops-nonekeep-r1",
+    "bench_base_red_run_never_retried"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/305"
+ },
+ {
+  "key": "b-score-arms",
+  "title": "Scoring one arm keeps the other arms' rows in results-ISSUE.jsonl",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r1",
+    "score-arms-filter-overwrites-results"
+   ],
+   [
+    "aops-nonekeep-r2",
+    "bench-score-arm-filter-truncates-results"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/306"
+ },
+ {
+  "key": "b-template-key",
+  "title": "A checkout template is keyed on everything that changes its content",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r2",
+    "template-key-ignores-preregister-post"
+   ],
+   [
+    "aops-nonekeep-r1",
+    "bench_template_key_ignores_preregister"
+   ],
+   [
+    "aops-nonekeep-r2",
+    "bench-template-ignores-preregister-post"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/307"
+ },
+ {
+  "key": "b-storybench-rules",
+  "title": "storybench runs are scored with the same rules as policybench runs",
+  "priority": "medium",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-nonekeep-r2",
+    "bench-storybench-score-old-rules"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/308"
+ },
+ {
+  "key": "b-counters-text",
+  "title": "toolmix and listing_then_read count only what agents ran: no devkb use from quoted text, no reads outside the listed folder",
+  "priority": "low",
+  "labels": [
+   "bug"
+  ],
+  "members": [
+   [
+    "aops-main-r2",
+    "toolmix-counts-quoted-text-as-devkb"
+   ],
+   [
+    "aops-main-r2",
+    "listing-then-read-counts-files-outside-cwd"
+   ]
+  ],
+  "issue": "https://github.com/namiq-ai/devkb/issues/309"
+ }
+]

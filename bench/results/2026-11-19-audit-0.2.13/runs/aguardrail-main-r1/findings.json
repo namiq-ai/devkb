@@ -1,0 +1,42 @@
+[
+ {
+  "id": "def-prefix-hides-lines",
+  "title": "A definition search whose pattern is a prefix (`def resolve`) is not denied while grep would also print `def resolve_file`",
+  "severity": "high",
+  "where": "scripts/devkb_guardrail.py:1013",
+  "actual": "grep -n \"def resolve\" m.py prints def resolve_file (line 1) and def resolve (line 5); the hook denies the search and answers only with `resolve` (line 5). Same for the recorded search `def extract` / `def resolve` in audit/searches.jsonl (#14, #591).",
+  "expected": "Either the answer lists every definition the pattern matches, or the search runs (a pattern that is a prefix of other names is not one name).",
+  "why_it_matters": "A deny replaces grep's output; the agent never sees the other matching definitions and, told the answer is the search's result, will not look further.",
+  "repro": "audit/repro/def-prefix-hides-lines.py"
+ },
+ {
+  "id": "def-answer-larger-than-grep",
+  "title": "A definition search for one line is not denied with the whole body when grep prints one line",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:1013",
+  "actual": "grep -n \"def finalize\" f.py prints 21 chars; the hook denies with a 1023-char answer holding the full 40-line body (recorded search #290: grep 60 chars, answer 1870 chars).",
+  "expected": "An answer never larger than grep's own output (#217); the body only when the search asked for context lines (-A/-B/-C) or a body.",
+  "why_it_matters": "Costs tokens the agent did not ask for on every plain definition lookup, and contradicts the #217 size rule.",
+  "repro": "audit/repro/def-answer-larger-than-grep.py"
+ },
+ {
+  "id": "replace-hides-comment-mentions",
+  "title": "A replaced name search keeps the comment lines that mention the name",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:1050",
+  "actual": "With a second file in the repository, grep -rn alpha --include=\"*.py\" . prints a comment line (a.py:6 `# alpha is called here`); the denial answer lists a.py:1, 7, 10 and c.py:2 but omits line 6.",
+  "expected": "A replacement lists every line grep would print, or the search runs.",
+  "why_it_matters": "The deny states the answer is the search's result (Complete); a line grep would have printed is hidden from the agent.",
+  "repro": "audit/repro/replace-hides-comment-mentions.py"
+ },
+ {
+  "id": "def-pattern-lists-other-language",
+  "title": "A `^def NAME` search is answered with that name's definitions in the language the pattern names, not in other languages",
+  "severity": "low",
+  "where": "scripts/devkb_guardrail.py:1013",
+  "actual": "grep -rn \"^def alpha\" . prints only a.py:1; the hook denies and lists a.py:1 and x.js:1 (`function alpha`), 295 chars against grep's 23.",
+  "expected": "The answer is limited to what the pattern matches; a line grep would not print is not added and the answer is not larger than grep's output.",
+  "why_it_matters": "An answer to a different question (definitions of alpha in any language) replaces the search, and is larger than grep's output.",
+  "repro": "audit/repro/def-pattern-lists-other-language.py"
+ }
+]

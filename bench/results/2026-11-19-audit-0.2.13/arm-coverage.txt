@@ -1,0 +1,25 @@
+area       groups  by both  no devkb only  devkb only  high: both/none/devkb
+guardrail      10        7              2           1  2/1/0
+     no devkb only: #278 g-names-cut-3 (high)
+     no devkb only: #279 g-stale-rename (medium)
+     devkb only:    #285 g-misslog (medium)
+graph           8        6              0           2  1/0/0
+     devkb only:    #289 r-quadratic-names (medium)
+     devkb only:    #290 r-macro-scope (medium)
+ops            16        9              2           5  0/0/1
+     no devkb only: #302 b-nav-rule (medium)
+     no devkb only: #308 b-storybench-rules (medium)
+     devkb only:    #296 o-feedback-lost (medium)
+     devkb only:    #301 b-flaky-order (high)
+     devkb only:    #303 b-timeout-free (medium)
+     devkb only:    #304 b-table-nav-stored (medium)
+     devkb only:    #309 b-counters-text (low)
+all: {'both': 22, 'none': 4, 'main': 8} | groups found per arm: none 26 , devkb 30
+nonekeep: $7.52, 308 turns, 46 min, groups 26, $ per group 0.289
+main: $7.07, 292 turns, 45 min, groups 30, $ per group 0.236
+  guardrail nonekeep groups per run [7, 7] of 10
+  guardrail main     groups per run [4, 7] of 10
+  graph     nonekeep groups per run [4, 6] of 8
+  graph     main     groups per run [7, 6] of 8
+  ops       nonekeep groups per run [8, 8] of 16
+  ops       main     groups per run [12, 8] of 16

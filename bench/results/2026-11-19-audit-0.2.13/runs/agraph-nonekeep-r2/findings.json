@@ -1,0 +1,82 @@
+[
+ {
+  "id": "nograph-audit-query-coverage",
+  "title": "`devkb audit`, `query` and `coverage` on a repository with no graph print one line saying to run `devkb build`",
+  "severity": "medium",
+  "where": "devkb/audit.py:48; devkb/query.py:32; devkb/coverage.py:61",
+  "actual": "`audit` dies with a FileNotFoundError traceback on .devkb/nodes.jsonl; `query` and `coverage` print a one-line error but tell the user to run `python3 devkb/build.py --project ...` (and coverage upper-cases the path into 'DEVKBFX-...'), not `devkb build`. #212 fixed only symbol/outline/uses/docs/pack.",
+  "expected": "Every graph-reading command prints the same single line as `devkb pack`: no devkb graph at <path>/.devkb: run `devkb build --project <path>` first; no traceback.",
+  "why_it_matters": "#212 is only half done: an agent that runs `devkb audit` first gets a stack trace, and the other two commands name a script that is not the entry point.",
+  "repro": "audit/repro/nograph_cli.py"
+ },
+ {
+  "id": "const-lambda-param",
+  "title": "A lambda parameter named like a module constant is not attributed as a read of that constant",
+  "severity": "medium",
+  "where": "devkb/build_symbols.py:374-405 (_uses_in_tree visit; Lambda is not a scope)",
+  "actual": "`def f(): return (lambda OTHER: OTHER)(1)` with module `OTHER = 6`: `pack change OTHER` lists f as reaching the constant (Uses: m.py:4). Comprehension variables are handled; lambda arguments are not.",
+  "expected": "No function reaches OTHER.",
+  "why_it_matters": "A wrong edge: `pack change` sends the agent (and the tests list) to a function that never reads the constant, and says Complete.",
+  "repro": "audit/repro/const_lambda_param.py"
+ },
+ {
+  "id": "const-except-match-binding",
+  "title": "`except ... as NAME` and `case [NAME, _]` bindings are not attributed as reads of a module constant of the same name",
+  "severity": "medium",
+  "where": "devkb/build_symbols.py:318 (_bound_names) and :402",
+  "actual": "With `K1 = 1` and `except Exception as K1: return K1` (or `case [K2, _]: return K2`), `pack change K1` / `K2` lists the local read as a use of the module constant.",
+  "expected": "No uses: the names are bound locally.",
+  "why_it_matters": "Same class of wrong edge as #199: false uses and false 'tests to run' for a constant, reported Complete.",
+  "repro": "audit/repro/const_except_match_binding.py"
+ },
+ {
+  "id": "const-dotted-module-read",
+  "title": "A read of a module constant through a dotted module path (`pkg.mod.LIMIT`) is attributed, or the pack says Incomplete",
+  "severity": "medium",
+  "where": "devkb/build_symbols.py:411-413 (Attribute branch only handles `Name.ATTR`)",
+  "actual": "`import pkg.mod` then `return pkg.mod.LIMIT` in e(): `pack change LIMIT` lists no function, no use and says Complete.",
+  "expected": "e() and its line listed (as for `pkg.LIMIT` and `mod.LIMIT`), or Incomplete.",
+  "why_it_matters": "#196-#198 made constant packs say Complete; this form is a silent miss, so a change to LIMIT skips a caller and its tests.",
+  "repro": "audit/repro/const_dotted_module_read.py"
+ },
+ {
+  "id": "key-environ-subscript",
+  "title": "`os.environ['X']` is not reported as a record string-key read",
+  "severity": "low",
+  "where": "devkb/build_symbols.py:408-410 (Subscript branch has no _is_environ check; only the Call branch at :421 does)",
+  "actual": "`symbol HOME_X` says it is used as a string key read in the function reading `os.environ['HOME_X']`.",
+  "expected": "Not a record key, as for `os.environ.get('X')` (#202).",
+  "why_it_matters": "#202 fixed the call form only, so environment variables still show up as record fields in `symbol` output.",
+  "repro": "audit/repro/key_environ_subscript.py"
+ },
+ {
+  "id": "cpp-overload-ambiguous-choices",
+  "title": "`pack refactor Class::method` on overloaded C++ methods offers choices an agent can tell apart",
+  "severity": "medium",
+  "where": "devkb/packs.py:297",
+  "actual": "`pack refactor W::draw` with two overloads answers 'could be: - `w.cc::W.draw` - `w.cc::W.draw`. Pass one as path::name.' Identical names with no line; passing `w.cc::W.draw` silently picks the first overload. `symbol W::draw` (#203) does show both with separate ranges.",
+  "expected": "Choices that differ (path:line or signature), or one pack covering every overload (they share one node's callers anyway).",
+  "why_it_matters": "The command AGENTS.md names for a change dead-ends on any overloaded method, which is most of a C++ API.",
+  "repro": "audit/repro/cpp_overload_ambiguous_choices.py"
+ },
+ {
+  "id": "cpp-pack-stale-macro-footer",
+  "title": "The C/C++ limits note in packs no longer claims there is no preprocessor expansion",
+  "severity": "low",
+  "where": "devkb/cpp_symbols.py:31 and :39",
+  "actual": "After #118 a call through a repository macro is linked, but every C/C++ pack still says 'no preprocessor expansion (macro-generated definitions and calls are not seen)' even when it lists the macro-reached caller.",
+  "expected": "The note states what is true: repository function-like macros are expanded for calls; what is still not seen.",
+  "why_it_matters": "Contradicts the pack's own result and teaches the agent to distrust (or re-search for) edges the graph does provide.",
+  "repro": "audit/repro/cpp_pack_stale_macro_footer.py"
+ },
+ {
+  "id": "star-reexport-complete",
+  "title": "A call reached through `from .sub import *` is attributed, or the pack says Incomplete",
+  "severity": "high",
+  "where": "devkb/build_symbols.py (_resolve_cross_file_symbol re-export following, #192)",
+  "actual": "pkg/__init__.py `from .sub import *`; user.py calls `starfn()` and `pkg.starfn()`: no CALLS edge. `pack refactor starfn` and `pack change starfn` say 'Complete ... nothing else calls them' with 0 callers and 0 tests, although tests/test_u.py reaches them via user.c.",
+  "expected": "The two callers and the test, or Incomplete naming pkg/user.py.",
+  "why_it_matters": "Exactly the #192 failure (unattributed re-export call not counted, so Complete with no caller and no test) remains for star imports, the most common package re-export style.",
+  "repro": "audit/repro/star_reexport_complete.py"
+ }
+]

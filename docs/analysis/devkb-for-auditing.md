@@ -8,6 +8,7 @@ a QA knowledge base (#36) will be asked, so the measurements below are its start
 |---|---|---|---|
 | 1 | changes v0.2.5 → main (≈6,600 lines: C/C++, C#, read tools, hook, init, packs) | 3 (devkb-first added mid-run) | 22 (#50–#71) |
 | 2 | code from v0.2.0 → v0.2.5 still on main (plugin hooks/config, init, bench; 825 surviving C# lines) | 2 (devkb-first from the start, every query logged with a verdict) | 14 (#72–#85) |
+| 3 | changes v0.2.12 → 0.2.13 (116 commits: the search hook, the graph and C/C++ resolver, the triage daemon, the benchmark harness) | 3 areas × 2 arms (no devkb / the 0.2.13 hook, no ask-first instruction) × 2 runs: the first controlled comparison (§4) | 101 findings in 34 tickets (#276–#309), plus 1 held back as a security report |
 
 Every finding was reproduced by a script before it was reported; the high ones were reproduced a second time
 independently. Measured from the reviewers' transcripts (`toolmix.py`: tool calls by kind and the characters each
@@ -124,9 +125,68 @@ benchmark truth as "truth noise"; the audit then found the extractor drops them 
 cases from the oracle hid the product's gap in that class.
 *QAKB requirement:* when the oracle is corrected, record each excluded class and test the product on it separately.
 
-## 4. What to carry into the QAKB specification
+## 4. Audit 3 (0.2.13): with and without devkb, same reviewers
 
-1. Ask-first instructions measurably change behaviour (devkb share of navigation 8–24% → 31–39%); ship them.
+The first audit with a control arm. Each of three reviewers ran four times on main 3f56ece:
+- **Reviewers:** the search hook (scripts, miss log, read tools); the graph and query tools (Python and C/C++
+  resolution, packs, CLI); the triage daemon and the benchmark harness.
+- **Arms:** twice with no devkb (no graph, hook off), and twice with the 0.2.13 hook, its teach line on.
+- **Prompt:** the same for both arms, with no instruction to ask devkb first: the hook was the only path to the graph.
+- **Model and harness:** Sonnet, the policy benchmark's harness (fresh checkout per run, transcripts recounted with the
+  #258 rules).
+- **Findings:** each came with a script that exits 1 while the defect is present. All 103 were run twice on a clean
+  checkout of main: all 103 exit 1 both times without a crash.
+- **Tickets:** each reproduction's output was read against the specifications and the code, and the findings grouped
+  by root cause into 34 tickets (#276–#309). One security finding, a bypass of the posted-text sanitiser, is held
+  for a private report. Data, scripts and harness: `bench/results/2026-11-19-audit-0.2.13/`.
+
+| | No devkb (6 runs) | devkb 0.2.13 hook (6 runs) |
+|---|---|---|
+| Cost | $7.52 | $7.07 |
+| Model calls | 308 | 292 |
+| Wall time | 46 min | 45 min |
+| Findings reproduced | 51 | 52 |
+| Defect groups found (of 35) | 27 | 31 |
+| Groups only this arm found | 4 (#278, #279, #302, #308) | 8 (#285, #289, #290, #296, #301, #303, #304, #309) |
+| High-severity groups found (of 5) | 4 | 4 |
+| Cost per group found | $0.29 | $0.23 |
+| Text read from files | 479k chars | 424k chars |
+| Hook decisions | — | 17: 15 passed through, 1 answer beside grep, 1 span hint |
+| devkb queries the reviewers ran | 8 (the repository's own tool, which they audit) | 6 |
+
+Per area, the number of the area's defect groups each run found:
+
+| Area | Groups | No devkb, runs 1 and 2 | devkb, runs 1 and 2 |
+|---|---|---|---|
+| Search hook | 10 | 7, 7 | 4, 7 |
+| Graph and query tools | 8 | 4, 6 | 7, 6 |
+| Triage and benchmark harness | 16 (+1 held back) | 8, 8 | 12, 8 |
+
+**What this shows:**
+- **The arms are not separable here.** The devkb arm found 4 more groups at 6% lower cost, but with 2 runs per arm a
+  single run varies more than that: 4 against 7 groups for the same reviewer and arm. And devkb barely took part,
+  with 2 hook answers and 6 queries in 6 runs. The difference cannot be credited to devkb.
+- **An audit's searches mostly pass through.** Of the 17 searches the hook saw, 15 passed through: reviewers searched
+  for behaviour (a regex, an option, a string) more than for definitions and callers. This agrees with audits 1 and 2:
+  defects are found by reading and running code, not by navigating.
+- **The teach line rarely fires in an audit.** D1 is shown only when the hook answers, which happened twice. In
+  ticket work it raised direct devkb use ninefold; in audits it had almost nothing to attach to.
+- **Repeated runs are the strongest quality control.** 23 of 35 groups were found by both arms, and every high one
+  but one (#278) by more than one run. A second run of each reviewer found 6.5 more groups without devkb (20.5 → 27) and 8.5 more with it (22.5 → 31); that,
+  not the tool, was the largest lever on audit recall.
+- **The audit found defects in the measurement rules made the same day.** The flaky-suite rule can score a
+  consistently failing suite green (#301); the navigation rule misreads a parent folder named `devkb` (#302). Both
+  rules were written and merged during 0.2.13, which is why an audit of the harness belongs in every release.
+
+**Corrections made while verifying.** The first verification counted a script that crashed (exit 1 from a
+traceback) as a reproduction; the second rejected crashes and then failed 25 graph scripts, because they import a
+helper the reviewer wrote beside them. The third copied each run's whole `audit/` folder. Reproductions must be run
+from `audit/` in a checkout, where the reviewer wrote them; the tickets say so.
+
+## 5. What to carry into the QAKB specification
+
+1. Ask-first instructions measurably change behaviour (devkb share of navigation 8–24% → 31–39%); ship them. The
+   hook alone does not replace them for auditing: in audit 3 it answered 2 of 17 searches (§4).
 2. The saving is in navigation and joins, not in judging; scope QAKB's promise to "find, link and remember", and
    measure it on navigation and joins.
 3. Every list answer carries a coverage statement that names the invisible link kinds (L1) and the files not
@@ -137,4 +197,5 @@ cases from the oracle hid the product's gap in that class.
    incomplete-honest, incomplete-silent, noisy, misleading, unsupported) checked against the source.
 
 Raw data: `bench/audit/` holds the measurement script and the audit-2 query logs (redacted paths). The defects are in
-issues #50–#93 with their repros.
+issues #50–#93 with their repros. Audit 3: `bench/results/2026-11-19-audit-0.2.13/` (each run's findings and
+reproductions, the verification log, the harness `auditbench.py`); the defects are #276–#309.

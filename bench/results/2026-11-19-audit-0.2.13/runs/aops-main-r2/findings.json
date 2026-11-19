@@ -1,0 +1,92 @@
+[
+ {
+  "id": "suite-order-failure-scored-green",
+  "title": "A suite that fails the same way on every full run is not scored green by the flaky-suite rule",
+  "severity": "high",
+  "where": "bench/policy/policybench.py:290-309",
+  "actual": "run_suite re-runs the failed test ids alone and calls every one that then passes flaky, so suite_pass becomes True. A test that fails in the full suite because an earlier test left state behind (a change the agent made) passes alone, and the run is scored green although the full suite is red on every run.",
+  "expected": "Only a failure that does not repeat in a second run of the full suite is flaky; a suite that fails the same way in full both times stays red.",
+  "why_it_matters": "A broken suite scores as passing, so arms that break test isolation look better than they are and the release table's Suite column is wrong.",
+  "repro": "audit/repro/suite_order_failure_scored_green.py"
+ },
+ {
+  "id": "triage-label-failure-repeats-comment",
+  "title": "A failed label edit after the triage comment does not make the next run comment on the same item again",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:496-506",
+  "actual": "The comment is posted first, then the labels are set with check=False, so a transient gh error is swallowed. The item keeps no `triaged` label, so the next run judges it again (a paid model call) and posts a second comment, on every run until a label edit succeeds.",
+  "expected": "A failed label edit is reported and recorded, and the item is not judged and commented on again.",
+  "why_it_matters": "#206 moved the failure from 'labelled without a comment' to 'repeated comments to an outside user plus repeated cost'.",
+  "repro": "audit/repro/triage_label_fail_duplicate_comment.py"
+ },
+ {
+  "id": "triage-malformed-answer-starves-queue",
+  "title": "An item whose answer is malformed does not take the per-run slot of every later run",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:479-491",
+  "actual": "A malformed answer is caught and logged, but nothing records it in apply mode, so the item is retried and paid for first in every run. With TRIAGE_MAX_ITEMS=1 an item behind it is never triaged (4 runs: 4 model calls on #1, #2 untouched); with 10 such items the whole run is spent on them.",
+  "expected": "A failed item is remembered (a label, or a failure count) and retried later or by a maintainer, while the items behind it are triaged.",
+  "why_it_matters": "#205 asked that one bad answer not be retried and paid for first on every later run; only the abort was fixed.",
+  "repro": "audit/repro/triage_bad_answer_starves_queue.py"
+ },
+ {
+  "id": "feedback-create-failure-loses-comment",
+  "title": "A transient GitHub error while filing a feedback ticket does not lose the comment for good",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:426-433",
+  "actual": "The comment id is written to feedback-seen.json before post_feedback runs. If `gh issue create` fails, the ticket is never filed and the user gets no reply, and no later run looks at the comment (3 runs: 0 tickets, 0 replies).",
+  "expected": "The comment is marked answered once the ticket exists (or the failure is recorded so a maintainer or the next run can retry), without filing the same ticket twice.",
+  "why_it_matters": "The #206 fix trades duplicate tickets for silently dropped user feedback.",
+  "repro": "audit/repro/feedback_ticket_create_failure_lost.py"
+ },
+ {
+  "id": "draft-pr-retry-push-rejected",
+  "title": "A draft-pr issue can be retried after an earlier attempt pushed its branch",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:673-706",
+  "actual": "The local branch is recreated with checkout -B (#207), but the push is a plain push of a new commit to auto/N-slug. If an earlier attempt pushed that branch and failed later (gh pr create, or the comment), the retry's push is rejected as non-fast-forward and every later attempt fails.",
+  "expected": "A retry replaces or reuses its own earlier auto/ branch (for example a force-with-lease push of an auto/ branch the daemon created) and opens the pull request.",
+  "why_it_matters": "#207 is only half fixed: the issue still cannot be retried once the branch exists on GitHub, which is the state a failed pr create leaves.",
+  "repro": "audit/repro/draft_pr_retry_after_push.py"
+ },
+ {
+  "id": "bench-setup-failure-recorded-as-base-red",
+  "title": "A run whose setup failed by accident is run again in the next batch and is not recorded as a red base",
+  "severity": "medium",
+  "where": "bench/policy/policybench.py:236-238, 224",
+  "actual": "Any exception in setup (uv/network error, disk full) is written as exit \"base-red\". _run_one only re-runs ends whose exit is \"error\", so the run is skipped in every later batch, and `score` prints it as REFUSED (red base).",
+  "expected": "A setup error is recorded as an error (re-run next time); only a really red base is base-red.",
+  "why_it_matters": "An arm silently ends up with fewer runs than the others, and its failures are reported as a broken checkout.",
+  "repro": "audit/repro/bench_setup_failure_never_retried.py"
+ },
+ {
+  "id": "template-key-ignores-preregister-post",
+  "title": "A benchmark checkout template is keyed on everything that changes its content",
+  "severity": "medium",
+  "where": "bench/policy/policybench.py:166-179",
+  "actual": "The template name is arm + base commit + tool-environment commit. POLICY_PREREGISTER_POST=1 changes the checkout (it adds a PostToolUse hook and a commit), but a template built without it is reused with it (and the reverse), so the setting is silently ignored.",
+  "expected": "The template name includes the settings that change the checkout, or the flag is applied after the copy.",
+  "why_it_matters": "A ticket that needs the hook registered runs against a checkout without it and the agent cannot do the work, which scores against the arm.",
+  "repro": "audit/repro/template_ignores_preregister_post.py"
+ },
+ {
+  "id": "toolmix-counts-quoted-text-as-devkb",
+  "title": "toolmix does not count a commit message or a comment that mentions a devkb command as devkb use",
+  "severity": "low",
+  "where": "bench/audit/toolmix.py:17-22",
+  "actual": "DEVKB matches `devkb symbol` anywhere in the command string, quotes and comments included: `git commit -m \"... devkb symbol ...\"` is class devkb with 1 query, and a grep with `# see devkb uses` loses its search class. storybench.transcript still takes devkb_queries and the call classes from this function, while the nav / self-test split uses the quote-aware rule of #258.",
+  "expected": "The same quote-aware rule everywhere: quoted text and comments are not devkb commands.",
+  "why_it_matters": "devkb_queries and the Grep column disagree with the nav column of the same run, so the release table's counts are inconsistent.",
+  "repro": "audit/repro/toolmix_quoted_text.py"
+ },
+ {
+  "id": "listing-then-read-counts-files-outside-cwd",
+  "title": "listing_then_read counts only reads inside the listed folder after a bare ls",
+  "severity": "low",
+  "where": "bench/exploration/listing_then_read.py:44-49, 113",
+  "actual": "For a listing of the working directory (`ls`, folder \".\") every later read matches, including absolute paths outside the session's working directory (rel() leaves them absolute): 2 reads of /usr/lib/... after `ls` in /work/proj are counted. The Read tool is also not filtered to CODE suffixes, unlike cat/sed.",
+  "expected": "Only files under the listed folder count (0 here).",
+  "why_it_matters": "The measure that decides whether a folder outline is worth building is inflated by reads of installed packages and other projects.",
+  "repro": "audit/repro/listing_outside_root.py"
+ }
+]
