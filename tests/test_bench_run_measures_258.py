@@ -34,16 +34,27 @@ def test_without_a_result_output_tokens_are_the_largest_value_per_message(tmp_pa
     assert sb.transcript(p)["out_tokens"] == 32
 
 
-def test_a_devkb_self_test_is_not_counted_as_navigation(tmp_path, monkeypatch):
+def test_a_query_before_the_first_edit_is_navigation_and_after_it_a_self_test(tmp_path, monkeypatch):
     monkeypatch.setattr(sb, "guardrail_actions", lambda s: (0, {}))
+    nav_venv = ("Bash", {"command": ".venv/bin/devkb outline devkb/cpp_resolve.py --project ."})   # D1 teaches this
     nav = ("Bash", {"command": "devkb symbol compute --project ."})
-    own = ("Bash", {"command": "cd x && .venv/bin/python -m devkb.cli symbol compute --project ."})
     fixture = ("Bash", {"command": "devkb pack refactor run --project /tmp/fx"})
+    edit = ("Edit", {"file_path": "/w/devkb/cpp_resolve.py", "old_string": "a", "new_string": "b"})
+    after = ("Bash", {"command": "cd x && .venv/bin/python -m devkb.cli symbol compute --project ."})
     p = tmp_path / "stream.jsonl"
-    p.write_text("".join(json.dumps(x) + "\n" for x in [_msg(1, 1, [nav]), _msg(2, 1, [own, fixture]),
-                                                          _msg(3, 1, [("mcp__devkb__symbol", {"name": "x"})])]))
+    p.write_text("".join(json.dumps(x) + "\n" for x in [_msg(1, 1, [nav_venv, nav]), _msg(2, 1, [fixture]),
+                                                          _msg(3, 1, [("mcp__devkb__symbol", {"name": "x"})]),
+                                                          _msg(4, 1, [edit, after])]))
     t = sb.transcript(p)
-    assert (t["devkb_nav"], t["devkb_selftest"]) == (2, 2)
+    assert (t["devkb_nav"], t["devkb_selftest"]) == (3, 2)
+
+
+def test_an_edit_outside_devkb_code_does_not_make_queries_self_tests(tmp_path, monkeypatch):
+    monkeypatch.setattr(sb, "guardrail_actions", lambda s: (0, {}))
+    p = tmp_path / "stream.jsonl"
+    p.write_text("".join(json.dumps(x) + "\n" for x in [_msg(1, 1, [("Edit", {"file_path": "/w/docs/notes.md"})]),
+                                                          _msg(2, 1, [("Bash", {"command": ".venv/bin/devkb outline devkb/x.py"})])]))
+    assert sb.transcript(p)["devkb_nav"] == 1
 
 
 def test_quoted_and_heredoc_text_is_not_a_devkb_command():

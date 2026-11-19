@@ -133,10 +133,11 @@ def run(issue: str, reps: int, parallel: int):
 _DEVKB_CMD = re.compile(r"(\S*/)?(devkb|python\S*\s+(?:-P\s+)?-m\s+devkb[\w.]*)\s+(symbol|uses|outline|pack|docs|misses|tests|config|flows|review)\b")
 
 
-def devkb_commands(command: str) -> tuple[int, int]:
-    """(navigation queries, self-tests) among the devkb commands in one shell command (#258). A self-test runs the
-    checkout's own devkb (its .venv or `python -m devkb`) or queries a fixture outside the checkout (`--project /tmp/…`):
-    the repository the agents edit is devkb itself, so testing a change is not using devkb to navigate."""
+def devkb_commands(command: str, edited: bool = False) -> tuple[int, int]:
+    """(navigation queries, self-tests) among the devkb commands in one shell command (#258). The repository the agents
+    edit is devkb itself, so a devkb command after the run has edited devkb's code tests the change, and so does a
+    query against a fixture outside the checkout (`--project /tmp/…`). Before the first such edit, a query is
+    navigation, whichever devkb runs it (the checkout's .venv included: D1 teaches that command)."""
     nav = own = 0
     c = re.sub(r"<<-?\s*'?(\w+)'?.*?\n\1\b", "", command or "", flags=re.S)   # heredoc bodies are text
     c = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", c)                     # quoted strings are text
@@ -145,7 +146,7 @@ def devkb_commands(command: str) -> tuple[int, int]:
         if not _DEVKB_CMD.match(seg):
             continue
         p = re.search(r"--project[ =](\S+)", seg)
-        if ".venv" in seg.split()[0] or "-m devkb" in seg or (p and p.group(1).startswith(("/tmp", "/var/folders"))):
+        if edited or (p and p.group(1).startswith(("/tmp", "/var/folders"))):
             own += 1
         else:
             nav += 1
@@ -156,7 +157,7 @@ def transcript(path: Path) -> dict:
     sys.path.insert(0, str(REPO / "bench" / "audit"))
     from toolmix import classify, devkb_queries, size  # noqa: PLC0415
     kinds, calls, chars, msgs = {}, Counter(), Counter(), set()
-    res, session, dq, nav, own, outs = {}, None, 0, 0, 0, {}
+    res, session, dq, nav, own, outs, edited = {}, None, 0, 0, 0, {}, False
     for line in open(path):
         try:
             e = json.loads(line)
@@ -183,8 +184,11 @@ def transcript(path: Path) -> dict:
                 if x["name"].startswith("mcp__devkb"):
                     nav += 1
                 elif x["name"] == "Bash":
-                    n, o = devkb_commands(x.get("input", {}).get("command", ""))
+                    n, o = devkb_commands(x.get("input", {}).get("command", ""), edited)
                     nav, own = nav + n, own + o
+                fp = str(x.get("input", {}).get("file_path", ""))
+                if x["name"] in ("Edit", "Write", "MultiEdit", "NotebookEdit") and re.search(r"(^|/)(devkb|scripts)/", fp):
+                    edited = True                     # from here on, a devkb command tests the change
             elif x.get("type") == "tool_result" and x.get("tool_use_id") in kinds:
                 chars[kinds[x["tool_use_id"]]] += size(x.get("content", ""))
     u = res.get("usage") or {}
