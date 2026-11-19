@@ -96,8 +96,10 @@ def extract(ctx: ProjectContext, graph: DevKBGraph) -> DevKBGraph:
     for verb in ("CALLS", "CALLS_API"):
         for e in graph.edges(verb):
             adjacency.setdefault(e.src, []).append((e.dst, e.confidence))
+    for nexts in adjacency.values():         # the edges arrive in set order, which differs per process: a fixed order
+        nexts.sort()                         # makes the walk, and every STEP sequence, the same in every build (#228)
 
-    for kind, start_symbol in touch_points:
+    for kind, start_symbol in sorted(set(touch_points)):
         steps = _bfs(start_symbol, adjacency)
         flow_key = f"flow:{kind}:{start_symbol}"
         g.add_node("Flow", flow_key, source="touch-point-bfs", touch_point_kind=kind, step_count=len(steps) + 1)
