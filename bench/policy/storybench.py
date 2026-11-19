@@ -162,12 +162,28 @@ def transcript(path: Path) -> dict:
     ctx = sum(u.get(k, 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
     for mu in (res.get("modelUsage") or {}).values():    # cumulative per model, when present
         ctx = max(ctx, sum(mu.get(k, 0) for k in ("inputTokens", "cacheReadInputTokens", "cacheCreationInputTokens")))
-    fired = 0
-    if session and GUARD_LOG.exists():
-        fired = sum(1 for l in open(GUARD_LOG) if f'"session": "{session}"' in l)
+    fired, actions = guardrail_actions(session)
     return {"session": session, "turns": res.get("num_turns", 0), "cost": res.get("total_cost_usd", 0),
             "model_calls": len(msgs), "ctx_tokens": ctx, "out_tokens": u.get("output_tokens", 0),
-            "devkb_queries": dq, "calls": dict(calls), "chars": dict(chars), "guardrail_fired": fired}
+            "devkb_queries": dq, "calls": dict(calls), "chars": dict(chars), "guardrail_fired": fired,
+            "guardrail_actions": actions}
+
+
+def guardrail_actions(session: str, log: Path | None = None) -> tuple[int, dict]:
+    """(decisions that reached the agent, every decision by action) for one session (#209). A pass-through sends the
+    agent nothing, so it is not a firing."""
+    log = log or GUARD_LOG
+    acts: dict = {}
+    if session and log.exists():
+        for line in open(log, errors="replace"):
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("session") == session:
+                a = r.get("action") or "remind"          # the oldest lines had no action: a reminder
+                acts[a] = acts.get(a, 0) + 1
+    return sum(n for a, n in acts.items() if a != "pass-through"), acts
 
 
 def score(issue: str):
