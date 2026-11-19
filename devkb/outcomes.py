@@ -39,6 +39,8 @@ def outcome_of_reply(reply: dict) -> tuple[str, str, str]:
         return "complete", "", str(m.get("k") or m.get("key") or "") if isinstance(m, dict) else str(m)
     if "n_hits" in reply and not reply["n_hits"]:
         return "no-match", "", ""
+    if "n_hits" in reply and reply.get("mode") in ("word", "text", "regex"):
+        return "fallback-text", _cut(f"{reply['n_hits']} text matches, not resolved references"), ""   # `uses` (#190)
     if reply.get("complete") is False:
         return "incomplete", _cut(f"{reply.get('unresolved_calls', '')} unresolved calls".strip()), ""
     return "complete", "", ""
@@ -149,14 +151,14 @@ def render_guardrail(log: Path | None = None, repo: str = "") -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="devkb stats", description="counts of devkb calls by tool and outcome")
-    ap.add_argument("--project", default=".")
+    ap.add_argument("--project", default=None, help="the repository (default .); with --guardrail, only its decisions (#189)")
     ap.add_argument("--guardrail", action="store_true", help="count the guardrail's decisions instead")
     ap.add_argument("--log", default="", help="guardrail log (default ~/.claude/hooks/devkb-guardrail.log)")
     a = ap.parse_args(argv)
     if a.guardrail:
-        print(render_guardrail(Path(a.log) if a.log else None))
+        print(render_guardrail(Path(a.log) if a.log else None, str(Path(a.project).resolve()) if a.project else ""))
     else:
-        print(render_stats(Path(a.project).resolve()))
+        print(render_stats(Path(a.project or ".").resolve()))
     return 0
 
 
