@@ -419,8 +419,9 @@ class Packer:
         cands: list[str] = []
         if i is None:
             i, cands = self._by_symbol_rules(name, path)
-        if i is None:
-            return self._unresolved("refactor", name, path, cands, " unambiguously. Search the code.")
+        if i is None:                            # as change() does: the text matches, never only "search the code" (#204)
+            text = self._unresolved("refactor", name, path, cands, " unambiguously. Search the code.")
+            return text + self._text_matches(name, path) if not cands else text
         callers = sorted(set(self.idx.sources("CALLS", i)) - {i}, key=self.api._key)  # a recursive call is not a caller (#70)
         by_file: dict[str, list[int]] = {}
         for c in callers:
