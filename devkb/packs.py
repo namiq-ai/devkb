@@ -309,6 +309,42 @@ class Packer:
         except Exception:  # noqa: BLE001
             return ""
 
+    def _readers(self, i: int) -> tuple[list[int], list[str], list[str]]:
+        """A module constant's reads (#196, #197): (the functions that hold a read site, the files that read it outside
+        any function, the files that star-import its module and mention it, which the graph does not attribute)."""
+        p = self.idx.props[i]
+        if p.get("kind") != "constant":
+            return [], [], []
+        funcs, module_level = set(), set()
+        for site in p.get("ref_sites") or []:
+            f, _, ln = str(site).rpartition(":")
+            if not ln.isdigit():
+                continue
+            best = None
+            for s in self.idx.sym_by_file.get(f, []):
+                q = self.idx.props[s]
+                a, b = q.get("line_start") or 0, q.get("line_end") or 0
+                if q.get("kind") in ("function", "method", "test") and a <= int(ln) <= b and (best is None or b - a < best[0]):
+                    best = (b - a, s)
+            if best:
+                funcs.add(best[1])
+            else:
+                module_level.add(f)
+        own = self.api._key(i).split("::")[0]
+        dotted = own.removesuffix(".py").removesuffix("/__init__").replace("/", ".")
+        name = self.api._key(i).split("::")[-1]
+        star = []
+        try:
+            hits = subprocess.run(["git", "grep", "-l", "-E", rf"from\s+{re.escape(dotted)}\s+import\s+\*", "--", "*.py"],
+                                  cwd=self.api.root, capture_output=True, text=True, timeout=10).stdout.split()
+            for f in hits:
+                text = (self.api.root / f).read_text(errors="replace")
+                if re.search(rf"\b{re.escape(name)}\b", text) and f not in {self.api._key(x).split("::")[0] for x in funcs}:
+                    star.append(f)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return sorted(funcs, key=self.api._key), sorted(module_level), sorted(star)
+
     def _references(self, i: int) -> list[str]:
         """#143: a module constant is not called; its uses are the REFERENCES edges and the sites kept on it."""
         p = self.idx.props[i]
@@ -331,7 +367,11 @@ class Packer:
         if i is None:
             text = self._unresolved("change", name, path, cands, ". Search the code.")
             return text + self._text_matches(name, path) if not cands else text
-        parent = self.up({i})
+        readers, _module_level, star = self._readers(i)
+        parent = self.up({i} | set(readers))      # a constant's readers reach it as callers reach a function
+        for r in readers:
+            if not self.api._is_test(self.api._key(r).split("::")[0]):
+                parent.setdefault(r, i)
         hs = self.handlers(parent, {i})
         closure = set(parent) | {i}
         tests = self.tests(closure)
@@ -351,7 +391,8 @@ class Packer:
         out += ["", f"## Test files to run ({len(tests)}): every test calling it or a function on those paths"] + self._tests_section(tests)
         if tests:
             out += ["", f"Run: `{self._run(list(tests))}`"]
-        out += ["", "## Coverage", self.coverage(sorted(closure, key=self.api._key)[:40], set(tests) | {self.api._key(x).split('::')[0] for x in closure})]
+        cov = self.coverage(sorted(closure, key=self.api._key)[:40], set(tests) | {self.api._key(x).split('::')[0] for x in closure})
+        out += ["", "## Coverage", star_coverage(cov, star)]
         return "\n".join(out + ["", HOW_TO_USE])
 
     def file(self, path: str, cap: int = 25) -> str:
@@ -422,13 +463,14 @@ class Packer:
         if i is None:                            # as change() does: the text matches, never only "search the code" (#204)
             text = self._unresolved("refactor", name, path, cands, " unambiguously. Search the code.")
             return text + self._text_matches(name, path) if not cands else text
-        callers = sorted(set(self.idx.sources("CALLS", i)) - {i}, key=self.api._key)  # a recursive call is not a caller (#70)
+        readers, module_readers, star = self._readers(i)
+        callers = sorted((set(self.idx.sources("CALLS", i)) | set(readers)) - {i}, key=self.api._key)  # a recursive call is not a caller (#70)
         by_file: dict[str, list[int]] = {}
         for c in callers:
             by_file.setdefault(self.api._key(c).split("::")[0], []).append(c)
         own = self.api._key(i).split("::")[0]
         # Calls made outside any function (import time, class bodies) have no caller Symbol; the graph keeps their files.
-        at_module = sorted(f for f in (self.idx.props[i].get("module_callers") or []) if f != own and f not in by_file)
+        at_module = sorted(f for f in set(self.idx.props[i].get("module_callers") or []) | set(module_readers) if f != own and f not in by_file)
         dnt = self.api._role_table().get(role, {}).get("dnt", []) if role else []
         files = sorted(set(by_file) | set(at_module))
         blocked = sorted(f for f in files if any(f.startswith(p) for p in dnt))
@@ -442,7 +484,8 @@ class Packer:
                 continue
             c = by_file[f][0]
             more = f" (+{len(by_file[f]) - 1} more)" if len(by_file[f]) > 1 else ""
-            out.append(f"- `{f}`{more} — `{self.call_site(c, self._name(i))}`{self._via(c, i)}")
+            site = next((s for s in self.idx.props[i].get("ref_sites") or [] if str(s).startswith(f + ":")), None) if c in readers else None
+            out.append(f"- `{f}`{more} — " + (f"reads it at `{site}`" if site else f"`{self.call_site(c, self._name(i))}`{self._via(c, i)}"))
         out += ["", f"## Test files among them ({len(tests)})"] + ([f"- `{f}`" for f in tests] or ["- none"])
         if role:
             out += ["", f"## Files role {role} must not edit ({len(blocked)})"] + ([f"- `{f}`" for f in blocked] or ["- none"])
@@ -450,7 +493,7 @@ class Packer:
             out += ["", f"(The defining file `{own}` is not counted as a caller.)"]
         if self.api._calls_itself(i):
             out += ["", f"(It calls itself at `{self.call_site(i, self._name(i))}`; that call is not counted as a caller.)"]
-        out += ["", "## Coverage", self.coverage([i], set(files))]
+        out += ["", "## Coverage", star_coverage(self.coverage([i], set(files)), star)]
         return "\n".join(out + ["", HOW_TO_USE])
 
 
@@ -592,6 +635,16 @@ class Packer:
         out += ["", "## Coverage", "Links come from the ticket's own Trace table as the graph extracted it; 'not in the graph' means "
                 "the link was not extracted, not that it does not exist: read the ticket file for it."]
         return "\n".join(out + ["", HOW_TO_USE])
+
+
+def star_coverage(cov: str, star: list[str]) -> str:
+    """A constant read through `from module import *` is not attributed by the graph: the answer is then Incomplete and
+    names those files to search (#196)."""
+    if not star:
+        return cov
+    files = ", ".join(f"`{f}`" for f in star[:10])
+    return (f"**Incomplete: {len(star)} file(s) star-import its module and mention it; the graph does not attribute "
+            f"those reads. Search only these files for them: {files}.**")
 
 
 HOW_TO_USE = ("---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. "
