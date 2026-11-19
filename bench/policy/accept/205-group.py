@@ -114,21 +114,32 @@ with tempfile.TemporaryDirectory() as td:
     quiet(lambda: T.cmd_triage(False, None))
     out["dry_once"] = first == 2 and len(n) == 3
 
-    fork = "https://github.com/someone/devkb-fork.git"
-    T.REPO = "someone/devkb-fork"
-    if hasattr(T, "REPO_URL"):
-        T.REPO_URL = fork
+    # the ticket's condition: TRIAGE_REPO names another repository when the daemon starts. Load the module fresh with
+    # it set, so a value computed at import (a REMOTE constant) sees it as well as one computed per call.
+    import os
+    fork = "someone/devkb-fork"
+    os.environ["TRIAGE_REPO"] = fork
+    spec2 = importlib.util.spec_from_file_location("triage_acc_fork", w / "ops" / "triage" / "triage.py")
+    T = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(T)
+    globals()["T"] = T
+    real_update = T.update_tree                  # the daemon's own start-of-run update, before setup() stubs it
     cmds = []
     setup(td / "r", [], ['{"review": "fine"}'], lambda cmd, **kw: cmds.append(cmd) or "")
     T.worktree_for = lambda name, ref: cmds.append(["worktree", ref]) or td
     T.post = lambda *a: None
     quiet(lambda: T.handle_review(item(7, pr=True), [], False))
-    review_ok = any("fetch" in x and fork in x for x in cmds) and not any("fetch" in x and "origin" in x for x in cmds)
+    flat = lambda x: " ".join(map(str, x))
+    review_ok = any("fetch" in x and fork in flat(x) for x in cmds) and not any("fetch" in x and "origin" in x for x in cmds)
     cmds.clear()
     T.claude = stop
     quiet(lambda: T.handle_draft_pr(item(8), [], False))
     base = [x[1] for x in cmds if x[0] == "worktree"]
-    draft_ok = any("fetch" in x and fork in x for x in cmds) and base and "origin" not in base[0]
+    upd = []                                     # the fork's main may be fetched by the start-of-run update instead
+    T.run = lambda cmd, **kw: upd.append(cmd) or ""
+    quiet(real_update)
+    fetched = any("fetch" in x and fork in flat(x) for x in cmds + upd)
+    draft_ok = fetched and bool(base) and "origin" not in str(base[0])
     src = (w / "ops" / "triage" / "triage.py").read_text()
     out["same_repo"] = bool(review_ok and draft_ok and '"push", "-q", "origin"' not in src)
 out["pass"] = all(v for k, v in out.items())
