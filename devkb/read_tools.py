@@ -224,17 +224,23 @@ class ReadTools:
         return {"query": query, "how": None, "n": 0, "matches": [], "suggestions": sugg}
 
     def _reply(self, query, how, order, hit, limit) -> dict:
-        rows = []
+        rows, extra = [], 0
         for i in order[:limit]:
-            p = self.idx.props[i]; f = self.file[i]; ls, le = p.get("line_start"), p.get("line_end")
-            rows.append({"i": i, "k": self.idx.keys[i], "kind": p.get("kind"), "ls": ls, "le": le, "range": range_state(f, ls, le),
+            p = self.idx.props[i]; f = self.file[i]
+            spans = self._def_spans(i) if p.get("line_start") else [(p.get("line_start"), p.get("line_end"))]
+            extra += len(spans) - 1            # C/C++ overloads share one node; each keeps its own row and range (#203)
+            for ls, le in spans:
+                rows.append(self._row(i, f, p, ls, le, how, hit))
+        return {"query": query, "how": how, "n": len(order) + extra, "matches": rows}
+
+    def _row(self, i, f, p, ls, le, how, hit) -> dict:
+        return ({"i": i, "k": self.idx.keys[i], "kind": p.get("kind"), "ls": ls, "le": le, "range": range_state(f, ls, le),
                          "doc": (p.get("docstring_summary") or "")[:90], "callers": self.api._caller_count(i),
                          "self_call": self.api._calls_itself(i), "value_refs": int(p.get("value_ref_count") or 0), "refs": int(p.get("ref_count") or 0),
                          # calls under this name the resolver left unattributed: the count above is a lower bound (#87)
                          "unresolved": int(p.get("unresolved_calls") or 0),
                          "shared_by": len(self.idx.short.get(self.short[i], [])),
                          "how": how if how != "similar" else f"similar {hit[i] / 60:.2f}"})
-        return {"query": query, "how": how, "n": len(order), "matches": rows}
 
     # ── symbol ────────────────────────────────────────────────────────────
     def key_uses(self, name: str, under: str = "") -> list[dict]:
@@ -282,7 +288,7 @@ class ReadTools:
                     m["moved"] = "not found near the recorded line; the graph is stale for this file"
             m["sig"] = sig[:140]
             m.pop("i", None)
-            if source and n == 0 and ls:
+            if source and ls and m["k"] == r["matches"][0]["k"]:   # every overload of the first match, each its own body
                 m["source"] = self._source(f, ln, m, max_lines)
                 if capped:
                     m["source"]["capped"] = HARD_SOURCE
@@ -343,9 +349,11 @@ class ReadTools:
         rows = []
         for i, q in zip(ids, quals):
             parents = [p for p in quals if q.startswith(p + ".")]
-            p = self.idx.props[i]; ls, le = p.get("line_start"), p.get("line_end")
-            rows.append({"name": q.rsplit(".", 1)[-1], "q": q, "kind": p.get("kind"), "ls": ls, "le": le, "range": range_state(f, ls, le),
-                         "depth": len(parents), "doc": (p.get("docstring_summary") or "")[:80]})
+            p = self.idx.props[i]
+            for ls, le in (self._def_spans(i) if p.get("line_start") else [(p.get("line_start"), p.get("line_end"))]):  # #203
+                rows.append({"name": q.rsplit(".", 1)[-1], "q": q, "kind": p.get("kind"), "ls": ls, "le": le, "range": range_state(f, ls, le),
+                             "depth": len(parents), "doc": (p.get("docstring_summary") or "")[:80]})
+        rows.sort(key=lambda x: (x["ls"] or 0, -(x["le"] or 0)))
         suffix = "." + f.rsplit(".", 1)[-1] if "." in f else ""
         imports = []
         if suffix in IMPORT_RE:
@@ -482,13 +490,8 @@ class ReadTools:
         if mode == "word":
             r = self.resolve(q, limit=4)
             if r.get("how") in ("exact", "suffix") and r["matches"]:
-                for m in r["matches"]:
-                    sp = self._def_spans(m["i"])
-                    if len(sp) < 2:
-                        sp = [(m["ls"], m["le"])]
-                    f0 = m["k"].split("::", 1)[0]
-                    for a, b in sp:
-                        defs.append({"k": m["k"], "kind": m["kind"], "ls": a, "le": b, "range": range_state(f0, a, b) if len(sp) > 1 else m["range"]})
+                for m in r["matches"]:            # one match per definition already, each with its own range (#203)
+                    defs.append({"k": m["k"], "kind": m["kind"], "ls": m["ls"], "le": m["le"], "range": m["range"]})
         ranked = sorted(by_file.items(), key=lambda kv: (self.api._is_test(kv[0]), -len(kv[1]), kv[0]))
         out_files = []; shown = 0
         for f, hs in ranked[:files]:
