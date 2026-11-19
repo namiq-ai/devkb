@@ -16,7 +16,7 @@ def test_guardrail_substitutes_the_direct_caller_pack(repo, tmp_path):
           "tool_input": {"pattern": "extract", "path": str(repo), "output_mode": "content"}}
     out = json.loads(run(PRE, tmp_path, ev))["hookSpecificOutput"]
     assert out["permissionDecision"] == "deny"
-    assert "changing the signature of" in out["permissionDecisionReason"]   # the refactor pack's header
+    assert "pkg/use.py:" in out["permissionDecisionReason"]   # the direct callers, as grep prints them (SPEC-DKB-007)
 
 
 def test_run_query_asks_the_kind_it_is_given(repo):
