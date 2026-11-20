@@ -129,10 +129,10 @@ class ReadTools:
         self._tri = dict(tri)
 
     def _rank_key(self, i: int, score: float, exact_case: bool = True):
-        """Best tier score first; among equals production before tests, shallower qualified name, more callers, the
-        spelling the query used, then path and line. Case alone never lifts test code above production code."""
+        """Best tier score first; among equals production before tests, then the spelling the query used (#372), shallower
+        qualified name, more callers, then path and line. Case alone never lifts test code above production code."""
         path = self.file[i]
-        return (-score, self.api._is_test(path), self.qual[i].count("."), -self.api._caller_count(i), 0 if exact_case else 1, path,
+        return (-score, self.api._is_test(path), 0 if exact_case else 1, self.qual[i].count("."), -self.api._caller_count(i), path,
                 self.idx.props[i].get("line_start") or 0)
 
     def resolve(self, query: str, kind: str = "", under: str = "", limit: int = 8, tests: bool = True) -> dict:
@@ -191,8 +191,12 @@ class ReadTools:
         for how, run in tiers:
             hit = run()
             if hit:
-                order = sorted(hit, key=lambda i: self._rank_key(i, hit[i], self.short[i] == q or self.qual[i] == q))
-                return self._reply(query, "qualified" if how == "exact" and "." in q and not any(self.short[i].lower() == ql for i in hit) else how, order, hit, limit)
+                spelled = {i for i in hit if self.short[i] == q or self.qual[i] == q}
+                order = sorted(hit, key=lambda i: self._rank_key(i, hit[i], i in spelled))
+                # the exact tier ignores case: a match spelled otherwise says so, when the query's spelling is among them (#372)
+                other = set(hit) - spelled if how == "exact" and spelled else set()
+                return self._reply(query, "qualified" if how == "exact" and "." in q and not any(self.short[i].lower() == ql for i in hit) else how,
+                                   order, hit, limit, other)
         # similarity fallback
         cand_names: dict[int, int] = defaultdict(int)
         for j in range(len(ql) - 2):
@@ -223,14 +227,14 @@ class ReadTools:
                 sugg.append({"name": self.short[best], "path": self.file[best], "score": round(sc)})
         return {"query": query, "how": None, "n": 0, "matches": [], "suggestions": sugg}
 
-    def _reply(self, query, how, order, hit, limit) -> dict:
+    def _reply(self, query, how, order, hit, limit, other_case=frozenset()) -> dict:
         rows, extra = [], 0
         for i in order[:limit]:
             p = self.idx.props[i]; f = self.file[i]
             spans = self._def_spans(i) if p.get("line_start") else [(p.get("line_start"), p.get("line_end"))]
             extra += len(spans) - 1            # C/C++ overloads share one node; each keeps its own row and range (#203)
             for ls, le in spans:
-                rows.append(self._row(i, f, p, ls, le, how, hit))
+                rows.append(self._row(i, f, p, ls, le, f"{how} (other case)" if i in other_case else how, hit))
         return {"query": query, "how": how, "n": len(order) + extra, "matches": rows}
 
     def _row(self, i, f, p, ls, le, how, hit) -> dict:
