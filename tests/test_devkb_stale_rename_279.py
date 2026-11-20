@@ -45,7 +45,7 @@ def test_staged_delete_is_stale(repo):
 
 
 def test_staged_add_is_stale(repo):
-    (repo / "pkg" / "new.py").write_text("x = 1\n")
+    (repo / "pkg" / "new.py").write_text("def fresh():\n    return 1\n")
     _git(repo, "add", "pkg/new.py")
     assert guard.graph_stale(repo, ["pkg"]) is True
 
@@ -57,4 +57,31 @@ def test_rename_of_a_non_code_file_is_not_stale(repo):
     subprocess.run([sys.executable, "-P", "-m", "devkb.cli", "build", "--project", str(repo)], cwd=repo, check=True,
                    capture_output=True, env=dict(os.environ, PYTHONPATH=str(ROOT), HOME=str(repo / "h")))  # only the rename pending
     _git(repo, "mv", "pkg/notes.txt", "pkg/notes2.txt")
+    assert guard.graph_stale(repo, ["pkg"]) is False
+
+
+def _rebuild(repo):
+    subprocess.run([sys.executable, "-P", "-m", "devkb.cli", "build", "--project", str(repo)], cwd=repo, check=True,
+                   capture_output=True, env=dict(os.environ, PYTHONPATH=str(ROOT), HOME=str(repo / "h")))
+
+
+def test_rebuilt_after_a_rename_is_fresh_again(repo):
+    _git(repo, "mv", "pkg/use.py", "pkg/client.py")
+    assert guard.graph_stale(repo, ["pkg"]) is True
+    _rebuild(repo)
+    assert guard.graph_stale(repo, ["pkg"]) is False
+
+
+def test_rebuilt_after_an_add_is_fresh_again(repo):
+    (repo / "pkg" / "new.py").write_text("def fresh():\n    return 1\n")
+    _git(repo, "add", "pkg/new.py")
+    assert guard.graph_stale(repo, ["pkg"]) is True
+    _rebuild(repo)
+    assert guard.graph_stale(repo, ["pkg"]) is False
+
+
+def test_rebuilt_after_a_delete_is_fresh_again(repo):
+    _git(repo, "rm", "-q", "pkg/use.py")
+    assert guard.graph_stale(repo, ["pkg"]) is True
+    _rebuild(repo)
     assert guard.graph_stale(repo, ["pkg"]) is False
