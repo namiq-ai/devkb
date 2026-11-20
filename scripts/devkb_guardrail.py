@@ -1034,6 +1034,9 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     except (ValueError, OSError):
         ev["_teach"] = None
     if intent == "list-symbols" and (repo / ".devkb").is_dir():   # a file's definitions: its outline, not a pack
+        if graph_stale(repo, scope_of(paths or [], repo)):       # an old graph's spans would be wrong lines (#273)
+            log_decision(ev, repo, tool, "pass-through", names, [], 0, "stale-graph")
+            return None
         ans = outline_answer(repo, paths)
         if ans:
             log_decision(ev, repo, tool, "alongside", names, [], len(ans), "outline")
@@ -1063,8 +1066,11 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
             queries.append({"name": n, "verdict": r[0], "detail": r[1],
                             "query": f"devkb pack {QUESTION} {shlex.quote(n)} --project {shlex.quote(str(repo))}"})
             answers.append(r[2].strip())
-    if (dname and why is None or why is None and intent == "call-sites") and graph_stale(repo, scope_of(paths or [], repo)):
-        log_decision(ev, repo, tool, "pass-through", names, queries, 0, "stale-graph")   # #182: grep has the answer
+    if graph_stale(repo, scope_of(paths or [], repo)):
+        # #182, #273: a graph that has not seen the working tree's code gives no answer at all, beside grep or instead
+        # of it: its line numbers and its callers may be wrong, and grep has the answer
+        log_decision(ev, repo, tool, "pass-through", names, queries, 0, "stale-graph")
+        record_pending(ev, key, repo, tool, inp, pattern, names, queries)
         return None
     if dname and why is None and (partial or longer_definitions(repo, pattern, dname, scope_of(paths or [], repo))):
         why = "longer-names" if not partial else "partial-names"   # grep also prints other definitions (#277, #278)
