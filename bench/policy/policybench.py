@@ -90,6 +90,161 @@ def without_missing_data(body: str, w: Path) -> str:
     return _FENCE.sub(swap, body)
 
 
+# The same arms with the ticket's location withheld (#337): "Where to start" removed, the files in "Scope" and every file or
+# name it gave masked wherever the ticket repeats them. Set up exactly as their base arm (same template); only the text differs.
+HIDE_LOCATION = {"nonehid": "none", "mainhid": "main"}
+WITHHELD = "(withheld)"
+_SECTION = re.compile(r"(?ms)^(?:\*\*(?P<h>[^*\n]+?):?\*\*:?|#{1,6}[ \t]+(?P<g>[^\n]+?)[ \t]*$)(?P<t>.*?)"
+                      r"(?=^\*\*[^*\n]+?:?\*\*|^#{1,6}[ \t]|\Z)")
+_FENCED = re.compile(r"(?ms)^(```|~~~).*?^\1[ \t]*$")
+_FILE = re.compile(r"(?<![\w/.-])(?:[\w.-]+/)*[\w.-]+\.(?:py|md|json|jsonl|toml|ya?ml|sh|c|cc|cpp|h|hpp|cs|ts|js)\b")
+_NAME = re.compile(r"[A-Za-z_][\w.]*(?:::[A-Za-z_]\w*)*")
+_VERSION = re.compile(r"^v?\d")
+
+
+def _sections(body: str):
+    """(heading, start, end) of each `**Heading:**` or `## Heading` section, outside code fences; an inline
+    `**Where to start:**` (not at a line start) is its own section up to the next blank line."""
+    plain = _FENCED.sub(lambda m: " " * len(m.group(0)), body)     # a bold line inside a fence is not a section
+    out = [((m.group("h") or m.group("g") or "").strip().lower(), m.start(), m.end()) for m in _SECTION.finditer(plain)]
+    if not any(h.startswith("where to start") for h, _a, _b in out):
+        m = re.search(r"\*\*Where to start:?\*\*:?.*?(?=\n\s*\n|\Z)", plain, re.S)
+        if m:
+            out.append(("where to start", m.start(), m.end()))
+    return out
+
+
+def _code_like(n: str, body: str = "") -> bool:
+    if _VERSION.match(n) or any(len(part) < 2 for part in re.split(r"\.|::", n)):
+        return False                              # v0.2.11, e.g: not code names (#385 review)
+    if re.search(r"(?:Error|Exception|Warning)$", n):
+        return False                              # an exception is the symptom, not the place (#385 review, round 2)
+    if n.isupper() and body and re.search(rf"(?:\$|\b){re.escape(n)}=|\${re.escape(n)}\b", body):
+        return False                              # an environment variable set or read in the ticket: the reproduction
+    return "_" in n or "." in n or "::" in n or bool(re.search(r"[a-z][A-Z]", n))
+
+
+def location_names(body: str) -> list[str]:
+    """What the location gives away, longest first: the files and code names a ticket's "Where to start" names (with the
+    stems of its dotted names and of its files), and the files its "Scope" names. A code name looks like code (an
+    underscore, a dot, `::` or CamelCase), so plain words and command names (`run`, `uses`, `devkb`) stay."""
+    names: set[str] = set()
+
+    def add_file(f: str) -> None:
+        base = f.rsplit("/", 1)[-1]
+        names.update({f, base})
+        stem = base.rsplit(".", 1)[0]
+        # the module's own name, where the ticket uses it as code (`storybench.ALLOW`, `import read_tools`), never a word
+        # like "service" in prose (#385 review)
+        if "_" in stem or re.search(rf"\b{re.escape(stem)}\.(?:[a-z_]\w*\(|[A-Z][A-Z_]+\b)|\b(?:import|from)\s+{re.escape(stem)}\b"
+                                    rf"|`{re.escape(stem)}`", body):           # or named alone as code: `policybench`
+            names.add(stem)
+    for h, a, b in _sections(body):
+        t = body[a:b]
+        if h.startswith("scope"):                 # a Scope file or code name is withheld wherever it appears (#385 review)
+            for f in _FILE.findall(t):
+                add_file(f)
+            for code in re.findall(r"`([^`\n]+)`", _FILE.sub(" ", t)):
+                for n in _NAME.findall(code):
+                    n = n.rstrip(".")
+                    if len(n) > 2 and (_code_like(n, body) or (n[:1].isupper() and len(n) >= 5)):
+                        names.add(n)          # `ReadTools.resolve`, `_by_module_name`, `Staleness`
+        if h.startswith("where to start"):
+            for f in _FILE.findall(t):
+                add_file(f)
+            for n in _NAME.findall(_FILE.sub(" ", t)):
+                n = n.rstrip(".")
+                if len(n) > 2 and _code_like(n, body):
+                    names.add(n)
+                    parts = re.split(r"\.|::", n)
+                    names.update(p for p in parts if len(p) > 2 and _code_like(p, body))      # `_match` of `x._match`
+                    if len(parts) > 1 and (_code_like(parts[0], body) or (parts[0][:1].isupper() and len(parts[0]) >= 5)):
+                        names.add(parts[0])                                           # the module or class: `build_symbols`, `Packer`
+    return sorted(names, key=len, reverse=True)
+
+
+def in_own_code(w: Path | None, name: str) -> bool:
+    """Whether a code name occurs in the checkout's own code (not its corpus, tests or docs). A name that does not, such
+    as a corpus function in the symptom (#114's `count_digits`), says nothing about where to fix (#385 review, round 3).
+    Without a checkout, every name counts."""
+    if w is None or not (Path(w) / ".git").exists():
+        return True
+    for part in [name] + [p for p in re.split(r"\.|::", name) if len(p) > 2]:   # `ReadTools.resolve` is written apart
+        rc = subprocess.run(["git", "-C", str(w), "grep", "-qwF", part, "--", ".", ":!corpus", ":!tests", ":!docs"],
+                            capture_output=True).returncode
+        if rc != 1:                               # found (0), or git failed: withhold rather than leak (#385 review, round 4)
+            return True
+    return False
+
+
+def without_location(title: str, body: str, w: Path | None = None) -> tuple[str, str]:
+    """(title, body) with the location withheld (#337): the "Where to start" section is replaced by one line; every name
+    `location_names` gives is masked wherever title and body repeat it, with what qualifies it (`Packer._resolve`,
+    `bench/policy/x.py`), and so are the line numbers around it (`x.py:1471`, `L636`). Code fences are masked too: a
+    reproduction that names the place gives the place away."""
+    names = [n for n in location_names(body) if _FILE.fullmatch(n) or in_own_code(w, n)]
+    pieces, last = [], 0
+    for h, a, b in sorted(_sections(body), key=lambda x: x[1]):
+        if a < last:
+            continue
+        pieces.append(body[last:a])
+        pieces.append("**Where to start:** (withheld for this benchmark run)\n\n" if h.startswith("where to start") else body[a:b])
+        last = b
+    pieces.append(body[last:])
+    body = "".join(pieces)
+
+    def mask(text: str) -> str:
+        for n in names:
+            text = re.sub(rf"(?:(?<=[^\w])|^)(?:[\w.-]*(?:\.|::|/))*{re.escape(n)}(?![\w-])", WITHHELD, text, flags=re.M)
+        # a withheld name's line number goes with it (`x.py:1471`, `name (L636)`); other line numbers, such as a corpus
+        # file's in a Done-when, are the ticket's evidence and stay (#385 review, round 2)
+        text = re.sub(rf"{re.escape(WITHHELD)}(?::\d+(?:-\d+)?)+", WITHHELD, text)
+        text = re.sub(rf"({re.escape(WITHHELD)}`?)(\s*[(,]\s*)~?L\d+(?:[-\u2013]L?\d+)?\)?", r"\1", text)
+        return text
+    return mask(title), mask(body)
+
+
+def arms_for(arms: list[str]) -> list[str]:
+    """The arms a batch runs and scores: with POLICY_HIDE_START=1 (the ticket's option name), every arm runs in its hidden
+    form (#337), and an arm that has none stops the batch rather than keep the location unnoticed (#385 review). `run`
+    and `score` both go through here."""
+    if os.environ.get("POLICY_HIDE_START") != "1":
+        return arms
+    hid = {v: k for k, v in HIDE_LOCATION.items()}
+    missing = [a for a in arms if a not in hid and a not in HIDE_LOCATION]
+    if missing:
+        raise SystemExit(f"POLICY_HIDE_START=1: no hidden form for arm(s) {', '.join(missing)}; hidden forms exist for "
+                         f"{', '.join(sorted(hid))}")
+    return [hid.get(a, a) for a in arms]
+
+
+def split_arm(arm: str) -> tuple[str, bool]:
+    """(the arm a run is set up as, whether its ticket's location is withheld) (#337)."""
+    return HIDE_LOCATION.get(arm, arm), arm in HIDE_LOCATION
+
+
+def ticket_for(issue: str) -> dict:
+    """The ticket as filed (title, body), with the tickets done in the same job (bench/policy/groups.json)."""
+    t = json.loads(sb.sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
+    for extra in GROUPS.get(issue, []):
+        t2 = json.loads(sb.sh(["gh", "issue", "view", extra, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
+        t = {"title": t["title"] + f" (with #{extra})", "body": t["body"] + f"\n\n# Same work: #{extra}, " + t2["title"] + "\n\n" + t2["body"]}
+    return t
+
+
+def run_prompt(issue: str, run_arm: str, w: Path) -> str:
+    """The prompt a run of `run_arm` is given: the ticket as filed, or with its location withheld for a hidden arm (#337)."""
+    t = ticket_for(issue)
+    return prompt_for(issue, t["title"], t["body"], w, split_arm(run_arm)[1])
+
+
+def prompt_for(issue: str, title: str, body: str, w: Path, hide: bool = False) -> str:
+    """The prompt an agent is given for a ticket: as filed, or with its location withheld (#337)."""
+    if hide:
+        title, body = without_location(title, body, w)
+    return (sb.PROMPT if issue == "117" else PROMPT).format(title=title, body=without_missing_data(body, w))
+
+
 def checkout(w: Path, arm: str):
     if w.exists():
         shutil.rmtree(w)
@@ -285,6 +440,7 @@ def run_one(issue: str, arm: str, rep: int) -> str:
 
 def _run_one(issue: str, arm: str, rep: int) -> str:
     tag = f"p{issue}-{arm}-r{rep}"
+    arm = split_arm(arm)[0]                           # #337: set up as the base arm; only the ticket's text differs (run_prompt)
     out = B / "runs" / tag
     if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") not in ("error", "base-red"):
         return f"skip {tag}"                          # an error, or a refused red base, is set up again (#305)
@@ -301,10 +457,6 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     except Exception as e:  # noqa: BLE001  a setup that fails is recorded, never a run that silently disappears
         (out / "end").write_text(json.dumps({"exit": "error", "seconds": 0, "error": f"setup: {type(e).__name__}: {e}"[-400:]}))
         return f"error {tag}: setup failed: {e}"       # not a red base: run again in the next batch (#305)
-    t = json.loads(sb.sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
-    for extra in GROUPS.get(issue, []):            # tickets done as one job (same code): bench/policy/groups.json
-        t2 = json.loads(sb.sh(["gh", "issue", "view", extra, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
-        t = {"title": t["title"] + f" (with #{extra})", "body": t["body"] + f"\n\n# Same work: #{extra}, " + t2["title"] + "\n\n" + t2["body"]}
     if arm.startswith("after"):                      # "cli": no MCP server, devkb only through the shell
         mcp = str(w / ".mcp.json")
         cfg = json.loads(Path(mcp).read_text())
@@ -313,7 +465,7 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     else:
         mcp = str(B / "no-mcp.json")
         Path(mcp).write_text(json.dumps({"mcpServers": {}}))
-    prompt = (sb.PROMPT if issue == "117" else PROMPT).format(title=t["title"], body=without_missing_data(t["body"], w))
+    prompt = run_prompt(issue, tag.split("-")[1], w)
     if os.environ.get("POLICY_PREREGISTER_POST") == "1":
         prompt += SETTINGS_NOTE
     deny = sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if arm in ("none", "nonekeep") else [])   # both forms (#335)
@@ -422,7 +574,7 @@ def score(issues):
     """Every run's row: the one saved when the run ended, unless its hidden check changed since (or POLICY_RESCORE=1)."""
     rows = []
     for issue in issues:
-        only = set(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))
+        only = set(arms_for(list(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))))   # as `run` ran them
         acc = B / "accept" / (f"{issue}-group.py" if (B / "accept" / f"{issue}-group.py").exists() else f"{issue}.py")
         sha = hashlib.sha256(acc.read_bytes()).hexdigest() if acc.exists() else ""
         for out in sorted((B / "runs").glob(f"p{issue}-*")):
@@ -440,7 +592,7 @@ def score(issues):
             rows.append(r)
             print(r["run"], "pass" if r["acceptance"].get("pass") else "FAIL", "suite" if r["suite_pass"] else "SUITE-RED",
                   f"${r['cost']:.2f}", "devkb", r["devkb_queries"], "guard", r["guardrail_fired"], "log", r["dogfood_log"], flush=True)
-    only = set(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))
+    only = set(arms_for(list(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))))
     scored = {r["run"] for r in rows}
 
     def other_arms(path):
@@ -485,6 +637,7 @@ if __name__ == "__main__":
             if v == "origin/main":
                 BASES[k] = os.environ["POLICY_MAIN"]
         print(f"batch pinned to main {os.environ['POLICY_MAIN'][:12]}", flush=True)
+        arms = arms_for(arms)
         jobs = [(i, arm, r) for i in issues for arm in arms for r in range(first, first + reps)]
         random.Random(126).shuffle(jobs)
         with cf.ThreadPoolExecutor(par) as ex:
