@@ -1,0 +1,72 @@
+[
+ {
+  "id": "star-reexport-callers-missing",
+  "title": "A call reached through a star re-export (`from .sub import *` in a package __init__) is attributed, or the pack says Incomplete",
+  "severity": "high",
+  "where": "devkb/build_symbols.py (call resolution through package re-exports, #192)",
+  "actual": "pkg/__init__.py has `from .sub import *`; app.py calls `subfn()` (after `from pkg import subfn`) and `pkg.subfn()`. `pack change pkg/sub.py::subfn` lists 0 functions and 0 tests and says **Complete.** Both callers and the test that reaches them are missing. A constant reached the same way through a star import is correctly flagged Incomplete, and a plain `from .sub import subfn` re-export resolves.",
+  "expected": "Both callers and tests/test_app.py are listed; or, if the resolver cannot follow star re-exports, the coverage line says Incomplete and names the files (as it does for star-imported constants).",
+  "why_it_matters": "An agent told 'Complete, nothing else calls it' will change a function and skip the tests that cover it: a missing edge the pack vouches for, which is the worst failure the pack can have (#192 fixed the same class for named re-exports).",
+  "repro": "audit/repro/star-reexport-callers-missing.py"
+ },
+ {
+  "id": "class-default-arg-shadow",
+  "title": "A method default `def run(self, t=TIMEOUT)` in a class that defines TIMEOUT is not attributed to the module constant",
+  "severity": "medium",
+  "where": "devkb/build_symbols.py:388-401 (_uses_in_tree: the head of a def inside a class body is visited with `bound`, not `bound | own`)",
+  "actual": "`TIMEOUT = 30` at module level; `class Client: TIMEOUT = 5; def run(self, t=TIMEOUT)`. `pack change a.py::TIMEOUT` lists Client.run as reaching the module constant and test_a.py as a test to run, and says Complete. Python evaluates the default in class scope, so it reads Client.TIMEOUT.",
+  "expected": "Only the function that really reads the module constant is listed. The default values and decorators of a def in a class body see the names the class body already assigned (the same rule #199 applied to class-body statements).",
+  "why_it_matters": "A wrong edge: the pack names a function and a test that cannot be affected by the change, and `Class.ATTR` used as a default is a common idiom. #199 is only half fixed.",
+  "repro": "audit/repro/class-default-arg-shadow.py"
+ },
+ {
+  "id": "lambda-param-shadows-constant",
+  "title": "A lambda parameter named like a module constant is not attributed to the constant",
+  "severity": "low",
+  "where": "devkb/build_symbols.py:387-415 (_uses_in_tree does not bind ast.Lambda arguments)",
+  "actual": "`def lam(): return lambda LIMIT: LIMIT` is listed by `pack change a.py::LIMIT` as a function that reaches the constant, with a use at the lambda body line.",
+  "expected": "Only `real()` (which reads the module LIMIT) is listed; the lambda parameter shadows the constant.",
+  "why_it_matters": "A wrong edge with an evidence line that does not prove it; it adds functions (and their tests) to the set an agent must run for a constant change.",
+  "repro": "audit/repro/lambda-param-shadows-constant.py"
+ },
+ {
+  "id": "audit-no-graph-traceback",
+  "title": "`devkb audit` and `devkb coverage` on a repository with no graph print one clear line saying to build first",
+  "severity": "low",
+  "where": "devkb/cli.py (audit subcommand); coverage / query messages",
+  "actual": "On a repository with no .devkb, `devkb audit --project P` ends in a Python traceback (FileNotFoundError: .../.devkb/nodes.jsonl), exit 1. `devkb coverage` prints `run: python3 devkb/build.py --project DK_..._` (the project path upper-cased into a bogus name); `devkb query --about` suggests `python3 devkb/build.py`, which is not the command every other tool prints (`devkb build --project <path>`).",
+  "expected": "Like symbol/outline/uses/docs/pack: `devkb: no devkb graph at <path>/.devkb: run `devkb build --project <path>` first`, exit 2, no traceback.",
+  "why_it_matters": "#212 fixed this for the read tools and packs only; the agent that runs `devkb audit` first gets a traceback, and the coverage hint cannot be pasted.",
+  "repro": "audit/repro/audit-no-graph-traceback.py"
+ },
+ {
+  "id": "cpp-pack-empty-run-command",
+  "title": "A pack that lists a C++ test to run gives a runnable command, or no Run line",
+  "severity": "low",
+  "where": "devkb/packs.py (the 'Run:' line of the tests section)",
+  "actual": "For a C/C++ repository, `pack change add` lists `lib_test.cc` under 'Test files to run' and then prints ``Run: ``` with an empty command (also seen on leveldb: `pack change MemTable::Add`).",
+  "expected": "A command, or no Run line / a line saying devkb cannot name a runner for this language.",
+  "why_it_matters": "An empty backtick span looks like a bug to the agent and gives it nothing to run; it must guess the test runner.",
+  "repro": "audit/repro/cpp-pack-empty-run-command.py"
+ },
+ {
+  "id": "cpp-overload-candidates-indistinguishable",
+  "title": "`pack change A::run` with two overloads lists candidates that can be told apart, and each overload gets only the calls its arity matches",
+  "severity": "medium",
+  "where": "devkb/packs.py (ambiguity message) and devkb/cpp_resolve.py (arity, #120/#203)",
+  "actual": "Two overloads `A::run(int)` and `A::run(int,int)` give `The graph cannot resolve `A::run` unambiguously. It could be: - `a.cc::A.run` - `a.cc::A.run` Pass one as `path::name`.` The two lines are identical, so the instruction cannot be followed. Passing `a.cc::A.run` silently picks the first overload (a.cc:2) and lists `two()` (which calls `a.run(1, 2)`) as reaching it, with Complete.",
+  "expected": "Candidates that differ (line or signature), a way to pick one, and callers split by arity as #120 describes.",
+  "why_it_matters": "A dead-end for the agent on any overloaded method (common in C++), and when it gets through, the pack reports callers of the other overload as callers of this one.",
+  "repro": "audit/repro/cpp-overload-candidates-indistinguishable.py"
+ },
+ {
+  "id": "cpp-macro-leaks-into-unrelated-file",
+  "title": "A function-like macro is expanded only in files that can see it (include it), not by name across the repository",
+  "severity": "low",
+  "where": "devkb/cpp_resolve.py / devkb/cpp_graph.py (macro expansion, #118)",
+  "actual": "legacy.h defines `#define run(x) legacy_helper(x)`. modern.cc never includes it and defines its own `void run(int)`, and `new_user()` calls `run(2)`. `pack change legacy_helper` lists modern.cc::new_user as reaching it; `pack change run` (the real target) lists no caller at all.",
+  "expected": "new_user is attributed to modern.cc's run (or left unattributed), not to legacy_helper.",
+  "why_it_matters": "A wrong edge plus a missing one in the same call: common macro names (min, max, check, log) are defined in one header and used as functions elsewhere.",
+  "repro": "audit/repro/cpp-macro-leaks-into-unrelated-file.py"
+ }
+]

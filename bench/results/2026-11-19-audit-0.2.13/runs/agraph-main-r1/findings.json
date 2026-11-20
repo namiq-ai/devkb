@@ -1,0 +1,72 @@
+[
+ {
+  "id": "audit-no-graph-traceback",
+  "title": "`devkb audit` and `devkb coverage` on a repository with no graph say to build first, in one line, with a command that works",
+  "severity": "low",
+  "where": "devkb/cli.py:37 (audit route) and the coverage entry point",
+  "actual": "`devkb audit --project <repo-without-graph>` prints a Python traceback ending in FileNotFoundError .devkb/nodes.jsonl. `devkb coverage` prints `no graph at .../nodes.jsonl; run: python3 devkb/build.py --project DKAUDIT...`, an upper-cased project code and a script path that does not exist in a user's checkout. `devkb query --about` prints a similar stale `python3 devkb/build.py` hint.",
+  "expected": "Every query command prints one line `no devkb graph at <path>/.devkb: run `devkb build --project <path>` first`, as pack/symbol/outline/uses/docs now do, and exits 2.",
+  "why_it_matters": "#212 fixed the traceback for pack/symbol/uses but not for audit, and coverage/query give a command the user cannot run. An agent following the hint fails again.",
+  "repro": "audit/repro/audit-no-graph-traceback.py"
+ },
+ {
+  "id": "constant-shadowed-locals",
+  "title": "A lambda parameter, `except ... as NAME` or match capture that shadows a module constant is not attributed to the constant",
+  "severity": "medium",
+  "where": "devkb/build_symbols.py (constant read attribution; local-binding detection)",
+  "actual": "With `LIMIT = 10` at module level, functions that bind their own `LIMIT` through a lambda parameter, `except Exception as LIMIT`, or `case LIMIT:` are listed by `pack change m.py::LIMIT` as functions that reach the constant, and their lines as uses. Parameters, plain assignment, for/with/walrus/import/comprehension targets are handled correctly.",
+  "expected": "Every binding form (lambda args, except-as, match capture, etc.) shadows the module constant inside its scope; those functions are not listed.",
+  "why_it_matters": "#199 and #198 made constant reads attributed. A false edge adds functions and tests to `pack change` and the pack still says Complete, so the agent runs and reviews unrelated code.",
+  "repro": "audit/repro/constant-shadowed-locals.py"
+ },
+ {
+  "id": "build-quadratic-same-name-defs",
+  "title": "Build time stays linear when many symbols share a name and many calls to that name are unresolved",
+  "severity": "medium",
+  "where": "devkb/build_symbols.py:1684 (_could_reach set comprehension per symbol over by_target[short])",
+  "actual": "For every symbol the build scans all unresolved calls to its short name and calls _could_reach for each pair: 800 modules each defining run() plus 800 unresolved run() calls made 640,000 calls (n*n). Build time: 400 -> 0.96 s, 800 -> 2.3 s, 1600 -> 6.9 s (about x3 per doubling). A profile of n=1200 shows 8.5 of 11.7 s inside _could_reach/_shape_fits.",
+  "expected": "Work proportional to unresolved calls plus definitions, e.g. index candidates by module or import target before testing, as #194/#195 did for receivers and constants.",
+  "why_it_matters": "Names such as run, get, __init__, main, setUp or handle are defined hundreds of times in real monorepos and called through unresolved receivers; this is the same quadratic class as #194 and #195 in a path they did not touch.",
+  "repro": "audit/repro/build-quadratic-same-name-defs.py"
+ },
+ {
+  "id": "macro-after-undef",
+  "title": "A call to a name that the file redeclares as a function, or #undef'd, is not linked to the callees of a same-named macro from another header",
+  "severity": "low",
+  "where": "devkb/cpp_resolve.py (macro expansion, union rule)",
+  "actual": "`a.h` defines `#define DEBUGONLY(x) dbg(x)`. `c.cc` includes it, does `#undef DEBUGONLY` and declares `void DEBUGONLY(int);`; `e.cc` never includes the header and declares its own `void DEBUGONLY(int);`. Their callers use3 and use5 are listed by `pack change dbg` as reaching `dbg`.",
+  "expected": "A name the file itself declares/defines as a function, or #undef's before the call, is not expanded as the macro; no edge to dbg from those callers.",
+  "why_it_matters": "The union rule is meant to cover macro definitions that vary, not files for which the macro is out of scope; the false edges add functions and tests to the change pack of dbg and to every function above it.",
+  "repro": "audit/repro/macro-after-undef.py"
+ },
+ {
+  "id": "cpp-overload-ambiguity-identical",
+  "title": "`pack change Class::method` on overloaded C++ methods resolves to the merged method, or lists choices an agent can tell apart",
+  "severity": "medium",
+  "where": "devkb/packs.py (ambiguity message) with devkb/cpp_symbols.py overloads sharing one node key",
+  "actual": "`pack change Foo::get` for two overloads prints `could be: - a.cc::Foo.get - a.cc::Foo.get` and `Pass one as path::name`; passing that key (`a.cc::Foo.get`) works and shows both overloads merged. Calls with different arity (`get(1)`, `get(1, 2)`) are both attributed to the one node, so arity (#120) has no effect on the pack. `symbol` and `outline` now separate the overloads (#203) but the pack does not.",
+  "expected": "Either `Foo::get` resolves to the merged node with every overload's lines, or the choices differ (with a line, `a.cc:2::Foo.get`) and are accepted back; likewise per-overload callers if arity is resolved.",
+  "why_it_matters": "The agent is told to disambiguate with two identical strings, and the #203 follow-through is incomplete in packs.",
+  "repro": "audit/repro/cpp-overload-ambiguity-identical.py"
+ },
+ {
+  "id": "cpp-pack-stale-limits",
+  "title": "The C/C++ limits footer of a pack matches what the resolver now does",
+  "severity": "low",
+  "where": "devkb/packs.py (C/C++ limits text)",
+  "actual": "Every C/C++ pack ends with `no preprocessor expansion (macro-generated definitions and calls are not seen), no overload resolution (overloads share one node), no type inference (...untyped receiver is not attributed)`, although #118 expands repository macros (a macro call links to the callees of its body), #120 resolves member calls through declared receiver types and arity.",
+  "expected": "The footer states the remaining limits (e.g. macro-generated definitions, macro arguments as receivers, overloads share one node) and not the ones that were lifted.",
+  "why_it_matters": "An agent reading `no preprocessor expansion` discounts the macro edges the graph does give, or searches again for what is already answered.",
+  "repro": "audit/repro/cpp-pack-stale-limits-and-empty-run.py"
+ },
+ {
+  "id": "environ-subscript-counted-as-key",
+  "title": "`os.environ[\"K\"]` and `\"K\" in os.environ` are not counted as record string-key reads, like `os.environ.get(\"K\")`",
+  "severity": "low",
+  "where": "devkb/build_symbols.py (string-key extraction, #202)",
+  "actual": "`uses zz1` for `os.environ[\"zz1\"]` and `uses zz4` for `\"zz4\" in os.environ` print `as a string key ... reads`; `os.environ.get(\"zz3\")` and `os.getenv(\"zz2\")` do not.",
+  "expected": "All environment reads are treated alike: none is a record-key read (they belong to the config view).",
+  "why_it_matters": "#202 removed environ.get from the key reads; the subscript and `in` forms still pollute `symbol KEY` and `uses KEY` with environment reads, so the answer for a config key differs by how the code is spelled.",
+  "repro": "audit/repro/environ-subscript-counted-as-key.py"
+ }
+]

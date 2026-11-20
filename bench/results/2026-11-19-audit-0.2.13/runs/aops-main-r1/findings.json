@@ -1,0 +1,122 @@
+[
+ {
+  "id": "triage-malformed-starves",
+  "title": "An item whose verdict is persistently malformed does not take a triage slot on every run",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:469-491",
+  "actual": "In apply mode a failed item gets no label and is not recorded, so it stays first in the todo list; with TRIAGE_MAX_ITEMS=2 and two such items, three runs judge items 1 and 2 six times (paid each time) and item 3 never.",
+  "expected": "A failed item is remembered (like dry-judged / handler-failed) and retried later or after the others, so newer items are still triaged and the same bad answer is not paid for every 4 hours.",
+  "why_it_matters": "#205 stopped the abort but left the retry-and-pay-first behaviour: a few hostile or odd issues block all later triage.",
+  "repro": "audit/repro/triage_malformed_starves.py"
+ },
+ {
+  "id": "triage-label-failure-recomments",
+  "title": "A failed label edit after the triage comment does not make the next run comment again",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:503-504",
+  "actual": "Labels are added with check=False after the comment is posted. If the 'triaged' edit fails, nothing is noticed; the item still lacks 'triaged' and the next run posts a second full comment (repro: 2 comments over two runs).",
+  "expected": "The item is not answered twice: a failed 'triaged' label is detected and retried without a new comment (or the daemon recognises its own marker comment on the thread).",
+  "why_it_matters": "#206 fixed only the comment-fails case; the inverse transient error produces duplicate public comments every 4 hours until a label edit succeeds.",
+  "repro": "audit/repro/triage_label_failure_recomments.py"
+ },
+ {
+  "id": "feedback-ticket-failure-loses-comment",
+  "title": "A transient GitHub error while filing a feedback ticket leaves the comment to be retried, not silently dropped",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:426-432",
+  "actual": "The comment id is written to feedback-seen.json before post_feedback runs. When `gh issue create` fails with HTTP 502 nothing was filed or answered, yet the next run reports 0 new comments: the user's report is never ticketed or answered.",
+  "expected": "The comment is marked done only once the ticket exists (or the failure happened after it was created); a failure before creation is retried on the next run.",
+  "why_it_matters": "The #206 fix trades a duplicate ticket for a permanently lost one, with only a log line as trace.",
+  "repro": "audit/repro/feedback_ticket_failure_loses_comment.py"
+ },
+ {
+  "id": "triage-duplicate-of-true",
+  "title": "A verdict with duplicate_of: true is refused instead of posted as '#True'",
+  "severity": "low",
+  "where": "ops/triage/triage.py:234-237",
+  "actual": "isinstance(True, int) and True in {1, 2}: the verdict is accepted, labelled duplicate, and the comment says 'This looks like a duplicate of #True'.",
+  "expected": "ValueError: duplicate_of must be an integer item number (bool excluded); same in validate_feedback.",
+  "why_it_matters": "The validator is the boundary between model output and what is posted; a type confusion gets through it.",
+  "repro": "audit/repro/triage_duplicate_of_true.py"
+ },
+ {
+  "id": "draft-pr-retry-remote-branch",
+  "title": "A draft-pr issue can be retried after its first attempt pushed the branch but failed to open the PR",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:673,706",
+  "actual": "#207 resets the local branch with checkout -B, but the earlier attempt already pushed auto/N-slug; the retry pushes a new commit without --force and git rejects it (non-fast-forward), so the item fails again, every time.",
+  "expected": "The retry opens the draft PR: push with --force-with-lease to the daemon's own auto/ branch, or reuse/delete the remote branch first.",
+  "why_it_matters": "#207's stated outcome (a draft-pr issue can be retried) is not met for the common transient failure of `gh pr create` after a successful push.",
+  "repro": "audit/repro/draft_pr_retry_remote_branch.py"
+ },
+ {
+  "id": "handle-sandbox-timeout-aborts-run",
+  "title": "A hanging test in the sandbox fails its item instead of aborting the whole handle run",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:538-539,736",
+  "actual": "sandboxed() runs with timeout=1800; subprocess.TimeoutExpired is not in cmd_handle's except tuple, so it propagates, the run stops, the item is not marked handler-failed and is the first one retried (and re-paid) by every later run.",
+  "expected": "TimeoutExpired is turned into RuntimeError (or caught) so the item is marked handler-failed and the next item is handled.",
+  "why_it_matters": "Agent- or outsider-written code controls whether tests hang, so one crafted issue can wedge the handler permanently; the same class of abort #205 set out to remove.",
+  "repro": "audit/repro/handle_sandbox_timeout_aborts_run.py"
+ },
+ {
+  "id": "triage-repo-override-reads-origin",
+  "title": "With TRIAGE_REPO set, the tree the agent reads to triage, plan and answer feedback is that repository's main",
+  "severity": "low",
+  "where": "ops/triage/triage.py:298-304",
+  "actual": "#208 moved review/draft fetches to REPO_URL, but update_tree() still adds the worktree at and fetches from the git remote `origin` of the checkout the script is in; triage, feedback and plan runs (claude(..., TREE, READ_ONLY)) read that code while gh comments on TRIAGE_REPO.",
+  "expected": "update_tree fetches REPO_URL main (as handle_draft_pr already does) so every agent run sees the code of the repository it is judging.",
+  "why_it_matters": "Verdicts such as 'valid bug' or 'already fixed' and plans are written against another repository's code.",
+  "repro": "audit/repro/triage_repo_override_reads_origin.py"
+ },
+ {
+  "id": "flaky-rule-hides-order-dependence",
+  "title": "A suite failure that appears only after the agent's own test is not scored as green by the flaky rule",
+  "severity": "high",
+  "where": "bench/policy/policybench.py:290-309",
+  "actual": "run_suite re-runs the failed test ids alone; a test broken by in-process state the agent's new test leaks passes alone, is recorded as 'flaky' and suite_pass becomes True (repro: 1 failed, 1 passed in the full run, suite_pass True).",
+  "expected": "Only a failure that also disappears when the whole suite is run again counts as flaky; a failure that reproduces in the full-suite order stays red (re-run the full suite, or run the failed tests in their original order with their predecessors).",
+  "why_it_matters": "#260 made a red suite caused by the agent's change score green, which biases the release table's suite column and the acceptance of every arm.",
+  "repro": "audit/repro/flaky_rule_hides_order_dependence.py"
+ },
+ {
+  "id": "timeout-run-scored-as-free",
+  "title": "A run cut off by the timeout is not recorded with zero cost and zero context",
+  "severity": "medium",
+  "where": "bench/policy/storybench.py:194-205",
+  "actual": "With no `result` event (5400 s timeout), transcript() returns cost 0 and ctx_tokens 0 although 40 assistant messages used 2M cached input tokens; per_run feeds these zeros into the release table means.",
+  "expected": "Cost and context are estimated from the per-message usage (or the run is flagged and excluded from cost/context means).",
+  "why_it_matters": "The slowest, most expensive runs are the ones that time out; they lower the arm's average cost and context, so the release table's 'cost -N%' is computed wrongly.",
+  "repro": "audit/repro/timeout_run_scored_as_free.py"
+ },
+ {
+  "id": "release-table-nav-from-missing-transcript",
+  "title": "The release table uses the devkb navigation counts stored in the results when the transcript is not under bench/policy/runs",
+  "severity": "medium",
+  "where": "bench/policy/release_table.py:29-34,83",
+  "actual": "counts() re-reads B/runs/<run>/stream.jsonl and returns (0,0,0) when it is missing, ignoring the row's devkb_nav / devkb_selftest (remeasure.py has --runs DIRs because transcripts live elsewhere); the table shows nav 0 and self-tests 0 for a run whose row says 7 and 2.",
+  "expected": "Fall back to the row's stored devkb_nav, devkb_selftest (and say when neither exists) instead of printing 0.",
+  "why_it_matters": "'devkb nav' and 'self-tests' are the columns #258 introduced; a results file moved to another machine silently reports that devkb was not used.",
+  "repro": "audit/repro/release_table_nav_from_missing_transcript.py"
+ },
+ {
+  "id": "base-red-run-never-rerun",
+  "title": "A run refused for a red base is run again after the base is fixed",
+  "severity": "low",
+  "where": "bench/policy/policybench.py:224-225",
+  "actual": "_run_one skips any run whose end file exists unless exit == 'error'; 'base-red' is skipped, so after the red base is fixed `policybench.py run` prints 'skip' and the arm stays empty (score prints REFUSED).",
+  "expected": "base-red ends are re-run like error ends (the setup is what failed, not the agent).",
+  "why_it_matters": "#221's refusal is only useful if the batch can be completed after the fix; today the user must find and delete runs/<tag>/end by hand and may publish a table with a missing arm.",
+  "repro": "audit/repro/base_red_run_never_rerun.py"
+ },
+ {
+  "id": "score-arms-filter-overwrites-results",
+  "title": "Re-scoring one arm keeps the other arms' rows in results-ISSUE.jsonl",
+  "severity": "medium",
+  "where": "bench/policy/policybench.py:354-374",
+  "actual": "With POLICY_ARMS=after, score() skips the other arms and then rewrites results-ISSUE.jsonl and results-policy.jsonl from the rows it collected: the before arm's scored runs disappear from the files release_table.py reads.",
+  "expected": "Rows of arms outside the filter are carried over from the saved score.json (or the existing file), so the release table input stays complete.",
+  "why_it_matters": "A routine partial re-score silently produces a table with missing arms and no 'vs no devkb' column.",
+  "repro": "audit/repro/score_arms_filter_overwrites_results.py"
+ }
+]

@@ -1,0 +1,122 @@
+[
+ {
+  "id": "replace-hides-lines",
+  "title": "A search replaced by the graph's call-site answer shows every line grep prints, or says how many it left out",
+  "severity": "high",
+  "where": "scripts/devkb_guardrail.py:815",
+  "actual": "use_lines() takes the lines `devkb uses --json` returns, which caps the hits per search and leaves out the definition line; the deny answer then says 'devkb answered this search from the graph (Complete)' and lists only those. In the fixture grep prints 8 lines (def line, docstring line, 6 callers); the replacement shows 3 callers and no 'N more' note. Lines are also whitespace-stripped and cut at 110 characters.",
+  "expected": "A replacement contains every line grep would print (SPEC-DKB-007 R6, 'never collapsed'), or the hook does not replace (alongside / pass-through) when the graph's hit list is truncated (`omitted`/`showing 3 of 5`).",
+  "why_it_matters": "The agent is told the answer is Complete and that grep's output is superseded; it will conclude there are only 3 callers and miss the others, so a refactor can silently skip call sites.",
+  "repro": "audit/repro/replace_hides_lines.py"
+ },
+ {
+  "id": "replace-hides-substring-matches",
+  "title": "A replaced `grep NAME` does not drop lines where NAME is part of a longer identifier",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:815",
+  "actual": "`grep -rn helper pkg` (substring match) is denied and answered from `uses helper`, a whole-word match: the line `def helper_two(x):` that grep prints is missing from the answer that claims to be Complete.",
+  "expected": "Either the replacement carries the substring matches grep prints, or a non -w search is not replaced by a whole-word answer.",
+  "why_it_matters": "Same class as above: the agent trusts the replacement as grep's result and does not see related identifiers (helper_two) the search was meant to reveal.",
+  "repro": "audit/repro/replace_hides_substring_matches.py"
+ },
+ {
+  "id": "answer-larger-than-head",
+  "title": "A replacement honours a trailing `| head -N` / `| tail -N` instead of returning every line",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:259",
+  "actual": "`grep -rn helper pkg | head -1` is denied and answered with all 3 call-site lines (is_trim_stage lets trim stages pass as if they changed nothing); `| tail -1` likewise returns the other lines, not the last one. The Grep tool's head_limit is ignored the same way.",
+  "expected": "The answer is never larger than the command's own output (SPEC-DKB-007 R5): apply the trim or pass the search through.",
+  "why_it_matters": "The agent asked for one line to keep its context small and is given more, in a call that replaced the command; for `tail` the answer is also the wrong lines.",
+  "repro": "audit/repro/answer_larger_than_head.py"
+ },
+ {
+  "id": "locate-gets-body",
+  "title": "A 'where is X defined' search with no -A/-B/-C is answered with the location line, not the whole body",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:1011",
+  "actual": "`grep -rn \"def helper\" pkg` (intent locate) is denied with the location plus the full body (up to 80 lines): 1175 characters for a 25-character grep output. The spec's own table lists 'where X is defined -> location and body' as 'same, larger than asked'.",
+  "expected": "locate -> `file:line: signature`, one line per definition (SPEC-DKB-007 \u00a73.3); the body only for read-body (context lines).",
+  "why_it_matters": "Every definition lookup pays for a body the agent did not ask for, which is the cost SPEC-DKB-007 set out to remove (R5).",
+  "repro": "audit/repro/locate_gets_body.py"
+ },
+ {
+  "id": "long-def-denied-without-body",
+  "title": "A `grep -A10 'def f'` on a function longer than 80 lines is not denied with an answer that has none of the 10 lines",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:760",
+  "actual": "For a 122-line function, `grep -n \"def big\" -A10 pkg/a.py` is denied and the answer is the location and '(Body not shown: big is longer than 80 lines...)'. The 10 lines requested are hidden; the agent must repeat the search. Seen on replayed search #14 (`-A30` on `extract`).",
+  "expected": "When the body is not shown, do not deny (let grep run), or give at least the lines grep's context would print.",
+  "why_it_matters": "A denial that carries less than grep prints costs a wasted round trip and a model call each time.",
+  "repro": "audit/repro/long_def_denied_without_body.py"
+ },
+ {
+  "id": "scoped-definition-no-body",
+  "title": "A definition search confined to one file gets that file's body when the name is defined in several files",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:760-771",
+  "actual": "`devkb symbol NAME --source` puts the body on the first match only; after the scope filter the one remaining definition may be a later match with no `source`, and definition_answer reports 'Body not shown: twin is its end is not known' although the function is 3 lines with an exact range. With two files defining `twin`, the search in pkg/b.py is denied with no body, the one in pkg/a.py gets it. The message is also ungrammatical ('twin is its end is not known'). Replayed #664 (`def _read -A4 devkb/process_api.py`) shows it on this repository.",
+  "expected": "The body of the definition inside the searched file, whichever match it is; the reason text matches the cause.",
+  "why_it_matters": "The denial hides lines grep would print, with a false reason, whenever a name is defined twice in the repository (common: _read, main, setUp).",
+  "repro": "audit/repro/scoped_definition_no_body.py"
+ },
+ {
+  "id": "outline-wider-than-grep",
+  "title": "A `grep '^class '` / `'^def '` listing gets only the symbols of that kind, not the whole outline",
+  "severity": "low",
+  "where": "scripts/devkb_guardrail.py:881",
+  "actual": "`grep -n \"^class \" pkg/m.py` (prints 2 lines) gets an alongside outline of 7 symbols: classes, methods and functions; replayed `grep -n \"^def \\|^class \" cpp_symbols.py` gets constants and fields too. Also the outline is read with the default limit of 200 symbols and `omitted` is ignored.",
+  "expected": "The answer lists the kinds the pattern names (and at top level when anchored with ^), or nothing.",
+  "why_it_matters": "The answer is to a different question and larger than grep's output (R5, R8); it costs tokens on every listing.",
+  "repro": "audit/repro/outline_wider_than_grep.py"
+ },
+ {
+  "id": "keyword-literal-gets-outline",
+  "title": "A search for the word 'async', 'static', 'public' or 'function' as text is not answered with the file's outline",
+  "severity": "low",
+  "where": "scripts/devkb_guardrail.py:492",
+  "actual": "classify() calls any pattern made only of language keywords list-symbols, anchored or not: `grep -n \"async\" pkg/m.py` (prints the import line and a comment) is answered alongside with the outline of every function in the file.",
+  "expected": "Only a definition-listing pattern (`^def `, `def `, `class ` with its trailing space or anchor) is a listing; a bare keyword is a literal and gets no answer (R2).",
+  "why_it_matters": "An answer to a different question, added next to every keyword search.",
+  "repro": "audit/repro/keyword_literal_gets_outline.py"
+ },
+ {
+  "id": "stats-omit-outline-on-open",
+  "title": "devkb guardrail-stats counts outline-on-open decisions",
+  "severity": "low",
+  "where": "devkb/outcomes.py:113",
+  "actual": "The hook logs action 'outline-on-open' for the first read of a code file (D2), but ACTIONS lacks it: the logged decision is counted as 'substitute 0, ... repeat 0' and its column is missing from the intent table, though the header says '1 guardrail decision'. Same defect as #188, left for the newest action.",
+  "expected": "Every action found in the log is counted (#188: 'counts every action it finds').",
+  "why_it_matters": "The stats are the evidence for the D2 experiment; the decisions it makes are invisible in them.",
+  "repro": "audit/repro/stats_omit_outline_on_open.py"
+ },
+ {
+  "id": "miss-single-file-forms",
+  "title": "A single-file `grep -n` with a pipe, a redirection or a leading `cd` is logged as a graph miss",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:147-166",
+  "actual": "single_bash_file() returns None for any command word that is only punctuation (`|`, `2>&1`, `2>/dev/null`) and for a command starting with `cd dir &&`. grep's `line:text` output then has no file name, parse_grep sees no code file and records nothing: all four forms found code in lib/x.rb and logged 0 graph-miss lines, where the plain form logs.",
+  "expected": "#137: a miss is logged when grep searches a single file, whatever pipe/redirect/cd the agent adds.",
+  "why_it_matters": "`| head`, `2>&1` and `cd` are how agents usually write such searches, so the misses devkb most needs to learn from are dropped.",
+  "repro": "audit/repro/miss_single_file_forms.py"
+ },
+ {
+  "id": "miss-enclosing-allman",
+  "title": "A graph miss names the enclosing C/C++ function when its opening brace is on its own line",
+  "severity": "low",
+  "where": "devkb/misses.py:199",
+  "actual": "The text scan in enclosing() walks up to the first unindented line; for `int Foo::bar(int x)` followed by `{` on the next line it stops at `{`, finds no function header and returns '' (also for an inline method in a struct). Used whenever the file is not in the graph or changed since the build.",
+  "expected": "'Foo::bar' (#138).",
+  "why_it_matters": "The ticket draft says 'in ``' for brace-on-next-line code (GNU/Allman style, common in C), so the miss cannot be acted on.",
+  "repro": "audit/repro/miss_enclosing_allman.py"
+ },
+ {
+  "id": "teach-command-wrong-dir",
+  "title": "The 'Next time ask devkb directly' command works from the directory the search ran in",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:695-705",
+  "actual": "teach_command() always writes `--project .`. When the agent's cwd is a subdirectory (`cwd=pkg`), the suggested `devkb uses helper --project .` fails with 'no devkb graph at .../pkg/.devkb'.",
+  "expected": "A command that runs where the agent is: `--project <repo>` or a path relative to the search directory (the D1 teach line is on by default since #267).",
+  "why_it_matters": "The agent follows the hint, gets an error, and learns that devkb does not work: the opposite of the measured direct-use gain D1 relies on.",
+  "repro": "audit/repro/teach_command_wrong_dir.py"
+ }
+]

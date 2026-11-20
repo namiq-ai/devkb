@@ -1,0 +1,42 @@
+[
+ {
+  "id": "audit-no-graph-traceback",
+  "title": "`devkb audit` (and `coverage`, `query`) on a repository with no graph print one line saying to run `devkb build --project <path>` first",
+  "severity": "low",
+  "where": "devkb/cli.py (audit/coverage/query dispatch); devkb/process_api.py",
+  "actual": "`devkb audit --project <repo-without-.devkb>` prints a Python traceback ending in FileNotFoundError .../.devkb/nodes.jsonl. `coverage` prints `run: python3 devkb/build.py --project DKAUDIT-XXXX` with the path upper-cased (not runnable); `query --about` prints `python3 devkb/build.py --project <path>`. Only symbol/outline/uses/docs/pack give the one-line `devkb build --project <path>` hint.",
+  "expected": "Every query command prints the same one-line `no devkb graph at ...: run devkb build --project <path> first` and exits 2, as #212 asks.",
+  "why_it_matters": "#212 is only fixed for some commands; an agent that runs `devkb audit` first gets a traceback, and `coverage` gives a build command that cannot be run because the path was upper-cased.",
+  "repro": "audit/repro/audit-no-graph-traceback.py"
+ },
+ {
+  "id": "cpp-overload-pack-ambiguous",
+  "title": "`pack change|refactor Class::method` for an overloaded C++ method returns a pack instead of an ambiguity list of identical entries",
+  "severity": "medium",
+  "where": "devkb/packs.py:297",
+  "actual": "With `int Foo::bar(int)` and `int Foo::bar(int,int)` in one file, `pack change Foo::bar` and `pack refactor Foo::bar` answer `cannot resolve Foo::bar unambiguously. It could be: - a.cc::Foo.bar - a.cc::Foo.bar. Pass one as path::name.` The two candidates are identical, so the advice cannot be followed, and no callers or tests are given. (symbol Foo::bar now separates the two overloads per #203, but the pack still sees two candidates for what is one graph node.)",
+  "expected": "A pack with callers use1/use2 (the overloads share one node), or candidates that differ (for example by line or signature).",
+  "why_it_matters": "AGENTS.md names `Class::method` as the form to pass to pack; for every overloaded C++ method (common in leveldb/fmt) the agent gets no impact information and has to fall back to grep.",
+  "repro": "audit/repro/cpp-overload-pack-ambiguous.py"
+ },
+ {
+  "id": "star-reexport-call-unattributed",
+  "title": "A call through a `from .core import *` re-export is attributed to the function, or the pack says Incomplete",
+  "severity": "high",
+  "where": "devkb/build_symbols.py (re-export resolution, #192)",
+  "actual": "pkg/__init__.py has `from .core import *`; use.py does `from pkg import star` and calls `star()`. `pack change star` says 0 functions reach it, no tests, and `Coverage: Complete`. pack refactor likewise. The call is neither attributed nor counted as unattributed.",
+  "expected": "use.py::a and tests/test_u.py are listed, or Coverage says Incomplete (the #192 rule: an unattributed re-exported call must not be counted as Complete).",
+  "why_it_matters": "Star re-exports are the common way packages expose their API; the pack tells an agent a public function has no callers and no tests while it does, which is exactly the false-Complete #192 set out to remove.",
+  "repro": "audit/repro/star-reexport-call-unattributed.py"
+ },
+ {
+  "id": "constant-dotted-read-unattributed",
+  "title": "A read of a module constant through a full dotted path (`pkg.sub.impl.CONST`) is attributed, or `pack change` says Incomplete",
+  "severity": "medium",
+  "where": "devkb/build_symbols.py (constant read attribution, #196/#197)",
+  "actual": "With `import pkg.sub.impl` and `return pkg.sub.impl.CONST`, `pack change CONST` omits that function (the `import ... as m; m.CONST` and `from pkg.sub import impl; impl.CONST` forms are found) and still says Complete.",
+  "expected": "All three readers are listed, or the pack says Incomplete.",
+  "why_it_matters": "A change to a constant misses a reader and its tests while claiming completeness.",
+  "repro": "audit/repro/constant-dotted-read-unattributed.py"
+ }
+]

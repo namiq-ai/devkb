@@ -1,0 +1,112 @@
+[
+ {
+  "id": "replace_hides_uses",
+  "title": "A replaced name search lists every call site grep would print, or says it is cut",
+  "severity": "high",
+  "where": "scripts/devkb_guardrail.py:815 (use_lines) / :1041-1054; devkb/read_tools.py:447 (per_file=3, hits=36, files=12)",
+  "actual": "`grep -rn helper pkg` (9 matching lines, one file) is denied and answered 'from the graph (Complete)' with 3 lines. The `uses` JSON is capped at 3 hits per file, 36 hits and 12 files; the hook neither asks for more nor adds a 'more' notice, and the definition line is also missing. On this repository `grep -rn log_decision scripts` prints 18 lines; the answer has 3.",
+  "expected": "A substituted answer holds every line grep prints (the same lines, up to LINES_CAP with an explicit 'N more' line), or the search is not replaced.",
+  "why_it_matters": "The agent is told the answer is Complete and the search did not run, so it concludes there are 3 call sites. This is the worst outcome of SPEC-DKB-005's rule: a replacement that hides lines.",
+  "repro": "audit/repro/replace_hides_uses.py"
+ },
+ {
+  "id": "definition_prefix_hides",
+  "title": "A definition search for a name that is a prefix of other names is not answered for one name alone",
+  "severity": "high",
+  "where": "scripts/devkb_guardrail.py:1011-1020; devkb/misses.py:62-71 (definition_name)",
+  "actual": "`grep -n \"def resolve\" tools.py` prints `def resolve_file` and `def resolve`. The hook denies it and answers only `resolve`; `resolve_file` appears nowhere. Real case in the replay: `{pattern: 'def resolve', path: 'devkb/read_tools.py'}` (read_tools.py:107 `resolve_file`, :138 `resolve`).",
+  "expected": "Either the pattern is only treated as a definition of NAME when it is anchored (`def NAME\\b`, `def NAME(`), or the answer lists every definition the pattern matches, or grep runs.",
+  "why_it_matters": "The grep substring semantics are lost, and the agent is told to 'repeat the command for grep's own lines' only after it already believes the answer is complete.",
+  "repro": "audit/repro/definition_prefix_hides.py"
+ },
+ {
+  "id": "locate_answers_whole_body",
+  "title": "A definition search with no context lines gets the definition's location, not its whole body",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:1011-1020 (read-answer), SPEC-DKB-007 \u00a73.3 `locate`",
+  "actual": "`grep -n \"def target\" m.py` (grep prints one 20-character line) is denied with a 35-line, 1.8k-character answer containing the whole body (92x grep). Replay: `grep -n \"def finalize\" devkb/cpp_symbols.py` prints 60 characters, the answer is 1,870.",
+  "expected": "intent `locate` is answered with `file:line: signature`, one line per definition (\u00a73.3); the body is for `read-body`. The answer is never larger than grep's own output (R5).",
+  "why_it_matters": "Every definition lookup now costs a body of up to 80 lines, the exact cost the specification set out to remove, and the agent did not ask for it.",
+  "repro": "audit/repro/locate_answers_whole_body.py"
+ },
+ {
+  "id": "definition_second_has_no_body",
+  "title": "A definition search in the second file that defines a name is answered with its body and a true reason",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:748-772 (definition_answer); devkb/misses.py:74-89 (run_definitions: only the first match carries source)",
+  "actual": "With `helper` defined in a.py and b.py, `grep -n \"def helper\" -A5 b.py` is denied with 'b.py:1:def helper(x): (Body not shown: helper is its end is not known. Span: b.py lines 1-3.)'. Only the first match of `symbol --source` carries a body, so the second file's 3-line function gets none; the reason string is wrong (the span is exact) and ungrammatical ('is its end is not known'). Replay: `grep -n \"def uses\" -A6 devkb/process_api.py`.",
+  "expected": "The body of the definition in the searched file, or grep runs; a reason that is true and reads correctly.",
+  "why_it_matters": "grep would print the lines; the denial withholds them and sends the agent to another read. The false reason misleads.",
+  "repro": "audit/repro/definition_second_has_no_body.py"
+ },
+ {
+  "id": "before_context_hidden",
+  "title": "A definition search with -B keeps the lines above the definition that were asked for",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:995-1020 (lenient set includes option:-B)",
+  "actual": "`grep -n \"def target\" -B3 -A4 m.py` prints the comment and the `@functools.lru_cache` decorator above the def. The hook denies it and answers from the `def` line on.",
+  "expected": "Lines before the definition are included, or a search with -B is not replaced.",
+  "why_it_matters": "Decorators and comments above a definition are what -B is used for; the replacement hides them.",
+  "repro": "audit/repro/before_context_hidden.py"
+ },
+ {
+  "id": "context_callsite_gets_body",
+  "title": "A name search with context lines is not answered with the definition's body",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:1029-1035 (read-body branch for any name with -A/-C)",
+  "actual": "`grep -rn \"helper(\" pkg -A2` (121 characters of call-site context) gets the 22-line body of `helper` beside it: 649 characters, 5x grep, and a different question (the body of the callee, not the lines around the calls). Replay: `grep -rn run_query devkb --include=*.py -A2` prints 401 characters; the answer is 1,583.",
+  "expected": "`read-body` only for a definition pattern; a name search with context is a call-sites question and gets nothing larger than grep.",
+  "why_it_matters": "R5 (alongside never larger than grep) and R1 (the question asked) are both broken, and every such search pays for text it did not ask for.",
+  "repro": "audit/repro/context_callsite_gets_body.py"
+ },
+ {
+  "id": "list_symbols_wrong_kinds",
+  "title": "A listing of `^def ` lines is answered with functions only and no more than grep prints",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:869-881 (outline_answer)",
+  "actual": "`grep -n \"^def \" m.py` prints the 2 top-level functions (28 characters). The answer beside it is the whole outline: 4 constants, a class, a method and the 2 functions (245 characters). Replay: `grep -n \"^def \" devkb/project_context.py` prints 500 characters, the answer is 956 and lists constants, fields and classes.",
+  "expected": "The outline filtered to the kinds and nesting the pattern selects (`^def ` = top-level functions; `^class ` = classes), within grep's size.",
+  "why_it_matters": "The answer is another question and larger than grep's output (R5); the agent reads constants and fields it did not ask for.",
+  "repro": "audit/repro/list_symbols_wrong_kinds.py"
+ },
+ {
+  "id": "head_trim_ignored",
+  "title": "A search trimmed by `| head -N` is not answered with more lines than N",
+  "severity": "low",
+  "where": "scripts/devkb_guardrail.py:259-273 (is_trim_stage) and :1041-1054",
+  "actual": "`grep -rn helper . | head -2` prints 2 lines (484 characters in the fixture). The hook treats `head` as the same question and replaces it with every call site: 17 lines, 628 characters.",
+  "expected": "Cut the answer to the same N lines, or do not replace.",
+  "why_it_matters": "The replacement is larger than the output it replaces (R5); agents use `| head` to limit tokens.",
+  "repro": "audit/repro/head_trim_ignored.py"
+ },
+ {
+  "id": "logged_question_wrong",
+  "title": "The decision log names the graph question that was asked",
+  "severity": "medium",
+  "where": "scripts/devkb_guardrail.py:639-645 (question_of), :708-720",
+  "actual": "question_of returns `pack refactor` whenever any pack query ran, and `none` otherwise. A call-sites answer built from `uses` is logged `pack refactor`; an outline answer is logged `none`; the outline-on-open and every `locate`/`in-file` answer are likewise wrong. `symbol`, `uses` and `outline` are never logged except `symbol --source` and `outline` for read-answer / span-hint.",
+  "expected": "Each decision line logs the question the answer came from: `uses`, `symbol`, `outline` or `none` (SPEC-DKB-007 R7, \u00a73.5).",
+  "why_it_matters": "The intents-by-question evidence that \u00a73.5 says justifies later changes to the table is wrong from the start.",
+  "repro": "audit/repro/logged_question_wrong.py"
+ },
+ {
+  "id": "stats_omits_outline_on_open",
+  "title": "guardrail-stats counts the outline-on-open decisions",
+  "severity": "low",
+  "where": "devkb/outcomes.py:113 (ACTIONS), :136-149",
+  "actual": "A first-open outline (`action: outline-on-open`) is logged and counted in the total ('1 guardrail decision(s)') but the per-action line reads 'substitute 0, ... repeat 0' and the intent table has an empty row. The row's `question` is `none` though `outline` was asked.",
+  "expected": "Every logged action appears in the per-action line and the intent table (#188, SPEC-DKB-007 R7).",
+  "why_it_matters": "The D2 arm cannot be measured from guardrail-stats, the purpose of that command.",
+  "repro": "audit/repro/stats_omits_outline_on_open.py"
+ },
+ {
+  "id": "teach_line_other_name",
+  "title": "The 'Next time ask devkb directly' line names the command for the answer it follows",
+  "severity": "low",
+  "where": "scripts/devkb_guardrail.py:695-705 (teach_command uses names[0]) and :1057-1065",
+  "actual": "`grep -rn \"alpha_sym\\|beta_key\" . | head`: the answer is the key uses of `beta_key`; the teach line says `devkb uses alpha_sym --project .`. Replay: `grep -n \"overload_lines\\|overload_count\" -r devkb | grep -v ...` answers overload_count and teaches `uses overload_lines`.",
+  "expected": "The teach line carries the command that gives the answer shown (the name that was answered).",
+  "why_it_matters": "D1 exists to teach agents the command for the intent; it teaches one that returns something else.",
+  "repro": "audit/repro/teach_line_other_name.py"
+ }
+]

@@ -1,0 +1,92 @@
+[
+ {
+  "id": "triage_handle_timeout",
+  "title": "A hanging agent-written test fails that handle item instead of aborting the run and being paid for again",
+  "severity": "high",
+  "where": "ops/triage/triage.py:539 (sandboxed timeout=1800) and ops/triage/triage.py:736 (cmd_handle except tuple)",
+  "actual": "sandboxed() runs pytest with subprocess.run(timeout=1800). A test the agent wrote that loops forever raises subprocess.TimeoutExpired, which is not in cmd_handle's (RuntimeError, ValueError, TypeError, KeyError, AttributeError). The whole handle run aborts: the item is not marked handler-failed, the items behind it are not handled, and the next timer run picks the same item first and pays for a full agent run again.",
+  "expected": "A timed-out sandbox run fails that item (handler-failed) like any other failed check, and the run continues (#205's own rule: a bad outcome fails its item, never the run).",
+  "why_it_matters": "An outsider-influenced issue can make the agent produce a hanging test; every 4 hours the daemon then re-spends an agent run on it and never reaches later items.",
+  "repro": "audit/repro/triage_handle_timeout.py"
+ },
+ {
+  "id": "triage_push_retry",
+  "title": "A draft-pr retry after the branch was pushed but the PR was not opened succeeds",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:706 (handle_draft_pr: push without force after checkout -B)",
+  "actual": "#207 made the local branch restart with checkout -B, but the push is a plain `branch:refs/heads/branch`. If the first attempt pushed and `gh pr create` (or the comment) then failed, the item is handler-failed; when a maintainer re-queues it the new commit, built from main afresh, is rejected as non-fast-forward against the first attempt's remote branch, so every retry fails.",
+  "expected": "The retry opens the draft PR: it reuses or replaces the daemon's own auto/N-slug branch (e.g. push with --force-with-lease to a branch only the daemon writes, or a unique branch name per attempt).",
+  "why_it_matters": "#207's goal (a draft-pr issue can be retried) still does not hold after the most likely transient failure, a GitHub error after the push.",
+  "repro": "audit/repro/triage_push_retry.py"
+ },
+ {
+  "id": "triage_label_failure_duplicate_comment",
+  "title": "A failed label edit after the triage comment does not make the next run comment and pay again",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:476-480 (labels via run(..., check=False)); also mark() at ops/triage/triage.py:553 for `handled`",
+  "actual": "#206 posts the comment before the labels, but the label edits (including `triaged`) use check=False, so a transient GitHub error is swallowed. The item stays untriaged with a comment posted; the next run judges it again (another model call) and posts a second comment, and so on every run while the edit keeps failing. mark(..., 'handled') is also check=False, so a handled item keeps handle:* and is handled again (a second review comment or a second draft PR).",
+  "expected": "A failed `triaged` / `handled` label is detected and not repeated blindly: it is retried or recorded locally so the comment/PR is not posted twice.",
+  "why_it_matters": "Duplicate bot comments and duplicate draft PRs on outsiders' issues, plus repeated model cost, after exactly the transient error #206 set out to cover.",
+  "repro": "audit/repro/triage_label_failure_duplicate_comment.py"
+ },
+ {
+  "id": "triage_failed_items_starve_queue",
+  "title": "Items whose model answer is malformed are backed off, not retried and paid for first on every later run",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:456-460 (cmd_triage except/continue with no recorded state) and the same pattern in feedback_pass (ops/triage/triage.py:411)",
+  "actual": "#205 stops the run aborting, but a failed item records nothing in apply mode. With TRIAGE_MAX_ITEMS=10 and ten items whose answers always fail validation, every run pays for the same ten first and the 11th item is never triaged. Same for feedback comments (never added to the seen set).",
+  "expected": "A failed item is recorded (with a retry limit or back-off) so it does not use the per-run budget on every run and later items are reached.",
+  "why_it_matters": "#205's title says the item is 'retried and paid for first on every later run'; a few poison items starve triage of all new items and burn money every 4 hours.",
+  "repro": "audit/repro/triage_failed_items_starve_queue.py"
+ },
+ {
+  "id": "triage_closing_keyword_gh_form",
+  "title": "Posted titles and PR summaries never carry a closing keyword in any form GitHub honours",
+  "severity": "low",
+  "where": "ops/triage/triage.py:608 (CLOSING regex requires `#` before a digit)",
+  "actual": "CLOSING removes `Fixes #5` and `Resolves owner/repo#5` but not `Fixes GH-5`. clean_title (issue title, commit subject, PR title) and the PR summary pass `Fixes GH-5` through unchanged.",
+  "expected": "Model- or outsider-influenced text never closes another issue when the draft PR is merged; the GH-N form is stripped too.",
+  "why_it_matters": "The sanitising rule exists so an automated draft cannot close issues the maintainers did not choose; one documented keyword form bypasses it.",
+  "repro": "audit/repro/triage_closing_keyword_gh_form.py"
+ },
+ {
+  "id": "bench_selftest_quoted_project",
+  "title": "A devkb query against a fixture outside the checkout counts as a self-test when its --project path is quoted",
+  "severity": "low",
+  "where": "bench/policy/storybench.py:174-183 (devkb_commands: quoted strings replaced by '' before --project is read)",
+  "actual": "`devkb symbol foo --project /tmp/fx` is a self-test, but `--project \"/tmp/fx\"` and `--project '/tmp/fx'` are counted as navigation: the quote-stripping step turns the path into '' before the /tmp check.",
+  "expected": "Quoted and unquoted fixture paths are classified the same way (self-test).",
+  "why_it_matters": "devkb nav and devkb self-tests are columns of the release table; agents commonly quote paths, which inflates navigation use for the devkb arms.",
+  "repro": "audit/repro/bench_selftest_quoted_project.py"
+ },
+ {
+  "id": "bench_edit_rule_matches_parent_dir",
+  "title": "Editing a test does not make later devkb queries count as self-tests just because the checkout sits under a devkb/ directory",
+  "severity": "medium",
+  "where": "bench/policy/storybench.py:231 and bench/policy/release_table.py:50 (re.search(r\"(^|/)(devkb|scripts)/\", file_path))",
+  "actual": "Claude Code passes absolute paths to Edit/Write, and runs live in <devkb checkout>/bench/policy/work/<tag>/. When the checkout directory is named devkb (or any ancestor is devkb/ or scripts/), the first edit of any file, even a test, sets edited=True and every later devkb query is counted as a self-test instead of navigation.",
+  "expected": "Only edits of devkb's own code inside the run's checkout (path relative to the checkout's root) switch queries to self-tests.",
+  "why_it_matters": "devkb nav drops to 0 and self-tests rise for every run on such a machine, silently distorting the #258 columns and the arm comparison.",
+  "repro": "audit/repro/bench_edit_rule_matches_parent_dir.py"
+ },
+ {
+  "id": "bench_template_key_ignores_preregister",
+  "title": "A benchmark batch with POLICY_PREREGISTER_POST=1 gets a checkout that registers the post hook, not a stale template",
+  "severity": "low",
+  "where": "bench/policy/policybench.py:166 (template_for key = arm-base-env)",
+  "actual": "checkout() changes the checkout when POLICY_PREREGISTER_POST=1 (registers the PostToolUse hook, extra commit), but the template name does not include it. A template built by an earlier batch without the variable is reused by a later one with it (and the reverse).",
+  "expected": "The template key covers every input that changes the checkout, or the batch refuses a mismatching template.",
+  "why_it_matters": "A ticket that needs the post hook is run against a checkout without it and scored as the agent's failure.",
+  "repro": "audit/repro/bench_template_key_ignores_preregister.py"
+ },
+ {
+  "id": "bench_base_red_run_never_retried",
+  "title": "A run refused for a red base is set up again in a later batch once the base is green",
+  "severity": "low",
+  "where": "bench/policy/policybench.py:224 (_run_one skip test (exit != 'error')",
+  "actual": "A refused run writes `end` with exit 'base-red'; _run_one skips every run whose end exists unless exit is 'error', so the refused run is never retried even after the base is fixed or the setup failure was transient (setup exceptions are also recorded as base-red).",
+  "expected": "base-red (and a failed setup) is retried like exit=error; only finished runs are skipped.",
+  "why_it_matters": "The arm ends with fewer runs than its siblings and the release table compares unequal run counts unless someone deletes the end file by hand.",
+  "repro": "audit/repro/bench_base_red_run_never_retried.py"
+ }
+]

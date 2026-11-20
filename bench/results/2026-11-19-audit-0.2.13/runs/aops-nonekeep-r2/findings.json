@@ -1,0 +1,82 @@
+[
+ {
+  "id": "triage-failed-item-retried-every-run",
+  "title": "An item the model cannot answer is not judged and paid for again on every run, and does not starve the items behind it",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:~513 (cmd_triage), ~389 (feedback_pass)",
+  "actual": "#205 made a malformed answer fail only its item, but in apply mode the failure leaves no marker (no label, no record that is read back; dry_judged is for dry runs only). With ten items whose answer never parses plus one good older item, three apply runs make 30 model calls and the good item is never judged (todo[:TRIAGE_MAX_ITEMS] always takes the same ten). Feedback comments behave the same (not added to `seen`). Handle, by contrast, labels handler-failed.",
+  "expected": "A failed item is recorded (like handler-failed, or a retry counter/backoff) so later runs do not pay for it again first and the rest of the queue is reached.",
+  "why_it_matters": "The ticket's own complaint ('retried and paid for first on every later run') is still true after the fix; an outsider can post items crafted to produce non-JSON answers and block triage of everything older, at a model cost every 4 hours.",
+  "repro": "audit/repro/triage_failed_item_retried_every_run.py"
+ },
+ {
+  "id": "triage-draft-pr-retry-push-rejected",
+  "title": "A draft-pr issue whose first attempt pushed its branch but failed to open the PR can be retried",
+  "severity": "medium",
+  "where": "ops/triage/triage.py:~717 (handle_draft_pr push)",
+  "actual": "#207 changed the local `checkout -b` to `-B`, but the push is a plain `git push REPO_URL branch:refs/heads/branch`. If attempt 1 pushed and then `gh pr create` failed (502), attempt 2 builds a new commit on the same auto/N-slug branch and the remote rejects it ('! [rejected] ... (non-fast-forward)'); the issue is again handler-failed.",
+  "expected": "The retry succeeds (force-with-lease on the daemon's own auto/ branch, or a unique branch per attempt, or reuse of the existing branch/PR).",
+  "why_it_matters": "A draft-pr issue can still never be retried after a transient failure at the last step, which is the scenario of #207; the maintainers must delete the remote branch by hand.",
+  "repro": "audit/repro/triage_draft_pr_retry_after_push.py"
+ },
+ {
+  "id": "triage-read-tree-from-origin",
+  "title": "With TRIAGE_REPO set, triage, plan and feedback agents read TRIAGE_REPO's code, not git origin's",
+  "severity": "low",
+  "where": "ops/triage/triage.py:~292 (update_tree)",
+  "actual": "update_tree() still runs `git fetch origin main` and `checkout --detach origin/main` and `worktree add ... origin/main`. #208 moved only handle_review and handle_draft_pr to REPO_URL; TREE, the directory every triage, plan and feedback agent reads, is still git origin's code while gh comments on TRIAGE_REPO.",
+  "expected": "update_tree() fetches REPO_URL's main (as the draft path does) so every agent reads the repository the comments are posted to.",
+  "why_it_matters": "Duplicate/validity judgments and plans are written against the wrong repository's code: the inconsistency #208 set out to remove remains for three of the five paths.",
+  "repro": "audit/repro/triage_reads_origin_not_triage_repo.py"
+ },
+ {
+  "id": "triage-duplicate-of-boolean",
+  "title": "A verdict with duplicate_of true is rejected instead of posting 'a duplicate of #True'",
+  "severity": "low",
+  "where": "ops/triage/triage.py:~196 (validate), ~354 (validate_feedback)",
+  "actual": "isinstance(True, int) is True and True == 1, so duplicate_of: true is accepted whenever #1 is a known item; the posted comment reads 'This looks like a duplicate of #True'.",
+  "expected": "Only a real integer item number is accepted; a boolean is an error like any other value outside the vocabulary.",
+  "why_it_matters": "Validation is meant to make anything outside the vocabulary an error, not a guess; a malformed answer is posted publicly under the owner's name.",
+  "repro": "audit/repro/triage_duplicate_of_boolean.py"
+ },
+ {
+  "id": "bench-template-ignores-preregister-post",
+  "title": "A benchmark run that sets POLICY_PREREGISTER_POST gets a checkout built with it, not a cached template built without",
+  "severity": "medium",
+  "where": "bench/policy/policybench.py:~175 (template_for)",
+  "actual": "The template directory is named from arm, base commit and devkb commit only. checkout() also depends on POLICY_PREREGISTER_POST (registers the PostToolUse hook, prompt note). Building with the variable unset and then with it set returns the same template and runs checkout once.",
+  "expected": "Every input that changes the checkout (POLICY_PREREGISTER_POST, and any other env-dependent step) is part of the template key.",
+  "why_it_matters": "A ticket that needs a new hook is run in a checkout without it and the agent cannot register it (headless writes to .claude/settings.json are refused): the arm is scored wrongly and, per #225, the setup is not what the result claims.",
+  "repro": "audit/repro/bench_template_ignores_preregister_post.py"
+ },
+ {
+  "id": "bench-score-arm-filter-truncates-results",
+  "title": "Scoring one arm with POLICY_ARMS leaves the other arms' scored runs in results-ISSUE.jsonl",
+  "severity": "medium",
+  "where": "bench/policy/policybench.py:~340 (score)",
+  "actual": "With POLICY_ARMS=main, score() skips every other arm and then rewrites results-policy.jsonl and results-ISSUE.jsonl from the filtered rows only: after scoring `main`, results-7.jsonl holds only the main arm although none/main runs are both scored on disk.",
+  "expected": "Re-scoring a subset of arms updates those rows and keeps the others (or writes to a different file).",
+  "why_it_matters": "release_table.py reads results-ISSUE.jsonl; the no-devkb baseline silently vanishes, so the 'vs no devkb' column and the release totals are computed without it (and the loss is not reported).",
+  "repro": "audit/repro/bench_score_arm_filter_truncates_results.py"
+ },
+ {
+  "id": "bench-quoted-fixture-project-counted-as-navigation",
+  "title": "A devkb query against a quoted /tmp fixture is counted as a self-test, not navigation",
+  "severity": "low",
+  "where": "bench/policy/storybench.py:~139 (devkb_commands)",
+  "actual": "Quoted strings are blanked to '' before `--project` is read, so `devkb uses foo --project \"/tmp/fixture\"` (and the single-quoted form) is counted as navigation=1, self-test=0, while the unquoted path gives navigation=0, self-test=1.",
+  "expected": "The rule gives the same answer whether or not the path is quoted.",
+  "why_it_matters": "#258's navigation / self-test split feeds the release table's 'devkb nav' and 'devkb self-tests' columns; quoting changes the count of devkb use.",
+  "repro": "audit/repro/bench_quoted_fixture_project_counted_as_navigation.py"
+ },
+ {
+  "id": "bench-storybench-score-old-rules",
+  "title": "storybench runs are scored with the same check hash, flaky-suite rule and green-base rule as policybench runs",
+  "severity": "medium",
+  "where": "bench/policy/storybench.py:~228 (score), ~72 (checkout)",
+  "actual": "storybench.score() still runs `pytest -x` once: its rows have no accept_sha256, suite_failed, suite_flaky or base_green, and checkout() never runs the base suite. A row scored with a load-sensitive failure is red with no ids and no re-run, and release_table.check_hashes() sees every hash as None, so runs scored by different check versions are never refused.",
+  "expected": "Every arm of every benchmark harness records the hidden-check hash (#223), applies the flaky-suite rule (#260) and starts from a green checkout (#221).",
+  "why_it_matters": "Results from this harness feed the same release table; its runs can be scored red by load alone or by a changed check and the table neither marks nor refuses them.",
+  "repro": "audit/repro/bench_storybench_score_lacks_check_hash_and_flaky_rule.py"
+ }
+]

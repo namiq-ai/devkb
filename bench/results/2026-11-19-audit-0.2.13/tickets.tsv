@@ -1,0 +1,54 @@
+118	A call to a repository C/C++ macro links the caller to the functions the macro calls
+120	C++ method calls resolve through declared receiver types, TEST_F fixtures and arity
+128	`uses` with a regex character in the name answers with git's error instead of the matches
+137	A graph miss is logged when grep searches a single file (its output has no file name)
+138	A graph miss names the enclosing C/C++ function of each match, not an empty string
+171	A code search is answered by the read tool that answers its question: a name inside one file gets that file's uses, a definitions listing gets the outline
+175	A search for a field or dictionary key is answered from the keys and fields the graph records (#148), not only from symbols
+180	A definition search with -A/-B/-C before -v, -c or -l is denied and answered with the body, though grep was asked for inverted lines, a count or a file list
+181	A search limited by --include / Grep glob / Grep type to another language is denied with the answer for code it excludes
+182	A graph built before a new caller or a second definition was added still replaces grep, saying the stale answer is the search's result
+183	A definition search in a file edited since the build is denied with the caller pack, whose 'Defined at' line is wrong
+184	A case-sensitive grep for a name that differs in case from the symbol is denied with the other symbol's callers
+185	grep -e A -e B is denied with an answer for A only
+186	A basic-regex or -F grep with a literal '|' is split into names and denied with their packs, though grep finds nothing
+187	Definition searches devkb cannot answer in one file or with -A/-B/-C are no longer recorded as graph misses
+188	devkb guardrail-stats leaves out read-answer and span-hint decisions
+189	devkb guardrail-stats --project counts decisions from every repository
+190	devkb stats counts every `uses` text-match answer as complete
+191	The read-answer's location line is repository-relative, not the path grep prints from a subdirectory
+192	A call reached through a package re-export that the resolver leaves unattributed is no longer counted, so the pack says Complete with no caller and no test
+193	A dataclass field named like a function makes calls to that function unresolved (same file and cross-file), losing CALLS edges and the tests they lead to
+194	Build time grows quadratically with typed-receiver calls: 400 small files take 81 s instead of 6 s
+195	A module with many constants builds quadratically: 20,000 constants take 11.3 s instead of 0.85 s
+196	`pack change` on a module constant says Complete with 0 functions and 0 tests while a test-covered function reads it
+197	`pack refactor` (the command AGENTS.md names for a change) ignores a constant's uses and says Complete with no users
+198	A read of a module constant from a function that declares it `global` is not attributed (lazy-singleton pattern), and `pack change` says Complete with 0 uses
+199	A class-body name that shadows a module constant is attributed to the module constant
+200	Constants assigned by tuple unpacking (`HOST, PORT = ...`) are not extracted
+201	`symbol KEY` hides a string key's reads and writes whenever any symbol merely starts with the key
+202	String-key reads miss `"k" in d` and the read in `d["k"] += 1`, and count `os.environ.get("k")` as a record-key read
+203	#115 is only half done: `symbol` and `outline` still give two C++ overloads one merged range and print both bodies
+204	`pack refactor` still answers "cannot resolve ... Search the code." with nothing, while `pack change` gives the text matches (#131 item 3)
+205	One malformed model answer aborts the whole triage/handle/feedback run and is retried and paid for first on every later run
+206	A transient GitHub error after a feedback ticket is filed makes the next run file the same ticket again; in triage it leaves an item labelled triaged with no comment and aborts the run
+207	A draft-pr issue can never be retried: the auto/N-slug branch survives the worktree removal and every later attempt fails at git checkout -b
+208	With TRIAGE_REPO set to another repository, reviews and draft pushes use git origin's code while gh comments on TRIAGE_REPO
+209	storybench/policybench 'guardrail_fired' counts every guardrail decision, including pass-throughs where the hook added nothing
+210	listing_then_read misses Read-tool reads after a relative ls, because it compares the Read tool's absolute path with the listing's relative one
+211	The guardrail answers the question its pattern names, not the question the search asks: grep intent needs a mapping to graph queries and answer shapes
+212	A devkb query on a repository with no graph prints a Python traceback instead of one line saying to build first
+214	The guardrail records what each search asks (its intent) and the graph question it used, and the stats count every decision
+215	A keyword or a word in another case is never answered as a symbol, and option values are never read as the search pattern
+216	Each search intent gets the graph question that answers it: a body, a definition, a file's outline or grep-like call sites, and nothing for counts, file lists and literals
+217	An answer added beside a search carries only its content, as grep-like lines, and is never larger than grep's own output
+218	Agents are shown, at the moment of intent, the devkb command that answers it, and two direct-path candidates are measured beside the hook
+221	Every benchmark arm starts from a checkout whose own test suite is green, so a red suite is the agent's, not the setup's
+222	The release table shows each arm's spread and marks differences within run-to-run noise, with 3 runs per arm by default
+223	Every scored benchmark run records which version of the hidden check scored it, and runs scored by different checks are never compared
+224	The release performance check is one reproducible command: old/new/new-again passes, machine load recorded, noise marked
+225	Each benchmark arm uses the devkb it claims (release or main), built from an exact commit and recorded in the result
+228	Two builds of the same tree give different flow STEP orders, so graphs cannot be compared
+258	The benchmark records the turns and output tokens of a run's last message only, and counts devkb self-tests as devkb use
+260	A suite that fails only under load scores the run as red, and the failed tests are not recorded
+267	An answer names the devkb command that gives it by default (D1 on)
