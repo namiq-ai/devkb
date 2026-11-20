@@ -94,3 +94,42 @@ def test_each_arm_is_compared_with_the_no_devkb_arm_given_the_ticket_the_same_wa
     arms = ["none", "main", "nonehid", "mainhid"]
     assert rt.base_for("mainhid", arms, sums) == "NH" and rt.base_for("main", arms, sums) == "N"
     assert rt.base_for("mainhid", ["none", "mainhid"], sums) is None     # never the location-given control
+
+
+def test_a_run_gets_the_prompt_of_its_arm(monkeypatch, tmp_path):
+    """The wiring `_run_one` uses: a hidden arm's run gets the withheld ticket, its base arm's run the filed one."""
+    monkeypatch.setattr(pb, "ticket_for", lambda issue: {"title": "T", "body": BODY})
+    assert "Packer.pack_file" not in pb.run_prompt("999", "mainhid", tmp_path)
+    assert "Packer.pack_file" in pb.run_prompt("999", "main", tmp_path)
+    assert "run_prompt(issue, tag.split" in Path(pb.__file__).read_text()      # and _run_one builds its prompt through it
+
+
+def test_score_with_the_option_scores_the_hidden_runs(monkeypatch, tmp_path):
+    import hashlib
+    import json
+    (tmp_path / "accept").mkdir()
+    (tmp_path / "accept" / "999.py").write_text("print('{}')\n")
+    sha = hashlib.sha256((tmp_path / "accept" / "999.py").read_bytes()).hexdigest()
+    for arm in ("none", "nonehid"):
+        d = tmp_path / "runs" / f"p999-{arm}-r1"
+        d.mkdir(parents=True)
+        (d / "end").write_text(json.dumps({"exit": 0}))
+        (d / "score.json").write_text(json.dumps({"run": d.name, "issue": "999", "arm": arm, "accept_sha256": sha,
+                                                  "acceptance": {"pass": True}, "suite_pass": True, "cost": 0.1,
+                                                  "devkb_queries": 0, "guardrail_fired": 0, "dogfood_log": []}))
+    monkeypatch.setattr(pb, "B", tmp_path)
+    monkeypatch.setenv("POLICY_HIDE_START", "1")
+    monkeypatch.setenv("POLICY_ARMS", "none")
+    pb.score(["999"])
+    rows = [json.loads(l) for l in (tmp_path / "results-999.jsonl").read_text().splitlines()]
+    assert [r["arm"] for r in rows] == ["nonehid"]
+
+
+def test_symptoms_and_corpus_line_numbers_stay():
+    body = ("**Reproduce:** `CLAUDE_PLUGIN_ROOT=/x/plugin devkb` raises `KeyError`; fmt's format.h L1364 shows it.\n\n"
+            "**Where to start:** catch (`KeyError`, `TypeError`) in `handle_plan` (`ops/triage/triage.py`); "
+            "`CLAUDE_PLUGIN_ROOT` handling.\n\n**Done when:** L1364 is listed.\n")
+    names = pb.location_names(body)
+    assert "handle_plan" in names and "KeyError" not in names and "CLAUDE_PLUGIN_ROOT" not in names
+    _t, b = pb.without_location("t", body)
+    assert "KeyError" in b and "CLAUDE_PLUGIN_ROOT=" in b and "L1364 is listed" in b and "format.h L1364" in b

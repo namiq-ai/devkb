@@ -114,9 +114,13 @@ def _sections(body: str):
     return out
 
 
-def _code_like(n: str) -> bool:
+def _code_like(n: str, body: str = "") -> bool:
     if _VERSION.match(n) or any(len(part) < 2 for part in re.split(r"\.|::", n)):
         return False                              # v0.2.11, e.g: not code names (#385 review)
+    if re.search(r"(?:Error|Exception|Warning)$", n):
+        return False                              # an exception is the symptom, not the place (#385 review, round 2)
+    if n.isupper() and body and re.search(rf"(?:\$|\b){re.escape(n)}=|\${re.escape(n)}\b", body):
+        return False                              # an environment variable set or read in the ticket: the reproduction
     return "_" in n or "." in n or "::" in n or bool(re.search(r"[a-z][A-Z]", n))
 
 
@@ -132,7 +136,8 @@ def location_names(body: str) -> list[str]:
         stem = base.rsplit(".", 1)[0]
         # the module's own name, where the ticket uses it as code (`storybench.ALLOW`, `import read_tools`), never a word
         # like "service" in prose (#385 review)
-        if "_" in stem or re.search(rf"\b{re.escape(stem)}\.(?:[a-z_]\w*\(|[A-Z][A-Z_]+\b)|\b(?:import|from)\s+{re.escape(stem)}\b", body):
+        if "_" in stem or re.search(rf"\b{re.escape(stem)}\.(?:[a-z_]\w*\(|[A-Z][A-Z_]+\b)|\b(?:import|from)\s+{re.escape(stem)}\b"
+                                    rf"|`{re.escape(stem)}`", body):           # or named alone as code: `policybench`
             names.add(stem)
     for h, a, b in _sections(body):
         t = body[a:b]
@@ -144,11 +149,11 @@ def location_names(body: str) -> list[str]:
                 add_file(f)
             for n in _NAME.findall(_FILE.sub(" ", t)):
                 n = n.rstrip(".")
-                if len(n) > 2 and _code_like(n):
+                if len(n) > 2 and _code_like(n, body):
                     names.add(n)
                     parts = re.split(r"\.|::", n)
-                    names.update(p for p in parts if len(p) > 2 and _code_like(p))      # `_match` of `x._match`
-                    if len(parts) > 1 and (_code_like(parts[0]) or re.search(r"[A-Z]", parts[0][:1])):
+                    names.update(p for p in parts if len(p) > 2 and _code_like(p, body))      # `_match` of `x._match`
+                    if len(parts) > 1 and (_code_like(parts[0], body) or (parts[0][:1].isupper() and len(parts[0]) >= 5)):
                         names.add(parts[0])                                           # the module or class: `build_symbols`, `Packer`
     return sorted(names, key=len, reverse=True)
 
@@ -171,10 +176,11 @@ def without_location(title: str, body: str) -> tuple[str, str]:
 
     def mask(text: str) -> str:
         for n in names:
-            text = re.sub(rf"(?:(?<=[^\w])|^)(?:[\w.-]*(?:\.|::|/))*{re.escape(n)}(?![\w])", WITHHELD, text, flags=re.M)
-        if names:                                # a withheld name's line, and line numbers anywhere, name the place too
-            text = re.sub(rf"{re.escape(WITHHELD)}(?::\d+(?:-\d+)?)+", WITHHELD, text)
-            text = re.sub(r"(?<![\w])~?L\d+(?:[-\u2013]L?\d+)?\b", WITHHELD, text)
+            text = re.sub(rf"(?:(?<=[^\w])|^)(?:[\w.-]*(?:\.|::|/))*{re.escape(n)}(?![\w-])", WITHHELD, text, flags=re.M)
+        # a withheld name's line number goes with it (`x.py:1471`, `name (L636)`); other line numbers, such as a corpus
+        # file's in a Done-when, are the ticket's evidence and stay (#385 review, round 2)
+        text = re.sub(rf"{re.escape(WITHHELD)}(?::\d+(?:-\d+)?)+", WITHHELD, text)
+        text = re.sub(rf"({re.escape(WITHHELD)}`?)(\s*[(,]\s*)~?L\d+(?:[-\u2013]L?\d+)?\)?", r"\1", text)
         return text
     return mask(title), mask(body)
 
@@ -196,6 +202,21 @@ def arms_for(arms: list[str]) -> list[str]:
 def split_arm(arm: str) -> tuple[str, bool]:
     """(the arm a run is set up as, whether its ticket's location is withheld) (#337)."""
     return HIDE_LOCATION.get(arm, arm), arm in HIDE_LOCATION
+
+
+def ticket_for(issue: str) -> dict:
+    """The ticket as filed (title, body), with the tickets done in the same job (bench/policy/groups.json)."""
+    t = json.loads(sb.sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
+    for extra in GROUPS.get(issue, []):
+        t2 = json.loads(sb.sh(["gh", "issue", "view", extra, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
+        t = {"title": t["title"] + f" (with #{extra})", "body": t["body"] + f"\n\n# Same work: #{extra}, " + t2["title"] + "\n\n" + t2["body"]}
+    return t
+
+
+def run_prompt(issue: str, run_arm: str, w: Path) -> str:
+    """The prompt a run of `run_arm` is given: the ticket as filed, or with its location withheld for a hidden arm (#337)."""
+    t = ticket_for(issue)
+    return prompt_for(issue, t["title"], t["body"], w, split_arm(run_arm)[1])
 
 
 def prompt_for(issue: str, title: str, body: str, w: Path, hide: bool = False) -> str:
@@ -400,7 +421,7 @@ def run_one(issue: str, arm: str, rep: int) -> str:
 
 def _run_one(issue: str, arm: str, rep: int) -> str:
     tag = f"p{issue}-{arm}-r{rep}"
-    arm, hide = split_arm(arm)                        # #337: set up as the base arm; only the ticket's text differs
+    arm = split_arm(arm)[0]                           # #337: set up as the base arm; only the ticket's text differs (run_prompt)
     out = B / "runs" / tag
     if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") not in ("error", "base-red"):
         return f"skip {tag}"                          # an error, or a refused red base, is set up again (#305)
@@ -417,10 +438,6 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     except Exception as e:  # noqa: BLE001  a setup that fails is recorded, never a run that silently disappears
         (out / "end").write_text(json.dumps({"exit": "error", "seconds": 0, "error": f"setup: {type(e).__name__}: {e}"[-400:]}))
         return f"error {tag}: setup failed: {e}"       # not a red base: run again in the next batch (#305)
-    t = json.loads(sb.sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
-    for extra in GROUPS.get(issue, []):            # tickets done as one job (same code): bench/policy/groups.json
-        t2 = json.loads(sb.sh(["gh", "issue", "view", extra, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
-        t = {"title": t["title"] + f" (with #{extra})", "body": t["body"] + f"\n\n# Same work: #{extra}, " + t2["title"] + "\n\n" + t2["body"]}
     if arm.startswith("after"):                      # "cli": no MCP server, devkb only through the shell
         mcp = str(w / ".mcp.json")
         cfg = json.loads(Path(mcp).read_text())
@@ -429,7 +446,7 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     else:
         mcp = str(B / "no-mcp.json")
         Path(mcp).write_text(json.dumps({"mcpServers": {}}))
-    prompt = prompt_for(issue, t["title"], t["body"], w, hide)
+    prompt = run_prompt(issue, tag.split("-")[1], w)
     if os.environ.get("POLICY_PREREGISTER_POST") == "1":
         prompt += SETTINGS_NOTE
     deny = sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if arm in ("none", "nonekeep") else [])   # both forms (#335)
