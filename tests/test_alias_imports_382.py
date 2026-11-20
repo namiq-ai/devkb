@@ -62,10 +62,17 @@ FILES = {
                                        "    spec = importlib.util.spec_from_file_location(name, BENCH / f\"{name}.py\")\n"
                                        "    m = importlib.util.module_from_spec(spec)\n    return m\n\n\n"
                                        "def test_load():\n    assert _load(\"loaded\")\n",
-    # paths that are data or a fixture in tmp_path, not a file of the repository
+    # a path from the test file's own directory: pkg/scripts/run.py, not scripts/run.py; tests/tools/t.py, not tools/t.py
+    "pkg/scripts/run.py": "def go():\n    return 1\n",
+    "scripts/run.py": "def go():\n    return 2\n",
+    "tools/t.py": "def t():\n    return 1\n",
+    "pkg/tests/test_depth.py": "from pathlib import Path\nROOT = Path(__file__).resolve().parents[1]\n"
+                               "SCRIPT = ROOT / \"scripts\" / \"run.py\"\nNEAR = Path(__file__).parent / \"tools\" / \"t.py\"\n\n\n"
+                               "def test_depth():\n    assert SCRIPT and NEAR\n",
+    # paths that are data, from the working directory, or a fixture in tmp_path: not a file of the repository
     "tests/test_data.py": "from pathlib import Path\n\n\ndef test_fixture(tmp_path):\n"
                           "    (tmp_path / \"lib\" / \"plain.py\").write_text(\"x\")\n"
-                          "    assert (\"tools/runme.py\", True) and \"lib/plain.py\"\n",
+                          "    assert (\"tools/runme.py\", True) and \"lib/plain.py\" and Path(\"tools\") / \"runme.py\"\n",
 }
 
 
@@ -96,7 +103,8 @@ def test_aliases_are_followed_and_only_to_the_module_meant(tmp_path):
 def test_one_name_for_two_modules_gives_no_false_edge(tmp_path):
     p = _packer(tmp_path)
     alpha, beta = _tests(p.file("alpha/alpha.py")), _tests(p.file("beta/beta.py"))
-    assert "test_two.py:20" not in alpha and "test_two.py:15" not in beta  # neither function's call goes to the other
+    assert "- `tests/test_two.py`" not in alpha and "- `tests/test_two.py`" not in beta   # neither is followed ...
+    assert "tests/test_two.py:14" in alpha and "tests/test_two.py:19" in beta              # ... and both packs say so
 
 
 def test_an_unfollowed_or_unresolved_alias_keeps_the_literal_rule(tmp_path):
@@ -123,27 +131,28 @@ def test_a_load_by_a_computed_name_says_the_list_may_be_incomplete_where_it_may_
     assert "may be incomplete" in p.change("spin").split("## Test files to run", 1)[1]
 
 
-def test_a_bare_name_counts_by_path_only_when_one_file_has_it(tmp_path):
+def test_a_path_is_read_from_the_test_file_s_own_directory(tmp_path):
     p = _packer(tmp_path)
-    (tmp_path / "tests" / "test_bare.py").write_text(HEAD + "G = HERE / \"g.py\"\n\n\ndef test_g():\n    assert G\n")
-    p._loads = None
-    assert "test_bare" not in p.file("tools/g.py") and "test_bare" not in p.file("other/g.py")
+    assert "`pkg/tests/test_depth.py` — names it by path" in _tests(p.file("pkg/scripts/run.py"))
+    assert "test_depth" not in p.file("scripts/run.py") and "test_depth" not in p.file("tools/t.py")
+    assert "test_data" not in p.file("tools/runme.py").split("## Coverage", 1)[0]   # a path from the working directory
 
 
 def test_the_parsers_follow_only_literals():
+    rel = "tests/test_x.py"
     t = ast.parse("import importlib, importlib.util as u, sys\nfrom pathlib import Path\nfrom importlib import import_module\n"
                   "ROOT = Path(__file__).resolve().parents[1]\nsys.path.insert(0, str(ROOT / 'bench' / 'policy'))\n"
                   "a = importlib.import_module('pkg.mod')\nb = import_module('other')\nc = importlib.import_module(name)\n"
                   "d = importlib.import_module('.rel', 'pkg')\n"
-                  "s = u.spec_from_file_location('x', ROOT / '..' / 'bench' / 'x.py')\nm = u.module_from_spec(s)\n"
+                  "s = u.spec_from_file_location('x', ROOT / 'bench' / 'x.py')\nm = u.module_from_spec(s)\n"
                   "s2 = u.spec_from_file_location(name='y', location=ROOT / 'scripts' / 'y.py')\nk = u.module_from_spec(s2)\n"
-                  "s3 = u.spec_from_file_location('z', go(tmp, 'climain') / 'z.py')\nn3 = u.module_from_spec(s3)\n")
-    got = _dynamic_imports(t)
-    assert ("a", "bench.policy.pkg.mod") in got and ("a", "pkg.mod") in got   # where the insert put it, first
-    assert got.index(("a", "bench.policy.pkg.mod")) < got.index(("a", "pkg.mod"))
+                  "s3 = u.spec_from_file_location('z', go(tmp, 'climain') / 'z.py')\nn3 = u.module_from_spec(s3)\n"
+                  "s4 = u.spec_from_file_location('w', ROOT / '..' / 'w.py')\nn4 = u.module_from_spec(s4)\n")
+    got = _dynamic_imports(t, rel)
+    assert got.index(("a", "bench.policy.pkg.mod")) < got.index(("a", "pkg.mod"))   # where the insert put it, first
     assert ("m", "bench.x") in got and ("k", "scripts.y") in got
-    assert not any(local in ("c", "d", "n3") for local, _ in got)       # computed, relative, a call's argument
-    assert [line for line, _ in unfollowed_loads(t)] == [8]                # s3 names no directory
+    assert not any(local in ("c", "d", "n3", "n4") for local, _ in got)  # computed, relative, an argument, outside the repo
+    assert unfollowed_loads(t, rel) == [(8, ["bench/policy"])]          # s3 names no directory
     paths = ast.parse("from pathlib import Path\nR = Path(__file__).parents[1]\nP = R / 'scripts' / 'g.py'\n"
-                      "Q = 'a/b.py'\ndef f(tmp_path):\n    return tmp_path / 'x' / 'c.py'\n")
-    assert literal_paths(paths) == [(3, "scripts/g.py")]
+                      "Q = 'a/b.py'\nC = Path('a') / 'b.py'\ndef f(tmp_path):\n    return tmp_path / 'x' / 'c.py'\n")
+    assert literal_paths(paths, rel) == [(3, "scripts/g.py")]

@@ -226,52 +226,57 @@ class Packer:
             lines.append(f"- `{rel}`{more} — `{self.call_site(c, self._name(s))}`")
         return lines or ["- none in the graph"]
 
-    def _test_loads(self) -> dict[str, tuple[list[tuple[int, str]], list[tuple[int, list[str]]]]]:
-        """{test file: (paths it builds from its own location, loads it cannot follow)}, read once per Packer: only
-        the test files whose text has a `.py` path or a run-time load are parsed (#382)."""
-        if getattr(self, "_loads", None) is None:
+    def _test_tree(self, rel: str, text: str):
+        """A test file's syntax tree, parsed once per Packer; None when it does not parse."""
+        cache = self.__dict__.setdefault("_trees", {})
+        if rel not in cache:
             import ast  # noqa: PLC0415
-            from devkb.build_symbols import literal_paths, unfollowed_loads  # noqa: PLC0415
-            self._loads = {}
-            for rel in sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and self.api._is_test(r)):
-                text = "\n".join(self._file(rel))
-                if ".py" not in text and "import_module(" not in text:
-                    continue
-                try:
-                    tree = ast.parse(text)
-                except (SyntaxError, ValueError, RecursionError):
-                    continue
-                self._loads[rel] = (literal_paths(tree), unfollowed_loads(tree))
-        return self._loads
+            try:
+                cache[rel] = ast.parse(text)
+            except (SyntaxError, ValueError, RecursionError):
+                cache[rel] = None
+        return cache[rel]
+
+    def _test_texts(self, needles: tuple[str, ...]) -> list[tuple[str, str]]:
+        """(test file, text) for each Python test file whose text holds one of `needles`: only those are parsed."""
+        return [(rel, text) for rel in sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and self.api._is_test(r))
+                for text in ["\n".join(self._file(rel))] if any(n in text for n in needles)]
 
     def _unfollowed_note(self, path: str, listed: dict) -> list[str]:
         """A line saying the test list may be incomplete when a test file outside it loads modules from `path`'s
-        directory by a computed name or path, which the graph cannot follow (#382); nothing otherwise."""
+        directory in a way the graph cannot follow (#382): by a computed name or path, or two modules under one name.
+        Nothing otherwise."""
         if not path.endswith(".py"):
             return []
+        from devkb.build_symbols import unfollowed_loads  # noqa: PLC0415
         here = path.rsplit("/", 1)[0] if "/" in path else ""
-        sites = [f"{rel}:{line}" for rel, (_paths, loads) in sorted(self._test_loads().items()) if rel not in listed
-                 for line, dirs in loads if any(here == d or here.endswith("/" + d) for d in dirs)]
+        sites = []
+        for rel, text in self._test_texts(("import_module(", "spec_from_file_location(")):
+            tree = self._test_tree(rel, text)
+            if rel in listed or tree is None:
+                continue
+            sites += [f"{rel}:{line}" for line, dirs in unfollowed_loads(tree, rel) if here in dirs]
         if not sites:
             return []
+        where = f"`{here}`" if here else "the repository root"
         shown = ", ".join(f"`{s}`" for s in sites[:3]) + (f" and {len(sites) - 3} more" if len(sites) > 3 else "")
-        return [f"- may be incomplete: {len(sites)} test site(s) load a module from `{here}` by a name or path "
-                f"computed at run time, which the graph cannot follow ({shown}); if they load this file, they are not listed"]
+        return [f"- may be incomplete: {len(sites)} test site(s) load a module from {where} in a way the graph cannot "
+                f"follow (a name or path computed at run time, or one name for two modules: {shown}); if they load "
+                f"this file, they are not listed"]
 
     def _named_by_path(self, path: str, listed: dict) -> dict[str, int]:
         """{test file: line} for test files outside `listed` that build `path` from their own location out of literal
         pieces (`ROOT / "scripts" / "g.py"`, `ROOT = Path(__file__).parents[1]`): they run or load the file by path,
-        with no call the graph can attribute (#382). A path of one piece (`HERE / "g.py"`) counts only when one file
-        has that name."""
+        with no call the graph can attribute (#382)."""
         if not path.endswith(".py"):
             return {}
-        base = path.rsplit("/", 1)[-1]
-        unique = sum(1 for r in self.idx.sym_by_file if r.rsplit("/", 1)[-1] == base) == 1
+        from devkb.build_symbols import literal_paths  # noqa: PLC0415
         out = {}
-        for rel, (paths, _loads) in sorted(self._test_loads().items()):
-            if rel in listed or rel == path:
+        for rel, text in self._test_texts((path.rsplit("/", 1)[-1],)):
+            tree = self._test_tree(rel, text)
+            if rel in listed or rel == path or tree is None:
                 continue
-            hits = [line for line, p in paths if path == p or path.endswith("/" + p) and ("/" in p or unique)]
+            hits = [line for line, p in literal_paths(tree, rel) if p == path]
             if hits:
                 out[rel] = hits[0]
         return out

@@ -520,7 +520,7 @@ def _module_paths(dotted: str) -> list[str]:
     return [f"{slash}.py", f"{slash}/__init__.py"]
 
 
-def _import_descriptors(tree: ast.AST) -> list[tuple[int, str, str | None, str]]:
+def _import_descriptors(tree: ast.AST, rel: str = "") -> list[tuple[int, str, str | None, str]]:
     """[(level, module, name_or_None, local_name), ...] -- every import with
     what `_imports` throws away (ODSF-305): the module an alias stands for,
     the imported name, and the relative level. `import a.b as m` is
@@ -538,7 +538,7 @@ def _import_descriptors(tree: ast.AST) -> list[tuple[int, str, str | None, str]]
                 else:
                     top = alias.name.split(".")[0]
                     out.append((0, top, None, top))
-    out += [(DYNAMIC, module, None, local) for local, module in _dynamic_imports(tree)]
+    out += [(DYNAMIC, module, None, local) for local, module in _dynamic_imports(tree, rel)]
     return out
 
 
@@ -563,55 +563,91 @@ def _module_names(tree: ast.AST) -> dict[str, ast.expr]:
             if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
 
 
-def _pieces(node: ast.AST, names: dict[str, ast.expr], depth: int = 0) -> tuple[list[str], bool, bool]:
-    """(the string pieces of a path expression in source order, computed, anchored): `ROOT / "a" / "b.py"` after
-    `ROOT = Path(__file__).parents[1]` is (["a", "b.py"], False, True). Computed: an f-string, or a name or call
-    whose value is not known here. Anchored: it starts from `__file__`, so it names a file of this repository."""
+PATH_CALLS = ("Path", "PurePath", "str", "join", "abspath", "realpath", "normpath", "fspath")
+SAME_PATH = ("resolve", "absolute", "expanduser")
+COMPUTED = ([], True, None)
+
+
+def _pieces(node: ast.AST, names: dict[str, ast.expr], depth: int = 0) -> tuple[list[str], bool, int | None]:
+    """(the string pieces of a path expression in source order, computed, ups): `ROOT / "a" / "b.py"` after
+    `ROOT = Path(__file__).resolve().parents[1]` is (["a", "b.py"], False, 2). Computed: an f-string, a parameter, or
+    a call or name whose value is not known here. ups: how many steps up from this file the path starts (`__file__`
+    is 0, `.parent` 1, `.parents[n]` n + 1), or None when it does not start from the file's own location."""
     if isinstance(node, ast.Constant):
-        return ([node.value] if isinstance(node.value, str) else []), False, False
-    if isinstance(node, ast.JoinedStr):
-        return [], True, False
+        return ([node.value], False, None) if isinstance(node.value, str) else COMPUTED
     if isinstance(node, ast.Name):
         if node.id == "__file__":
-            return [], False, True
+            return [], False, 0
         if node.id in names and depth < 4:
             return _pieces(names[node.id], names, depth + 1)
-        return [], True, False
+        return COMPUTED
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
-        lp, lc, la = _pieces(node.left, names, depth)
-        rp, rc, _ = _pieces(node.right, names, depth)
-        return lp + rp, lc or rc, la
-    if isinstance(node, ast.Call):            # Path(__file__).resolve(), str(p), os.path.join(a, "b"), dirname(...)
+        lp, lc, ups = _pieces(node.left, names, depth)
+        rp, rc, rups = _pieces(node.right, names, depth)
+        return lp + rp, lc or rc or rups is not None, ups
+    if isinstance(node, ast.Attribute):
+        if node.attr == "parent":
+            p, c, ups = _pieces(node.value, names, depth)
+            return (p, c, ups + 1) if ups is not None and not p else COMPUTED
+        return COMPUTED
+    if isinstance(node, ast.Subscript):              # .parents[n]
+        if isinstance(node.value, ast.Attribute) and node.value.attr == "parents" \
+                and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int):
+            p, c, ups = _pieces(node.value.value, names, depth)
+            return (p, c, ups + node.slice.value + 1) if ups is not None and not p else COMPUTED
+        return COMPUTED
+    if isinstance(node, ast.Call):
         f = _called_function(node)
-        if isinstance(node.func, ast.Attribute) and not node.args and not node.keywords:
-            return _pieces(node.func.value, names, depth)   # a method that keeps the path: .resolve(), .absolute()
+        if isinstance(node.func, ast.Attribute) and f in SAME_PATH and not node.args:
+            return _pieces(node.func.value, names, depth)
+        if f == "dirname" and len(node.args) == 1:
+            p, c, ups = _pieces(node.args[0], names, depth)
+            return (p, c, ups + 1) if ups is not None and not p else COMPUTED
         if f in PATH_CALLS and node.args and not node.keywords:
-            parts, comp, anch = [], False, False
-            for arg in node.args:
-                p, c, a = _pieces(arg, names, depth)
-                parts, comp, anch = parts + p, comp or c, anch or a
-            return parts, comp, anch
-        return [], True, False                # any other call: its value is not known here
-    if isinstance(node, (ast.Attribute, ast.Subscript)):  # .parent, .parents[1]
-        return _pieces(node.value, names, depth)
-    return [], True, False
+            parts, comp, ups = [], False, None
+            for i, arg in enumerate(node.args):
+                p, c, u = _pieces(arg, names, depth)
+                parts, comp = parts + p, comp or c or (u is not None and i > 0)
+                ups = u if i == 0 else ups
+            return parts, comp, ups
+    return COMPUTED
 
 
-PATH_CALLS = ("Path", "PurePath", "str", "join", "abspath", "realpath", "normpath", "dirname", "fspath")
+def _repo_path(rel: str, parts: list[str], ups: int | None) -> str | None:
+    """The repository path a path expression names: from the file's own location when it is anchored (`ups`), from
+    the repository root otherwise (the directory tests run in). None when it leaves the repository."""
+    if ups is None:
+        here: list[str] = []
+    else:
+        here = rel.split("/")[: -max(ups, 1)] if rel else []
+        if rel and max(ups, 1) > len(rel.split("/")):
+            return None
+    for p in parts:
+        for s in p.split("/"):
+            if s in ("", "."):
+                continue
+            if s == "..":
+                if not here:
+                    return None
+                here.pop()
+            else:
+                here.append(s)
+    return "/".join(here)
 
 
-def _steps(parts: list[str]) -> list[str]:
-    return [s for p in parts for s in p.split("/") if s not in ("", ".", "..")]
-
-
-def _literal_module(path_expr: ast.expr, names: dict[str, ast.expr] | None = None) -> str | None:
-    """The module a `spec_from_file_location` path names: `ROOT / "scripts" / "g.py"` is `scripts.g`. None when any
-    piece is computed (an f-string, an argument, an environment variable) or the last one is not a literal `.py`."""
-    parts, computed, _ = _pieces(path_expr, names or {})
-    steps = _steps(parts)
-    if computed or not steps or not steps[-1].endswith(".py"):
+def _literal_path(expr: ast.expr, names: dict[str, ast.expr], rel: str) -> str | None:
+    """The repository `.py` file a literal path names (`ROOT / "scripts" / "g.py"`), or None when any piece is
+    computed or the last is not a literal `.py` file."""
+    parts, computed, ups = _pieces(expr, names)
+    if computed or not parts or not parts[-1].endswith(".py"):
         return None
-    return ".".join(steps)[: -len(".py")]
+    return _repo_path(rel, parts, ups) or None
+
+
+def _literal_module(path_expr: ast.expr, names: dict[str, ast.expr] | None = None, rel: str = "") -> str | None:
+    """The module a `spec_from_file_location` path names: `scripts.g` for `ROOT / "scripts" / "g.py"`."""
+    path = _literal_path(path_expr, names or {}, rel)
+    return path[: -len(".py")].replace("/", ".") if path else None
 
 
 def _spec_location(call: ast.Call) -> ast.expr | None:
@@ -620,31 +656,26 @@ def _spec_location(call: ast.Call) -> ast.expr | None:
     return next((k.value for k in call.keywords if k.arg == "location"), None)
 
 
-def _path_inserts(tree: ast.AST, names: dict[str, ast.expr]) -> list[tuple[str, bool]]:
-    """[(directory, known)] for each `sys.path.insert(i, DIR)` / `sys.path.append(DIR)`: the literal path of DIR
-    from the file's own location (`""` for the repository root), and whether all of it is literal."""
+def _path_inserts(tree: ast.AST, names: dict[str, ast.expr], rel: str) -> list[str]:
+    """The repository directory of each `sys.path.insert(i, DIR)` / `sys.path.append(DIR)` whose DIR is literal
+    (`""` is the repository root)."""
     out = []
     for n in ast.walk(tree):
         if isinstance(n, ast.Call) and _called_function(n) in ("insert", "append") and isinstance(n.func, ast.Attribute) \
                 and isinstance(n.func.value, ast.Attribute) and n.func.value.attr == "path" and n.args:
-            parts, computed, anchored = _pieces(n.args[-1], names)
-            out.append(("/".join(_steps(parts)), anchored and not computed))
+            parts, computed, ups = _pieces(n.args[-1], names)
+            d = None if computed else _repo_path(rel, parts, ups)
+            if d is not None:
+                out.append(d)
     return out
 
 
-def _dynamic_imports(tree: ast.AST) -> list[tuple[str, str]]:
-    """[(local, module)] for a module loaded at run time and bound to a name (#382), the way tests and scripts load
-    a file that is not on the import path:
-    `sb = importlib.import_module("storybench")`, and
-    `spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / "g.py")` then
-    `g = importlib.util.module_from_spec(spec)`.
-    Only a literal name or path is followed; a computed one is reported by `unfollowed_loads`. The binding is per
-    file, as an import's is, so a name bound to two different modules in one file is not followed at all: one of the
-    two would be wrong."""
+def _bindings(tree: ast.AST, rel: str) -> tuple[dict[str, dict[str, int]], list[str]]:
+    """({local: {module or "": first line}}, sys.path directories) for the names this file binds with `importlib`;
+    "" stands for a module whose name or path is computed."""
     names = _module_names(tree)
-    dirs = [d.replace("/", ".") for d, known in _path_inserts(tree, names) if known]
     specs: dict[str, str] = {}
-    bound: dict[str, set[str]] = {}
+    bound: dict[str, dict[str, int]] = {}
     assigns = sorted((n for n in ast.walk(tree) if isinstance(n, ast.Assign) and len(n.targets) == 1
                       and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Call)),
                      key=lambda n: (n.lineno, n.col_offset))
@@ -653,31 +684,43 @@ def _dynamic_imports(tree: ast.AST) -> list[tuple[str, str]]:
         if name == "import_module" and call.args:
             arg = call.args[0]
             literal = isinstance(arg, ast.Constant) and isinstance(arg.value, str) and not arg.value.startswith(".")
-            bound.setdefault(local, set()).add(arg.value if literal else "")
+            bound.setdefault(local, {}).setdefault(arg.value if literal else "", n.lineno)
         elif name == "spec_from_file_location" and _spec_location(call) is not None:
-            specs[local] = _literal_module(_spec_location(call), names) or ""
+            specs[local] = _literal_module(_spec_location(call), names, rel) or ""
         elif name == "module_from_spec" and call.args and isinstance(call.args[0], ast.Name) \
                 and call.args[0].id in specs:
-            bound.setdefault(local, set()).add(specs[call.args[0].id])
+            bound.setdefault(local, {}).setdefault(specs[call.args[0].id], n.lineno)
+    return bound, _path_inserts(tree, names, rel)
+
+
+def _dynamic_imports(tree: ast.AST, rel: str = "") -> list[tuple[str, str]]:
+    """[(local, module)] for a module loaded at run time and bound to a name (#382), the way tests and scripts load
+    a file that is not on the import path:
+    `sb = importlib.import_module("storybench")`, and
+    `spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / "g.py")` then
+    `g = importlib.util.module_from_spec(spec)`.
+    Only a literal name or path is followed; a computed one is reported by `unfollowed_loads`. The binding is per
+    file, as an import's is, so a name bound to two different modules in one file is not followed at all (one of the
+    two would be wrong); `unfollowed_loads` reports it instead. An `import_module` name is looked up first in each
+    directory the file put on sys.path, as Python does, then as an import statement would take it."""
+    bound, dirs = _bindings(tree, rel)
     out = []
     for local, mods in bound.items():
-        module = next(iter(mods))
-        if len(mods) != 1 or not module:
+        if len(mods) != 1 or "" in mods:
             continue
-        # each directory the file put on sys.path first, as Python looks there first; then the name as an import
-        # statement would take it (#382)
-        out += [(local, f"{d}.{module}") for d in dirs if d] + [(local, module)]
+        module = next(iter(mods))
+        out += [(local, f"{d.replace('/', '.')}.{module}") for d in dirs if d] + [(local, module)]
     return out
 
 
-def unfollowed_loads(tree: ast.AST) -> list[tuple[int, list[str]]]:
-    """[(line, directories)] for each module this file loads by a name or path computed at run time
-    (`import_module(os.environ[...])`, `spec_from_file_location(n, BENCH / f"{name}.py")`): calls through it cannot
-    be attributed, so a test list that leaves the file out is incomplete (#382). The directories, as repository path
-    endings (`bench/cpp`), are where it may load from: the literal part of the path, or the file's `sys.path`
-    inserts. A load with no known directory (a plugin from the installed packages) is not reported."""
+def unfollowed_loads(tree: ast.AST, rel: str = "") -> list[tuple[int, list[str]]]:
+    """[(line, directories)] for each module this file loads in a way calls through it cannot be attributed (#382):
+    by a name or path computed at run time (`import_module(os.environ[...])`, `BENCH / f"{name}.py"`), or under one
+    name bound to two modules. The directories (repository paths, `""` the root) are where it may load from: the
+    literal part of the path, or the file's sys.path directories. A load with no known directory (a plugin from the
+    installed packages) is not reported."""
     names = _module_names(tree)
-    inserts = [d for d, known in _path_inserts(tree, names) if known and d]
+    bound, inserts = _bindings(tree, rel)
     out = []
     for n in ast.walk(tree):
         if not isinstance(n, ast.Call):
@@ -686,21 +729,32 @@ def unfollowed_loads(tree: ast.AST) -> list[tuple[int, list[str]]]:
         if name == "import_module" and n.args and not (isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)):
             dirs = inserts                             # a module name is not a directory; where it is looked up is
         elif name == "spec_from_file_location" and _spec_location(n) is not None \
-                and _literal_module(_spec_location(n), names) is None:
-            steps = [s for s in _steps(_pieces(_spec_location(n), names)[0]) if not s.endswith(".py")]
-            dirs = ["/".join(steps)] if steps else []
+                and _literal_module(_spec_location(n), names, rel) is None:
+            parts, _c, ups = _pieces(_spec_location(n), names)
+            keep = []
+            for p in parts:                            # the literal directory before the computed file name
+                if p.endswith(".py") or not all(s.isidentifier() or s in ("", ".", "..") for s in p.split("/")):
+                    break
+                keep.append(p)
+            d = _repo_path(rel, keep, ups) if keep or ups is not None else None
+            dirs = [d] if d else []
         else:
             continue
         if dirs:
             out.append((n.lineno, dirs))
+    for local, mods in bound.items():                  # one name, two modules: neither is followed
+        real = [m for m in mods if m]
+        if len(mods) > 1 and real:
+            dirs = sorted({"/".join(x for x in (d, "/".join(m.split(".")[:-1])) if x) for d in inserts + [""] for m in real})
+            out += [(line, dirs) for m, line in sorted(mods.items(), key=lambda kv: kv[1]) if m]
     return sorted(out)
 
 
-def literal_paths(tree: ast.AST) -> list[tuple[int, str]]:
-    """[(line, path)] for each `.py` path this file builds from its own location out of literal pieces:
-    `ROOT / "scripts" / "g.py"` with `ROOT = Path(__file__).parents[1]` is `scripts/g.py` (#382), how a test names
-    a script it runs or loads by path. A path from `tmp_path`, or a plain string (data, a fixture's file name), is
-    not one: it does not name a file of the repository."""
+def literal_paths(tree: ast.AST, rel: str = "") -> list[tuple[int, str]]:
+    """[(line, repository path)] for each `.py` file this file names by a path built from its own location out of
+    literal pieces: `ROOT / "scripts" / "g.py"` with `ROOT = Path(__file__).parents[1]` (#382), how a test names a
+    script it runs or loads by path. A path from `tmp_path`, from the working directory, or a plain string (data, a
+    fixture's file name) does not name a file of the repository and is left out."""
     names = _module_names(tree)
     joined = {id(c) for n in ast.walk(tree) if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Div)
               for c in (n.left, n.right)}               # a piece of a longer path: only the whole path counts
@@ -708,10 +762,12 @@ def literal_paths(tree: ast.AST) -> list[tuple[int, str]]:
     for n in ast.walk(tree):
         if id(n) in joined or not (isinstance(n, ast.BinOp) and isinstance(n.op, ast.Div)):
             continue
-        parts, computed, anchored = _pieces(n, names)
-        steps = _steps(parts)
-        if anchored and not computed and steps and steps[-1].endswith(".py"):
-            out.add((n.lineno, "/".join(steps)))
+        parts, computed, ups = _pieces(n, names)
+        if ups is None or computed or not parts or not parts[-1].endswith(".py"):
+            continue
+        path = _repo_path(rel, parts, ups)
+        if path:
+            out.add((n.lineno, path))
     return sorted(out)
 
 
@@ -899,7 +955,7 @@ def collect_reexports(repo_root: Path, rel_paths: list[str]) -> dict[str, dict[s
             tree = ast.parse((repo_root / rel).read_text(errors="replace"))
         except (SyntaxError, OSError, ValueError, RecursionError):
             continue
-        descriptors = _import_descriptors(tree)
+        descriptors = _import_descriptors(tree, rel)
         table = _reexport_table(descriptors, rel, _import_targets(descriptors, rel)[1])
         if table:
             out[rel] = table
@@ -1501,7 +1557,7 @@ def _skip(path: Path, reason: str, skipped: dict[str, str] | None) -> None:
 
 
 def _parse_python_file(
-    path: Path, skipped: dict[str, str] | None = None,
+    path: Path, skipped: dict[str, str] | None = None, rel: str = "",
 ) -> tuple[list[dict], list[tuple[str, str | None, str]], list[tuple[str, str | None]],
            list[tuple[str, str, str]], str | None, list[tuple[str, str, str | None, int | None]],
            list[tuple[str, str, str | None]], list[tuple[str, str]], str, list[str],
@@ -1536,7 +1592,7 @@ def _parse_python_file(
             if sym["qualified_name"] in returns:
                 sym["returns"] = returns[sym["qualified_name"]]
         return (v.symbols, v.calls, _imports(tree), v.routes, module_docstring, v.raises, v.logs,
-                _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree),
+                _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree, rel),
                 _py_literals(tree), typed, _safe_value_refs(tree), *_safe_uses(tree))
     except RecursionError:
         # a generated file nested deeper than the tree walks can follow: skip it, say so, keep the rest (#106)
@@ -1581,7 +1637,7 @@ def extract(repo_root: Path) -> DevKBGraph:
     skipped: dict[str, str] = {}   # absolute path -> why the file could not be read (#109)
     for rel_path in _list_python_files(repo_root):
         (symbols, calls, imports, routes, module_doc, raises, logs, middleware, router_prefix,
-         daemon_entries, descriptors, literals, typed_calls, value_refs, name_refs, key_uses) = _parse_python_file(repo_root / rel_path, skipped)
+         daemon_entries, descriptors, literals, typed_calls, value_refs, name_refs, key_uses) = _parse_python_file(repo_root / rel_path, skipped, rel_path)
         # `@typing.overload` signatures and the implementation share one qualified name, and so one Symbol key: keep
         # one entry (the last, the implementation), or every lookup by name sees several and resolves nothing
         # (click's `prompt`: all 13 call sites were left unattributed).

@@ -71,7 +71,7 @@ def extract(ctx: ProjectContext, graph: DevKBGraph) -> DevKBGraph:
         if not tests:
             continue
 
-        descriptors = _import_descriptors(tree)
+        descriptors = _import_descriptors(tree, rel)
         receivers, bare = _import_targets(descriptors, rel)
         dynamic = dynamic_locals(descriptors)        # bound by importlib: a miss still tries the literals (#382)
         literals = _py_literals(tree)
