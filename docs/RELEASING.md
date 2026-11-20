@@ -75,7 +75,7 @@ switch on `namiq-ai/devkb`.
 ## Publishing to PyPI
 
 Publishing is public and permanent: PyPI never accepts the same version twice, and a package once downloaded cannot
-be recalled. The `pypi` job is therefore off, and when on, it stops unless all of these hold.
+be recalled. The `pypi` job runs only when the repository variable `PYPI_PUBLISH` is `true`, and it stops unless all of these hold.
 
 **Before the first upload**
 
@@ -91,7 +91,12 @@ be recalled. The `pypi` job is therefore off, and when on, it stops unless all o
 
 - Package metadata: URLs, keywords, classifiers (`pyproject.toml`); `twine check --strict` passes.
 - GitHub environment `pypi`, deployable only from tags `v*`.
-- Repository variable `PYPI_PUBLISH` = `false`: the switch, off.
+- Repository variable `PYPI_PUBLISH` = `true` (checked 2026-11-20): the switch is **on**. The `pypi` environment has a tag policy (`v*`) and
+  **no required reviewer**, so a tag publishes to PyPI as soon as audit, test, build and the scan pass, without a person's approval.
+  (Step 2 under "Still to do" below, required reviewers, is not done.)
+- PyPI's latest version was 0.2.12 on 2026-11-20: **v0.2.13's upload was refused by the scan below** (a private-key marker in a test
+  fixture; #364), so v0.2.13 exists as a GitHub release only. `tests/test_sdist_denylist_364.py` now runs the scan on the files the
+  sdist is made of, so the next such fixture fails in CI and not at the tag.
 - The `pypi` job: trusted publishing, the internal-name scan before upload.
 
 **Still to do, when going public**
