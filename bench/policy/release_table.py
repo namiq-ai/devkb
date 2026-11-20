@@ -135,7 +135,7 @@ def start_section(pairs: list[tuple[str, list[dict]]]) -> list[str]:
     """The start of each run apart from its totals (#331): the first model call's context (policy, hook and tool text, no
     work yet) and the number of tests the arm's checkout collects. A ticket whose arms collect different numbers gets a
     warning: a difference in cost, turns or wall time between them then includes the suite's size."""
-    out = ["", "| Ticket | Arm | First-call context k | Tests collected | Commands backgrounded per run |", "|---|---|---|---|---|"]
+    out = ["", "| Ticket | Arm | First-call context k | Tests collected | Commands backgrounded per run | Hook outputs per run |", "|---|---|---|---|---|---|"]
     warn = []
     for t, rows in pairs:
         arms = sorted({r["arm"] for r in rows}, key=lambda a: ORDER.index(a) if a in ORDER else 99)
@@ -145,8 +145,9 @@ def start_section(pairs: list[tuple[str, list[dict]]]) -> list[str]:
             tc = sorted({r["tests_collected"] for r in rows if r["arm"] == a and r.get("tests_collected") is not None})
             seen[a] = tc
             bg = [r["backgrounded"] for r in rows if r["arm"] == a and r.get("backgrounded") is not None]
+            ho = [r["hook_outputs"] for r in rows if r["arm"] == a and r.get("hook_outputs") is not None]    # #330
             out.append(f"| #{t} | {a} | {f'{st.mean(fc) / 1e3:.1f}' if fc else 'unknown'} | {', '.join(map(str, tc)) if tc else 'unknown'} | "
-                       f"{f'{st.mean(bg):.1f}' if bg else 'unknown'} |")
+                       f"{f'{st.mean(bg):.1f}' if bg else 'unknown'} | {f'{st.mean(ho):.1f}' if ho else 'unknown'} |")
         known = {a: tc for a, tc in seen.items() if tc}
         if len({tuple(v) for v in known.values()}) > 1:
             warn.append(f"#{t}: the arms collect different numbers of tests ({'; '.join(f'{a} {tc}' for a, tc in known.items())}): "

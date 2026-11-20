@@ -313,7 +313,8 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     env_bin = tool_of(arm, toolenv.build(ENV_REF[arm]()) if arm in ENV_REF else None)
     cmd = ["claude", "-p", prompt, "--model", sb.MODEL, *SOURCES, "--output-format",
            "stream-json", "--verbose", "--max-turns", "250" if issue in ("117", "131") else "150", "--permission-mode", "acceptEdits", "--strict-mcp-config",
-           "--mcp-config", mcp, "--allowedTools", *sb.ALLOW, "--disallowedTools", *deny]
+           "--mcp-config", mcp, "--allowedTools", *sb.ALLOW, "--disallowedTools", *deny,
+           "--include-hook-events"]                  # the stream then records what the hook said to the agent (#330)
     # The Bash tool backgrounds a command after 120 s by default; a full suite that runs about that long then costs the agent
     # extra turns to wait for it, in one arm and not the other (#334). Every arm gets the same, longer limit.
     limit = os.environ.get("POLICY_BASH_TIMEOUT_MS", "600000")
