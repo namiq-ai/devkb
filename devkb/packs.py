@@ -239,8 +239,11 @@ class Packer:
 
     def _test_texts(self, needles: tuple[str, ...]) -> list[tuple[str, str]]:
         """(test file, text) for each Python test file whose text holds one of `needles`: only those are parsed."""
-        return [(rel, text) for rel in sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and self.api._is_test(r))
-                for text in ["\n".join(self._file(rel))] if any(n in text for n in needles)]
+        texts = self.__dict__.get("_texts")
+        if texts is None:
+            texts = self.__dict__["_texts"] = [(rel, "\n".join(self._file(rel))) for rel in
+                                               sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and self.api._is_test(r))]
+        return [(rel, text) for rel, text in texts if any(n in text for n in needles)]
 
     def _unfollowed_note(self, path: str, listed: dict) -> list[str]:
         """A line saying the test list may be incomplete when a test file outside it loads modules from `path`'s
@@ -250,12 +253,12 @@ class Packer:
             return []
         from devkb.build_symbols import unfollowed_loads  # noqa: PLC0415
         here = path.rsplit("/", 1)[0] if "/" in path else ""
-        sites = []
-        for rel, text in self._test_texts(("import_module(", "spec_from_file_location(")):
-            tree = self._test_tree(rel, text)
-            if rel in listed or tree is None:
-                continue
-            sites += [f"{rel}:{line}" for line, dirs in unfollowed_loads(tree, rel) if here in dirs]
+        loads = self.__dict__.get("_unfollowed")
+        if loads is None:                                # once per Packer: a batch of packs reads each test once
+            loads = self.__dict__["_unfollowed"] = [
+                (rel, line, dirs) for rel, text in self._test_texts(("import_module(", "spec_from_file_location("))
+                for tree in [self._test_tree(rel, text)] if tree is not None for line, dirs in unfollowed_loads(tree, rel)]
+        sites = [f"{rel}:{line}" for rel, line, dirs in loads if rel not in listed and (here in dirs or path in dirs)]
         if not sites:
             return []
         where = f"`{here}`" if here else "the repository root"
@@ -272,11 +275,14 @@ class Packer:
             return {}
         from devkb.build_symbols import literal_paths  # noqa: PLC0415
         out = {}
+        paths = self.__dict__.setdefault("_paths", {})
         for rel, text in self._test_texts((path.rsplit("/", 1)[-1],)):
-            tree = self._test_tree(rel, text)
-            if rel in listed or rel == path or tree is None:
+            if rel in listed or rel == path:
                 continue
-            hits = [line for line, p in literal_paths(tree, rel) if p == path]
+            if rel not in paths:
+                tree = self._test_tree(rel, text)
+                paths[rel] = literal_paths(tree, rel) if tree is not None else []
+            hits = [line for line, p in paths[rel] if p == path]
             if hits:
                 out[rel] = hits[0]
         return out

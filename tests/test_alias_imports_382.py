@@ -27,6 +27,7 @@ FILES = {
     "other/g.py": "def only_here():\n    return 2\n",
     "alpha/alpha.py": "def run_job(x):\n    return x\n",
     "beta/beta.py": "def run_job(x):\n    return -x\n",
+    "alpha/near.py": "def near():\n    return 0\n",
     "vendor/pkg/tool.py": "def frob_it(x):\n    return x\n",
     "bench/cpp/loaded.py": "def measure():\n    return 1\n",
     "bench/exercises/cpp/other.py": "def score():\n    return 1\n",
@@ -105,6 +106,7 @@ def test_one_name_for_two_modules_gives_no_false_edge(tmp_path):
     alpha, beta = _tests(p.file("alpha/alpha.py")), _tests(p.file("beta/beta.py"))
     assert "- `tests/test_two.py`" not in alpha and "- `tests/test_two.py`" not in beta   # neither is followed ...
     assert "tests/test_two.py:14" in alpha and "tests/test_two.py:19" in beta              # ... and both packs say so
+    assert "test_two" not in p.file("alpha/near.py")           # a file beside them is not one of the two modules
 
 
 def test_an_unfollowed_or_unresolved_alias_keeps_the_literal_rule(tmp_path):

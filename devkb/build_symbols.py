@@ -716,9 +716,10 @@ def _dynamic_imports(tree: ast.AST, rel: str = "") -> list[tuple[str, str]]:
 def unfollowed_loads(tree: ast.AST, rel: str = "") -> list[tuple[int, list[str]]]:
     """[(line, directories)] for each module this file loads in a way calls through it cannot be attributed (#382):
     by a name or path computed at run time (`import_module(os.environ[...])`, `BENCH / f"{name}.py"`), or under one
-    name bound to two modules. The directories (repository paths, `""` the root) are where it may load from: the
-    literal part of the path, or the file's sys.path directories. A load with no known directory (a plugin from the
-    installed packages) is not reported."""
+    name bound to two modules. The places (repository paths, `""` the root) are where it may load from: a directory
+    (the literal part of the path, or the file's sys.path directories), or, for one name bound to two modules, the
+    `.py` files those module names can be. A load with no known directory (a plugin from the installed packages) is not
+    reported."""
     names = _module_names(tree)
     bound, inserts = _bindings(tree, rel)
     out = []
@@ -745,7 +746,8 @@ def unfollowed_loads(tree: ast.AST, rel: str = "") -> list[tuple[int, list[str]]
     for local, mods in bound.items():                  # one name, two modules: neither is followed
         real = [m for m in mods if m]
         if len(mods) > 1 and real:
-            dirs = sorted({"/".join(x for x in (d, "/".join(m.split(".")[:-1])) if x) for d in inserts + [""] for m in real})
+            # the files those names can be, in each sys.path directory and at the root: not every file beside them
+            dirs = sorted({"/".join(x for x in (d, m.replace(".", "/") + ".py") if x) for d in inserts + [""] for m in real})
             out += [(line, dirs) for m, line in sorted(mods.items(), key=lambda kv: kv[1]) if m]
     return sorted(out)
 
