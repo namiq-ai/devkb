@@ -22,7 +22,9 @@ def _env(tmp_path, monkeypatch, arm, **env):
     real = sb.sh
     monkeypatch.setattr(sb, "sh", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, json.dumps({"title": "T", "body": "b"}), "") if cmd[:2] == ["gh", "issue"] else real(cmd, **kw))
     got = {}
-    monkeypatch.setattr(pb.subprocess, "run", lambda cmd, **k: (got.update(env=k.get("env")), subprocess.CompletedProcess(cmd, 0))[1])
+    real_run = subprocess.run
+    monkeypatch.setattr(pb.subprocess, "run", lambda cmd, **k: (got.update(env=k.get("env")), subprocess.CompletedProcess(cmd, 0))[1]
+                        if cmd[0] == "claude" else real_run(cmd, **k))      # only the agent launch is stubbed (git calls are real)
     pb._run_one("9", arm, 1)
     return got["env"]
 
