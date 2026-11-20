@@ -56,7 +56,10 @@ def main(argv: list[str] | None = None) -> int:
         print(__doc__)
         return 0
     cmd, rest = argv[0], argv[1:]
-    if cmd == "build":
+    if cmd == "build":  # one at a time, and a line in .devkb/build.log (#158)
+        from devkb.buildlog import logged_build  # noqa: PLC0415
+        return logged_build(rest)
+    if cmd == "build-direct":
         return _run("devkb.build_symbols", rest) or _run("devkb.build", rest)
     if cmd in ("symbol", "outline", "uses", "docs"):
         return _run("devkb.read_tools", [cmd, *rest])

@@ -200,6 +200,9 @@ class ProcessAPI:
         stale, head, behind = self.stale.check()
         reply["_meta"] = {"built": self.idx.built_at[:16], "head": self.idx.git_head[:8], "stale": stale,
                           **({"behind": behind} if stale else {})}
+        from devkb.buildlog import last_failure  # noqa: PLC0415
+        if (store := getattr(self, "store", None)) and (failed := last_failure(store)):  # #158: a failed background build is not silent
+            reply["_meta"]["build_failed"] = failed
         size = len(json.dumps(reply, separators=(",", ":")))
         from devkb.outcomes import outcome_of_reply  # noqa: PLC0415
         outcome, detail, resolved = outcome_of_reply(reply)

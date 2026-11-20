@@ -563,10 +563,11 @@ class ReadTools:
 # ── text rendering: what an agent reads (ADR-DEVKB-010 §2) ──────────────
 def _stale(reply: dict) -> str:
     meta = reply.get("_meta") or {}
+    failed = f"\ngraph: {meta['build_failed']}." if meta.get("build_failed") else ""
     if not meta.get("stale"):
-        return ""
+        return failed
     ahead = f", repository is {meta['behind']} commits ahead" if meta.get("behind") else ""
-    return f"\ngraph stale: built at {meta.get('head', '?')}{ahead}; ranges and names may have moved, re-read what you edit."
+    return f"\ngraph stale: built at {meta.get('head', '?')}{ahead}; ranges and names may have moved, re-read what you edit." + failed
 
 
 def fit_text(text: str, budget: int = BUDGET) -> str:
