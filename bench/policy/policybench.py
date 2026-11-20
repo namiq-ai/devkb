@@ -406,14 +406,25 @@ def score(issues):
             rows.append(r)
             print(r["run"], "pass" if r["acceptance"].get("pass") else "FAIL", "suite" if r["suite_pass"] else "SUITE-RED",
                   f"${r['cost']:.2f}", "devkb", r["devkb_queries"], "guard", r["guardrail_fired"], "log", r["dogfood_log"], flush=True)
+    only = set(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))
+    scored = {r["run"] for r in rows}
+
+    def other_arms(path):
+        """The rows already in `path` of the arms POLICY_ARMS leaves out of this scoring: re-scoring one arm replaces only
+        that arm's rows, and the release table keeps its baseline (#306)."""
+        if not only or not path.exists():
+            return []
+        return [r for r in (json.loads(l) for l in path.read_text().splitlines() if l.strip())
+                if r.get("issue") in issues and r.get("arm") not in only and r.get("run") not in scored]
+    keep_policy = other_arms(B / "results-policy.jsonl")
+    keep_issue = {i: other_arms(B / f"results-{i}.jsonl") for i in issues}
     with open(B / "results-policy.jsonl", "w") as f:
-        for r in rows:
+        for r in keep_policy + rows:
             f.write(json.dumps(r) + "\n")
     for issue in issues:                              # one file per ticket, every run scored by today's check (#223)
         with open(B / f"results-{issue}.jsonl", "w") as f:
-            for r in rows:
-                if r["issue"] == issue:
-                    f.write(json.dumps(r) + "\n")
+            for r in [x for x in keep_issue[issue] if x.get("issue") == issue] + [r for r in rows if r["issue"] == issue]:
+                f.write(json.dumps(r) + "\n")
 
 
 if __name__ == "__main__":
