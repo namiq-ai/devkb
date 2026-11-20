@@ -35,13 +35,13 @@ with tempfile.TemporaryDirectory() as td:
     (td / "uneven").mkdir()
     (td / "uneven" / "sitecustomize.py").write_text(UNEVEN)
 
-    def run(root, extra=""):
+    def run(root, extra="", want=""):
         env = dict(os.environ, HOME=str(home), PYTHONPATH=os.pathsep.join(filter(None, [extra, str(root)])), PYTHONWARNINGS="ignore")
         for k in ("DEVKB_GUARDRAIL", "DEVKB_TELEMETRY", "DEVKB_MISSLOG"):
             env.pop(k, None)
         r = subprocess.run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", TEST], cwd=root, env=env, capture_output=True,
                            text=True, timeout=900)
-        return r.returncode == 0 and " passed" in r.stdout
+        return (r.returncode == 0 and " passed" in r.stdout) if not want else want in r.stdout
 
     res["test_exists"] = "def test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method" in (W / "tests/test_csharp_symbols.py").read_text()
     res["passes"] = run(W)
@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory() as td:
         cp = td / "copy"
         shutil.copytree(W, cp, ignore=shutil.ignore_patterns(".git", ".venv", ".devkb", "corpus", "__pycache__"))
         (cp / "devkb" / "csharp_symbols.py").write_text(old.stdout)
-        res["fails_on_the_quadratic_code"] = not run(cp)
+        res["fails_on_the_quadratic_code"] = run(cp, want="quadratic again")   # the test's own verdict, not any crash
     else:
         res["fails_on_the_quadratic_code"] = False
 res["pass"] = all(res.values())

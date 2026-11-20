@@ -1076,7 +1076,9 @@ def test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method(tmp_path):
     """#61: one method of `b.Property(x => x.P).HasColumn(y => y.Q);` lines (an EF Core model snapshot's shape). Every
     lambda parameter went on one list scanned whole per lookup: quadratic. The measure is the number of Python lines
     csharp_symbols executes, which is the same on every run: a wall clock or CPU time fails under load (#371; CPU time
-    too, when another process shares the core). 4x the lines: 4.05x the work now, 10.9x for the code before #61."""
+    too, when another process shares the core). 4x the lines: 4.05x the work now, 10.9x for the code before #61.
+    A count of Python lines does not see work inside one C-level call (a regex or a string method over a growing
+    range); #61's quadratic scan was a Python loop, which it does see."""
     import sys
 
     def repo(n: int) -> Path:
@@ -1098,7 +1100,7 @@ def test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method(tmp_path):
                 n[0] += 1
             return local
 
-        old = sys.gettrace()
+        old = sys.gettrace()                     # a coverage tracer, if any, sees no lines of extract() here; restored after
         sys.settrace(lambda frame, event, arg: local if frame.f_code.co_filename == mine else None)
         try:
             _, calls = csharp_symbols.extract(d)
