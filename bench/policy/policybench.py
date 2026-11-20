@@ -90,6 +90,64 @@ def without_missing_data(body: str, w: Path) -> str:
     return _FENCE.sub(swap, body)
 
 
+# The same arms with the ticket's location withheld (#337): "Where to start" removed, the files in "Scope" and every file or
+# name it gave masked wherever the ticket repeats them. Set up exactly as their base arm (same template); only the text differs.
+HIDE_LOCATION = {"nonehid": "none", "mainhid": "main"}
+WITHHELD = "(withheld)"
+_SECTION = re.compile(r"(?ms)^\*\*(?P<h>[^*\n]+?):?\*\*:?(?P<t>.*?)(?=^\*\*[^*\n]+?:?\*\*|\Z)")
+_FILE = re.compile(r"(?<![\w/.-])(?:[\w.-]+/)*[\w.-]+\.(?:py|md|json|jsonl|toml|ya?ml|sh|c|cc|cpp|h|hpp|cs|ts|js)\b")
+_CODE = re.compile(r"`([^`\n]+)`")
+_NAME = re.compile(r"[A-Za-z_][\w.]*(?:::[A-Za-z_]\w*)*")
+
+
+def location_names(body: str) -> list[str]:
+    """The files and code names a ticket's "Where to start" gives, longest first. A code name is a token that looks like
+    code (an underscore, a dot, `::` or CamelCase), so plain words and command names (`run`, `uses`, `devkb`) stay."""
+    names: set[str] = set()
+    for m in _SECTION.finditer(body):
+        if m.group("h").strip().lower().startswith("where to start"):
+            t = m.group("t")
+            files = set(_FILE.findall(t))
+            names |= files | {f.rsplit("/", 1)[-1] for f in files}
+            for n in _NAME.findall(_FILE.sub(" ", t)):
+                n = n.rstrip(".")
+                if len(n) > 2 and ("_" in n or "." in n or "::" in n or re.search(r"[a-z][A-Z]", n)):
+                    names.add(n)
+    return sorted(names, key=len, reverse=True)
+
+
+def without_location(title: str, body: str) -> tuple[str, str]:
+    """(title, body) with the location withheld (#337): the "Where to start" section goes, the "Scope" section's files and
+    every name "Where to start" gave are masked in title and body alike."""
+    names = location_names(body)
+    pieces, last = [], 0
+    for m in _SECTION.finditer(body):
+        pieces.append(body[last:m.start()])
+        head = m.group("h").strip().lower()
+        if head.startswith("where to start"):
+            pieces.append("**Where to start:** (withheld for this benchmark run)\n\n")
+        elif head.startswith("scope"):
+            pieces.append(_FILE.sub(WITHHELD, m.group(0)))
+        else:
+            pieces.append(m.group(0))
+        last = m.end()
+    pieces.append(body[last:])
+    body = "".join(pieces)
+
+    def mask(text: str) -> str:
+        for n in names:
+            text = re.sub(rf"(?<![\w/.:-]){re.escape(n)}(?![\w])", WITHHELD, text)
+        return text
+    return mask(title), mask(body)
+
+
+def prompt_for(issue: str, title: str, body: str, w: Path, hide: bool = False) -> str:
+    """The prompt an agent is given for a ticket: as filed, or with its location withheld (#337)."""
+    if hide:
+        title, body = without_location(title, body)
+    return (sb.PROMPT if issue == "117" else PROMPT).format(title=title, body=without_missing_data(body, w))
+
+
 def checkout(w: Path, arm: str):
     if w.exists():
         shutil.rmtree(w)
@@ -285,6 +343,8 @@ def run_one(issue: str, arm: str, rep: int) -> str:
 
 def _run_one(issue: str, arm: str, rep: int) -> str:
     tag = f"p{issue}-{arm}-r{rep}"
+    hide = arm in HIDE_LOCATION                       # #337: set up as the base arm; only the ticket's text differs
+    arm = HIDE_LOCATION.get(arm, arm)
     out = B / "runs" / tag
     if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") not in ("error", "base-red"):
         return f"skip {tag}"                          # an error, or a refused red base, is set up again (#305)
@@ -313,7 +373,7 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     else:
         mcp = str(B / "no-mcp.json")
         Path(mcp).write_text(json.dumps({"mcpServers": {}}))
-    prompt = (sb.PROMPT if issue == "117" else PROMPT).format(title=t["title"], body=without_missing_data(t["body"], w))
+    prompt = prompt_for(issue, t["title"], t["body"], w, hide)
     if os.environ.get("POLICY_PREREGISTER_POST") == "1":
         prompt += SETTINGS_NOTE
     deny = sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if arm in ("none", "nonekeep") else [])   # both forms (#335)
@@ -485,6 +545,9 @@ if __name__ == "__main__":
             if v == "origin/main":
                 BASES[k] = os.environ["POLICY_MAIN"]
         print(f"batch pinned to main {os.environ['POLICY_MAIN'][:12]}", flush=True)
+        if os.environ.get("POLICY_HIDE_START") == "1":   # the ticket's option name: every arm with a hidden form, hidden (#337)
+            hid = {v: k for k, v in HIDE_LOCATION.items()}
+            arms = [hid.get(a, a) for a in arms]
         jobs = [(i, arm, r) for i in issues for arm in arms for r in range(first, first + reps)]
         random.Random(126).shuffle(jobs)
         with cf.ThreadPoolExecutor(par) as ex:

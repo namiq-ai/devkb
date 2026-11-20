@@ -22,8 +22,13 @@ from pathlib import Path
 B = Path(__file__).resolve().parent
 sys.path.insert(0, str(B))
 import storybench as sb  # noqa: E402  (the one rule for devkb commands, #258)
-NONE = ("none", "nonekeep")
-ORDER = ("nonekeep", "none", "release", "climain", "cli130", "main")
+NONE = ("none", "nonekeep", "nonehid")
+ORDER = ("nonekeep", "none", "release", "climain", "cli130", "main", "nonehid", "mainhid")
+HIDDEN_LOCATION = ("nonehid", "mainhid")          # the ticket's location withheld (#337); compared with each other
+
+
+def location_given(arm: str) -> bool:
+    return arm not in HIDDEN_LOCATION
 
 
 def counts(run: str) -> tuple[int, int, int] | None:
@@ -161,17 +166,18 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
         raise SystemExit("refused, re-score first:\n  " + "\n  ".join(problems))
     dirty = [(t, [r["run"] for r in rows if r.get("contaminated")]) for t, rows in pairs]
     pairs = [(t, [r for r in rows if not r.get("contaminated")]) for t, rows in pairs]      # left out of every mean (#340)
-    lines = ["| Ticket | Arm | Runs | Wall min | Turns | Context k | Output k | Cost $ | Grep | devkb nav | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
-             "|" + "---|" * 16]
+    lines = ["| Ticket | Arm | Location given | Runs | Wall min | Turns | Context k | Output k | Cost $ | Grep | devkb nav | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
+             "|" + "---|" * 17]
     per_arm: dict[str, list[dict]] = {}
     diffs: dict[str, dict[str, list[float]]] = {}
     for t, rows in pairs:
         arms = sorted({r["arm"] for r in rows}, key=lambda a: ORDER.index(a) if a in ORDER else 99)
         sums = {a: summary([per_run(r) for r in rows if r["arm"] == a]) for a in arms}
-        base = next((sums[a] for a in arms if a in NONE), None)
         for i, a in enumerate(arms):
             m = sums[a]
             per_arm.setdefault(a, []).append(m)
+            # the no-devkb arm given the ticket the same way: hidden against hidden, as filed against as filed (#337)
+            base = next((sums[b] for b in arms if b in NONE and location_given(b) == location_given(a)), None)
             vs = ""
             if base is not None and a not in NONE:
                 dc, dk = 100 * (m["cost"] / base["cost"] - 1), 100 * (m["ctx"] / base["ctx"] - 1)
@@ -182,7 +188,7 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
                 diffs[a]["ctx"].append(m["ctx"] - base["ctx"])
             flaky = f" ({m['flaky']} flaky)" if m.get("flaky") else ""       # green only on the re-run (#260)
             cut = f" ({m['cut_off']} cut off, cost left out)" if m.get("cut_off") else ""      # #303
-            lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {m['n']}{cut} | {fmt_range(m, 'wall')} | {m['turns']:.1f} | "
+            lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {'yes' if location_given(a) else 'no'} | {m['n']}{cut} | {fmt_range(m, 'wall')} | {m['turns']:.1f} | "
                          f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {m['out'] / 1e3:.1f} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | {m['own']:.1f} | "
                          f"{m['sub']:.1f} | {m['answers']:.1f} ({m['answer_chars']:.0f}) | {m['ok']}/{m['n']} | {m['suite']}/{m['n']}{flaky} | {vs} |")
     lines += ["", "| Release, arm | Runs | Cost per run | Context per run | Cost difference vs no devkb (90% interval) | Context difference (90% interval) |",
