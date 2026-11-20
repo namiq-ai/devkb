@@ -150,3 +150,8 @@ def test_scope_code_names_are_withheld_and_a_name_outside_the_own_code_stays(tmp
     assert "Staleness" not in b and "_hook" not in b and "service.py" not in b
     assert "count_digits" in b                      # a corpus function in the symptom: not the place to fix
     assert pb.in_own_code(tmp_path, "Staleness.message") and not pb.in_own_code(tmp_path, "count_digits")
+
+
+def test_a_broken_repository_withholds_rather_than_leaks(tmp_path):
+    (tmp_path / ".git").mkdir()                     # not a valid repository: git grep exits 128
+    assert pb.in_own_code(tmp_path, "_resolve")

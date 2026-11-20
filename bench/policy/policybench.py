@@ -170,8 +170,9 @@ def in_own_code(w: Path | None, name: str) -> bool:
     if w is None or not (Path(w) / ".git").exists():
         return True
     for part in [name] + [p for p in re.split(r"\.|::", name) if len(p) > 2]:   # `ReadTools.resolve` is written apart
-        if subprocess.run(["git", "-C", str(w), "grep", "-qwF", part, "--", ".", ":!corpus", ":!tests", ":!docs"],
-                          capture_output=True).returncode == 0:
+        rc = subprocess.run(["git", "-C", str(w), "grep", "-qwF", part, "--", ".", ":!corpus", ":!tests", ":!docs"],
+                            capture_output=True).returncode
+        if rc != 1:                               # found (0), or git failed: withhold rather than leak (#385 review, round 4)
             return True
     return False
 
