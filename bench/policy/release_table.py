@@ -26,13 +26,14 @@ NONE = ("none", "nonekeep")
 ORDER = ("nonekeep", "none", "release", "climain", "cli130", "main")
 
 
-def counts(run: str) -> tuple[int, int, int]:
-    """(devkb queries the agent made, devkb runs on its own code, searches the hook replaced) in one transcript."""
+def counts(run: str) -> tuple[int, int, int] | None:
+    """(devkb queries the agent made, devkb runs on its own code, searches the hook replaced) in one transcript, or None
+    when the transcript is not under bench/policy/runs (#304): the row's stored counts are used then, never zeros."""
     nav = own = subst = 0
     edited, root = False, None
     path = B / "runs" / run / "stream.jsonl"
     if not path.exists():
-        return 0, 0, 0
+        return None
     for line in open(path):
         try:
             e = json.loads(line)
@@ -82,7 +83,8 @@ def guard_rows(session: str) -> list[dict]:
 
 
 def per_run(r: dict) -> dict:
-    nav, own, sub = counts(r["run"])
+    c = counts(r["run"])
+    nav, own, sub = c if c else (r.get("devkb_nav", 0), r.get("devkb_selftest", 0), 0)
     a = r.get("acceptance") or {}
     g = guard_rows(r.get("session", ""))
     return {"turns": r["turns"], "grep": r["calls"].get("search", 0), "nav": nav, "own": own, "sub": sub, "ctx": r["ctx_tokens"],
