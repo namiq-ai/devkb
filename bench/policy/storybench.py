@@ -133,6 +133,21 @@ def run(issue: str, reps: int, parallel: int):
 _DEVKB_CMD = re.compile(r"(\S*/)?(devkb|python\S*\s+(?:-P\s+)?-m\s+devkb[\w.]*)\s+(symbol|uses|outline|pack|docs|misses|tests|config|flows|review)\b")
 
 
+def edits_devkb_code(file_path: str, root: str | None = None) -> bool:
+    """Whether an edit changes devkb's own code, judged on the path inside the checkout (#302). A checkout that sits under
+    a folder named `devkb` must not make every edit one, and an absolute path outside the checkout is not its code.
+    Without a root (a transcript with no init event) an absolute path is judged as before: `devkb/` or `scripts/` anywhere."""
+    fp = file_path or ""
+    if root:
+        r = root.rstrip("/") + "/"
+        if fp.startswith(r):
+            fp = fp[len(r):]
+        elif fp.startswith("/"):
+            return False
+        return bool(re.match(r"(\./)?(devkb|scripts)/", fp))
+    return bool(re.search(r"(^|/)(devkb|scripts)/", fp))
+
+
 def devkb_commands(command: str, edited: bool = False) -> tuple[int, int]:
     """(navigation queries, self-tests) among the devkb commands in one shell command (#258). The repository the agents
     edit is devkb itself, so a devkb command after the run has edited devkb's code tests the change, and so does a
@@ -140,6 +155,7 @@ def devkb_commands(command: str, edited: bool = False) -> tuple[int, int]:
     navigation, whichever devkb runs it (the checkout's .venv included: D1 teaches that command)."""
     nav = own = 0
     c = re.sub(r"<<-?\s*'?(\w+)'?.*?\n\1\b", "", command or "", flags=re.S)   # heredoc bodies are text
+    c = re.sub(r"--project([ =])(['\"])([^'\"]*)\2", r"--project\1\3", c)    # a quoted fixture path is the same path (#302)
     c = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", c)                     # quoted strings are text
     for seg in re.split(r"&&|\|\||;|\||\n", c):
         seg = re.sub(r"^\s*(?:cd\s+\S+\s*|[A-Z_]+=\S+\s+)*", "", seg)
@@ -157,14 +173,14 @@ def transcript(path: Path) -> dict:
     sys.path.insert(0, str(REPO / "bench" / "audit"))
     from toolmix import classify, devkb_queries, size  # noqa: PLC0415
     kinds, calls, chars, msgs = {}, Counter(), Counter(), set()
-    res, session, dq, nav, own, outs, edited = {}, None, 0, 0, 0, {}, False
+    res, session, dq, nav, own, outs, edited, root = {}, None, 0, 0, 0, {}, False, None
     for line in open(path):
         try:
             e = json.loads(line)
         except ValueError:
             continue
         if e.get("type") == "system" and e.get("subtype") == "init":
-            session = e.get("session_id")
+            session, root = e.get("session_id"), e.get("cwd") or root
         if e.get("type") == "result":
             res = e
         m = e.get("message")
@@ -187,7 +203,7 @@ def transcript(path: Path) -> dict:
                     n, o = devkb_commands(x.get("input", {}).get("command", ""), edited)
                     nav, own = nav + n, own + o
                 fp = str(x.get("input", {}).get("file_path", ""))
-                if x["name"] in ("Edit", "Write", "MultiEdit", "NotebookEdit") and re.search(r"(^|/)(devkb|scripts)/", fp):
+                if x["name"] in ("Edit", "Write", "MultiEdit", "NotebookEdit") and edits_devkb_code(fp, root):
                     edited = True                     # from here on, a devkb command tests the change
             elif x.get("type") == "tool_result" and x.get("tool_use_id") in kinds:
                 chars[kinds[x["tool_use_id"]]] += size(x.get("content", ""))

@@ -29,7 +29,7 @@ ORDER = ("nonekeep", "none", "release", "climain", "cli130", "main")
 def counts(run: str) -> tuple[int, int, int]:
     """(devkb queries the agent made, devkb runs on its own code, searches the hook replaced) in one transcript."""
     nav = own = subst = 0
-    edited = False
+    edited, root = False, None
     path = B / "runs" / run / "stream.jsonl"
     if not path.exists():
         return 0, 0, 0
@@ -38,6 +38,8 @@ def counts(run: str) -> tuple[int, int, int]:
             e = json.loads(line)
         except ValueError:
             continue
+        if e.get("type") == "system" and e.get("subtype") == "init":
+            root = e.get("cwd") or root
         m = e.get("message")
         if not isinstance(m, dict):
             continue
@@ -51,7 +53,7 @@ def counts(run: str) -> tuple[int, int, int]:
                 n, o = sb.devkb_commands(x.get("input", {}).get("command", "") or "", edited)
                 nav, own = nav + n, own + o
                 fp = str(x.get("input", {}).get("file_path", ""))
-                if x["name"] in ("Edit", "Write", "MultiEdit", "NotebookEdit") and re.search(r"(^|/)(devkb|scripts)/", fp):
+                if x["name"] in ("Edit", "Write", "MultiEdit", "NotebookEdit") and sb.edits_devkb_code(fp, root):
                     edited = True
             elif x.get("type") == "tool_result":
                 c = x.get("content")
