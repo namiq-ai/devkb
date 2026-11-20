@@ -463,6 +463,10 @@ KEYWORDS = {"def", "class", "struct", "enum", "union", "interface", "fn", "func"
             "virtual", "async", "public", "private", "protected", "pub"}
 
 
+ANCHORED_NAME = re.compile(r"\^\s*(?:\\s\*)?[A-Za-z_][\w.:]*(?:\\?\()?")           # `^name`, `^\s*name`, `^name(`
+ANCHORED_ALTERNATIVES = re.compile(r"(?:^|\\\|)\^|\$(?:$|\\\|)")                   # an alternative that starts at `^` or ends at `$`
+
+
 def classify(tool: str, inp: dict, pattern: str, why: str | None, paths: list[Path] | None = None) -> str:
     """What a search asks (SPEC-DKB-007 §3.2), from the whole search: pattern, flags, operands, pipes and the tool; the
     names alone never decide it (#214). First match wins. It reads no graph and changes no answer."""
@@ -503,10 +507,10 @@ def classify(tool: str, inp: dict, pattern: str, why: str | None, paths: list[Pa
         return "read-body" if ctx else "locate"
     if ctx and misses.navigation_names(pattern):
         return "read-body"                        # the lines around a name: the body it sits in
-    if re.match(r"\^\s*(?:\\s\*)?[A-Za-z_]", pattern):
-        return "locate"                           # a name anchored at line start: where it is defined
-    if not misses.navigation_names(pattern):
-        return "literal"
+    if all(ANCHORED_NAME.fullmatch(a) for a in re.split(r"\\\||\|", pattern)):
+        return "locate"                           # names anchored at line start (one, or `^A\\|^B`): where they are defined
+    if not misses.navigation_names(pattern) or ANCHORED_ALTERNATIVES.search(pattern):
+        return "literal"                          # no identifier to look up, or anchored alternatives (`^REPO\|^B =`): grep's job (#329)
     if why in ("file-operand", "not-recursive") or (paths and all(p.is_file() for p in paths)):
         return "in-file"                          # a search confined to named files, whatever its other flags
     if why == "pipe" and re.search(r"\|\s*(?:e|f)?grep\b", cmd):
@@ -1349,6 +1353,8 @@ def main() -> int:
     if out:
         print(json.dumps(out))
         return 0
+    if ev.get("_intent") == "literal":
+        return 0                                 # grep is right for a literal search (the reminder says so): keep the session's one reminder for a search that asks about a name (#329)
     if not first_of_session(ev):
         return 0
     try:
