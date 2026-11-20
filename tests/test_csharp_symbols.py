@@ -1073,17 +1073,45 @@ def test_extraction_stays_linear_in_unresolved_calls_to_a_common_name(tmp_path):
 
 
 def test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method(tmp_path):
-    """#61: one method of 8000 lines `b.Property(x => x.P).HasColumn(y => y.Q);` (an EF Core model snapshot's shape).
-    Every lambda parameter went on one list scanned whole per lookup: ~5 s; linear, about 1 s."""
-    import time
-    lines = "\n".join(f"    b.Property(x => x.P{i}).HasColumn(y => y.Q{i});" for i in range(8000))
-    text = ("namespace N { class B { public B Property(System.Func<int,int> f) => this; "
-            "public B HasColumn(System.Func<int,int> f) => this; }\nclass A { void M(B b) {\n" + lines + "\n} } }\n")
-    t = time.perf_counter()
-    _, edges = _edges_of(tmp_path, {"A.cs": text})
-    took = time.perf_counter() - t
-    assert edges == {("N.A.M", "N.B.Property"), ("N.A.M", "N.B.HasColumn")}
-    assert took < 2.5, f"{took:.1f} s for 8000 lines: quadratic again"
+    """#61: one method of `b.Property(x => x.P).HasColumn(y => y.Q);` lines (an EF Core model snapshot's shape). Every
+    lambda parameter went on one list scanned whole per lookup: quadratic. The measure is the number of Python lines
+    csharp_symbols executes, which is the same on every run: a wall clock or CPU time fails under load (#371; CPU time
+    too, when another process shares the core). 4x the lines: 4.05x the work now, 10.9x for the code before #61.
+    A count of Python lines does not see work inside one C-level call (a regex or a string method over a growing
+    range); #61's quadratic scan was a Python loop, which it does see."""
+    import sys
+
+    def repo(n: int) -> Path:
+        d = tmp_path / f"r{n}"
+        d.mkdir()
+        lines = "\n".join(f"    b.Property(x => x.P{i}).HasColumn(y => y.Q{i});" for i in range(n))
+        (d / "A.cs").write_text("namespace N { class B { public B Property(System.Func<int,int> f) => this; "
+                                "public B HasColumn(System.Func<int,int> f) => this; }\nclass A { void M(B b) {\n" + lines + "\n} } }\n")
+        for cmd in (["init", "-q"], ["add", "-A", "-f"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+            subprocess.run(["git", *cmd], cwd=d, check=True)
+        return d
+
+    def work(d: Path):
+        """(lines executed in csharp_symbols, calls found) for one extract()."""
+        n, mine = [0], csharp_symbols.__file__
+
+        def local(frame, event, arg):
+            if event == "line":
+                n[0] += 1
+            return local
+
+        old = sys.gettrace()                     # a coverage tracer, if any, sees no lines of extract() here; restored after
+        sys.settrace(lambda frame, event, arg: local if frame.f_code.co_filename == mine else None)
+        try:
+            _, calls = csharp_symbols.extract(d)
+        finally:
+            sys.settrace(old)
+        return n[0], calls
+
+    small, _ = work(repo(500))
+    big, calls = work(repo(2000))
+    assert {(_short(c["caller"]), _short(c["callee"])) for c in calls} == {("N.A.M", "N.B.Property"), ("N.A.M", "N.B.HasColumn")}
+    assert big / small < 6, f"4x the lines took {big / small:.1f}x the work ({small} and {big} lines executed): quadratic again"
 
 
 def test_a_lambda_parameter_shadows_only_within_its_lambda(tmp_path):
