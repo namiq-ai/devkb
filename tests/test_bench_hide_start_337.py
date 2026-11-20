@@ -133,3 +133,20 @@ def test_symptoms_and_corpus_line_numbers_stay():
     assert "handle_plan" in names and "KeyError" not in names and "CLAUDE_PLUGIN_ROOT" not in names
     _t, b = pb.without_location("t", body)
     assert "KeyError" in b and "CLAUDE_PLUGIN_ROOT=" in b and "L1364 is listed" in b and "format.h L1364" in b
+
+
+def test_scope_code_names_are_withheld_and_a_name_outside_the_own_code_stays(tmp_path):
+    import subprocess
+    (tmp_path / "devkb").mkdir()
+    (tmp_path / "devkb" / "service.py").write_text("class Staleness:\n    pass\n\ndef _hook():\n    return 1\n")
+    (tmp_path / "corpus").mkdir()
+    (tmp_path / "corpus" / "fmt.h").write_text("int count_digits(int n);\n")
+    for c in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@e.x", "commit", "-qm", "x"]):
+        subprocess.run(["git", "-C", str(tmp_path), *c], check=True, capture_output=True)
+    body = ("**Actual:** the label reads `in count_digits` and `Staleness` is wrong.\n\n"
+            "**Scope:** the message in `devkb/service.py` (`Staleness`).\n\n"
+            "**Where to start:** `_hook`; check whether the `count_digits` span is too long.\n")
+    _t, b = pb.without_location("t", body, tmp_path)
+    assert "Staleness" not in b and "_hook" not in b and "service.py" not in b
+    assert "count_digits" in b                      # a corpus function in the symptom: not the place to fix
+    assert pb.in_own_code(tmp_path, "Staleness.message") and not pb.in_own_code(tmp_path, "count_digits")

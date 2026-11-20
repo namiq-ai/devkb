@@ -141,9 +141,14 @@ def location_names(body: str) -> list[str]:
             names.add(stem)
     for h, a, b in _sections(body):
         t = body[a:b]
-        if h.startswith("scope"):                 # a Scope file is withheld wherever it appears (#385 review)
+        if h.startswith("scope"):                 # a Scope file or code name is withheld wherever it appears (#385 review)
             for f in _FILE.findall(t):
                 add_file(f)
+            for code in re.findall(r"`([^`\n]+)`", _FILE.sub(" ", t)):
+                for n in _NAME.findall(code):
+                    n = n.rstrip(".")
+                    if len(n) > 2 and (_code_like(n, body) or (n[:1].isupper() and len(n) >= 5)):
+                        names.add(n)          # `ReadTools.resolve`, `_by_module_name`, `Staleness`
         if h.startswith("where to start"):
             for f in _FILE.findall(t):
                 add_file(f)
@@ -158,12 +163,25 @@ def location_names(body: str) -> list[str]:
     return sorted(names, key=len, reverse=True)
 
 
-def without_location(title: str, body: str) -> tuple[str, str]:
+def in_own_code(w: Path | None, name: str) -> bool:
+    """Whether a code name occurs in the checkout's own code (not its corpus, tests or docs). A name that does not, such
+    as a corpus function in the symptom (#114's `count_digits`), says nothing about where to fix (#385 review, round 3).
+    Without a checkout, every name counts."""
+    if w is None or not (Path(w) / ".git").exists():
+        return True
+    for part in [name] + [p for p in re.split(r"\.|::", name) if len(p) > 2]:   # `ReadTools.resolve` is written apart
+        if subprocess.run(["git", "-C", str(w), "grep", "-qwF", part, "--", ".", ":!corpus", ":!tests", ":!docs"],
+                          capture_output=True).returncode == 0:
+            return True
+    return False
+
+
+def without_location(title: str, body: str, w: Path | None = None) -> tuple[str, str]:
     """(title, body) with the location withheld (#337): the "Where to start" section is replaced by one line; every name
     `location_names` gives is masked wherever title and body repeat it, with what qualifies it (`Packer._resolve`,
     `bench/policy/x.py`), and so are the line numbers around it (`x.py:1471`, `L636`). Code fences are masked too: a
     reproduction that names the place gives the place away."""
-    names = location_names(body)
+    names = [n for n in location_names(body) if _FILE.fullmatch(n) or in_own_code(w, n)]
     pieces, last = [], 0
     for h, a, b in sorted(_sections(body), key=lambda x: x[1]):
         if a < last:
@@ -222,7 +240,7 @@ def run_prompt(issue: str, run_arm: str, w: Path) -> str:
 def prompt_for(issue: str, title: str, body: str, w: Path, hide: bool = False) -> str:
     """The prompt an agent is given for a ticket: as filed, or with its location withheld (#337)."""
     if hide:
-        title, body = without_location(title, body)
+        title, body = without_location(title, body, w)
     return (sb.PROMPT if issue == "117" else PROMPT).format(title=title, body=without_missing_data(body, w))
 
 
