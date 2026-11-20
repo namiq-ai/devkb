@@ -173,7 +173,7 @@ def transcript(path: Path) -> dict:
     sys.path.insert(0, str(REPO / "bench" / "audit"))
     from toolmix import classify, devkb_queries, size  # noqa: PLC0415
     kinds, calls, chars, msgs = {}, Counter(), Counter(), set()
-    res, session, dq, nav, own, outs, edited, root = {}, None, 0, 0, 0, {}, False, None
+    res, session, dq, nav, own, outs, edited, root, seen_ctx = {}, None, 0, 0, 0, {}, False, None, 0
     for line in open(path):
         try:
             e = json.loads(line)
@@ -189,6 +189,8 @@ def transcript(path: Path) -> dict:
         if e.get("type") == "assistant" and m.get("id"):
             msgs.add(m["id"])
             outs[m["id"]] = max(outs.get(m["id"], 0), (m.get("usage") or {}).get("output_tokens", 0))
+            u = m.get("usage") or {}
+            seen_ctx = max(seen_ctx, sum(u.get(k, 0) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")))
         for x in m.get("content") or []:
             if not isinstance(x, dict):
                 continue
@@ -209,13 +211,16 @@ def transcript(path: Path) -> dict:
                 chars[kinds[x["tool_use_id"]]] += size(x.get("content", ""))
     u = res.get("usage") or {}
     ctx = sum(u.get(k, 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+    cut_off = not res                                     # no final result message: the run was cut off (#303)
+    if cut_off:
+        ctx = seen_ctx                                    # the largest context any model call had: a floor, not zero
     for mu in (res.get("modelUsage") or {}).values():    # cumulative per model, when present
         ctx = max(ctx, sum(mu.get(k, 0) for k in ("inputTokens", "cacheReadInputTokens", "cacheCreationInputTokens")))
     out = sum(mu.get("outputTokens", 0) for mu in (res.get("modelUsage") or {}).values()) or sum(outs.values())
     fired, actions = guardrail_actions(session)
     # turns: the result's num_turns counts only the last turn of a session (#258); each assistant message is one
     # model call. out_tokens: modelUsage holds the session's totals; per-message usage in the stream is partial.
-    return {"session": session, "turns": len(msgs), "cost": res.get("total_cost_usd", 0),
+    return {"session": session, "turns": len(msgs), "cost": None if cut_off else res.get("total_cost_usd", 0), "cut_off": cut_off,
             "model_calls": len(msgs), "ctx_tokens": ctx, "out_tokens": out,
             "devkb_queries": dq, "devkb_nav": nav, "devkb_selftest": own, "calls": dict(calls), "chars": dict(chars), "guardrail_fired": fired,
             "guardrail_actions": actions}

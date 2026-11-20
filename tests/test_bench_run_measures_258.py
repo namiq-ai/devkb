@@ -59,3 +59,23 @@ def test_an_edit_outside_devkb_code_does_not_make_queries_self_tests(tmp_path, m
 
 def test_quoted_and_heredoc_text_is_not_a_devkb_command():
     assert sb.devkb_commands("echo 'devkb symbol x' && cat <<'EOF'\ndevkb uses y\nEOF") == (0, 0)
+
+
+def test_303_a_cut_off_run_is_flagged_with_its_context_estimated_and_its_cost_unknown(tmp_path, monkeypatch):
+    monkeypatch.setattr(sb, "guardrail_actions", lambda s: (0, {}))
+    m1, m2 = _msg(1, 10), _msg(2, 20)
+    m1["message"]["usage"].update(input_tokens=5, cache_read_input_tokens=1000)
+    m2["message"]["usage"].update(input_tokens=7, cache_read_input_tokens=3000, cache_creation_input_tokens=100)
+    p = tmp_path / "stream.jsonl"
+    p.write_text("".join(json.dumps(x) + "\n" for x in [{"type": "system", "subtype": "init", "session_id": "s"}, m1, m2]))
+    t = sb.transcript(p)
+    assert t["cut_off"] and t["cost"] is None and t["ctx_tokens"] == 3107 and t["turns"] == 2
+
+
+def test_303_a_finished_run_is_not_cut_off(tmp_path, monkeypatch):
+    monkeypatch.setattr(sb, "guardrail_actions", lambda s: (0, {}))
+    p = tmp_path / "stream.jsonl"
+    p.write_text("".join(json.dumps(x) + "\n" for x in [_msg(1, 10), {"type": "result", "total_cost_usd": 0.5,
+                                                                    "usage": {"input_tokens": 9}, "modelUsage": {}}]))
+    t = sb.transcript(p)
+    assert not t["cut_off"] and t["cost"] == 0.5 and t["ctx_tokens"] == 9

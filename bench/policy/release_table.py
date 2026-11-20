@@ -87,16 +87,16 @@ def per_run(r: dict) -> dict:
     g = guard_rows(r.get("session", ""))
     return {"turns": r["turns"], "grep": r["calls"].get("search", 0), "nav": nav, "own": own, "sub": sub, "ctx": r["ctx_tokens"],
             "out": r.get("out_tokens", 0),
-            "cost": r["cost"], "wall": r["seconds"] / 60, "ok": bool(a.get("pass")), "suite": bool(r["suite_pass"]),
+            "cost": r["cost"], "cut_off": bool(r.get("cut_off")), "wall": r["seconds"] / 60, "ok": bool(a.get("pass")), "suite": bool(r["suite_pass"]),
             "flaky": bool(r.get("suite_flaky")),
             "answers": len(g), "answer_chars": sum(x.get("answer_chars") or x.get("chars") or 0 for x in g)}
 
 
 def summary(xs: list[dict]) -> dict:
     out = {"n": len(xs), "ok": sum(x["ok"] for x in xs), "suite": sum(x["suite"] for x in xs),
-           "flaky": sum(x.get("flaky", False) for x in xs)}
+           "flaky": sum(x.get("flaky", False) for x in xs), "cut_off": sum(x.get("cut_off", False) for x in xs)}
     for k in ("turns", "grep", "nav", "own", "sub", "ctx", "out", "cost", "wall", "answers", "answer_chars"):
-        vals = [x[k] for x in xs]
+        vals = [x[k] for x in xs if x[k] is not None] or [0]     # a cut-off run's cost is unknown: not a zero (#303)
         out[k] = st.mean(vals)
         out[k + "_lo"], out[k + "_hi"] = min(vals), max(vals)
     return out
@@ -153,7 +153,8 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
                 diffs[a]["cost"].append(m["cost"] - base["cost"])
                 diffs[a]["ctx"].append(m["ctx"] - base["ctx"])
             flaky = f" ({m['flaky']} flaky)" if m.get("flaky") else ""       # green only on the re-run (#260)
-            lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {m['n']} | {fmt_range(m, 'wall')} | {m['turns']:.1f} | "
+            cut = f" ({m['cut_off']} cut off, cost left out)" if m.get("cut_off") else ""      # #303
+            lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {m['n']}{cut} | {fmt_range(m, 'wall')} | {m['turns']:.1f} | "
                          f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {m['out'] / 1e3:.1f} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | {m['own']:.1f} | "
                          f"{m['sub']:.1f} | {m['answers']:.1f} ({m['answer_chars']:.0f}) | {m['ok']}/{m['n']} | {m['suite']}/{m['n']}{flaky} | {vs} |")
     lines += ["", "| Release, arm | Runs | Cost per run | Context per run | Cost difference vs no devkb (90% interval) | Context difference (90% interval) |",
