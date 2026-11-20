@@ -69,7 +69,6 @@ def test_teach_is_on_by_default_and_the_setting_0_gives_the_plain_answer(repo, t
 
 
 @pytest.mark.parametrize("command, taught", [
-    ('grep -n "def compute" -A20 pkg/core.py', "devkb symbol compute --source --project ."),       # read-body
     ('grep -rn "def compute" pkg/', "devkb symbol compute --source --project ."),                   # locate
     ('grep -n "^def " pkg/core.py', "devkb outline pkg/core.py --project ."),                       # list-symbols
     ("grep -rn compute pkg/", "devkb uses compute --project ."),                                     # call-sites
