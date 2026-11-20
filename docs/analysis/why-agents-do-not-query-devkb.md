@@ -6,7 +6,7 @@
 
 **Data.**
 - **0.2.13:** the transcripts of the `main`, `teach` and `outline` runs on the six D1 tickets (#118, #120, #137, #175, #203, #205), in `~/.claude/projects/*cs4-bench-policy-work-p<ticket>-<arm>-r<n>/<session>.jsonl` (local), with the result rows in `bench/results/2026-11-19-release-0.2.13/results/`.
-- **Since 0.2.14:** the run streams of #372, #371 and #375 and #375's benchmark (`devkb-benchmark-375-teach-archive.tar.gz`, next to the checkout).
+- **Since 0.2.14:** #375's runs and benchmark in `devkb-benchmark-375-teach-archive.tar.gz` (next to the checkout); #372's and #371's `main` runs as Claude Code sessions in `~/.claude/projects/-home-namiq--cache-devkb-policy-work-p37{1,2}-main-r*/` (local).
 - **81 interviews:** `bench/policy/interviews-381/answers.jsonl`.
 
 ## 1. The answer, ranked
@@ -16,11 +16,11 @@
 | 1 | **The ticket hands over the location, so a read is the shortest path** | **supported, confounded** (#337 decides it) | 0 of 63 runs since 0.2.14 tried devkb, all on tickets that give line numbers, against 16 of 54 on 0.2.13's tickets, 5 of 6 of which give none (Fisher p ≈ 1e-6). 58 of 63 agents asked "why not" named the ticket's location. The sets also differ in tickets, code areas, devkb versions and permission rules (section 3). |
 | 2 | **When agents did try, the benchmark refused the command** | **confirmed**, for 0.2.13 | 35 attempts in 16 runs; **all 35 refused** by the permission checker, **0 answered** (19 compound commands, 15 needing approval, 1 an unchecked variable). 15 of the 18 interviewed agents said so. |
 | 3 | **Advice at the point of need is not followed** | **confirmed** | The teach line was seen 17 times in #375's `teachall` arm, with 0 queries. 35 of 63 agents said a hook or guardrail hint was shown and they did not act on it. |
-| 4 | **The work is small and local, so the expected gain is small** | **reported**, consistent with the data | 32-36 of 63 called the fix small or local. Almost all (about 60 of 63) judged devkb would have helped "a little" or "somewhat", at most 2 "not at all" (both also say "a little"), **none "clearly"**. |
+| 4 | **The work is small and local, so the expected gain is small** | **reported**, consistent with the data | 32-36 of 63 called the fix small or local. Almost all (about 60 of 63) judged devkb would have helped "a little" or "somewhat", at most 2 "not at all" (one of them also says it would have helped "in a few places"), **none "clearly"**. |
 | 5 | Familiarity: grep and sed are free to recall, devkb is an unknown CLI | **open** | 6 of 63 said "habit" or "momentum". Not tested by an arm (SPEC-DKB-007 D3, intent-named native tools, was never built). |
 | 6 | The model | **open** | Only Sonnet 5.5 has been measured. |
 
-**Not a cause, but a defect found on the way:** devkb's "tests to run" for the bench files these tickets change lists 0-1 tests, against 1-11 test files that load them (#382). The cause is that the tests bind the module to a short alias (`sb = importlib.import_module("storybench")`). Agents name "tests to run" as devkb's main value. But no agent since 0.2.13 got a devkb answer at all, so this defect cannot have put anyone off. It matters for the next measurement, not for this one.
+**Not a cause, but a defect found on the way:** devkb's "tests to run" for the bench files these tickets change lists 0-1 tests, against 1-11 test files that load them (#382). The cause is that the tests bind the module to a short alias (`sb = importlib.import_module("storybench")`). Agents name "tests to run" as devkb's main value. But no agent since 0.2.13 ran a devkb query, so this defect cannot have put anyone off. The guardrail's own answers did reach agents in 12 of the 57 archived devkb-arm runs (for example p302-hookmain-r1: "the guardrail … answered from the graph"), but none of them was a list of tests to run. It matters for the next measurement, not for this one.
 
 ## 2. The 0.2.13 positive case was refused commands, not answers
 
