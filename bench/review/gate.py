@@ -19,7 +19,7 @@ OWNER = "hungle-namiq"
 # A PR touching these is never merged by the gate (owner decides): it is sent to rework with the reason.
 NEVER_MERGE = (".github/workflows/*", "ops/triage/*", "pyproject.toml", "MANIFEST.in", "docs/specs/*", "docs/adr/*",
                "docs/RELEASING.md", "scripts/release*")
-BLOCKING = ("high", "medium")
+NON_BLOCKING = ("low", "info", "nit")      # anything else, a spelling or a severity the gate does not know, blocks
 
 
 def decide(pr: dict, findings: list[dict], whoami: str, host: str, allowed_hosts: tuple[str, ...] | list[str],
@@ -30,6 +30,8 @@ def decide(pr: dict, findings: list[dict], whoami: str, host: str, allowed_hosts
     if not own:
         return {"action": "review-only", "reasons": ["not the owner's own PR: reviewed and reported, never merged"]}
     why: list[str] = []
+    if pr.get("is_draft"):
+        why.append("the PR is a draft")
     if not pr.get("ci_green"):
         why.append("CI is not green")
     if not pr.get("suite_green"):
@@ -37,9 +39,9 @@ def decide(pr: dict, findings: list[dict], whoami: str, host: str, allowed_hosts
     if pr.get("hidden_check") is False:
         why.append("the ticket's hidden check fails")
     for f in findings:
-        if f.get("open", True) and f.get("severity") in BLOCKING:
-            why.append(f"open {f['severity']} finding: {f.get('title', '?')}")
-        sev = {v for v in (f.get("severity_by_arm") or {}).values() if v}
+        if f.get("open", True) and str(f.get("severity", "")).strip().lower() not in NON_BLOCKING:
+            why.append(f"open {f.get('severity') or 'unrated'} finding: {f.get('title', '?')}")
+        sev = {str(v).strip().lower() for v in (f.get("severity_by_arm") or {}).values() if v}
         if len(sev) > 1:
             why.append(f"the two reviews disagree on the severity of: {f.get('title', '?')}")
     guarded = sorted({p for p in pr.get("files", []) for g in NEVER_MERGE if fnmatch.fnmatch(p, g)})
@@ -58,9 +60,9 @@ def _gh(*a: str) -> str:
 
 
 def pr_facts(n: str) -> dict:
-    j = json.loads(_gh("pr", "view", n, "--json", "author,isCrossRepository,files,headRefOid,statusCheckRollup"))
+    j = json.loads(_gh("pr", "view", n, "--json", "author,isCrossRepository,isDraft,files,headRefOid,statusCheckRollup"))
     runs = j.get("statusCheckRollup") or []
-    return {"author": j["author"]["login"], "is_fork": j["isCrossRepository"], "head": j["headRefOid"],
+    return {"author": j["author"]["login"], "is_fork": j["isCrossRepository"], "is_draft": j["isDraft"], "head": j["headRefOid"],
             "files": [f["path"] for f in j["files"]],
             "ci_green": bool(runs) and all(r.get("conclusion") in ("SUCCESS", "NEUTRAL", "SKIPPED") for r in runs),
             "suite_green": None, "hidden_check": None}      # the review harness fills these from its own run

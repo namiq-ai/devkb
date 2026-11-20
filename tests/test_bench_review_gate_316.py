@@ -54,3 +54,13 @@ def test_a_merge_from_another_identity_or_host_is_review_only():
     assert d(who="someone-else")["action"] == "review-only"
     assert d(host="other-host")["action"] == "review-only"
     assert g.decide(OK, [], "hungle-namiq", "this-host", [])["action"] == "review-only"   # no allowed host configured
+
+
+def test_the_gate_fails_closed_on_an_unknown_or_oddly_spelled_severity():
+    for sev in ("High", " MEDIUM ", "critical", "", None):
+        assert d(findings=[{"severity": sev, "title": "t"}])["action"] == "rework", sev
+    assert d(findings=[{"severity": "Low"}, {"severity": "nit"}])["action"] == "merge"
+
+
+def test_a_draft_pr_is_rework():
+    assert d({"is_draft": True})["action"] == "rework"
