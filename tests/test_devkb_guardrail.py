@@ -47,19 +47,19 @@ def test_a_search_in_a_served_repository_is_reminded_and_logged(env):
     assert len(reminders) == 1 and reminders[0]["tool"] == "Bash"
 
 
-@pytest.mark.parametrize("command", ["git grep -n x", "rg x src", "find . -name '*.py' | xargs grep -l x"])
+@pytest.mark.parametrize("command", ["git grep -n parse", "rg parse src", "find . -name '*.py' | xargs grep -l parse"])
 def test_every_search_form_is_reminded(env, command):
     assert hook(env, bash(env["served"], command))
 
 
 def test_the_grep_tool_is_reminded(env):
     ev = {"tool_name": "Grep", "cwd": str(env["served"]), "session_id": "s", "tool_use_id": "g1",
-          "tool_input": {"pattern": "x"}}
+          "tool_input": {"pattern": "parse"}}
     assert hook(env, ev)
 
 
 def test_a_search_reached_through_cd_is_reminded(env):
-    assert hook(env, bash(env["plain"], f"cd {env['served']} && grep -n x f.py"))
+    assert hook(env, bash(env["plain"], f"cd {env['served']} && grep -n parse f.py"))
 
 
 @pytest.mark.parametrize("command", ["pytest -q | grep passed", "ls -la", "git log --oneline | grep fix",
@@ -78,18 +78,18 @@ def test_the_switch_turns_it_off(env):
 
 
 def test_two_copies_of_the_hook_remind_once(env):
-    ev = bash(env["served"], "grep -rn x .", n=7)
+    ev = bash(env["served"], "grep -rn parse .", n=7)
     first, second = hook(env, ev), hook(env, ev)
     assert first and second == ""
 
 
 def test_a_session_is_reminded_once(env):
-    assert hook(env, bash(env["served"], "grep -rn x .", n=1))
+    assert hook(env, bash(env["served"], "grep -rn parse .", n=1))
     assert hook(env, bash(env["served"], "rg y .", n=2)) == "", "a later search in the same session is not reminded"
-    other = dict(bash(env["served"], "grep -rn x .", n=3), session_id="s2")
+    other = dict(bash(env["served"], "grep -rn parse .", n=3), session_id="s2")
     assert hook(env, other), "another session is reminded"
     log = (env["home"] / ".claude" / "hooks" / "devkb-guardrail.log").read_text().splitlines()
-    assert len(log) == 2
+    assert len([1 for x in log if json.loads(x).get("action") == "remind"]) == 2     # decisions (#149) are other lines
 
 
 def test_the_repository_registers_it():
@@ -99,3 +99,15 @@ def test_the_repository_registers_it():
     assert "Developing devkb: devkb first, logged" in (ROOT / "AGENTS.md").read_text()
     assert "@AGENTS.md" in (ROOT / "CLAUDE.md").read_text()
     assert not (ROOT / ".mcp.json").exists(), "devkb's own repository uses devkb from the shell (CLI-only, #126)"
+
+
+@pytest.mark.parametrize("command", ['grep -n "^REPO\\|^B =" mod.py', "grep -n x mod.py", 'grep -rn "^A$\\|^B$" .', "rg '^[A-Z_]+ =' ."])
+def test_a_literal_search_does_not_spend_the_sessions_one_reminder(env, command):
+    """#329: grep is right for these (the reminder says so); the reminder is kept for a search that asks about a name."""
+    assert hook(env, bash(env["served"], command, n=1)) == ""
+    assert hook(env, bash(env["served"], "grep -rn parse .", n=2)), "the next name search is still reminded"
+
+
+@pytest.mark.parametrize("command", ["grep -rn parse .", "grep -n '^def parse' mod.py", "grep -rn '^parse' ."])
+def test_a_search_for_a_name_is_still_reminded_first(env, command):
+    assert hook(env, bash(env["served"], command, n=1))
