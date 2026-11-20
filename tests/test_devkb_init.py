@@ -50,7 +50,7 @@ def test_a_bare_repository_gets_new_files_and_loses_them_again(tmp_path):
     root = _repo(tmp_path, {})
     init.run(root, "lean", hooks=True, dry_run=False)
     hook = root / ".git/hooks/post-commit"
-    assert hook.read_text().startswith("#!/bin/sh\n") and "devkb build" in hook.read_text() and hook.stat().st_mode & 0o111
+    assert hook.read_text().startswith("#!/bin/sh\n") and "build --hook" in hook.read_text() and hook.stat().st_mode & 0o111
     init.run(root, None, hooks=False, dry_run=False)
     assert not any((root / rel).exists() for rel in ("AGENTS.md", "CLAUDE.md", ".gitignore", ".mcp.json"))
 

@@ -11,7 +11,7 @@ the block:
   .mcp.json     the devkb MCP server, merged into any servers already declared
   .gitignore    .devkb/ (the graph is built locally, never committed)
   .claude/settings.json  with --claude-hook: a PreToolUse hook that gives Claude Code the file's pack at its first edit
-  git hooks     with --hooks: rebuild the graph in the background after a commit, merge or checkout
+  git hooks     with --hooks: rebuild the graph in the background after a commit, merge, rebase or checkout
 
 Why instructions and not only a server: in the study, agents left to choose used the graph in 88% of runs that
 followed a call chain and in none of the requirement, solution or review runs. The savings were measured with these
@@ -22,13 +22,14 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
 
 BEGIN, END = "<!-- devkb:begin (managed by `devkb init`; edit outside this block) -->", "<!-- devkb:end -->"
 HASH_BEGIN, HASH_END = "# devkb:begin (managed by `devkb init`)", "# devkb:end"
-HOOKS = ("post-commit", "post-merge", "post-checkout")
+HOOKS = ("post-commit", "post-merge", "post-checkout", "post-rewrite")  # post-rewrite: pull --rebase, rebase, amend (#158)
 
 AGENTS_BLOCK = """## devkb: ask the graph before you read or change code
 
@@ -194,7 +195,12 @@ def _hooks_dir(root: Path) -> Path:
 
 
 def _hook(text: str, install: bool) -> str | None:
-    body = "( devkb build --project \"$(git rev-parse --show-toplevel)\" > /dev/null 2>&1 & )"
+    """The block calls the devkb that ran `devkb init`, by absolute path, never whichever `devkb` is first on PATH (#158):
+    this interpreter with this package's directory on PYTHONPATH, so in devkb's own checkout the graph is built with the
+    code at HEAD. The build runs in the background, serialised and logged by `devkb build --hook` (devkb/buildlog.py)."""
+    pkg_parent = Path(__file__).resolve().parent.parent
+    body = (f"( R=\"$(git rev-parse --show-toplevel)\" && PYTHONPATH={shlex.quote(str(pkg_parent))} "
+            f"{shlex.quote(sys.executable)} -P -m devkb.cli build --hook --project \"$R\" > /dev/null 2>&1 & )")
     if install:
         return _set_block(text or "#!/bin/sh\n", body, HASH_BEGIN, HASH_END)
     out = _drop_block(text, HASH_BEGIN, HASH_END)
