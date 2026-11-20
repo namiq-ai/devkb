@@ -131,6 +131,27 @@ def fmt_range(m: dict, k: str, scale: float = 1.0, unit: str = "", digits: int =
     return f"{f.format(m[k] / scale)}{unit} ({f.format(m[k + '_lo'] / scale)}–{f.format(m[k + '_hi'] / scale)})"
 
 
+def start_section(pairs: list[tuple[str, list[dict]]]) -> list[str]:
+    """The start of each run apart from its totals (#331): the first model call's context (policy, hook and tool text, no
+    work yet) and the number of tests the arm's checkout collects. A ticket whose arms collect different numbers gets a
+    warning: a difference in cost, turns or wall time between them then includes the suite's size."""
+    out = ["", "| Ticket | Arm | First-call context k | Tests collected |", "|---|---|---|---|"]
+    warn = []
+    for t, rows in pairs:
+        arms = sorted({r["arm"] for r in rows}, key=lambda a: ORDER.index(a) if a in ORDER else 99)
+        seen = {}
+        for a in arms:
+            fc = [r["first_ctx"] for r in rows if r["arm"] == a and r.get("first_ctx") is not None]
+            tc = sorted({r["tests_collected"] for r in rows if r["arm"] == a and r.get("tests_collected") is not None})
+            seen[a] = tc
+            out.append(f"| #{t} | {a} | {f'{st.mean(fc) / 1e3:.1f}' if fc else 'unknown'} | {', '.join(map(str, tc)) if tc else 'unknown'} |")
+        known = {a: tc for a, tc in seen.items() if tc}
+        if len({tuple(v) for v in known.values()}) > 1:
+            warn.append(f"#{t}: the arms collect different numbers of tests ({'; '.join(f'{a} {tc}' for a, tc in known.items())}): "
+                        "a difference in cost, turns or wall time between them includes the suite's size (#331)")
+    return out + [f"WARNING {w}" for w in warn]
+
+
 def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str:
     problems = [p for t, rows in pairs if (p := check_hashes(t, rows))]
     if problems and not allow_mixed:
@@ -173,6 +194,7 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
         else:
             dc = dk = "—"
         lines.append(f"| {a} | {n} | ${cost:.2f} | {ctx / 1e3:.0f}k | {dc} | {dk} |")
+    lines += start_section(pairs)
     if problems:
         lines += ["", "Mixed hidden-check versions (allowed by flag): " + "; ".join(problems)]
     return "\n".join(lines)

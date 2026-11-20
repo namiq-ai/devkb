@@ -83,11 +83,10 @@ def checkout(w: Path, arm: str):
         for t in TRACE:
             p = w / t
             shutil.rmtree(p) if p.is_dir() else p.unlink(missing_ok=True)
-        for t in [*(w / "scripts").glob("devkb_guardrail*.py"), *(w / "tests").glob("*.py")]:
-            # the guardrail's scripts go with it, and so does every test that exercises them, so the suite starts green
-            if t.parent.name == "scripts" or "devkb_guardrail" in t.read_text(errors="replace"):
-                t.unlink(missing_ok=True)
-        remove_dependents(w / "tests")
+        for t in (w / "scripts").glob("devkb_guardrail*.py"):    # the guardrail's scripts go with it
+            t.unlink(missing_ok=True)
+    if arm != "nonekeep" and (arm == "none" or os.environ.get("POLICY_EQUAL_SUITE", "1") == "1"):
+        trim_tests(w)                                 # every arm runs the same suite as `none` (#331); nonekeep keeps all
     if env:                                           # the arm's hook runs the tool environment's guardrail
         st_path = w / ".claude" / "settings.json"
         st = json.loads(st_path.read_text()) if st_path.exists() else {}
@@ -121,13 +120,32 @@ def checkout(w: Path, arm: str):
     base_suite = subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-x"], cwd=w,
                                 capture_output=True, text=True, timeout=1800)
     failed = [l.split(" - ")[0] for l in base_suite.stdout.splitlines() if l.startswith(("FAILED ", "ERROR "))]
-    meta = {"arm": arm, "base_suite": (base_suite.stdout.strip().splitlines() or [""])[-1], "base_failed": failed[:5],
+    n_tests = collected(subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
+                                       cwd=w, capture_output=True, text=True, timeout=600).stdout)
+    meta = {"arm": arm, "tests_collected": n_tests, "base_suite": (base_suite.stdout.strip().splitlines() or [""])[-1], "base_failed": failed[:5],
             "base_green": base_suite.returncode == 0,
             "devkb_commit": env["commit"] if env else None, "hook_sha": env["hook_sha"] if env else None}
     (w / ".bench-arm.json").write_text(json.dumps(meta) + "\n")
     (w / ".bench-base").write_text(sb.sh(["git", "rev-parse", "HEAD"], cwd=w).stdout.strip())
     if not meta["base_green"]:                        # a red base would be counted against the agent (#221)
         raise RuntimeError(f"{w.name}: the checkout's own suite is red before the agent starts: {meta['base_suite']} {failed[:3]}")
+
+
+def trim_tests(w: Path) -> None:
+    """Remove every test that exercises the guardrail's scripts, and every test module that imports one that is gone, so
+    the suite starts green in the arm that has no guardrail, and is the same suite in every other arm (#331): a cost,
+    turn or wall-time difference then does not include the suite's size. POLICY_EQUAL_SUITE=0 keeps the other arms' tests
+    (for a ticket about the guardrail itself; use the nonekeep arm as its control)."""
+    for t in (w / "tests").glob("*.py"):
+        if "devkb_guardrail" in t.read_text(errors="replace"):
+            t.unlink(missing_ok=True)
+    remove_dependents(w / "tests")
+
+
+def collected(out: str) -> int | None:
+    """The number of tests in `pytest --collect-only -q` output (its last line: 'N tests collected in …'), else None."""
+    m = re.search(r"(\d+) tests? collected", (out or "").strip().splitlines()[-1] if (out or "").strip() else "")
+    return int(m.group(1)) if m else None
 
 
 def remove_dependents(tests: Path) -> None:
@@ -168,7 +186,8 @@ def template_for(arm: str) -> Path:
     copied for each run: the 4-5 minutes of setup a run used to repeat (POLICY_TEMPLATES=0 turns it off)."""
     base = sb.sh(["git", "-C", str(sb.REPO), "rev-parse", f"{BASES[arm]}^{{commit}}"]).stdout.strip()
     envc = toolenv.resolve(ENV_REF[arm]()) if arm in ENV_REF else "none"
-    t = TEMPLATES / f"{arm}-{base[:12]}-{envc[:12]}"
+    suite = "eq" if os.environ.get("POLICY_EQUAL_SUITE", "1") == "1" else "full"      # the suite is content: part of the key (#331)
+    t = TEMPLATES / f"{arm}-{base[:12]}-{envc[:12]}-suite{suite}"
     with toolenv.held(TEMPLATES / f".{t.name}.lock"):   # runs of one arm, in this or another benchmark process, wait
                                                         # for the same template: never built twice, never deleted in use
         if not (t / ".bench-ready").exists():
@@ -336,6 +355,7 @@ def score_run(issue: str, out: Path) -> dict | None:
             "diff": sb.sh(["git", "diff", "--shortstat", base], cwd=w).stdout.strip(),
             "accept_sha256": hashlib.sha256(acc.read_bytes()).hexdigest(),          # which check scored it (#223)
             "base_green": arm_meta.get("base_green"), "base_suite": arm_meta.get("base_suite"),   # #221
+            "tests_collected": arm_meta.get("tests_collected"),                                    # #331
             "devkb_commit": arm_meta.get("devkb_commit"), "hook_sha": arm_meta.get("hook_sha"),   # #225
             "telemetry": sum(len((d / ".devkb" / "process-api-telemetry.jsonl").read_text().splitlines())
                              for d in [w, *(w / "corpus" / r for r in sb.CORPUS_REPOS)]
