@@ -47,6 +47,26 @@ for it, grouped by function as `uses` does, and says so.
 
 This repository is devkb itself, so every session that works on it is also a test of it. Follow these in order.
 
+**Per-ticket checklist: read it before you start a ticket, and again before you call it done.** Every ticket gets all five;
+skipping one is a defect in the work, not a shortcut (the 0.2.14 harness fixes #301-#304 skipped 2-5 and had to be
+backfilled).
+1. **Hidden check.** `bench/policy/accept/<N>.py`, written from the ticket's *Expected* list as a black box (it takes the
+   checkout path, prints one JSON line with `pass`). Run it on the ticket's base commit (must fail) and on the fix (must pass).
+2. **Two arms, from the base commit, before you look at your own fix.** `none` (no devkb) and `main` (devkb CLI), same model,
+   same prompt, one shuffled batch, at least 3 repetitions:
+   `POLICY_ARMS=none,main POLICY_MAIN=<base sha> .venv/bin/python bench/policy/policybench.py run <N> --reps 3`, then `score <N>`.
+   Every arm runs the same suite (#331): the harness removes the guardrail's tests from all arms, and the table prints each arm's
+   collected-test count and first-call context, with a warning when the counts differ. For a ticket about the guardrail itself,
+   set `POLICY_EQUAL_SUITE=0` and use `nonekeep` as the control.
+   The rules are `docs/BENCHMARK.md`'s: same model in every arm, one session per batch, pinned commits, never tune on the
+   benchmark's own tasks, report everything (arms that cost more, runs that failed, runs cut off).
+3. **PR review, two ways.** With and without devkb's `review_pack` (#316), posted as a GitHub review (`gh pr review`), then
+   `bench/review/gate.py PR FINDINGS.json`. Merge only as the owner on the owner's host, and only when the gate says `merge`;
+   a PR from anyone else is reviewed and never merged.
+4. **Execution result comment** on the ticket (rule 7 below): where it was done, what it does now, the dual-mode table from
+   step 2, problems found, follow-ups.
+5. **Graph misses**: `devkb misses --project .`, summarised in that comment (rule 7).
+
 1. **Run the devkb of this checkout.** Use `.venv/bin/devkb`, not the `devkb` on your PATH: the released 0.2.11 lacks
    `devkb misses` (#133), `Class::method` in `pack` (#132) and the query log (#127), so rule 7 would fail with it. Once
    the next release ships these, the one on your PATH is fine. Examples below write `devkb` for either.

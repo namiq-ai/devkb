@@ -56,7 +56,8 @@ def navigation_names(pattern: str, dialect: str = "both") -> list[str]:
             return []
         if part not in names:
             names.append(part)
-    return names[:3]
+    return names                                    # every name: the hook asks about at most 3 and never replaces a
+                                                    # search that names more (#278)
 
 
 def definition_name(pattern: str) -> str | None:
@@ -91,13 +92,13 @@ def run_definitions(repo: Path, name: str, timeout: float = 12) -> list[dict] | 
 
 def changed_since_build(repo: Path, rel: str) -> bool:
     """True when the file may differ from what the graph was built from: edited after the build, or no build time known."""
-    built = 0.0
+    times = []
     for n in ("symbols-manifest.json", "manifest.json"):
         try:
-            built = (repo / ".devkb" / n).stat().st_mtime
-            break
+            times.append((repo / ".devkb" / n).stat().st_mtime)
         except OSError:
             pass
+    built = min(times) if times else 0.0              # the older part decides: an answer may read either (#273)
     try:
         return not built or (repo / rel).stat().st_mtime > built
     except OSError:
@@ -144,20 +145,24 @@ def run_query(repo: Path, kind: str, name: str, timeout: float = 12) -> tuple[st
 
 
 def graph_state(repo: Path) -> tuple[str, str]:
-    """(commit the graph was built at, repository HEAD)."""
-    built = ""
+    """(commit the graph was built at, repository HEAD). The graph has two parts, the symbol index and the process graph,
+    each with its own manifest, and an answer may read either: when they were built at different commits, the one that
+    is not HEAD is the graph's commit, so a stale part makes the whole graph stale (#273)."""
+    heads = []
     for n in ("symbols-manifest.json", "manifest.json"):
         try:
-            built = json.loads((repo / ".devkb" / n).read_text()).get("git_head", "") or built
+            h = json.loads((repo / ".devkb" / n).read_text()).get("git_head", "")
         except (OSError, ValueError):
-            pass
-        if built:
-            break
+            h = ""
+        if h:
+            heads.append(h)
     try:
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True,
                               timeout=5).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         head = ""
+    same = lambda h: bool(head) and (head.startswith(h[:7]) or h.startswith(head[:7]))
+    built = next((h for h in heads if not same(h)), heads[0] if heads else "")
     return built, head
 
 

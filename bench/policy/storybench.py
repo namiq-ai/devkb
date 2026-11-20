@@ -43,7 +43,7 @@ and do not use gh.
 {body}
 """
 ALLOW = ["Read", "Edit", "Write", "Glob", "Grep", "TodoWrite", "mcp__devkb",
-         "Bash(git:*)", "Bash(.venv/bin/python:*)", "Bash(.venv/bin/pytest:*)", "Bash(python3:*)", "Bash(devkb:*)",
+         "Bash(git:*)", "Bash(.venv/bin/python:*)", "Bash(.venv/bin/pytest:*)", "Bash(python3:*)", "Bash(devkb:*)", "Bash(.venv/bin/devkb:*)",
          "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)", "Bash(find:*)", "Bash(grep:*)",
          "Bash(rg:*)", "Bash(diff:*)", "Bash(sed -n:*)", "Bash(awk:*)", "Bash(sort:*)", "Bash(uniq:*)", "Bash(mkdir:*)",
          "Bash(make:*)", "Bash(cd:*)", "Bash(echo:*)", "Bash(jq:*)"]
@@ -133,6 +133,21 @@ def run(issue: str, reps: int, parallel: int):
 _DEVKB_CMD = re.compile(r"(\S*/)?(devkb|python\S*\s+(?:-P\s+)?-m\s+devkb[\w.]*)\s+(symbol|uses|outline|pack|docs|misses|tests|config|flows|review)\b")
 
 
+def edits_devkb_code(file_path: str, root: str | None = None) -> bool:
+    """Whether an edit changes devkb's own code, judged on the path inside the checkout (#302). A checkout that sits under
+    a folder named `devkb` must not make every edit one, and an absolute path outside the checkout is not its code.
+    Without a root (a transcript with no init event) an absolute path is judged as before: `devkb/` or `scripts/` anywhere."""
+    fp = file_path or ""
+    if root:
+        r = root.rstrip("/") + "/"
+        if fp.startswith(r):
+            fp = fp[len(r):]
+        elif fp.startswith("/"):
+            return False
+        return bool(re.match(r"(\./)?(devkb|scripts)/", fp))
+    return bool(re.search(r"(^|/)(devkb|scripts)/", fp))
+
+
 def devkb_commands(command: str, edited: bool = False) -> tuple[int, int]:
     """(navigation queries, self-tests) among the devkb commands in one shell command (#258). The repository the agents
     edit is devkb itself, so a devkb command after the run has edited devkb's code tests the change, and so does a
@@ -140,6 +155,7 @@ def devkb_commands(command: str, edited: bool = False) -> tuple[int, int]:
     navigation, whichever devkb runs it (the checkout's .venv included: D1 teaches that command)."""
     nav = own = 0
     c = re.sub(r"<<-?\s*'?(\w+)'?.*?\n\1\b", "", command or "", flags=re.S)   # heredoc bodies are text
+    c = re.sub(r"--project([ =])(['\"])([^'\"]*)\2", r"--project\1\3", c)    # a quoted fixture path is the same path (#302)
     c = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", c)                     # quoted strings are text
     for seg in re.split(r"&&|\|\||;|\||\n", c):
         seg = re.sub(r"^\s*(?:cd\s+\S+\s*|[A-Z_]+=\S+\s+)*", "", seg)
@@ -157,14 +173,15 @@ def transcript(path: Path) -> dict:
     sys.path.insert(0, str(REPO / "bench" / "audit"))
     from toolmix import classify, devkb_queries, size  # noqa: PLC0415
     kinds, calls, chars, msgs = {}, Counter(), Counter(), set()
-    res, session, dq, nav, own, outs, edited = {}, None, 0, 0, 0, {}, False
+    res, session, dq, nav, own, outs, edited, root, seen_ctx, first_ctx = {}, None, 0, 0, 0, {}, False, None, 0, None
+    backgrounded = 0
     for line in open(path):
         try:
             e = json.loads(line)
         except ValueError:
             continue
         if e.get("type") == "system" and e.get("subtype") == "init":
-            session = e.get("session_id")
+            session, root = e.get("session_id"), e.get("cwd") or root
         if e.get("type") == "result":
             res = e
         m = e.get("message")
@@ -173,9 +190,16 @@ def transcript(path: Path) -> dict:
         if e.get("type") == "assistant" and m.get("id"):
             msgs.add(m["id"])
             outs[m["id"]] = max(outs.get(m["id"], 0), (m.get("usage") or {}).get("output_tokens", 0))
+            u = m.get("usage") or {}
+            seen_ctx = max(seen_ctx, sum(u.get(k, 0) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")))
+            if first_ctx is None:                  # the run's starting context: the policy, hook and tool text, before any work (#331)
+                first_ctx = sum(u.get(k, 0) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
         for x in m.get("content") or []:
             if not isinstance(x, dict):
                 continue
+            if x.get("type") == "tool_result" and "was moved to the background" in (
+                    x["content"] if isinstance(x.get("content"), str) else json.dumps(x.get("content"))):
+                backgrounded += 1                     # a command the Bash tool backgrounded at its timeout (#334)
             if x.get("type") == "tool_use":
                 k = "devkb" if x["name"].startswith("mcp__devkb") else classify(x["name"], x.get("input", {}))
                 kinds[x["id"]] = k
@@ -187,19 +211,22 @@ def transcript(path: Path) -> dict:
                     n, o = devkb_commands(x.get("input", {}).get("command", ""), edited)
                     nav, own = nav + n, own + o
                 fp = str(x.get("input", {}).get("file_path", ""))
-                if x["name"] in ("Edit", "Write", "MultiEdit", "NotebookEdit") and re.search(r"(^|/)(devkb|scripts)/", fp):
+                if x["name"] in ("Edit", "Write", "MultiEdit", "NotebookEdit") and edits_devkb_code(fp, root):
                     edited = True                     # from here on, a devkb command tests the change
             elif x.get("type") == "tool_result" and x.get("tool_use_id") in kinds:
                 chars[kinds[x["tool_use_id"]]] += size(x.get("content", ""))
     u = res.get("usage") or {}
     ctx = sum(u.get(k, 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+    cut_off = not res                                     # no final result message: the run was cut off (#303)
+    if cut_off:
+        ctx = seen_ctx                                    # the largest context any model call had: a floor, not zero
     for mu in (res.get("modelUsage") or {}).values():    # cumulative per model, when present
         ctx = max(ctx, sum(mu.get(k, 0) for k in ("inputTokens", "cacheReadInputTokens", "cacheCreationInputTokens")))
     out = sum(mu.get("outputTokens", 0) for mu in (res.get("modelUsage") or {}).values()) or sum(outs.values())
     fired, actions = guardrail_actions(session)
     # turns: the result's num_turns counts only the last turn of a session (#258); each assistant message is one
     # model call. out_tokens: modelUsage holds the session's totals; per-message usage in the stream is partial.
-    return {"session": session, "turns": len(msgs), "cost": res.get("total_cost_usd", 0),
+    return {"session": session, "turns": len(msgs), "cost": None if cut_off else res.get("total_cost_usd", 0), "cut_off": cut_off, "first_ctx": first_ctx, "backgrounded": backgrounded,
             "model_calls": len(msgs), "ctx_tokens": ctx, "out_tokens": out,
             "devkb_queries": dq, "devkb_nav": nav, "devkb_selftest": own, "calls": dict(calls), "chars": dict(chars), "guardrail_fired": fired,
             "guardrail_actions": actions}

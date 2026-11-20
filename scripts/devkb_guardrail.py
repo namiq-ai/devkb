@@ -692,16 +692,27 @@ def emit(ev: dict, out: dict | None) -> dict | None:
     return out
 
 
+def project_arg(repo: Path) -> str:
+    """`--project` as the agent would type it in the directory the search ran in: the repository root relative to it
+    (`.` at the root, `..` from a subfolder), so the suggested command runs where it is pasted (#283)."""
+    try:
+        rel = os.path.relpath(repo.resolve(), (SEARCH_CWD[0] if SEARCH_CWD else repo).resolve())
+    except ValueError:
+        rel = str(repo)
+    return shlex.quote(rel)
+
+
 def teach_command(intent: str, names: list[str], paths: list[Path] | None, repo: Path) -> str | None:
-    """D1: the one devkb command that answers this intent, as the agent would type it."""
-    n = names[0] if names else ""
+    """D1: the one devkb command that answers this intent, as the agent would type it: names and paths shell-quoted,
+    `--project` relative to the search's directory (#283)."""
+    n = shlex.quote(names[0]) if names else ""
     files = [p for p in paths or [] if p.is_file()]
     if intent in ("read-body", "locate") and n:
-        return f"devkb symbol {n} --source --project ."
+        return f"devkb symbol {n} --source --project {project_arg(repo)}"
     if intent == "list-symbols" and files:
-        return f"devkb outline {files[0].resolve().relative_to(repo)} --project ."
+        return f"devkb outline {shlex.quote(str(files[0].resolve().relative_to(repo.resolve())))} --project {project_arg(repo)}"
     if intent in ("call-sites", "call-sites-filtered", "in-file") and n:
-        return f"devkb uses {n} --project ."
+        return f"devkb uses {n} --project {project_arg(repo)}"
     return None
 
 
@@ -714,7 +725,7 @@ def log_decision(ev: dict, repo: Path | str, tool: str, action: str, names: list
         log.parent.mkdir(parents=True, exist_ok=True)
         with open(log, "a") as fh:
             fh.write(json.dumps({"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "session": ev.get("session_id"), "tool": tool,
-                                 "repo": str(repo), "action": action, "names": names,
+                                 "repo": str(repo), "action": action, "names": ev.get("_all_names") or names,
                                  "verdicts": [q["verdict"] for q in queries], "chars": chars, "reason": reason,
                                  "scope": scope, "intent": ev.get("_intent", "unknown"),
                                  "question": question_of(action, queries)}) + "\n")
@@ -812,15 +823,70 @@ def key_answer(repo: Path, names: list[str], scope: list[str] | None) -> tuple[s
     return "\n\n".join(parts), got
 
 
+USES_CUT = [False]                                 # the last use_lines() left lines out (#276)
+
+
 def use_lines(repo: Path, names: list[str]) -> list[tuple[str, int, str]] | None:
-    """(file, line, text) of every line that uses one of the names, as grep prints them, from `uses --json`."""
-    out = []
+    """(file, line, text) of every line that uses one of the names, as grep prints them, from `uses --json`.
+    USES_CUT[0] says whether `uses` left any out (per-file cap, omitted files, overall cap): then the lines are not
+    everything grep prints, and they may go beside the search but never replace it (#276)."""
+    out, cut = [], False
     for n in names:
         r = read_tool(repo, "uses", n)
         if r is None:
             return None
-        out += [(f["f"], h["line"], h["text"]) for f in r.get("files", []) for h in f.get("hits", [])]
+        files = r.get("files", [])
+        cut = cut or bool(r.get("capped") or r.get("omitted_files")) or any(f.get("n", 0) > len(f.get("hits", [])) for f in files)
+        out += [(f["f"], h["line"], h["text"]) for f in files for h in f.get("hits", [])]
+    USES_CUT[0] = cut
     return sorted(set(out))
+
+
+NON_CODE = (".md", ".rst", ".txt", ".adoc", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".xml", ".html", ".csv")
+
+
+def names_non_code(paths: list[Path] | None, repo: Path, names: list[str] | None = None,
+                   scope: list[str] | None = None) -> bool:
+    """The search reaches docs or configuration where grep prints a line for one of its names: a named non-code path,
+    or a non-code file in the search's scope (the whole repository for `.` or no path) that holds a name. The graph
+    holds no document text, so such a search is never replaced (#276)."""
+    for p in paths or []:
+        if p.suffix.lower() in NON_CODE or p.name.lower() in ("docs", "doc", "config", "conf", "etc"):
+            return True
+    if not names:
+        return False
+    args = ["git", "-C", str(repo), "grep", "--untracked", "-l", "-I", "-i", "-F"]   # untracked docs, any case: grep prints them too
+    for n in names:
+        args += ["-e", n]
+    try:
+        p = subprocess.run([*args, "--", *(scope or ["."])], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return True                                # cannot tell: do not replace
+    if p.returncode not in (0, 1):
+        return True
+    return any(is_non_code(f) for f in p.stdout.splitlines())
+
+
+def is_non_code(path: str) -> bool:
+    """A documentation or configuration file: by suffix, or a bare README / LICENSE / CHANGELOG / NOTICE."""
+    p = Path(path)
+    return p.suffix.lower() in NON_CODE or p.name.lower() in ("readme", "license", "changelog", "notice")
+
+
+def longer_definitions(repo: Path, pattern: str, name: str, scope: list[str] | None) -> bool:
+    """True when grep's pattern could also print the definition of a longer name (`def resolve` -> `def resolve_file`),
+    so a definition answer for `name` alone would hide lines (#277). A pattern bounded after the name (a word
+    boundary, `(`, a space) cannot."""
+    if re.search(re.escape(name) + r"(\\b|\\>|\\?\(|\s)", pattern):
+        return False
+    kw = r"(def|class|function|fn|func|struct|interface|enum|union|void|static|const|let|var)"
+    try:
+        p = subprocess.run(["git", "-C", str(repo), "grep", "-q", "-E", "-e",
+                            rf"(^|[^A-Za-z0-9_]){kw}[[:space:]]+{re.escape(name)}[A-Za-z0-9_]", "--", *(scope or ["."])],
+                           capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return True                                # cannot tell: do not replace
+    return p.returncode != 1                       # 0: found; 1: none; anything else: cannot tell
 
 
 def pipe_filters(cmd: str) -> list[tuple[bool, re.Pattern]] | None:
@@ -970,12 +1036,18 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     key = "".join(c for c in str(ev.get("tool_use_id") or "") if c.isalnum() or c in "-_")[:80]
     SEARCH_CWD[:] = [search_dir(ev, inp)]
     intent = ev.get("_intent", "unknown")
-    names = misses.navigation_names(pattern, ev.get("_dialect", "both"))
+    all_names = misses.navigation_names(pattern, ev.get("_dialect", "both"))
+    names = all_names[:3]                         # the names asked about; a search naming more is never replaced (#278)
+    partial = len(all_names) > len(names)
+    ev["_all_names"] = all_names                  # the decision line records every name the search asks about (#278)
     try:
         ev["_teach"] = teach_command(intent, names, paths, repo)
     except (ValueError, OSError):
         ev["_teach"] = None
     if intent == "list-symbols" and (repo / ".devkb").is_dir():   # a file's definitions: its outline, not a pack
+        if graph_stale(repo, scope_of(paths or [], repo)):       # an old graph's spans would be wrong lines (#273)
+            log_decision(ev, repo, tool, "pass-through", names, [], 0, "stale-graph")
+            return None
         ans = outline_answer(repo, paths)
         if ans:
             log_decision(ev, repo, tool, "alongside", names, [], len(ans), "outline")
@@ -1005,9 +1077,14 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
             queries.append({"name": n, "verdict": r[0], "detail": r[1],
                             "query": f"devkb pack {QUESTION} {shlex.quote(n)} --project {shlex.quote(str(repo))}"})
             answers.append(r[2].strip())
-    if (dname and why is None or why is None and intent == "call-sites") and graph_stale(repo, scope_of(paths or [], repo)):
-        log_decision(ev, repo, tool, "pass-through", names, queries, 0, "stale-graph")   # #182: grep has the answer
+    if graph_stale(repo, scope_of(paths or [], repo)):
+        # #182, #273: a graph that has not seen the working tree's code gives no answer at all, beside grep or instead
+        # of it: its line numbers and its callers may be wrong, and grep has the answer
+        log_decision(ev, repo, tool, "pass-through", names, queries, 0, "stale-graph")
+        record_pending(ev, key, repo, tool, inp, pattern, names, queries)
         return None
+    if dname and why is None and (partial or longer_definitions(repo, pattern, dname, scope_of(paths or [], repo))):
+        why = "longer-names" if not partial else "partial-names"   # grep also prints other definitions (#277, #278)
     if dname and why is None:
         scope = scope_of(paths or [], repo)
         ans = definition_answer(repo, dname, scope, search_globs(tool, inp))
@@ -1042,9 +1119,14 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         if not text:                             # nothing in the searched scope: grep may still find a mention there
             log_decision(ev, repo, tool, "pass-through", names, queries, 0, "nothing-in-scope", scope)
             return None
+        cut = len(text) > MAX_ANSWER or USES_CUT[0]
         text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
         if why is None and intent != "call-sites":
             why = f"intent:{intent}"                # only a repository- or folder-wide name search is replaced
+        if why is None and (cut or partial or names_non_code(paths, repo, found, scope)):
+            # a replacement must hold every line grep prints: not when lines were left out, names were not asked
+            # about, or the search names docs or configuration (#276, #278); the answer goes beside grep instead
+            why = "cut" if cut else "partial-names" if partial else "non-code-path"
         if why is None:
             if again(ev, inp):
                 log_decision(ev, repo, tool, "repeat", names, queries, len(text), "repeat", scope)
@@ -1059,6 +1141,8 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         scope = scope_of(paths or [], repo)
         text, got = key_answer(repo, no_symbol, scope)
         if text:
+            if got:                                # teach the command for the answer given: the key's, not names[0] (#283)
+                ev["_teach"] = f"devkb symbol {shlex.quote(sorted(got)[0])} --project {project_arg(repo)}"
             text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
             log_decision(ev, repo, tool, "alongside", names, queries, len(text), "key", scope)
             record_pending(ev, key, repo, tool, inp, pattern, names, [q for q in queries if q["name"] not in got])
@@ -1150,9 +1234,10 @@ def first_open_outline(ev: dict, inp: dict) -> dict | None:
     if not ans:
         return None
     text = capped(ans)
+    SEARCH_CWD[:] = [Path(ev.get("cwd") or os.getcwd())]   # the teach line's --project from the session's directory
     ev["_intent"] = "list-symbols"
     log_decision(ev, repo, "Read", "outline-on-open", [], [], len(text), "first-open")
-    ev["_teach"] = f"devkb outline {rel} --project ."
+    ev["_teach"] = f"devkb outline {shlex.quote(str(rel))} --project {project_arg(repo)}"
     return emit(ev, {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=text)}})
 
 
