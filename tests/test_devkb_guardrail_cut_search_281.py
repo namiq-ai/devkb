@@ -49,7 +49,7 @@ def rows(h):
 
 @pytest.mark.parametrize("cmd, n", [("grep -rn helper pkg | head -1", 1), ("grep -rn helper pkg | tail -2", 2),
                                     ("grep -rn helper pkg | head -n 1", 1), ("grep -rn 'def helper' pkg | head -2", 2),
-                                    ("grep -rn helper pkg | tail -n +2", 0)])
+                                    ])
 def test_the_answer_to_a_cut_bash_search_is_not_larger_than_the_cut(repo, tmp_path, cmd, n):
     assert rows(hook(repo, tmp_path, "Bash", {"command": cmd})) <= n
 
@@ -66,8 +66,27 @@ def test_an_uncut_search_is_still_answered(repo, tmp_path):
 
 @pytest.mark.parametrize("cmd, limit", [("grep -rn helper pkg | head -3", 3), ("grep -rn helper pkg | tail -n3", 3),
                                         ("grep -rn helper pkg", None), ("grep -rn helper pkg | wc -l", None),
-                                        ("grep -rn helper pkg | sort | head -2", 2), ("grep -rn helper pkg | tail -n +2", 0),
+                                        ("grep -rn helper pkg | sort | head -2", 2), ("grep -rn helper pkg | tail -n +2", None),
                                         ("grep -rn helper pkg | head -5 | tail -2", 2)])
 def test_output_limit(cmd, limit):
     assert g.output_limit("Bash", {"command": cmd}) == limit
     assert g.output_limit("Grep", {"head_limit": 4}) == 4 and g.output_limit("Grep", {}) is None
+
+
+def logged(home):
+    rows = [json.loads(ln) for ln in (home / ".claude" / "hooks" / "devkb-guardrail.log").read_text().splitlines()]
+    return [r for r in rows if r["action"] != "remind"][-1]
+
+
+def test_a_dropped_answer_is_logged_as_a_pass_through(repo, tmp_path):
+    hook(repo, tmp_path, "Bash", {"command": "grep -rn helper pkg | head -1"})
+    r = logged(tmp_path)
+    assert r["action"] == "pass-through" and r["reason"] == "cut:1" and r["chars"] == 0
+    assert r["verdicts"] == [] and r["question"] == "none"
+    assert not any(k in r for k in ("answer_sha1", "answer_chars", "answer_head"))
+
+
+def test_a_kept_answer_is_logged_as_an_answer(repo, tmp_path):
+    hook(repo, tmp_path, "Bash", {"command": "grep -rn helper pkg | head -50"})
+    r = logged(tmp_path)
+    assert r["action"] != "pass-through" and r["chars"] > 0 and r["answer_chars"] > 0 and r["answer_sha1"]
