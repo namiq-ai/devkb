@@ -538,6 +538,107 @@ def _import_descriptors(tree: ast.AST) -> list[tuple[int, str, str | None, str]]
                 else:
                     top = alias.name.split(".")[0]
                     out.append((0, top, None, top))
+    out += [(0, module, None, local) for local, module in _dynamic_imports(tree)]
+    return out
+
+
+def _called_function(node: ast.expr) -> str:
+    """`importlib.util.spec_from_file_location` -> `spec_from_file_location`: the called function's own name."""
+    f = node.func if isinstance(node, ast.Call) else None
+    return f.attr if isinstance(f, ast.Attribute) else f.id if isinstance(f, ast.Name) else ""
+
+
+def _literal_module(path_expr: ast.expr) -> str | None:
+    """The module a `spec_from_file_location` path names, from its string pieces: `ROOT / "scripts" / "g.py"` is
+    `scripts.g`. None unless the last piece is a literal `.py` file (an f-string is computed, not literal); leading
+    `.`, `..` and `/` steps are dropped."""
+    if any(isinstance(n, ast.JoinedStr) for n in ast.walk(path_expr)):
+        return None
+    parts = [n.value for n in sorted((n for n in ast.walk(path_expr) if isinstance(n, ast.Constant)
+                                       and isinstance(n.value, str)), key=lambda n: (n.lineno, n.col_offset))]
+    if not parts or not parts[-1].endswith(".py"):
+        return None
+    steps = [s for p in parts for s in p.split("/") if s not in ("", ".", "..")]
+    return ".".join(steps)[: -len(".py")] if steps else None
+
+
+def _dynamic_imports(tree: ast.AST) -> list[tuple[str, str]]:
+    """[(local, module)] for a module loaded at run time and bound to a name (#382), the way tests and scripts load
+    a file that is not on the import path:
+    `sb = importlib.import_module("storybench")`, and
+    `spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / "g.py")` then
+    `g = importlib.util.module_from_spec(spec)`.
+    Only a literal name or path is followed; a computed one is reported by `unfollowed_loads`."""
+    specs: dict[str, str] = {}
+    out: list[tuple[str, str]] = []
+    assigns = sorted((n for n in ast.walk(tree) if isinstance(n, ast.Assign) and len(n.targets) == 1
+                      and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Call)),
+                     key=lambda n: (n.lineno, n.col_offset))
+    for n in assigns:
+        local, call, name = n.targets[0].id, n.value, _called_function(n.value)
+        if name == "import_module" and call.args and isinstance(call.args[0], ast.Constant) \
+                and isinstance(call.args[0].value, str) and not call.args[0].value.startswith("."):
+            out.append((local, call.args[0].value))
+        elif name == "spec_from_file_location" and len(call.args) >= 2:
+            module = _literal_module(call.args[1])
+            if module:
+                specs[local] = module
+            else:
+                specs.pop(local, None)
+        elif name == "module_from_spec" and call.args and isinstance(call.args[0], ast.Name) \
+                and call.args[0].id in specs:
+            out.append((local, specs[call.args[0].id]))
+    return out
+
+
+def unfollowed_loads(tree: ast.AST) -> list[tuple[int, list[str]]]:
+    """[(line, directory hints)] for each module this file loads by a name or path computed at run time
+    (`import_module(os.environ[...])`, `spec_from_file_location(n, BENCH / f"{name}.py")`): calls through it cannot
+    be attributed, so a test list that leaves the file out is incomplete (#382). The hints are the literal directory
+    names in the load and in the file's `sys.path` inserts, to tell which directories it may load from."""
+    names = {n.targets[0].id: n.value for n in getattr(tree, "body", [])
+             if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
+    inserts = [s for n in ast.walk(tree) if isinstance(n, ast.Call) and _called_function(n) == "insert"
+               and isinstance(n.func, ast.Attribute) and isinstance(n.func.value, ast.Attribute)
+               and n.func.value.attr == "path"
+               for s in _path_pieces(n, names)]
+    out = []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Call):
+            continue
+        name = _called_function(n)
+        if name == "import_module" and n.args and not (isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)):
+            out.append((n.lineno, inserts))           # a module name is not a directory; where it is looked up is
+        elif name == "spec_from_file_location" and len(n.args) >= 2 and _literal_module(n.args[1]) is None:
+            out.append((n.lineno, _path_pieces(n.args[1], names)))
+    return sorted(out)
+
+
+def literal_paths(tree: ast.AST) -> list[tuple[int, str]]:
+    """[(line, path)] for each `.py` path this file spells out of literal pieces: `"scripts/g.py"`, and
+    `ROOT / "scripts" / "g.py"` as `scripts/g.py` (#382): how a test names a script it runs or loads by path."""
+    joined = {id(c) for n in ast.walk(tree) if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Div)
+              for c in (n.left, n.right)}               # a piece of a longer path: only the whole path counts
+    out = []
+    for n in ast.walk(tree):
+        if id(n) in joined:
+            continue
+        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Div) or isinstance(n, ast.Constant) and isinstance(n.value, str):
+            module = _literal_module(n)
+            if module and (isinstance(n, ast.BinOp) or "/" in n.value or n.value.endswith(".py")):
+                out.append((n.lineno, module.replace(".", "/") + ".py"))
+    return sorted(set(out))
+
+
+def _path_pieces(node: ast.AST, names: dict[str, ast.expr], depth: int = 0) -> list[str]:
+    """Directory names among a node's string constants, through the module-level names it uses:
+    `BENCH / f"{x}.py"` after `BENCH = ROOT / "bench" / "cpp"` gives ["bench", "cpp"]."""
+    out = []
+    for c in ast.walk(node):
+        if isinstance(c, ast.Constant) and isinstance(c.value, str):
+            out += [s for s in c.value.split("/") if s and s not in (".", "..") and not s.endswith(".py") and s.isidentifier()]
+        elif isinstance(c, ast.Name) and c.id in names and depth < 3 and names[c.id] is not node:
+            out += _path_pieces(names[c.id], names, depth + 1)
     return out
 
 
