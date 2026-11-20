@@ -1074,16 +1074,31 @@ def test_extraction_stays_linear_in_unresolved_calls_to_a_common_name(tmp_path):
 
 def test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method(tmp_path):
     """#61: one method of 8000 lines `b.Property(x => x.P).HasColumn(y => y.Q);` (an EF Core model snapshot's shape).
-    Every lambda parameter went on one list scanned whole per lookup: ~5 s; linear, about 1 s."""
+    Every lambda parameter went on one list scanned whole per lookup. Linear means 4x the lines take about 4x the time
+    (measured 4.0x; the code before #61 took 9.8x). The bound is on that ratio, taken in this process, so a loaded or
+    slow machine does not fail it (#371); an absolute bound failed under load."""
     import time
-    lines = "\n".join(f"    b.Property(x => x.P{i}).HasColumn(y => y.Q{i});" for i in range(8000))
-    text = ("namespace N { class B { public B Property(System.Func<int,int> f) => this; "
-            "public B HasColumn(System.Func<int,int> f) => this; }\nclass A { void M(B b) {\n" + lines + "\n} } }\n")
-    t = time.perf_counter()
-    _, edges = _edges_of(tmp_path, {"A.cs": text})
-    took = time.perf_counter() - t
-    assert edges == {("N.A.M", "N.B.Property"), ("N.A.M", "N.B.HasColumn")}
-    assert took < 2.5, f"{took:.1f} s for 8000 lines: quadratic again"
+
+    def repo(n: int) -> Path:
+        d = tmp_path / f"r{n}"
+        d.mkdir()
+        lines = "\n".join(f"    b.Property(x => x.P{i}).HasColumn(y => y.Q{i});" for i in range(n))
+        (d / "A.cs").write_text("namespace N { class B { public B Property(System.Func<int,int> f) => this; "
+                                "public B HasColumn(System.Func<int,int> f) => this; }\nclass A { void M(B b) {\n" + lines + "\n} } }\n")
+        for cmd in (["init", "-q"], ["add", "-A", "-f"], ["-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "x"]):
+            subprocess.run(["git", *cmd], cwd=d, check=True)
+        return d
+
+    small, big = repo(2000), repo(8000)
+    best = {small: float("inf"), big: float("inf")}
+    for _ in range(3):                           # interleaved, best of three: load hits both sizes alike
+        for d in (small, big):
+            t = time.perf_counter()
+            symbols, calls = csharp_symbols.extract(d)
+            best[d] = min(best[d], time.perf_counter() - t)
+    assert {(_short(c["caller"]), _short(c["callee"])) for c in calls} == {("N.A.M", "N.B.Property"), ("N.A.M", "N.B.HasColumn")}
+    ratio = best[big] / best[small]
+    assert ratio < 6.5, f"4x the lines took {ratio:.1f}x the time ({best[small]:.2f} s, {best[big]:.2f} s): quadratic again"
 
 
 def test_a_lambda_parameter_shadows_only_within_its_lambda(tmp_path):
