@@ -288,24 +288,25 @@ def _failed_ids(stdout: str) -> list[str]:
 
 
 def run_suite(w: Path, timeout: int = 1800) -> dict:
-    """The checkout's full suite, with the ids of what failed; a red suite's failed tests are run once more on their own
-    (#260). Tests that pass on that second run are flaky (load-sensitive): recorded, and not held against the change.
-    The suite counts as green only when every failed test passed the second time."""
+    """The checkout's full suite, with the ids of what failed. A red suite is run in full once more (#301): a failed
+    test is flaky (load-sensitive, recorded, not held against the change) only when the whole suite passes the second
+    time. A test that passes alone but fails again in the second full run is order-dependent, which is the change's
+    failure, so the suite stays red. (#260 re-ran the failed tests alone, which let an order dependence pass as flaky.)"""
     py = str(w / ".venv/bin/python")
-    t = subprocess.run([py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"], cwd=w, capture_output=True, text=True,
-                       timeout=timeout)
+    cmd = [py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"]
+    t = subprocess.run(cmd, cwd=w, capture_output=True, text=True, timeout=timeout)
     last = (t.stdout.strip().splitlines() or [""])[-1]
     failed = _failed_ids(t.stdout)
     row = {"suite_pass": t.returncode == 0, "suite": last, "suite_failed": failed, "suite_flaky": []}
     if t.returncode == 0 or not failed:                 # green, or red with nothing to re-run (a crash): as it is
         return row
-    r = subprocess.run([py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider", *failed], cwd=w, capture_output=True,
-                       text=True, timeout=timeout)
-    still = _failed_ids(r.stdout) if r.returncode != 0 else []
-    if r.returncode != 0 and not still:                 # the re-run itself broke: nothing can be called flaky
-        still = failed
-    row.update(suite_failed=still, suite_flaky=[x for x in failed if x not in still], suite_pass=not still,
-               suite_first=last)
+    r = subprocess.run(cmd, cwd=w, capture_output=True, text=True, timeout=timeout)
+    if r.returncode == 0:                               # green on the second full run: the first failures were flaky
+        row.update(suite_failed=[], suite_flaky=failed, suite_pass=True, suite_first=last)
+        return row
+    again = _failed_ids(r.stdout)
+    still = [x for x in failed if x in again] or again or failed   # red twice: the ones that failed both times first
+    row.update(suite_failed=still, suite_flaky=[], suite_pass=False, suite_first=last)
     return row
 
 
