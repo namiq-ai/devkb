@@ -54,10 +54,15 @@ def test_one_definition_gives_location_and_body(repo, tmp_path, tool, inp):
 
 
 def test_long_function_gives_span_and_cap_note(repo, tmp_path):
-    hso, row = decide(repo, tmp_path, "Bash", {"command": 'grep -n "def big" pkg/'})
+    hso, row = decide(repo, tmp_path, "Bash", {"command": 'grep -n "def big(" pkg/'})   # bounded: only big itself (#277)
     t = text(hso)
     assert row["action"] == "read-answer" and "pkg/big.py:1:" in t and "lines 1-121" in t and "longer than 80" in t
     assert "x += 100" not in t
+
+
+def test_a_definition_search_that_also_matches_a_longer_name_is_not_replaced(repo, tmp_path):
+    hso, row = decide(repo, tmp_path, "Bash", {"command": 'grep -n "def big" pkg/'})   # grep also prints def big_user (#277)
+    assert row["action"] != "read-answer" and row.get("reason") in ("longer-names", "not-complete") or row["action"] == "pass-through"
 
 
 def test_several_definitions_give_locations_only(repo, tmp_path):

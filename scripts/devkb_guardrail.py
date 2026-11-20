@@ -714,7 +714,7 @@ def log_decision(ev: dict, repo: Path | str, tool: str, action: str, names: list
         log.parent.mkdir(parents=True, exist_ok=True)
         with open(log, "a") as fh:
             fh.write(json.dumps({"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "session": ev.get("session_id"), "tool": tool,
-                                 "repo": str(repo), "action": action, "names": names,
+                                 "repo": str(repo), "action": action, "names": ev.get("_all_names") or names,
                                  "verdicts": [q["verdict"] for q in queries], "chars": chars, "reason": reason,
                                  "scope": scope, "intent": ev.get("_intent", "unknown"),
                                  "question": question_of(action, queries)}) + "\n")
@@ -812,15 +812,70 @@ def key_answer(repo: Path, names: list[str], scope: list[str] | None) -> tuple[s
     return "\n\n".join(parts), got
 
 
+USES_CUT = [False]                                 # the last use_lines() left lines out (#276)
+
+
 def use_lines(repo: Path, names: list[str]) -> list[tuple[str, int, str]] | None:
-    """(file, line, text) of every line that uses one of the names, as grep prints them, from `uses --json`."""
-    out = []
+    """(file, line, text) of every line that uses one of the names, as grep prints them, from `uses --json`.
+    USES_CUT[0] says whether `uses` left any out (per-file cap, omitted files, overall cap): then the lines are not
+    everything grep prints, and they may go beside the search but never replace it (#276)."""
+    out, cut = [], False
     for n in names:
         r = read_tool(repo, "uses", n)
         if r is None:
             return None
-        out += [(f["f"], h["line"], h["text"]) for f in r.get("files", []) for h in f.get("hits", [])]
+        files = r.get("files", [])
+        cut = cut or bool(r.get("capped") or r.get("omitted_files")) or any(f.get("n", 0) > len(f.get("hits", [])) for f in files)
+        out += [(f["f"], h["line"], h["text"]) for f in files for h in f.get("hits", [])]
+    USES_CUT[0] = cut
     return sorted(set(out))
+
+
+NON_CODE = (".md", ".rst", ".txt", ".adoc", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".xml", ".html", ".csv")
+
+
+def names_non_code(paths: list[Path] | None, repo: Path, names: list[str] | None = None,
+                   scope: list[str] | None = None) -> bool:
+    """The search reaches docs or configuration where grep prints a line for one of its names: a named non-code path,
+    or a non-code file in the search's scope (the whole repository for `.` or no path) that holds a name. The graph
+    holds no document text, so such a search is never replaced (#276)."""
+    for p in paths or []:
+        if p.suffix.lower() in NON_CODE or p.name.lower() in ("docs", "doc", "config", "conf", "etc"):
+            return True
+    if not names:
+        return False
+    args = ["git", "-C", str(repo), "grep", "--untracked", "-l", "-I", "-i", "-F"]   # untracked docs, any case: grep prints them too
+    for n in names:
+        args += ["-e", n]
+    try:
+        p = subprocess.run([*args, "--", *(scope or ["."])], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return True                                # cannot tell: do not replace
+    if p.returncode not in (0, 1):
+        return True
+    return any(is_non_code(f) for f in p.stdout.splitlines())
+
+
+def is_non_code(path: str) -> bool:
+    """A documentation or configuration file: by suffix, or a bare README / LICENSE / CHANGELOG / NOTICE."""
+    p = Path(path)
+    return p.suffix.lower() in NON_CODE or p.name.lower() in ("readme", "license", "changelog", "notice")
+
+
+def longer_definitions(repo: Path, pattern: str, name: str, scope: list[str] | None) -> bool:
+    """True when grep's pattern could also print the definition of a longer name (`def resolve` -> `def resolve_file`),
+    so a definition answer for `name` alone would hide lines (#277). A pattern bounded after the name (a word
+    boundary, `(`, a space) cannot."""
+    if re.search(re.escape(name) + r"(\\b|\\>|\\?\(|\s)", pattern):
+        return False
+    kw = r"(def|class|function|fn|func|struct|interface|enum|union|void|static|const|let|var)"
+    try:
+        p = subprocess.run(["git", "-C", str(repo), "grep", "-q", "-E", "-e",
+                            rf"(^|[^A-Za-z0-9_]){kw}[[:space:]]+{re.escape(name)}[A-Za-z0-9_]", "--", *(scope or ["."])],
+                           capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return True                                # cannot tell: do not replace
+    return p.returncode != 1                       # 0: found; 1: none; anything else: cannot tell
 
 
 def pipe_filters(cmd: str) -> list[tuple[bool, re.Pattern]] | None:
@@ -970,7 +1025,10 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     key = "".join(c for c in str(ev.get("tool_use_id") or "") if c.isalnum() or c in "-_")[:80]
     SEARCH_CWD[:] = [search_dir(ev, inp)]
     intent = ev.get("_intent", "unknown")
-    names = misses.navigation_names(pattern, ev.get("_dialect", "both"))
+    all_names = misses.navigation_names(pattern, ev.get("_dialect", "both"))
+    names = all_names[:3]                         # the names asked about; a search naming more is never replaced (#278)
+    partial = len(all_names) > len(names)
+    ev["_all_names"] = all_names                  # the decision line records every name the search asks about (#278)
     try:
         ev["_teach"] = teach_command(intent, names, paths, repo)
     except (ValueError, OSError):
@@ -1008,6 +1066,8 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     if (dname and why is None or why is None and intent == "call-sites") and graph_stale(repo, scope_of(paths or [], repo)):
         log_decision(ev, repo, tool, "pass-through", names, queries, 0, "stale-graph")   # #182: grep has the answer
         return None
+    if dname and why is None and (partial or longer_definitions(repo, pattern, dname, scope_of(paths or [], repo))):
+        why = "longer-names" if not partial else "partial-names"   # grep also prints other definitions (#277, #278)
     if dname and why is None:
         scope = scope_of(paths or [], repo)
         ans = definition_answer(repo, dname, scope, search_globs(tool, inp))
@@ -1042,9 +1102,14 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         if not text:                             # nothing in the searched scope: grep may still find a mention there
             log_decision(ev, repo, tool, "pass-through", names, queries, 0, "nothing-in-scope", scope)
             return None
+        cut = len(text) > MAX_ANSWER or USES_CUT[0]
         text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
         if why is None and intent != "call-sites":
             why = f"intent:{intent}"                # only a repository- or folder-wide name search is replaced
+        if why is None and (cut or partial or names_non_code(paths, repo, found, scope)):
+            # a replacement must hold every line grep prints: not when lines were left out, names were not asked
+            # about, or the search names docs or configuration (#276, #278); the answer goes beside grep instead
+            why = "cut" if cut else "partial-names" if partial else "non-code-path"
         if why is None:
             if again(ev, inp):
                 log_decision(ev, repo, tool, "repeat", names, queries, len(text), "repeat", scope)
