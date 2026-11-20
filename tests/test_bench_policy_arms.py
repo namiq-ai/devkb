@@ -22,7 +22,7 @@ def test_the_hidden_checks_are_never_in_a_checkout():
 
 
 def test_tri_mode_arms_take_devkb_from_a_tool_environment():
-    assert set(pb.ENV_REF) == {"release", "main", "noteach", "outline"}        # #218 arms; D1 is on in main (#267)
+    assert set(pb.ENV_REF) == {"release", "main", "noteach", "outline", "hookmain", "teachall"}   # #218 arms; #375's pair
     assert pb.ARM_ENV["noteach"]["DEVKB_GUARDRAIL_TEACH"] == "0" and pb.ARM_ENV["outline"]["DEVKB_GUARDRAIL_OUTLINE"] == "1"
     assert "DEVKB_GUARDRAIL_TEACH" not in pb.ARM_ENV["main"]          # main is the hook as shipped: D1 on (#267)
     env = {"hook": "/e/src/scripts/devkb_guardrail.py", "post": "/nonexistent/post.py", "bin": "/e/.venv/bin/devkb"}
@@ -105,3 +105,13 @@ def test_an_error_in_a_run_is_recorded_and_never_stops_the_batch(tmp_path, monke
     assert pb.run_one("9", "main", 1).startswith("error p9-main-r1")
     end = json.loads((tmp_path / "runs" / "p9-main-r1" / "end").read_text())
     assert end["exit"] == "error" and "502" in end["error"]
+
+
+def test_the_hook_pair_takes_its_hooks_from_fixed_commits_and_its_checkout_from_the_batch(monkeypatch):
+    """#375: hookmain and teachall run on the same checkout (the ticket's base, POLICY_MAIN) with two hook versions."""
+    monkeypatch.setenv("POLICY_HOOK_MAIN", "f39cb29")
+    monkeypatch.setenv("POLICY_TEACHALL", "dace8e9")
+    monkeypatch.setenv("POLICY_MAIN", "4155904")
+    assert pb.ENV_REF["hookmain"]() == "f39cb29" and pb.ENV_REF["teachall"]() == "dace8e9"
+    assert pb.BASES["hookmain"] == pb.BASES["teachall"] == "origin/main"   # pinned to POLICY_MAIN when a batch starts
+    assert pb.ARM_ENV["hookmain"] == pb.ARM_ENV["teachall"] == {"DEVKB_GUARDRAIL_KEEP": "1"}

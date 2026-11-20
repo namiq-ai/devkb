@@ -35,17 +35,24 @@ BASES = {"before": "origin/main", "after": "ce284c4", "after2": os.environ.get("
          "release": "origin/main",                                # tri mode (#225): main's code, the last release's devkb
          "main": "origin/main",                                   # tri mode (#225): main's code, main's devkb
          "noteach": "origin/main",                                # main's devkb with D1 off (DEVKB_GUARDRAIL_TEACH=0, #267)
-         "outline": "origin/main"}                                # #218 D2: main's devkb, outline on first open
+         "outline": "origin/main",                                # #218 D2: main's devkb, outline on first open
+         "hookmain": "origin/main",                               # #375: the ticket's base, the hook of POLICY_HOOK_MAIN
+         "teachall": "origin/main"}                               # #375: the ticket's base, the hook of POLICY_TEACHALL
 # Tri-mode arms take their devkb (CLI, graph build, hook) from a tool environment built from an exact commit, never
 # from the checkout the agent edits (#225). POLICY_RELEASE / POLICY_MAIN override the refs.
 ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest_release(),
            "main": lambda: os.environ.get("POLICY_MAIN") or "origin/main",
            "noteach": lambda: os.environ.get("POLICY_MAIN") or "origin/main",
-           "outline": lambda: os.environ.get("POLICY_MAIN") or "origin/main"}
+           "outline": lambda: os.environ.get("POLICY_MAIN") or "origin/main",
+           # a hook version against another on the same checkouts (#375): the checkout follows POLICY_MAIN (the ticket's
+           # base), the devkb and hook come from a fixed commit each
+           "hookmain": lambda: os.environ.get("POLICY_HOOK_MAIN") or "origin/main",
+           "teachall": lambda: os.environ["POLICY_TEACHALL"]}
 # Every devkb arm keeps the answers its agents were given (#218); D1 and D2 are the two direct-path candidates.
 ARM_ENV = {"release": {"DEVKB_GUARDRAIL_KEEP": "1"}, "main": {"DEVKB_GUARDRAIL_KEEP": "1"},
            "noteach": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH": "0"},   # main without D1 (on by default, #267)
-           "outline": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_OUTLINE": "1"}}
+           "outline": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_OUTLINE": "1"},
+           "hookmain": {"DEVKB_GUARDRAIL_KEEP": "1"}, "teachall": {"DEVKB_GUARDRAIL_KEEP": "1"}}
 HIDDEN = ("bench/policy/accept",)                               # the hidden checks: never in an agent's checkout (#223)
 GROUPS = json.loads((Path(__file__).resolve().parent / "groups.json").read_text())   # tickets done as one job
 # after2 (the revised #126 + #127): navigation through the branch's own devkb, which records every query
