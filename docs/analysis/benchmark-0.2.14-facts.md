@@ -131,7 +131,7 @@ Reminder intents: {'in-file': 1, 'call-sites': 4, 'locate': 6, 'list-files': 1, 
 Answers beside grep (alongside): [('p304-main-r2', ['devkb_selftest', 'devkb_nav'], 393), ('p304-main-r3', ['devkb_selftest', 'devkb_nav'], 393), ('p331-main-r3', ['nonekeep'], 275), ('p331-main-r1', ['ctx_tokens'], 346)]
 
 
-## 6. Defects found in the benchmark itself (all open or fixed; the numbers above are measured with them present)
+## 6. Defects found in the benchmark itself (open or fixed; the numbers above were measured with them present)
 
 | # | Defect | Evidence | Where tracked |
 |---|---|---|---|
@@ -145,6 +145,7 @@ Answers beside grep (alongside): [('p304-main-r2', ['devkb_selftest', 'devkb_nav
 | D8 | Results rows scored before #331 have no test count or first-call context | rows lack `tests_collected`, `first_ctx` | the table prints "unknown" for them |
 | D9 | The prompt mentions the C/C++ corpus, irrelevant to these tickets | `policybench.PROMPT` | not filed |
 | D10 | n=3 per arm per ticket; one model; one repository (devkb itself, about 60 modules) | the design | section 9 |
+| D11 | **The agents' checkouts live inside the repository that holds the harness** (`bench/policy/work/<run>`), so a cut-down absolute path reaches the harness's own source. 26 tool calls in 11 runs named a path in the real repository outside the run's own checkout; **3 runs wrote to it** (`p301-main-r1`, `p306-none-r1`, `p307-none-r1`). `p306-none-r1` edited `policybench.py` and a test there, ran `git -C <real repo> diff`, noticed, and redid the work in its checkout, leaving its edits behind (found afterwards as uncommitted changes in the working tree; saved, then discarded). No tool call read a hidden check or another run's data (all 48 streams checked) | the Edit/Write calls above; archive `devkb-benchmark-0.2.14-contamination.tar.gz` (the leftover diff and a test file) | #340 |
 
 ## 7. What the runs say about devkb's design
 
@@ -191,6 +192,7 @@ Facts first, then the reading. Prior evidence is in `docs/analysis/bugfix-benchm
   #331, which has no such reproduction (21 of 21 for #301-#307 is right). Both corrected.
 - My first explanation of the extra turns (policy text, more verification) was a guess; the data say the 120 s cliff and the suite size. I named hypotheses as such,
   but I presented the +30% cost / +80% context figures before I had found that cause; they should not be quoted as devkb's overhead.
+- I ran the benchmark with the agents' checkouts inside my own working repository and left that repository's working tree where an agent's stray edit could change the harness for the next batch (D11). I found it only while preparing a clean tree. The later batches (#307, #331) imported `policybench.py` after `p306-none-r1`'s edit had been left in it; the edit touched only `score()` (which rows the results file keeps), so I do not expect a different outcome *(inferred; not re-run)*.
 - I asked the owner questions that I could have answered by testing (the allowlist, the timeout); the later experiments did that.
 
 ## 9. Unknowns, and what to explore next
@@ -218,7 +220,7 @@ Facts first, then the reading. Prior evidence is in `docs/analysis/bugfix-benchm
 - Run streams, hook log slice, and the raw tables: archive `devkb-benchmark-0.2.14-archive.tar.gz` kept next to the repository checkout (1.3 MB compressed, 7.6 MB of streams; not committed because the streams hold local paths). It also holds the 57 hook-log rows of these runs, the committed result rows and the generated tables.
 - Hidden checks: `bench/policy/accept/301.py` ... `307.py`, `331.py`. Checklist: `AGENTS.md`, "Per-ticket checklist".
 - Tickets fixed and merged: #301 (PR #323), #302 (#325), #303 (#326), #304 (#327), #305 (#332), #331 (#333); open: #306, #307. Gate: PR #324 (part 1 of #316); checklist and checks: PR #328.
-- Issues from this work: #329 (reminder on literal grep), #330 (hook output in the stream), #334 (120 s timeout), #335 (`.venv/bin/devkb` allowance), #336 (reproduction data),
+- Issues from this work: #339 (0.2.15 epic: efficiency and performance), #340 (D11), #329 (reminder on literal grep), #330 (hook output in the stream), #334 (120 s timeout), #335 (`.venv/bin/devkb` allowance), #336 (reproduction data),
   #337 (milestone 0.2.15: tickets that need navigation, revised), #331 (equal suites, done).
 
 ## Appendix A. Per run
