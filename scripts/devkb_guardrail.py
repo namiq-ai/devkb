@@ -26,9 +26,42 @@ PENDING = Path.home() / ".claude" / "hooks" / ".devkb-guardrail-pending"
 
 REMINDER = ("devkb guardrail: this is a code search in a repository devkb serves ({repo}). For 'where is X defined', "
             "'who calls / uses X', 'what is in this file' or 'what does a change to X touch', ask devkb first "
-            "(`devkb symbol|uses|outline|pack ... --project {repo}` or the mcp__devkb tools), check its answer against "
-            "the source, and log the query and verdict in the task's dogfood log. grep stays right for filtering "
-            "output, literal strings, and checking an edit.")
+            "(`{cmd} symbol|uses|outline|pack ... --project {repo}`{mcp}) and check its answer against the source. "
+            "grep stays right for filtering output, literal strings, and checking an edit.")
+
+
+def reminder(repo: Path) -> str:
+    """#375: the reminder names the command this session can run (`devkb_exe`) and the MCP tools only when a devkb MCP
+    server is configured where Claude Code reads one (`mcp_configured`); it no longer asks for a dogfood log (#126)."""
+    return REMINDER.format(repo=repo, cmd=devkb_exe(repo), mcp=" or the mcp__devkb tools" if mcp_configured(repo) else "")
+
+
+def mcp_configured(repo: Path) -> bool:
+    """Whether a devkb MCP server is configured: the repository's `.mcp.json`, the user's `~/.claude.json` (user scope, or
+    this project's local scope), or a devkb plugin enabled in the user's, the project's or the local settings. A session started with
+    `--strict-mcp-config` cannot be seen from here; then the reminder may name tools the session lacks."""
+    def servers(path: Path, *keys: str) -> dict:
+        try:
+            d = json.loads(path.read_text())
+            for k in keys:
+                d = d.get(k) or {}
+            return d.get("mcpServers") or {}
+        except (OSError, ValueError, AttributeError):
+            return {}
+    home = Path.home()
+    if any("devkb" in x for x in (servers(repo / ".mcp.json"), servers(home / ".claude.json"),
+                                  servers(home / ".claude.json", "projects", str(repo.resolve())))):
+        return True
+    for f in (home / ".claude" / "settings.json", repo / ".claude" / "settings.json", repo / ".claude" / "settings.local.json"):
+        try:                                     # user, project and local scope plugins (#378 review)
+            plugins = json.loads(f.read_text()).get("enabledPlugins") or {}
+            if any(v and k.split("@")[0] == "devkb" for k, v in plugins.items()):
+                return True
+        except (OSError, ValueError, AttributeError):
+            pass
+    return False
+
+
 SEARCH = re.compile(r"(?:^|[;&|(]\s*|\bxargs\s+)(?:git\s+grep|grep|egrep|rg)\b")
 
 
@@ -724,6 +757,36 @@ def answer_fields(answer: str | None) -> dict:
     return {"answer_sha1": sha, "answer_chars": len(answer), "answer_head": (lines[0] if lines else "")[:160]}
 
 
+def teach_all() -> bool:
+    """The teach line on a duplicate and on a span-hint (#375): off unless DEVKB_GUARDRAIL_TEACH_ALL=1. Measured on 9
+    tickets x 3 runs per arm (hook of f39cb29 against dace8e9): agents saw the line 17 times against 7, made 0 direct devkb
+    queries in both arms, and cost 12.6% more (context +20%, turns +24%), so by #218's rule it is not on by default."""
+    return os.environ.get("DEVKB_GUARDRAIL_TEACH_ALL") == "1"
+
+
+def teach_only(ev: dict, inp: dict) -> dict | None:
+    """#375: grep prints devkb's whole answer itself, so the answer is not repeated; the agent is still told, once per
+    command and session, which devkb command answers this search. Before, nothing was said, and in 149 benchmark runs
+    92 complete answers went by without the agent seeing a devkb command (83 answers carried one)."""
+    if not teach_all() or os.environ.get("DEVKB_GUARDRAIL_TEACH", "1") == "0" or not ev.get("_teach"):
+        return None
+    sid = "".join(c for c in str(ev.get("session_id") or "") if c.isalnum() or c in "-_")[:80]
+    key = hashlib.sha1(json.dumps([sid, "teach", str(ev.get("cwd") or ""), json.dumps(inp, sort_keys=True)]).encode()).hexdigest()
+    d = Path.home() / ".claude" / "hooks" / ".devkb-guardrail-seen"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        os.close(os.open(d / f"teach-{key}", os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        return None
+    except OSError:
+        pass
+    ev["_teach_only"] = True                     # no lines of grep's output in it: a cut search does not drop it (#281)
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ""}}
+
+
+TEACH_LINE = "Next time ask devkb directly: `{cmd}`"
+
+
 def emit(ev: dict, out: dict | None) -> dict | None:
     """Every hook answer passes here on its way out: the last decision line gets what the agent was given, and the
     answer ends with the devkb command that gives it (SPEC-DKB-007 D1, on by default since #267: in the 0.2.13 batch
@@ -734,7 +797,10 @@ def emit(ev: dict, out: dict | None) -> dict | None:
     h = out.get("hookSpecificOutput", {})
     key = "permissionDecisionReason" if "permissionDecisionReason" in h else "additionalContext"
     if os.environ.get("DEVKB_GUARDRAIL_TEACH", "1") != "0" and ev.get("_teach"):
-        h[key] = h[key].rstrip() + f"\nNext time ask devkb directly: `{ev['_teach']}`"
+        line = TEACH_LINE.format(cmd=ev["_teach"])
+        h[key] = h[key].rstrip() + "\n" + line if h[key].strip() else line      # a teach-only answer is the line alone (#375)
+    if not h.get(key, "").strip():
+        return None
     ev["_answer"] = h.get(key, "")
     try:
         log = Path.home() / ".claude" / "hooks" / "devkb-guardrail.log"
@@ -756,7 +822,25 @@ def project_arg(repo: Path) -> str:
         rel = os.path.relpath(repo.resolve(), (SEARCH_CWD[0] if SEARCH_CWD else repo).resolve())
     except ValueError:
         rel = str(repo)
-    return shlex.quote(rel)
+    full = str(repo.resolve())
+    return shlex.quote(rel if len(rel) <= len(full) else full)   # a teach line stays short from a distant cwd (#375)
+
+
+def devkb_exe(repo: Path) -> str:
+    """The devkb command this session can run (#375): `devkb` when it is on PATH; else the checkout's `.venv/bin/devkb`,
+    as a path from the directory the search ran in (the shorter of relative and absolute); else `devkb`."""
+    import shutil
+    if shutil.which("devkb"):
+        return "devkb"
+    v = repo / ".venv" / "bin" / "devkb"
+    if not v.exists():
+        return "devkb"
+    full = str(v.resolve())
+    try:                                         # both sides resolved, as project_arg does: a symlinked cwd (#378 review)
+        rel = os.path.relpath(v.resolve(), (SEARCH_CWD[0] if SEARCH_CWD else repo).resolve())
+    except ValueError:
+        rel = full
+    return shlex.quote(rel if len(rel) <= len(full) else full)
 
 
 def teach_command(intent: str, names: list[str], paths: list[Path] | None, repo: Path) -> str | None:
@@ -765,11 +849,11 @@ def teach_command(intent: str, names: list[str], paths: list[Path] | None, repo:
     n = shlex.quote(names[0]) if names else ""
     files = [p for p in paths or [] if p.is_file()]
     if intent in ("read-body", "locate") and n:
-        return f"devkb symbol {n} --source --project {project_arg(repo)}"
+        return f"{devkb_exe(repo)} symbol {n} --source --project {project_arg(repo)}"
     if intent == "list-symbols" and files:
-        return f"devkb outline {shlex.quote(str(files[0].resolve().relative_to(repo.resolve())))} --project {project_arg(repo)}"
+        return f"{devkb_exe(repo)} outline {shlex.quote(str(files[0].resolve().relative_to(repo.resolve())))} --project {project_arg(repo)}"
     if intent in ("call-sites", "call-sites-filtered", "in-file") and n:
-        return f"devkb uses {n} --project {project_arg(repo)}"
+        return f"{devkb_exe(repo)} uses {n} --project {project_arg(repo)}"
     return None
 
 
@@ -1210,8 +1294,13 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         found = [resolved_name(a) or n for n, a in zip(names, answers)] if ev.get("_nocase") else names
         if intent == "read-body" or (why is not None and intent in ("call-sites", "call-sites-filtered", "in-file")):
             # grep runs and prints these very lines: the same lines beside them only cost tokens (#217)
-            log_decision(ev, repo, tool, "pass-through", names, queries, 0, f"duplicate:{intent}")
-            return None
+            if ev.get("_nocase"):                # -i: teach the symbol's own spelling, which `uses` finds (#375)
+                ev["_teach"] = teach_command(intent, found, paths, repo)
+            out = teach_only(ev, inp)
+            # the agent is told the command, and nothing else: a decision of its own, so benchmarks count it (#375)
+            log_decision(ev, repo, tool, "teach" if out else "pass-through", names, queries,
+                         len(TEACH_LINE.format(cmd=ev["_teach"])) if out else 0, f"duplicate:{intent}")
+            return out
         text = shaped_answer(intent, repo, found, inp, paths, scope, tool)
         if not text:                             # nothing in the searched scope: grep may still find a mention there
             log_decision(ev, repo, tool, "pass-through", names, queries, 0, "nothing-in-scope", scope)
@@ -1239,7 +1328,7 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         text, got = key_answer(repo, no_symbol, scope)
         if text:
             if got:                                # teach the command for the answer given: the key's, not names[0] (#283)
-                ev["_teach"] = f"devkb symbol {shlex.quote(sorted(got)[0])} --project {project_arg(repo)}"
+                ev["_teach"] = f"{devkb_exe(repo)} symbol {shlex.quote(sorted(got)[0])} --project {project_arg(repo)}"
             text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
             log_decision(ev, repo, tool, "alongside", names, queries, len(text), "key", scope)
             record_pending(ev, key, repo, tool, inp, pattern, names, [q for q in queries if q["name"] not in got])
@@ -1345,7 +1434,7 @@ def first_open_outline(ev: dict, inp: dict) -> dict | None:
     SEARCH_CWD[:] = [Path(ev.get("cwd") or os.getcwd())]   # the teach line's --project from the session's directory
     ev["_intent"] = "list-symbols"
     log_decision(ev, repo, "Read", "outline-on-open", [], [], len(text), "first-open")
-    ev["_teach"] = f"devkb outline {shlex.quote(str(rel))} --project {project_arg(repo)}"
+    ev["_teach"] = f"{devkb_exe(repo)} outline {shlex.quote(str(rel))} --project {project_arg(repo)}"
     return emit(ev, {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=text)}})
 
 
@@ -1398,7 +1487,10 @@ def span_hint(ev: dict, tool: str, inp: dict) -> dict | None:
         pass
     msg = f"this range stops at L{b}; {s['q']} runs L{s['ls']}\u2013L{s['le']}"
     log_decision(ev, repo, tool, "span-hint", [s["q"]], [], len(msg), f"{rel}:{a}-{b}")
-    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": msg}}
+    if teach_all():                               # the whole definition, when the setting is on (#375)
+        SEARCH_CWD[:] = [cwd]                     # --project as typed from where the read ran (#283)
+        ev["_teach"] = f"{devkb_exe(repo)} symbol {shlex.quote(s['q'])} --source --project {project_arg(repo)}"
+    return emit(ev, {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": msg}})
 
 
 def main() -> int:
@@ -1452,7 +1544,7 @@ def main() -> int:
         return 0
     try:
         out, limit = answer_or_record(ev, repo, tool, inp, pattern, paths, why), output_limit(tool, inp)
-        kept = within_limit(out, limit)
+        kept = out if ev.get("_teach_only") else within_limit(out, limit)
         if out and not kept:
             log_dropped(ev, limit)
         out = emit(ev, kept)
@@ -1473,7 +1565,7 @@ def main() -> int:
     except OSError:
         pass
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                             "additionalContext": REMINDER.format(repo=repo)}}))
+                                             "additionalContext": reminder(repo)}}))
     return 0
 
 

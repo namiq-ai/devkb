@@ -35,17 +35,25 @@ BASES = {"before": "origin/main", "after": "ce284c4", "after2": os.environ.get("
          "release": "origin/main",                                # tri mode (#225): main's code, the last release's devkb
          "main": "origin/main",                                   # tri mode (#225): main's code, main's devkb
          "noteach": "origin/main",                                # main's devkb with D1 off (DEVKB_GUARDRAIL_TEACH=0, #267)
-         "outline": "origin/main"}                                # #218 D2: main's devkb, outline on first open
+         "outline": "origin/main",                                # #218 D2: main's devkb, outline on first open
+         "hookmain": "origin/main",                               # #375: the ticket's base, the hook of POLICY_HOOK_MAIN
+         "teachall": "origin/main"}                               # #375: the ticket's base, the hook of POLICY_TEACHALL
 # Tri-mode arms take their devkb (CLI, graph build, hook) from a tool environment built from an exact commit, never
 # from the checkout the agent edits (#225). POLICY_RELEASE / POLICY_MAIN override the refs.
 ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest_release(),
            "main": lambda: os.environ.get("POLICY_MAIN") or "origin/main",
            "noteach": lambda: os.environ.get("POLICY_MAIN") or "origin/main",
-           "outline": lambda: os.environ.get("POLICY_MAIN") or "origin/main"}
+           "outline": lambda: os.environ.get("POLICY_MAIN") or "origin/main",
+           # a hook version against another on the same checkouts (#375): the checkout follows POLICY_MAIN (the ticket's
+           # base), the devkb and hook come from a fixed commit each
+           "hookmain": lambda: os.environ.get("POLICY_HOOK_MAIN") or "origin/main",
+           "teachall": lambda: os.environ["POLICY_TEACHALL"]}
 # Every devkb arm keeps the answers its agents were given (#218); D1 and D2 are the two direct-path candidates.
 ARM_ENV = {"release": {"DEVKB_GUARDRAIL_KEEP": "1"}, "main": {"DEVKB_GUARDRAIL_KEEP": "1"},
            "noteach": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH": "0"},   # main without D1 (on by default, #267)
-           "outline": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_OUTLINE": "1"}}
+           "outline": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_OUTLINE": "1"},
+           "hookmain": {"DEVKB_GUARDRAIL_KEEP": "1"},
+           "teachall": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH_ALL": "1"}}   # the setting, off by default (#375)
 HIDDEN = ("bench/policy/accept",)                               # the hidden checks: never in an agent's checkout (#223)
 GROUPS = json.loads((Path(__file__).resolve().parent / "groups.json").read_text())   # tickets done as one job
 # after2 (the revised #126 + #127): navigation through the branch's own devkb, which records every query
@@ -453,6 +461,12 @@ def score(issues):
                 f.write(json.dumps(r) + "\n")
 
 
+def check_arms(arms: list[str]) -> None:
+    """Stop a batch before any run when an arm cannot say which commit its hook comes from (#375)."""
+    if "teachall" in arms and not os.environ.get("POLICY_TEACHALL"):
+        raise SystemExit("the teachall arm needs POLICY_TEACHALL: the commit whose hook it runs (#375)")
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     issues = a[1].split(",")
@@ -465,6 +479,8 @@ if __name__ == "__main__":
         # so a merge during the batch never splits its runs across two commits
         pinned = sb.sh(["git", "-C", str(sb.REPO), "rev-parse", "origin/main"]).stdout.strip()
         os.environ.setdefault("POLICY_MAIN", pinned)
+        os.environ.setdefault("POLICY_HOOK_MAIN", pinned)  # hookmain's hook is main as the batch starts, not a moving ref
+        check_arms(arms)
         for k, v in BASES.items():
             if v == "origin/main":
                 BASES[k] = os.environ["POLICY_MAIN"]
