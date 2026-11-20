@@ -195,7 +195,27 @@ registers `scripts/devkb_guardrail.py` as the PreToolUse hook and `scripts/devkb
 PostToolUse hook for Grep and Bash, each with a 20-second timeout. Do not try to change the settings file."""
 
 
-TEMPLATES = B / "templates"
+HARNESS_REPO = Path(__file__).resolve().parents[2]          # the repository that holds this harness, its hidden checks and results
+CACHE = Path.home() / ".cache" / "devkb"
+
+
+def work_dir() -> Path:
+    """Where each run's checkout is made: outside the harness repository (#340). Inside it, an agent's working directory
+    contains the repository's own path, and a cut-down absolute path reached the harness's source (3 of 48 runs wrote to it)."""
+    return Path(os.environ.get("POLICY_WORK_DIR") or CACHE / "policy-work")
+
+
+def harness_state(repo: Path | None = None) -> str:
+    """HEAD and the uncommitted changes of the harness repository, apart from the files the harness itself writes (results,
+    the empty MCP config). A change between two calls is a write by someone else: an agent's stray edit (#340)."""
+    repo = repo or HARNESS_REPO
+    def git(*a):
+        return subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True).stdout
+    return git("rev-parse", "HEAD").strip() + "\n" + git("status", "--porcelain", "--untracked-files=all", "--", ".", ":(exclude)bench/policy/results-*",
+                                                         ":(exclude)bench/policy/no-mcp.json")
+
+
+TEMPLATES = Path(os.environ.get("POLICY_TEMPLATES_DIR") or CACHE / "policy-templates")   # outside the repository too (#340)
 
 
 def template_for(arm: str) -> Path:
@@ -261,7 +281,7 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") not in ("error", "base-red"):
         return f"skip {tag}"                          # an error, or a refused red base, is set up again (#305)
     out.mkdir(parents=True, exist_ok=True)
-    w = B / "work" / tag
+    w = work_dir() / tag
     try:
         if os.environ.get("POLICY_TEMPLATES", "1") == "1":
             from_template(template_for(arm), w)
@@ -302,19 +322,22 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
                PATH=f"{Path(env_bin).parent}:{w / '.venv' / 'bin'}:{os.environ['PATH']}", **ARM_ENV.get(arm, {}))
     (out / "arm.json").write_text(json.dumps(meta) + "\n")
     t0 = time.time()
+    before = harness_state()
     with open(out / "stream.jsonl", "w") as fo, open(out / "stderr.log", "w") as fe:
         try:
             code = subprocess.run(cmd, cwd=w, env=env, stdout=fo, stderr=fe, timeout=5400).returncode
         except subprocess.TimeoutExpired:
             code = "timeout"
-    (out / "end").write_text(json.dumps({"exit": code, "seconds": round(time.time() - t0)}))
+    after = harness_state()
+    touched = sorted(set(after.splitlines()) ^ set(before.splitlines()))     # the lines that appeared or went away (#340)
+    (out / "end").write_text(json.dumps({"exit": code, "seconds": round(time.time() - t0), **({"contaminated": touched} if touched else {})}))
     try:                                              # scored now, while other agents run, not in a tail after the batch
         r = score_run(issue, out)
         if r:
             (out / "score.json").write_text(json.dumps(r) + "\n")
     except Exception as e:  # noqa: BLE001  `score` scores it later
         (out / "score-error.txt").write_text(str(e)[-2000:])
-    return f"done {tag} exit={code} {round(time.time() - t0)}s"
+    return f"done {tag} exit={code} {round(time.time() - t0)}s" + (f" CONTAMINATED the harness repository: {touched}" if touched else "")
 
 
 def _failed_ids(stdout: str) -> list[str]:
@@ -354,7 +377,7 @@ def run_suite(w: Path, timeout: int = 1800) -> dict:
 def score_run(issue: str, out: Path) -> dict | None:
     """One run's row: the full suite, the hidden check, the transcript. None for a refused run or a missing checkout."""
     _, arm, rep = out.name.split("-")
-    w = B / "work" / out.name
+    w = work_dir() / out.name
     if not (w / ".bench-base").exists() or not (out / "end").exists():
         return None
     end = json.loads((out / "end").read_text())
@@ -378,6 +401,7 @@ def score_run(issue: str, out: Path) -> dict | None:
             "accept_sha256": hashlib.sha256(acc.read_bytes()).hexdigest(),          # which check scored it (#223)
             "base_green": arm_meta.get("base_green"), "base_suite": arm_meta.get("base_suite"),   # #221
             "tests_collected": arm_meta.get("tests_collected"),                                    # #331
+            "contaminated": end.get("contaminated") or [],                                         # #340
             "devkb_commit": arm_meta.get("devkb_commit"), "hook_sha": arm_meta.get("hook_sha"),   # #225
             "telemetry": sum(len((d / ".devkb" / "process-api-telemetry.jsonl").read_text().splitlines())
                              for d in [w, *(w / "corpus" / r for r in sb.CORPUS_REPOS)]

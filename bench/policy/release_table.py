@@ -158,6 +158,8 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
     problems = [p for t, rows in pairs if (p := check_hashes(t, rows))]
     if problems and not allow_mixed:
         raise SystemExit("refused, re-score first:\n  " + "\n  ".join(problems))
+    dirty = [(t, [r["run"] for r in rows if r.get("contaminated")]) for t, rows in pairs]
+    pairs = [(t, [r for r in rows if not r.get("contaminated")]) for t, rows in pairs]      # left out of every mean (#340)
     lines = ["| Ticket | Arm | Runs | Wall min | Turns | Context k | Output k | Cost $ | Grep | devkb nav | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
              "|" + "---|" * 16]
     per_arm: dict[str, list[dict]] = {}
@@ -197,6 +199,7 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
             dc = dk = "—"
         lines.append(f"| {a} | {n} | ${cost:.2f} | {ctx / 1e3:.0f}k | {dc} | {dk} |")
     lines += start_section(pairs)
+    lines += [f"WARNING #{t}: {len(rs)} run(s) changed the harness repository while they ran and are left out of the means: {', '.join(rs)} (#340)" for t, rs in dirty if rs]
     if problems:
         lines += ["", "Mixed hidden-check versions (allowed by flag): " + "; ".join(problems)]
     return "\n".join(lines)
