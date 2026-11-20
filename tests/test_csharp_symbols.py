@@ -1073,11 +1073,11 @@ def test_extraction_stays_linear_in_unresolved_calls_to_a_common_name(tmp_path):
 
 
 def test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method(tmp_path):
-    """#61: one method of 8000 lines `b.Property(x => x.P).HasColumn(y => y.Q);` (an EF Core model snapshot's shape).
-    Every lambda parameter went on one list scanned whole per lookup. Linear means 4x the lines take about 4x the time
-    (measured 4.0x; the code before #61 took 9.8x). The bound is on that ratio, taken in this process, so a loaded or
-    slow machine does not fail it (#371); an absolute bound failed under load."""
-    import time
+    """#61: one method of `b.Property(x => x.P).HasColumn(y => y.Q);` lines (an EF Core model snapshot's shape). Every
+    lambda parameter went on one list scanned whole per lookup: quadratic. The measure is the number of Python lines
+    csharp_symbols executes, which is the same on every run: a wall clock or CPU time fails under load (#371; CPU time
+    too, when another process shares the core). 4x the lines: 4.05x the work now, 10.9x for the code before #61."""
+    import sys
 
     def repo(n: int) -> Path:
         d = tmp_path / f"r{n}"
@@ -1089,16 +1089,27 @@ def test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method(tmp_path):
             subprocess.run(["git", *cmd], cwd=d, check=True)
         return d
 
-    small, big = repo(2000), repo(8000)
-    best = {small: float("inf"), big: float("inf")}
-    for _ in range(3):                           # interleaved, best of three: load hits both sizes alike
-        for d in (small, big):
-            t = time.perf_counter()
-            symbols, calls = csharp_symbols.extract(d)
-            best[d] = min(best[d], time.perf_counter() - t)
+    def work(d: Path):
+        """(lines executed in csharp_symbols, calls found) for one extract()."""
+        n, mine = [0], csharp_symbols.__file__
+
+        def local(frame, event, arg):
+            if event == "line":
+                n[0] += 1
+            return local
+
+        old = sys.gettrace()
+        sys.settrace(lambda frame, event, arg: local if frame.f_code.co_filename == mine else None)
+        try:
+            _, calls = csharp_symbols.extract(d)
+        finally:
+            sys.settrace(old)
+        return n[0], calls
+
+    small, _ = work(repo(500))
+    big, calls = work(repo(2000))
     assert {(_short(c["caller"]), _short(c["callee"])) for c in calls} == {("N.A.M", "N.B.Property"), ("N.A.M", "N.B.HasColumn")}
-    ratio = best[big] / best[small]
-    assert ratio < 6.5, f"4x the lines took {ratio:.1f}x the time ({best[small]:.2f} s, {best[big]:.2f} s): quadratic again"
+    assert big / small < 6, f"4x the lines took {big / small:.1f}x the work ({small} and {big} lines executed): quadratic again"
 
 
 def test_a_lambda_parameter_shadows_only_within_its_lambda(tmp_path):
