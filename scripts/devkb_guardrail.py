@@ -615,6 +615,50 @@ def search_part(cmd: str) -> str:
     return cmd
 
 
+def output_limit(tool: str, inp: dict) -> int | None:
+    """How many lines the search prints at most when its output is cut: Grep's `head_limit`, the smallest `| head -N` /
+    `| tail -N` after the search. None when the output is not cut (`tail -n +N` is not a cap) (#281)."""
+    if tool == "Grep":
+        n = inp.get("head_limit")
+        return int(n) if isinstance(n, int) and n > 0 else None
+    cmd = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", search_part(inp.get("command", "")))
+    limit = None
+    for st in (s.split() for s in cmd.split("|")[1:]):
+        if is_trim_stage(st):
+            m = re.search(r"(\+?)(\d+)", " ".join(st[1:]))
+            if not m.group(1):
+                n = int(m.group(2))
+                limit = n if limit is None else min(limit, n)
+    return limit
+
+
+def within_limit(out: dict | None, limit: int | None) -> dict | None:
+    """The answer, or None (the search runs) when a cut search would print fewer lines than the answer carries (#281)."""
+    if out is None or limit is None:
+        return out
+    h = out.get("hookSpecificOutput", {})
+    text = h.get("permissionDecisionReason") or h.get("additionalContext") or ""
+    rows = sum(1 for ln in text.splitlines() if re.match(r"^(?:\S+:)?\d+:", ln))
+    return out if 0 < rows <= limit and "more lines" not in text else None
+
+
+def log_dropped(ev: dict, limit: int | None) -> None:
+    """The cut dropped the answer: the decision line `answer_or_record` wrote says the agent was given it, so it becomes a
+    pass-through, with the reason and no answer fields (#281)."""
+    try:
+        log = Path.home() / ".claude" / "hooks" / "devkb-guardrail.log"
+        lines = log.read_text().splitlines()
+        last = json.loads(lines[-1]) if lines else {}
+        if last.get("session") != ev.get("session_id") or last.get("action") in ("pass-through", "remind"):
+            return
+        for k in ("answer_sha1", "answer_chars", "answer_head"):
+            last.pop(k, None)
+        last.update(action="pass-through", chars=0, verdicts=[], reason=f"cut:{limit}" if limit else "cut", question="none")
+        log.write_text("\n".join(lines[:-1] + [json.dumps(last)]) + "\n")
+    except (OSError, ValueError):
+        pass
+
+
 def search_flags(tool: str, inp: dict) -> set[str]:
     """The output-changing options of the first search: c (count), l/L (file names), v (invert), as letters."""
     if tool == "Grep":
@@ -1396,7 +1440,11 @@ def main() -> int:
     if not first_copy(ev):
         return 0
     try:
-        out = emit(ev, answer_or_record(ev, repo, tool, inp, pattern, paths, why))
+        out, limit = answer_or_record(ev, repo, tool, inp, pattern, paths, why), output_limit(tool, inp)
+        kept = within_limit(out, limit)
+        if out and not kept:
+            log_dropped(ev, limit)
+        out = emit(ev, kept)
     except Exception:  # noqa: BLE001  devkb must never get in the search's way
         out = None
     if out:
