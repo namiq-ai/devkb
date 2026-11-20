@@ -48,3 +48,14 @@ def test_the_release_table_shows_flaky_runs_apart():
     rt = importlib.import_module("release_table")
     m = rt.summary([{"ok": True, "suite": True, "flaky": True, **{k: 0 for k in ("turns", "grep", "nav", "own", "sub", "ctx", "out", "cost", "wall", "answers", "answer_chars")}}])
     assert m["flaky"] == 1 and m["suite"] == 1
+
+
+ORDER_A = "import builtins\n\n\ndef test_a():\n    builtins._poisoned = True\n"
+ORDER_B = "import builtins\n\n\ndef test_b():\n    assert not hasattr(builtins, '_poisoned')\n"
+
+
+def test_301_an_order_dependent_failure_that_passes_alone_keeps_the_suite_red(tmp_path):
+    """Fails after test_a in every full run, passes on its own: not flaky, the suite is red (#301)."""
+    w = _checkout(tmp_path, {"test_a.py": ORDER_A, "test_b.py": ORDER_B})
+    r = pb.run_suite(w, timeout=120)
+    assert not r["suite_pass"] and r["suite_failed"] == ["tests/test_b.py::test_b"] and r["suite_flaky"] == []
