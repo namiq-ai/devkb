@@ -21,9 +21,11 @@ for spec in sys.argv[4:]:
     t = time.time()
     env = dict(os.environ, PYTHONPATH=code)
     cmd = lambda mod, *extra: [py, "-P", "-W", "ignore", "-m", mod, "--project", path, *extra]
-    # devkb's own repository carries its own code, so both stages need the other-checkout flag there (ODSF-104, #383)
+    # devkb's own repository carries its own code, so the stages need the other-checkout flag there (ODSF-104). The
+    # symbol stage takes it from #383 on; older code (a baseline release) neither takes nor needs it.
     extra = ("--allow-foreign-checkout",) if (Path(path) / "devkb" / "cli.py").exists() else ()
-    steps = [cmd("devkb.build_symbols", *extra), cmd("devkb.build", *extra)]
+    sym_takes = "allow-foreign-checkout" in (Path(code) / "devkb" / "build_symbols.py").read_text(errors="replace")
+    steps = [cmd("devkb.build_symbols", *(extra if sym_takes else ())), cmd("devkb.build", *extra)]
     for step in steps:
         r = subprocess.run(step, env=env, capture_output=True, text=True)
         if r.returncode:
