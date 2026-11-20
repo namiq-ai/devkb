@@ -44,13 +44,37 @@ def test_the_lowercase_query_puts_the_function_first(tmp_path):
     assert r["matches"][1]["how"] == "exact (other case)"
 
 
-def test_no_label_when_no_match_has_the_query_spelling(tmp_path):
-    r = _repo(tmp_path, {"pkg/a.py": "def Parse_Thing():\n    return 1\n"}).resolve("parse_thing")
-    assert [m["how"] for m in r["matches"]] == ["exact"]
+def test_every_match_spelled_otherwise_is_labelled_even_when_none_has_the_query_spelling(tmp_path):
+    rt = _repo(tmp_path, {"pkg/tools.py": "def trace(t):\n    return t\n\nclass Trace:\n    pass\n"})
+    assert [m["how"] for m in rt.resolve("TRACE")["matches"]] == ["exact (other case)", "exact (other case)"]
+    assert {m["k"]: m["how"] for m in rt.resolve("Trace")["matches"]} == {"pkg/tools.py::Trace": "exact",
+                                                                          "pkg/tools.py::trace": "exact (other case)"}
 
 
 def test_case_never_lifts_a_test_symbol_above_production(tmp_path):
     rt = _repo(tmp_path, {"app/core.py": "def parse(s):\n    return s\n",
                           "tests/test_core.py": "def Parse():\n    return 1\n\ndef test_it():\n    assert Parse() == 1\n"})
     r = rt.resolve("Parse")
-    assert [m["k"] for m in r["matches"]] == ["app/core.py::parse", "tests/test_core.py::Parse"]
+    assert [(m["k"], m["how"]) for m in r["matches"]] == [("app/core.py::parse", "exact (other case)"),
+                                                          ("tests/test_core.py::Parse", "exact")]
+
+
+def test_qualified_regex_and_glob_queries_put_the_spelling_first_and_label_the_rest(tmp_path):
+    rt = _repo(tmp_path, {"pkg/a.py": "def trace(t):\n    return t\n\ndef use():\n    return trace(1)\n\nTRACE = 1\n"})
+    for q, how in (("a.TRACE", "module"), ("pkg.a.TRACE", "module"), ("re:^TRACE$", "regex"), ("TRAC*", "glob")):
+        r = rt.resolve(q)
+        assert r["how"] == how, q
+        assert [(m["k"], m["how"]) for m in r["matches"]] == [("pkg/a.py::TRACE", how), ("pkg/a.py::trace", f"{how} (other case)")], q
+
+
+def test_a_suffix_query_keeps_the_case_of_every_typed_part(tmp_path):
+    rt = _repo(tmp_path, {"pkg/a.py": "class Store:\n    def add(self):\n        return 1\n\nclass store:\n    def add(self):\n        return 2\n\n"
+                                      "def f():\n    return store().add() + store().add()\n"})
+    r = rt.resolve("Store.add")
+    assert [(m["k"], m["how"]) for m in r["matches"]] == [("pkg/a.py::Store.add", "qualified"), ("pkg/a.py::store.add", "qualified (other case)")]
+
+
+def test_the_spelling_goes_before_the_depth_of_the_qualified_name(tmp_path):
+    rt = _repo(tmp_path, {"pkg/a.py": "def run():\n    return 1\n\ndef go():\n    return run()\n\nclass Task:\n    def Run(self):\n        return 2\n"})
+    r = rt.resolve("Run")
+    assert [(m["k"], m["how"]) for m in r["matches"]] == [("pkg/a.py::Task.Run", "exact"), ("pkg/a.py::run", "exact (other case)")]

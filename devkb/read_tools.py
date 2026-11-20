@@ -50,6 +50,9 @@ IMPORT_RE = {
 }
 
 
+CASE_FOLDED = ("exact", "suffix", "module", "glob", "regex")   # tiers that compare in lower case (#372)
+
+
 def _module_of(path: str) -> str:
     """A file's dotted module path, lower case: `devkb/cli.py` -> `devkb.cli`, `pkg/__init__.py` -> `pkg`."""
     stem = re.sub(r"\.[A-Za-z0-9]{1,5}$", "", path).replace("/", ".").lower()
@@ -191,10 +194,10 @@ class ReadTools:
         for how, run in tiers:
             hit = run()
             if hit:
-                spelled = {i for i in hit if self.short[i] == q or self.qual[i] == q}
+                spelled = {i for i in hit if self._spelled(i, how, q, rx)}
                 order = sorted(hit, key=lambda i: self._rank_key(i, hit[i], i in spelled))
-                # the exact tier ignores case: a match spelled otherwise says so, when the query's spelling is among them (#372)
-                other = set(hit) - spelled if how == "exact" and spelled else set()
+                # these tiers ignore case: a match spelled otherwise than the query says so (#372)
+                other = set(hit) - spelled if how in CASE_FOLDED else set()
                 return self._reply(query, "qualified" if how == "exact" and "." in q and not any(self.short[i].lower() == ql for i in hit) else how,
                                    order, hit, limit, other)
         # similarity fallback
@@ -226,6 +229,23 @@ class ReadTools:
                 best = sorted(ids, key=lambda i: self._rank_key(i, sc))[0]
                 sugg.append({"name": self.short[best], "path": self.file[best], "score": round(sc)})
         return {"query": query, "how": None, "n": 0, "matches": [], "suggestions": sugg}
+
+    def _spelled(self, i: int, how: str, q: str, rx) -> bool:
+        """Whether symbol i matches the query in the case the query was typed (#372). The tiers compare in lower case
+        so a loosely typed name still finds its symbol; this decides the order among their matches and the label."""
+        short, qual = self.short[i], self.qual[i]
+        if how == "regex":
+            cs = re.compile(rx.pattern)
+            return bool(cs.search(short) or cs.search(qual))
+        if how == "glob":
+            return fnmatch.fnmatchcase(short, q) or fnmatch.fnmatchcase(qual, q)
+        if short == q or qual == q:
+            return True
+        if how in ("suffix", "module"):          # `Class.method`, `module.NAME`, `ns.A.f`: the typed tail, case kept
+            parts = q.split(".")
+            dotted = "." + _module_of(self.file[i]) + "." + qual
+            return any(dotted.endswith("." + ".".join(parts[n:])) for n in range(len(parts) - 1)) and short == parts[-1]
+        return False
 
     def _reply(self, query, how, order, hit, limit, other_case=frozenset()) -> dict:
         rows, extra = [], 0
