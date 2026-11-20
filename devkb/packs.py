@@ -226,52 +226,52 @@ class Packer:
             lines.append(f"- `{rel}`{more} — `{self.call_site(c, self._name(s))}`")
         return lines or ["- none in the graph"]
 
+    def _test_loads(self) -> dict[str, tuple[list[tuple[int, str]], list[tuple[int, list[str]]]]]:
+        """{test file: (paths it builds from its own location, loads it cannot follow)}, read once per Packer: only
+        the test files whose text has a `.py` path or a run-time load are parsed (#382)."""
+        if getattr(self, "_loads", None) is None:
+            import ast  # noqa: PLC0415
+            from devkb.build_symbols import literal_paths, unfollowed_loads  # noqa: PLC0415
+            self._loads = {}
+            for rel in sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and self.api._is_test(r)):
+                text = "\n".join(self._file(rel))
+                if ".py" not in text and "import_module(" not in text:
+                    continue
+                try:
+                    tree = ast.parse(text)
+                except (SyntaxError, ValueError, RecursionError):
+                    continue
+                self._loads[rel] = (literal_paths(tree), unfollowed_loads(tree))
+        return self._loads
+
     def _unfollowed_note(self, path: str, listed: dict) -> list[str]:
         """A line saying the test list may be incomplete when a test file outside it loads modules from `path`'s
         directory by a computed name or path, which the graph cannot follow (#382); nothing otherwise."""
         if not path.endswith(".py"):
             return []
-        if not hasattr(self, "_unfollowed"):
-            from devkb.build_symbols import unfollowed_loads  # noqa: PLC0415
-            import ast  # noqa: PLC0415
-            self._unfollowed: list[tuple[str, int, list[str]]] = []
-            for rel in sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and self.api._is_test(r)):
-                text = "\n".join(self._file(rel))
-                if "import_module(" not in text and "spec_from_file_location(" not in text:
-                    continue
-                try:
-                    loads = unfollowed_loads(ast.parse(text))
-                except (SyntaxError, ValueError, RecursionError):
-                    continue
-                self._unfollowed += [(rel, line, hints) for line, hints in loads]
-        dirs = set(path.split("/")[:-1])
-        sites = list(dict.fromkeys(f"{rel}:{line}" for rel, line, hints in self._unfollowed
-                                   if rel not in listed and all(h in dirs for h in hints)))
+        here = path.rsplit("/", 1)[0] if "/" in path else ""
+        sites = [f"{rel}:{line}" for rel, (_paths, loads) in sorted(self._test_loads().items()) if rel not in listed
+                 for line, dirs in loads if any(here == d or here.endswith("/" + d) for d in dirs)]
         if not sites:
             return []
         shown = ", ".join(f"`{s}`" for s in sites[:3]) + (f" and {len(sites) - 3} more" if len(sites) > 3 else "")
-        return [f"- may be incomplete: {len(sites)} test site(s) load a module from this directory by a name or path "
+        return [f"- may be incomplete: {len(sites)} test site(s) load a module from `{here}` by a name or path "
                 f"computed at run time, which the graph cannot follow ({shown}); if they load this file, they are not listed"]
 
     def _named_by_path(self, path: str, listed: dict) -> dict[str, int]:
-        """{test file: line} for test files outside `listed` that spell `path` out of literal pieces
-        (`ROOT / "scripts" / "g.py"`): they run or load the file by path, with no call the graph can attribute (#382)."""
+        """{test file: line} for test files outside `listed` that build `path` from their own location out of literal
+        pieces (`ROOT / "scripts" / "g.py"`, `ROOT = Path(__file__).parents[1]`): they run or load the file by path,
+        with no call the graph can attribute (#382). A path of one piece (`HERE / "g.py"`) counts only when one file
+        has that name."""
         if not path.endswith(".py"):
             return {}
-        from devkb.build_symbols import literal_paths  # noqa: PLC0415
-        import ast  # noqa: PLC0415
-        base, out = path.rsplit("/", 1)[-1], {}
-        unique = sum(1 for r in self.idx.sym_by_file if r.rsplit("/", 1)[-1] == base) == 1   # a bare `g.py` names one file
-        for rel in sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and r not in listed and r != path
-                          and self.api._is_test(r)):
-            text = "\n".join(self._file(rel))
-            if base not in text:
+        base = path.rsplit("/", 1)[-1]
+        unique = sum(1 for r in self.idx.sym_by_file if r.rsplit("/", 1)[-1] == base) == 1
+        out = {}
+        for rel, (paths, _loads) in sorted(self._test_loads().items()):
+            if rel in listed or rel == path:
                 continue
-            try:
-                hits = [line for line, p in literal_paths(ast.parse(text))
-                        if path == p or path.endswith("/" + p) and ("/" in p or unique)]
-            except (SyntaxError, ValueError, RecursionError):
-                continue
+            hits = [line for line, p in paths if path == p or path.endswith("/" + p) and ("/" in p or unique)]
             if hits:
                 out[rel] = hits[0]
         return out

@@ -42,6 +42,7 @@ with tempfile.TemporaryDirectory() as td:
     d = mk("alias", {
         "tools/storyline.py": "def count_turns(rows):\n    return len(rows)\n\n\ndef other():\n    return 0\n",
         "tools/gatekeep.py": "def decide(x):\n    return x > 1\n",
+        "other/gatekeep.py": "def decide(x):\n    return x < 1\n",      # the bare name alone cannot tell which
         "tools/dynamo.py": "def spin():\n    return 3\n",
         "tests/test_alias.py": (
             "import importlib\nimport sys\nfrom pathlib import Path\n\n"
@@ -50,8 +51,8 @@ with tempfile.TemporaryDirectory() as td:
             "def test_count():\n    assert sl.count_turns([1, 2]) == 2\n"),
         "tests/test_spec.py": (
             "import importlib.util\nfrom pathlib import Path\n\n"
-            "HERE = Path(__file__).resolve().parents[1]\n"
-            "spec = importlib.util.spec_from_file_location(\"gk_mod\", HERE / \"tools\" / \"gatekeep.py\")\n"
+            "HERE = Path(__file__).resolve().parents[1]\nTOOLS = HERE / \"tools\"\n"
+            "spec = importlib.util.spec_from_file_location(\"gk_mod\", TOOLS / \"gatekeep.py\")\n"
             "gk = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(gk)\n\n\n"
             "def test_decide():\n    assert gk.decide(2)\n"),
         "tests/test_dyn.py": (
@@ -63,7 +64,10 @@ with tempfile.TemporaryDirectory() as td:
     got, _ = tests_listed(run(d, "pack", "--project", str(d), "file", "tools/storyline.py"))
     res["aliased_import_module_listed"] = "tests/test_alias.py" in got
     got, _ = tests_listed(run(d, "pack", "--project", str(d), "file", "tools/gatekeep.py"))
-    res["aliased_spec_from_file_location_listed"] = "tests/test_spec.py" in got
+    other, _ = tests_listed(run(d, "pack", "--project", str(d), "file", "other/gatekeep.py"))
+    _, sec = tests_listed(run(d, "pack", "--project", str(d), "file", "tools/gatekeep.py"))
+    line = next((l for l in sec.splitlines() if l.startswith("- `tests/test_spec.py`")), "")
+    res["aliased_spec_from_file_location_listed"] = "gk.decide" in line and "tests/test_spec.py" not in other  # by its call
     got, sec = tests_listed(run(d, "pack", "--project", str(d), "file", "tools/dynamo.py"))
     res["unfollowable_load_not_silent"] = "tests/test_dyn.py" in got or bool(
         re.search(r"(?i)incomplete|may be missing|may miss|cannot follow|could not follow", sec))

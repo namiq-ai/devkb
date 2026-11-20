@@ -19,7 +19,7 @@ from __future__ import annotations
 import ast
 
 from devkb.build_symbols import (
-    EXPR, _calls_in_body, _import_descriptors, _import_targets, _imports, _module_paths, _py_literals,
+    EXPR, _calls_in_body, _import_descriptors, _import_targets, dynamic_locals, _imports, _module_paths, _py_literals,
     _list_python_files, _resolve_cross_file_symbol, _resolve_via_literals, collect_reexports, register_reexports,
 )
 from devkb.model import DevKBGraph
@@ -71,7 +71,9 @@ def extract(ctx: ProjectContext, graph: DevKBGraph) -> DevKBGraph:
         if not tests:
             continue
 
-        receivers, bare = _import_targets(_import_descriptors(tree), rel)
+        descriptors = _import_descriptors(tree)
+        receivers, bare = _import_targets(descriptors, rel)
+        dynamic = dynamic_locals(descriptors)        # bound by importlib: a miss still tries the literals (#382)
         literals = _py_literals(tree)
         for name, lineno, calls, pairs in tests:
             resolved: set[str] = set()
@@ -91,7 +93,7 @@ def extract(ctx: ProjectContext, graph: DevKBGraph) -> DevKBGraph:
                         hit = _resolve_cross_file_symbol(module, rel, short, symbols_by_file)
                         if hit:
                             break
-                    if hit is None and receiver not in receivers:
+                    if hit is None and (receiver not in receivers or receiver in dynamic):
                         hit = _resolve_via_literals(literals, short, symbols_by_file)
                     if hit:
                         resolved.add(hit)
