@@ -1037,6 +1037,22 @@ def shaped_answer(intent: str, repo: Path, names: list[str], inp: dict, paths: l
     return lines_text(rows) if rows else None
 
 
+def _graph_matches(repo: Path, xy: str, paths: list[str]) -> bool:
+    """Does the graph's file list agree with git's view of an added, deleted or renamed path (#279)? A path that exists
+    must be listed; one that is gone (deleted, or renamed away) must not be. Unreadable file list: no. (A file with no
+    symbols has no File node, so such an added file stays stale until committed: the safe side.)"""
+    try:
+        listed = set()
+        for l in (repo / ".devkb" / "symbols-nodes.jsonl").read_text().splitlines():
+            if '"type": "File"' in l:
+                listed.add(json.loads(l)["natural_key"])
+    except (OSError, ValueError, KeyError):
+        return False
+    gone = paths[:-1] if "R" in xy else ([paths[0]] if "D" in xy else [])
+    here = [paths[-1]] if "D" not in xy else []
+    return all(x in listed for x in here if Path(x).suffix.lower() in CODE_EXTS) and not any(x in listed for x in gone)
+
+
 def graph_stale(repo: Path, scope: list[str] | None) -> bool:
     """The working tree may hold code the graph has not seen (#182): the graph was built at another commit, or git
     reports a code file in the searched scope as new or changed after the build. Then grep, not the graph, has the
@@ -1053,8 +1069,13 @@ def graph_stale(repo: Path, scope: list[str] | None) -> bool:
     if p.returncode:
         return True
     for line in p.stdout.splitlines():
-        rel = line[3:].split(" -> ")[-1].strip('"')
-        if Path(rel).suffix.lower() in CODE_EXTS and (line.startswith("??") or misses.changed_since_build(repo, rel)):
+        paths = [x.strip('"') for x in line[3:].split(" -> ")]
+        if not any(Path(x).suffix.lower() in CODE_EXTS for x in paths):
+            continue
+        if line.startswith("??") or ("D" not in line[:2] and misses.changed_since_build(repo, paths[-1])):
+            return True
+        # a renamed, added or deleted code file is a change only while the graph's file list disagrees with the tree (#279)
+        if any(c in line[:2] for c in "RAD") and not _graph_matches(repo, line[:2], paths):
             return True
     return False
 
