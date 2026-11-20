@@ -37,10 +37,20 @@ Python as .venv/bin/python; libclang is installed in it). The pinned C/C++ corpu
 checkout). Implement the story below completely: code, fixture tests, and any measurement or document it asks for.
 Keep the whole test suite passing (.venv/bin/python -m pytest -q). Commit your work with git when done. Do not push
 and do not use gh.
-
+{commands}
 # {title}
 
 {body}
+"""
+# The same for every arm, appended to both prompts (#369). Each sentence answers a command form the benchmark's
+# permission settings refused in a headless probe (docs/BENCHMARK.md, "Permission denials"): a path outside the
+# checkout, a shell loop, a variable, `$(...)`, a subshell, a brace group with quoted strings in a heredoc, and the
+# venv called by its absolute path.
+COMMANDS = """
+How to run commands here (the session refuses other forms): run each shell command from the checkout root, one simple
+command or a short `&&` chain at a time, without shell loops, variables, `$(...)` or subshells; call the venv as
+.venv/bin/python, never by its absolute path; stay inside the checkout (no `..`, no other directories). Create and
+change files with the Write and Edit tools, not with shell heredocs, `cat >` or Python scripts that rewrite files.
 """
 ALLOW = ["Read", "Edit", "Write", "Glob", "Grep", "TodoWrite", "mcp__devkb",
          "Bash(git:*)", "Bash(.venv/bin/python:*)", "Bash(.venv/bin/pytest:*)", "Bash(python3:*)", "Bash(devkb:*)", "Bash(.venv/bin/devkb:*)",
@@ -107,7 +117,7 @@ def run_one(issue: str, arm: str, rep: int) -> str:
     w = B / "work" / tag
     checkout(w)
     t = json.loads(sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
-    cmd = ["claude", "-p", PROMPT.format(title=t["title"], body=t["body"]), "--model", MODEL, "--output-format",
+    cmd = ["claude", "-p", PROMPT.format(title=t["title"], body=t["body"], commands=COMMANDS), "--model", MODEL, "--output-format",
            "stream-json", "--verbose", "--max-turns", "250", "--permission-mode", "acceptEdits", "--strict-mcp-config",
            "--mcp-config", str(w / ".mcp.json"), "--allowedTools", *ALLOW, "--disallowedTools", *DENY]
     env = dict(os.environ, DEVKB_GUARDRAIL="1" if arm == "guardrail" else "0",
