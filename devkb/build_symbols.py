@@ -557,6 +557,20 @@ def _star_modules(descriptors: list[tuple[int, str, str | None, str]], rel_path:
     return out
 
 
+def _reexport_table(descriptors: list[tuple[int, str, str | None, str]], rel_path: str, bare: dict[str, tuple[str, str]]) -> dict[str, tuple[str, str]]:
+    """A file's re-export entries: its named from-imports, plus one `"*<module>"` entry per `from <module> import *` (#286),
+    which may supply any name the file does not define. A copy: `bare` is shared with the import targets."""
+    out = dict(bare)
+    for mod in _star_modules(descriptors, rel_path):
+        if mod:
+            out["*" + mod] = (mod, "*")
+    return out
+
+
+def _star_sources(table: dict[str, tuple[str, str]]) -> list[str]:
+    return [v[0] for k, v in table.items() if k.startswith("*") and v[1] == "*"]
+
+
 def _module_is(dotted: str, rel_path: str) -> bool:
     """True when `dotted` could name the file `rel_path` (from the repo root or any ancestor directory of the importer)."""
     return any(rel_path == g or rel_path.endswith("/" + g) for g in _module_paths(dotted))
@@ -569,8 +583,14 @@ def _reexported(module: str, name: str, sym_file: str, ctx: dict, sym_short: str
     if depth > 5:
         return False
     for path in _module_paths(module):
-        via = (ctx.get("reexports") or {}).get(path, {}).get(name)
+        table = (ctx.get("reexports") or {}).get(path, {})
+        via = table.get(name)
         if not via:
+            for star in _star_sources(table):             # `from .sub import *` (#286)
+                if _module_is(star, sym_file) and name == sym_short:
+                    return True
+                if _reexported(star, name, sym_file, ctx, sym_short, depth + 1):
+                    return True
             continue
         if _module_is(via[0], sym_file) and via[1] == sym_short:
             return True
@@ -677,9 +697,10 @@ def collect_reexports(repo_root: Path, rel_paths: list[str]) -> dict[str, dict[s
             tree = ast.parse((repo_root / rel).read_text(errors="replace"))
         except (SyntaxError, OSError, ValueError, RecursionError):
             continue
-        bare = _import_targets(_import_descriptors(tree), rel)[1]
-        if bare:
-            out[rel] = bare
+        descriptors = _import_descriptors(tree)
+        table = _reexport_table(descriptors, rel, _import_targets(descriptors, rel)[1])
+        if table:
+            out[rel] = table
     return out
 
 
@@ -710,9 +731,14 @@ def _resolve_cross_file_symbol(
             return None
         # Not defined here: the module may re-export it (`from .wallets import get_wallet` in a package's
         # `__init__.py`). Follow that import, a bounded number of hops.
-        via = reexports.get(guess, {}).get(short_name)
+        table = reexports.get(guess, {})
+        via = table.get(short_name)
         if via and _depth < 6:
             return _resolve_cross_file_symbol(via[0], guess, via[1], per_file_symbols, _depth + 1)
+        if _depth < 6:
+            for star in _star_sources(table):             # `from .sub import *` (#286)
+                if hit := _resolve_cross_file_symbol(star, guess, short_name, per_file_symbols, _depth + 1):
+                    return hit
         return None
 
     candidates = _module_paths(dotted_module)
@@ -1363,8 +1389,8 @@ def extract(repo_root: Path) -> DevKBGraph:
         # otherwise silently lose its own middleware registrations here,
         # a real bug this exact shape caught live (BL-10's own test).
         targets = _import_targets(descriptors, rel_path)
-        if targets[1]:
-            reexports[rel_path] = targets[1]
+        if table := _reexport_table(descriptors, rel_path, targets[1]):
+            reexports[rel_path] = table
         if not symbols and not middleware and not module_doc and not daemon_entries and not calls:
             continue
         per_file_symbols[rel_path] = symbols
