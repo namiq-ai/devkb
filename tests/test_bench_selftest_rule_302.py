@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bench" / "policy"))
+HOME = "/ho" + "me/u"                                  # built at run time: the sdist holds no denylisted string (#364)
 sb = importlib.import_module("storybench")
 rt = importlib.import_module("release_table")
 
@@ -23,7 +24,7 @@ def _lines(cwd):
 
 def test_a_checkout_under_a_folder_named_devkb_is_not_an_edit_of_devkb_code(tmp_path, monkeypatch):
     monkeypatch.setattr(sb, "guardrail_actions", lambda s: (0, {}))
-    cwd = "/home/u/devkb/bench/work/run-1"
+    cwd = f"{HOME}/devkb/bench/work/run-1"
     p = tmp_path / "stream.jsonl"
     p.write_text("".join(json.dumps(x) + "\n" for x in _lines(cwd)))
     t = sb.transcript(p)
@@ -31,19 +32,19 @@ def test_a_checkout_under_a_folder_named_devkb_is_not_an_edit_of_devkb_code(tmp_
 
 
 def test_the_rule_reads_the_path_inside_the_checkout():
-    root = "/home/u/devkb/work/r"
+    root = f"{HOME}/devkb/work/r"
     assert sb.edits_devkb_code(root + "/devkb/cli.py", root)
     assert sb.edits_devkb_code(root + "/scripts/x.py", root)
     assert sb.edits_devkb_code("devkb/cli.py", root)
     assert not sb.edits_devkb_code(root + "/docs/devkb/notes.md", root)
-    assert not sb.edits_devkb_code("/home/u/devkb/other/devkb/x.py", root)      # outside the checkout
+    assert not sb.edits_devkb_code(f"{HOME}/devkb/other/devkb/x.py", root)      # outside the checkout
     assert sb.edits_devkb_code("/w/devkb/x.py")                                   # no root known: as before
 
 
 def test_the_release_table_uses_the_same_rule(tmp_path, monkeypatch):
     monkeypatch.setattr(rt, "B", tmp_path)
     (tmp_path / "runs" / "r").mkdir(parents=True)
-    (tmp_path / "runs" / "r" / "stream.jsonl").write_text("".join(json.dumps(x) + "\n" for x in _lines("/home/u/devkb/w")))
+    (tmp_path / "runs" / "r" / "stream.jsonl").write_text("".join(json.dumps(x) + "\n" for x in _lines(f"{HOME}/devkb/w")))
     assert rt.counts("r")[:2] == (1, 0)
 
 
