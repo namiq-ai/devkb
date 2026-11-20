@@ -68,3 +68,23 @@ def test_the_command_names_the_key_it_answered(repo, tmp_path):
 def test_a_path_with_a_space_is_quoted(repo, tmp_path):
     cmd = teach(repo, tmp_path, 'grep -n "^def " "my dir/with space.py"')
     assert "'my dir/with space.py'" in cmd and runs(cmd, repo), cmd
+
+
+def test_the_outline_on_open_command_runs_from_the_subfolder_the_session_is_in(tmp_path):
+    root = tmp_path / "r"
+    (root / "pkg").mkdir(parents=True)
+    (root / "pkg" / "big.py").write_text("".join("def f%d():\n    return %d\n\n" % (i, i) for i in range(80)))
+    for c in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "x"]):
+        subprocess.run(["git", *c], cwd=root, check=True)
+    env = dict(os.environ, PYTHONPATH=str(ROOT), PYTHONWARNINGS="ignore")
+    subprocess.run([sys.executable, "-P", "-m", "devkb.cli", "build", "--project", str(root)], cwd=root, env=env, check=True,
+                   capture_output=True)
+    henv = {k: v for k, v in os.environ.items() if not k.startswith("DEVKB_")}
+    henv.update(DEVKB_GUARDRAIL_OUTLINE="1", HOME=str(tmp_path / "home"), PYTHONPATH=str(ROOT))
+    ev = {"tool_name": "Read", "cwd": str(root / "pkg"), "session_id": "s283-open", "tool_use_id": "t-open",
+          "tool_input": {"file_path": str(root / "pkg" / "big.py")}}
+    out = subprocess.run([sys.executable, str(PRE)], input=json.dumps(ev), capture_output=True, text=True, env=henv).stdout
+    text = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    line = next(l for l in text.splitlines() if l.startswith("Next time ask devkb directly:"))
+    cmd = line.split("`")[1]
+    assert "--project .." in cmd and runs(cmd, root / "pkg"), cmd

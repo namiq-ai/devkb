@@ -1234,6 +1234,7 @@ def first_open_outline(ev: dict, inp: dict) -> dict | None:
     if not ans:
         return None
     text = capped(ans)
+    SEARCH_CWD[:] = [Path(ev.get("cwd") or os.getcwd())]   # the teach line's --project from the session's directory
     ev["_intent"] = "list-symbols"
     log_decision(ev, repo, "Read", "outline-on-open", [], [], len(text), "first-open")
     ev["_teach"] = f"devkb outline {shlex.quote(str(rel))} --project {project_arg(repo)}"
