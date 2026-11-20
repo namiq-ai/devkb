@@ -23,7 +23,7 @@ B = Path(__file__).resolve().parent
 sys.path.insert(0, str(B))
 import storybench as sb  # noqa: E402  (the one rule for devkb commands, #258)
 NONE = ("none", "nonekeep", "nonehid")
-ORDER = ("nonekeep", "none", "release", "climain", "cli130", "main", "nonehid", "mainhid")
+ORDER = ("nonekeep", "none", "release", "climain", "cli130", "userpolicy", "short", "inject", "main", "nonehid", "mainhid")
 HIDDEN_LOCATION = ("nonehid", "mainhid")          # the ticket's location withheld (#337); compared with each other
 
 

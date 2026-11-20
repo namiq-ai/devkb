@@ -37,7 +37,11 @@ BASES = {"before": "origin/main", "after": "ce284c4", "after2": os.environ.get("
          "noteach": "origin/main",                                # main's devkb with D1 off (DEVKB_GUARDRAIL_TEACH=0, #267)
          "outline": "origin/main",                                # #218 D2: main's devkb, outline on first open
          "hookmain": "origin/main",                               # #375: the ticket's base, the hook of POLICY_HOOK_MAIN
-         "teachall": "origin/main"}                               # #375: the ticket's base, the hook of POLICY_TEACHALL
+         "teachall": "origin/main",                               # #375: the ticket's base, the hook of POLICY_TEACHALL
+         # #366: main's devkb with the policy a user's repository holds, not this repository's own process text
+         "userpolicy": "origin/main",                             # AGENTS.md/CLAUDE.md exactly as `devkb init` writes them
+         "short": "origin/main",                                  # the same, the block cut to the lines agents act on
+         "inject": "origin/main"}                                 # userpolicy, plus the pack of the ticket's file in the prompt
 # Tri-mode arms take their devkb (CLI, graph build, hook) from a tool environment built from an exact commit, never
 # from the checkout the agent edits (#225). POLICY_RELEASE / POLICY_MAIN override the refs.
 ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest_release(),
@@ -47,13 +51,26 @@ ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest
            # a hook version against another on the same checkouts (#375): the checkout follows POLICY_MAIN (the ticket's
            # base), the devkb and hook come from a fixed commit each
            "hookmain": lambda: os.environ.get("POLICY_HOOK_MAIN") or "origin/main",
-           "teachall": lambda: os.environ["POLICY_TEACHALL"]}
+           "teachall": lambda: os.environ["POLICY_TEACHALL"],
+           **{a: (lambda: os.environ.get("POLICY_MAIN") or "origin/main") for a in ("userpolicy", "short", "inject")}}
 # Every devkb arm keeps the answers its agents were given (#218); D1 and D2 are the two direct-path candidates.
 ARM_ENV = {"release": {"DEVKB_GUARDRAIL_KEEP": "1"}, "main": {"DEVKB_GUARDRAIL_KEEP": "1"},
            "noteach": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH": "0"},   # main without D1 (on by default, #267)
            "outline": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_OUTLINE": "1"},
            "hookmain": {"DEVKB_GUARDRAIL_KEEP": "1"},
-           "teachall": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH_ALL": "1"}}   # the setting, off by default (#375)
+           "teachall": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH_ALL": "1"},   # the setting, off by default (#375)
+           **{a: {"DEVKB_GUARDRAIL_KEEP": "1"} for a in ("userpolicy", "short", "inject")}}
+# #366: the policy text of the user-facing arms. "full" is the block `devkb init` writes (devkb.init.AGENTS_BLOCK of the
+# arm's devkb), "short" the candidate below; the checkout's CLAUDE.md is then `@AGENTS.md`, as init writes it.
+USER_POLICY = {"userpolicy": "full", "short": "short", "inject": "full"}
+SHORT_BLOCK = """## devkb: ask the graph before you search or read code
+
+`.devkb/` holds a graph of this repository's code; every answer cites the line that proves it.
+- `devkb symbol NAME --source`: where NAME is defined, and its body (instead of `grep -n "def NAME" -A30`)
+- `devkb uses NAME`: every use of NAME, grouped by the function it is in (instead of `grep -rn NAME`)
+- `devkb pack --project . file PATH`: before you edit PATH: who calls into it, and the tests to run
+- `devkb pack --project . refactor NAME`: before you change a function: its callers at any depth, and their tests
+A pack marked **Complete** is the whole answer. To learn how code is written, read the file: the graph does not store it."""
 HIDDEN = ("bench/policy/accept",)                               # the hidden checks: never in an agent's checkout (#223)
 GROUPS = json.loads((Path(__file__).resolve().parent / "groups.json").read_text())   # tickets done as one job
 # after2 (the revised #126 + #127): navigation through the branch's own devkb, which records every query
@@ -265,6 +282,8 @@ def checkout(w: Path, arm: str):
             shutil.rmtree(p) if p.is_dir() else p.unlink(missing_ok=True)
         for t in (w / "scripts").glob("devkb_guardrail*.py"):    # the guardrail's scripts go with it
             t.unlink(missing_ok=True)
+    if arm in USER_POLICY:                           # #366: what `devkb init` gives a user's repository, nothing else
+        write_user_policy(w, env, USER_POLICY[arm])
     if arm != "nonekeep" and (arm == "none" or os.environ.get("POLICY_EQUAL_SUITE", "1") == "1"):
         trim_tests(w)                                 # every arm runs the same suite as `none` (#331); nonekeep keeps all
     if env:                                           # the arm's hook runs the tool environment's guardrail
@@ -381,6 +400,44 @@ def harness_state(repo: Path | None = None) -> str:
 TEMPLATES = Path(os.environ.get("POLICY_TEMPLATES_DIR") or CACHE / "policy-templates")   # outside the repository too (#340)
 
 
+def user_policy(env: dict, kind: str) -> tuple[str, str]:
+    """(AGENTS.md, CLAUDE.md) as `devkb init` of the arm's devkb writes them into a repository with neither file (#366);
+    with `kind` "short", the block is SHORT_BLOCK instead of devkb's AGENTS_BLOCK."""
+    code = ("import sys\nfrom devkb.init import AGENTS_BLOCK, _set_block\n"
+            "block = AGENTS_BLOCK if sys.argv[1] == 'full' else sys.argv[2]\n"
+            "print(_set_block('', block), end='\\0')\nprint(_set_block('', '@AGENTS.md'), end='')\n")
+    p = subprocess.run([sys.executable, "-P", "-c", code, kind, SHORT_BLOCK], capture_output=True, text=True, check=True,
+                       env=dict(os.environ, PYTHONPATH=env["src"]))
+    agents, claude = p.stdout.split("\0")
+    return agents, claude
+
+
+INJECT = ("Before this session, devkb ran `devkb pack --project . file {path}` for the file the ticket points to. Its "
+          "answer:\n\n{pack}\n\n---\n\n")
+
+
+def injected_context(issue: str, w: Path, devkb_bin: str) -> str:
+    """The `inject` arm's first-turn context (#366): the file pack of the first file (code before tests) the ticket's
+    "Where to start" names that exists in the checkout, computed with the arm's devkb on the run's own graph; nothing when it names no file."""
+    t = ticket_for(issue)
+    files = [n for n in location_names(t["body"]) if "/" in n and (w / n).is_file()]
+    files = [n for n in files if not (n.startswith("tests/") or "/test_" in n)] or files   # the code, before its tests
+    if not files:
+        return ""
+    p = subprocess.run([devkb_bin, "pack", "--project", str(w), "file", files[0]], cwd=w, capture_output=True, text=True,
+                       timeout=300)
+    pack = p.stdout.strip().replace(str(w), ".")
+    return INJECT.format(path=files[0], pack=pack) if p.returncode == 0 and pack else ""
+
+
+def write_user_policy(w: Path, env: dict | None, kind: str) -> None:
+    if not env:
+        raise RuntimeError("a user-policy arm needs a tool environment (ENV_REF)")
+    agents, claude = user_policy(env, kind)
+    (w / "AGENTS.md").write_text(agents)
+    (w / "CLAUDE.md").write_text(claude)
+
+
 def template_for(arm: str) -> Path:
     """One prepared checkout per arm and base commit (files, corpus, venv, graphs, base suite checked), made once and
     copied for each run: the 4-5 minutes of setup a run used to repeat (POLICY_TEMPLATES=0 turns it off)."""
@@ -466,6 +523,8 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
         mcp = str(B / "no-mcp.json")
         Path(mcp).write_text(json.dumps({"mcpServers": {}}))
     prompt = run_prompt(issue, tag.split("-")[1], w)
+    if arm == "inject":                              # #366: the answer up front instead of advice
+        prompt = injected_context(issue, w, tool_of(arm, toolenv.build(ENV_REF[arm]()))) + prompt
     if os.environ.get("POLICY_PREREGISTER_POST") == "1":
         prompt += SETTINGS_NOTE
     deny = sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if arm in ("none", "nonekeep") else [])   # both forms (#335)
