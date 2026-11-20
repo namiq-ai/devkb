@@ -75,3 +75,16 @@ def test_a_complete_short_list_still_replaces(repo, tmp_path):
 def test_a_repository_wide_search_reaching_docs_is_never_replaced(repo, tmp_path, cmd):
     h, row = decide(repo, tmp_path, cmd)                  # docs/guide.md mentions handler: grep prints that line
     assert h.get("permissionDecision") != "deny" and row["reason"] == "non-code-path"
+
+
+def test_an_untracked_doc_naming_the_function_stops_the_replacement(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("g276u", ROOT / "scripts" / "devkb_guardrail.py")
+    g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "a.py").write_text("def helper():\n    return 1\n")
+    for c in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "x"]):
+        subprocess.run(["git", *c], cwd=tmp_path, check=True)
+    assert not g.names_non_code(None, tmp_path, ["helper"], ["."])
+    (tmp_path / "NOTES.md").write_text("Call HELPER first.\n")          # untracked, and in another case
+    assert g.names_non_code(None, tmp_path, ["helper"], ["."])

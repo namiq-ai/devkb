@@ -844,7 +844,7 @@ def names_non_code(paths: list[Path] | None, repo: Path, names: list[str] | None
             return True
     if not names:
         return False
-    args = ["git", "-C", str(repo), "grep", "-l", "-I", "-F"]
+    args = ["git", "-C", str(repo), "grep", "--untracked", "-l", "-I", "-i", "-F"]   # untracked docs, any case: grep prints them too
     for n in names:
         args += ["-e", n]
     try:
