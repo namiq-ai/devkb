@@ -1200,6 +1200,17 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
             log_decision(ev, repo, tool, "alongside", names, queries, len(text), "key", scope)
             record_pending(ev, key, repo, tool, inp, pattern, names, [q for q in queries if q["name"] not in got])
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(text))}}
+    if why is None and intent in ("call-sites", "locate") and queries:
+        # a name with several definitions needs no resolution for `uses` or the definition list, and a name devkb has
+        # nothing for adds nothing: what devkb has goes beside grep, never instead of it (#274)
+        have = [q["name"] for q in queries if q["verdict"] in ("complete", "cannot-resolve")]
+        scope = scope_of(paths or [], repo)
+        text = shaped_answer(intent, repo, have, inp, paths, scope, tool) if have else None
+        if text:
+            text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
+            log_decision(ev, repo, tool, "alongside", names, queries, len(text), f"ambiguous:{intent}", scope)
+            record_pending(ev, key, repo, tool, inp, pattern, names, queries)
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(text))}}
     log_decision(ev, repo, tool, "pass-through", names, queries, 0, "not-complete")
     record_pending(ev, key, repo, tool, inp, pattern, names, queries)
     return None
