@@ -74,7 +74,7 @@ def test_nothing_that_fetches_or_hides_is_posted(text):
 
 
 def test_nothing_that_looks_like_a_credential_is_posted():
-    for secret in ("ghp_" + "a" * 36, "github_pat_" + "b" * 60, "-----BEGIN OPENSSH PRIVATE KEY-----"):
+    for secret in ("ghp_" + "a" * 36, "github_pat_" + "b" * 60, "-----BEGIN OPENSSH " + "PRIVATE KEY-----"):
         with pytest.raises(RuntimeError, match="credential"):
             triage.post(5, f"here: {secret}", False)
     triage.post(5, "a normal review", False)
