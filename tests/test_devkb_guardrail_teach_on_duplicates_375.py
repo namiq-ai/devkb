@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -142,3 +143,32 @@ def test_with_only_the_checkouts_devkb_every_line_names_it_from_where_the_search
         exe.parent.parent.rmdir()
     assert "`../.venv/bin/devkb symbol|uses|outline|pack" in rem
     assert teach == f"{TEACH}`../.venv/bin/devkb uses helper --project ..`"
+
+
+def test_a_plugin_enabled_in_the_projects_settings_counts_as_mcp(repo, tmp_path):
+    st = repo / ".claude" / "settings.json"
+    st.parent.mkdir(exist_ok=True)
+    st.write_text(json.dumps({"enabledPlugins": {"devkb@devkb": True}}))
+    try:
+        _, text = hook(repo, tmp_path, 'grep -rn "def nosuchname_p" pkg/', "s-rem-plugin")
+    finally:
+        st.unlink()
+        st.parent.rmdir()
+    assert "or the mcp__devkb tools" in text
+
+
+def test_from_a_symlinked_directory_the_checkouts_devkb_path_runs(repo, tmp_path):
+    exe = repo / ".venv" / "bin" / "devkb"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("#!/bin/sh\n")
+    link = tmp_path / "deep" / "a" / "b"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(repo)
+    try:
+        _, teach = hook(repo, tmp_path, "grep -n helper use.py", "s-link", cwd=link / "pkg", PATH="/usr/bin:/bin")
+    finally:
+        exe.unlink()
+        exe.parent.rmdir()
+        exe.parent.parent.rmdir()
+    cmd = teach.split("`")[1].split()[0]
+    assert (link / "pkg" / cmd).resolve() == exe.resolve() or Path(cmd).resolve() == exe.resolve(), teach

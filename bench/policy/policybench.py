@@ -460,6 +460,12 @@ def score(issues):
                 f.write(json.dumps(r) + "\n")
 
 
+def check_arms(arms: list[str]) -> None:
+    """Stop a batch before any run when an arm cannot say which commit its hook comes from (#375)."""
+    if "teachall" in arms and not os.environ.get("POLICY_TEACHALL"):
+        raise SystemExit("the teachall arm needs POLICY_TEACHALL: the commit whose hook it runs (#375)")
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     issues = a[1].split(",")
@@ -472,6 +478,8 @@ if __name__ == "__main__":
         # so a merge during the batch never splits its runs across two commits
         pinned = sb.sh(["git", "-C", str(sb.REPO), "rev-parse", "origin/main"]).stdout.strip()
         os.environ.setdefault("POLICY_MAIN", pinned)
+        os.environ.setdefault("POLICY_HOOK_MAIN", pinned)  # hookmain's hook is main as the batch starts, not a moving ref
+        check_arms(arms)
         for k, v in BASES.items():
             if v == "origin/main":
                 BASES[k] = os.environ["POLICY_MAIN"]

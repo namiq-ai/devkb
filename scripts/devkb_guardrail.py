@@ -38,7 +38,7 @@ def reminder(repo: Path) -> str:
 
 def mcp_configured(repo: Path) -> bool:
     """Whether a devkb MCP server is configured: the repository's `.mcp.json`, the user's `~/.claude.json` (user scope, or
-    this project's local scope), or an enabled devkb plugin in `~/.claude/settings.json`. A session started with
+    this project's local scope), or a devkb plugin enabled in the user's, the project's or the local settings. A session started with
     `--strict-mcp-config` cannot be seen from here; then the reminder may name tools the session lacks."""
     def servers(path: Path, *keys: str) -> dict:
         try:
@@ -52,11 +52,14 @@ def mcp_configured(repo: Path) -> bool:
     if any("devkb" in x for x in (servers(repo / ".mcp.json"), servers(home / ".claude.json"),
                                   servers(home / ".claude.json", "projects", str(repo.resolve())))):
         return True
-    try:
-        plugins = json.loads((home / ".claude" / "settings.json").read_text()).get("enabledPlugins") or {}
-        return any(v and k.split("@")[0] == "devkb" for k, v in plugins.items())
-    except (OSError, ValueError, AttributeError):
-        return False
+    for f in (home / ".claude" / "settings.json", repo / ".claude" / "settings.json", repo / ".claude" / "settings.local.json"):
+        try:                                     # user, project and local scope plugins (#378 review)
+            plugins = json.loads(f.read_text()).get("enabledPlugins") or {}
+            if any(v and k.split("@")[0] == "devkb" for k, v in plugins.items()):
+                return True
+        except (OSError, ValueError, AttributeError):
+            pass
+    return False
 
 
 SEARCH = re.compile(r"(?:^|[;&|(]\s*|\bxargs\s+)(?:git\s+grep|grep|egrep|rg)\b")
@@ -825,9 +828,9 @@ def devkb_exe(repo: Path) -> str:
     v = repo / ".venv" / "bin" / "devkb"
     if not v.exists():
         return "devkb"
-    full = str(v.absolute())
-    try:
-        rel = os.path.relpath(v, (SEARCH_CWD[0] if SEARCH_CWD else repo))
+    full = str(v.resolve())
+    try:                                         # both sides resolved, as project_arg does: a symlinked cwd (#378 review)
+        rel = os.path.relpath(v.resolve(), (SEARCH_CWD[0] if SEARCH_CWD else repo).resolve())
     except ValueError:
         rel = full
     return shlex.quote(rel if len(rel) <= len(full) else full)
