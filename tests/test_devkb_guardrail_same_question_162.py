@@ -54,14 +54,19 @@ def sub(hso):
     return hso.get("permissionDecision") == "deny"
 
 
-@pytest.mark.parametrize("command", ["grep -rn extract .", "grep -rn extract", "grep -rn extract pkg/ scripts/",
-                                     "grep -rnwE extract --color=auto .",
-                                     "grep -rn extract . | head", "grep -rn extract . | head -5",
-                                     "grep -rn extract . | tail -3", "grep -rn extract . | head -n 20 | tail -n5",
-                                     "grep -rn extract . | tail -n +2", "grep -rn extract . | head --lines=8"])
+@pytest.mark.parametrize("command", ["grep -rn extract pkg/ scripts/", "grep -rnwE extract --color=auto pkg/ scripts/",
+                                     "grep -rn extract pkg/ scripts/ | head -5", "grep -rn extract pkg/ scripts/ | tail -3"])
 def test_same_question_is_substituted(repo, tmp_path, command):
     hso, row = decide(repo, tmp_path, "Bash", {"command": command})
     assert sub(hso) and row["action"] == "substitute" and row["reason"] == "same-question"
+
+
+@pytest.mark.parametrize("command", ["grep -rn extract .", "grep -rn extract", "grep -rnwE extract --color=auto .",
+                                     "grep -rn extract . | head", "grep -rn extract . | head -n 20 | tail -n5",
+                                     "grep -rn extract . | tail -n +2", "grep -rn extract . | head --lines=8"])
+def test_a_search_that_reaches_a_doc_mentioning_the_name_is_not_replaced(repo, tmp_path, command):
+    hso, row = decide(repo, tmp_path, "Bash", {"command": command})   # docs/readme.md mentions extract: grep prints it (#276)
+    assert not sub(hso) and row["reason"] == "non-code-path"
 
 
 def test_folder_narrows_the_answer(repo, tmp_path):
@@ -120,7 +125,7 @@ def test_grep_tool_variants(repo, tmp_path, inp, action, reason):
 
 
 def test_grep_tool_plain_and_scoped(repo, tmp_path):
-    assert sub(decide(repo, tmp_path, "Grep", {"pattern": "extract", "output_mode": "content"})[0])
+    assert not sub(decide(repo, tmp_path, "Grep", {"pattern": "extract", "output_mode": "content"})[0])   # reaches docs (#276)
     hso, _ = decide(repo, tmp_path, "Grep", {"pattern": "extract", "path": str(repo / "scripts"), "output_mode": "content"})
     text = hso["permissionDecisionReason"]
     assert sub(hso) and "scripts/tool.py" in text and "tests/test_alpha.py" not in text

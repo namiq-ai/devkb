@@ -254,15 +254,36 @@ _MENTION = re.compile(r"@(?=[A-Za-z0-9])")
 ZWSP = "\u200b"
 
 
+# a GitHub-hosted attachment link GitHub would embed as a player; the host is broken with a zero-width space, so it is
+# never autolinked or embedded, with or without a scheme, `www.` or backticks around it
+_ASSET = re.compile(r"((?:www\.)?github|(?:private-)?user-images\.githubusercontent)(\.com/)"
+                    r"(?=user-attachments/|[^/\s]+/[^/\s]+/assets/|\S)", re.I)
+_INVISIBLE = re.compile("[\U000e0000-\U000e007f\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]")   # tags, bidi
+
+
+def _is_asset(m: re.Match) -> bool:
+    rest = m.string[m.end():m.end() + 200].lower()
+    host = m.group(1).lower()
+    return "githubusercontent" in host or rest.startswith("user-attachments/") or bool(re.match(r"[^/\s]+/[^/\s]+/assets/", rest))
+
+
 def sanitize(text: str) -> str:
     """Text the daemon posts: no @mentions (they notify strangers), no HTML comments, no more than a page."""
     prev = None
     while prev != text:                       # '<!<!-- -->-- x -->' is a comment again after one pass
         prev, text = text, re.sub(r"<!--.*?-->", "", text, flags=re.S)
-    text = text.replace("<!--", "&lt;!--")    # an unclosed opener would hide everything after it
-    text = text.replace("![", "[")                                            # no image: one would fetch a URL on render
-    text = re.sub(r"<\s*(img|picture|source|video|audio|iframe|object|embed)\b[^>]*>", "", text, flags=re.I)
-    text = re.sub(r"^[ \t>*+\-\d.]*\[[^\]]*\]:.*$", "", text, flags=re.M)  # reference definitions, in lists and quotes too
+    # Escape, never remove: removing a tag or `![` in one pass lets nesting rebuild it ('<im<img>g ...>' -> '<img ...>',
+    # '!![x](u)' -> '![x](u)', GHSA-2f68-qq22-rcgx). Escaping only adds characters, so no input can rebuild either.
+    text = text.replace("&", "&amp;")         # no entity: '&#64;name' would render as a mention, '&#60;' as '<' text
+    text = text.replace("<", "&lt;")          # no HTML at all: no tag, image, comment opener or hidden block survives
+    text = re.sub(r"!(?=\[)", r"!\\", text)   # no Markdown image: '![' becomes '!\[' (shown as text, never fetched)
+    text = text.replace("]:", "]\\:")         # no reference definition in any container or label form: ']\:' is text
+    text = text.replace("$", "\uff04")        # no math: '$\phantom{x}$' would hide text; a fullwidth sign is never math
+    # no fenced block at all: mermaid, geojson, topojson, stl and math fences render (images, maps, hidden text), in any
+    # container; escaping every fence character leaves no fence, and inline code spans still work
+    text = re.sub(r"`{3,}|~{3,}", lambda m: "".join("\\" + c for c in m.group(0)), text)
+    text = _ASSET.sub(lambda m: m.group(1) + ZWSP + m.group(2) if _is_asset(m) else m.group(0), text)   # no embedded media
+    text = _INVISIBLE.sub("", text)           # no text hidden by invisible tag or direction characters
     # A zero-width space after every @ before a name: GitHub never reads it as a mention, whatever Markdown is around
     # it (backslashes, code spans, a cut at the length limit), and it reads the same.
     return _MENTION.sub("@" + ZWSP, text.strip()[:3500])

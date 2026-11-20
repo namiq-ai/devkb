@@ -70,7 +70,7 @@ def test_a_pull_request_with_a_symlink_submodule_or_claude_settings_is_not_revie
                                   "[//]: # (hidden text)\nvisible"])
 def test_nothing_that_fetches_or_hides_is_posted(text):
     out = triage.sanitize(text)                   # a former image may stay a plain link: a link is not fetched on render
-    assert "![" not in out and "<img" not in out.lower() and "hidden text" not in out
+    assert "![" not in out and "<img" not in out.lower() and "]:" not in out   # a definition is shown as text, never hidden
 
 
 def test_nothing_that_looks_like_a_credential_is_posted():
@@ -126,6 +126,11 @@ def _worktree(tmp_path):
 
 def _draft(monkeypatch, tmp_path, agent, tests=None):
     work = _worktree(tmp_path)
+    monkeypatch.setattr(triage, "TREE", tmp_path / "base")
+    real_run = triage.run
+    # the draft fetches REPO's main into the triage checkout first (#208): never the network or the live checkout here
+    monkeypatch.setattr(triage, "run", lambda cmd, *a, **k: None if cmd[:4] == ["git", "-C", str(triage.TREE), "fetch"]
+                        else real_run(cmd, *a, **k))
     monkeypatch.setattr(triage, "worktree_for", lambda name, ref: work)
     monkeypatch.setattr(triage, "claude", lambda p, cwd, tools: (agent(work), ("{}", 0.0))[1])
     ran = []
@@ -246,7 +251,8 @@ def test_a_quoted_comment_is_sanitized_before_it_is_quoted():
     c = {"id": 1, "url": "u", "author": "a", "body": "![x][r]\n[r]: https://x.example/p.png"}
     v = triage.validate_feedback({"action": "ticket", "type": "bug", "priority": "low",
                                   "ticket": {"title": "t", "body": "b" * 90}}, set())
-    assert "x.example" not in triage.ticket_body(c, 3, v)
+    body = triage.ticket_body(c, 3, v)
+    assert "![" not in body and "]:" not in body             # neither the image nor its definition can render
 
 
 def test_titles_lose_mentions_secrets_and_closing_keywords():
@@ -310,3 +316,94 @@ def test_an_interpreter_reached_through_directory_symlinks_runs_in_the_sandbox(t
     links = triage.interpreter_links()
     assert ["--symlink", "py-3.11.17", str(tmp_path / "py-3.11")] == links[links.index(str(tmp_path / "py-3.11")) - 2:
                                                                            links.index(str(tmp_path / "py-3.11")) + 1]
+
+
+# GHSA-2f68-qq22-rcgx: removal in one pass let nested input rebuild an image; escaping cannot be undone by nesting
+@pytest.mark.parametrize("text", ["<im<img>g src=https://x.example/p.png>", "<<img>img src=https://x.example/p.png>",
+                                  "!![pixel](https://x.example/p.png?u=1)", "!!![a](https://x.example/p.png)",
+                                  "<IMG SRC=x>", "<svg onload=x>", "<picture><source srcset=x></picture>",
+                                  "\\![x](https://x.example/p.png)", "![x][r]\n[r]: https://x.example/p.png",
+                                  "<<!-- -->img src=x>", "&lt;img src=x&gt; is shown as text"])
+def test_nested_input_cannot_rebuild_an_image_or_a_tag(text):
+    import re
+    out = triage.sanitize(text)
+    assert "<" not in out, out                            # every tag, comment and image tag is escaped
+    assert not re.search(r"!\[", out), out                 # every Markdown image is escaped
+    assert "]: https://x.example" not in out               # reference definitions are still removed
+
+
+def test_escaped_text_still_reads_the_same():
+    out = triage.sanitize("Use `a < b` and see the [docs](https://example.org).")
+    assert out == "Use `a &lt; b` and see the [docs](https://example.org)."
+
+
+# GHSA-2f68-qq22-rcgx review round 1: every form escaped, none deleted
+@pytest.mark.parametrize("text", ["1) [//]: # (hidden text)", "1) [r]: https://x.example/p.png \"hidden\"",
+                                  "- 1) [r]: https://x.example/", "[a\\]b]: https://x.example/x \"hidden\"",
+                                  "[a\\]]: # (hidden)", "   [r]: https://x.example/", "* > 1. [a]: /u"])
+def test_no_reference_definition_of_any_form_survives(text):
+    import re
+    out = triage.sanitize(text)
+    assert not re.search(r"\]:", out), out                 # ']\:' is text; a definition needs ']:'
+
+
+@pytest.mark.parametrize("text", ["&#64;octocat please look", "&#x40;octocat", "&commat;octocat", "&#60;img src=x&#62;"])
+def test_no_entity_reaches_the_renderer(text):
+    out = triage.sanitize(text)
+    assert "&#" not in out.replace("&amp;#", "") and "&commat;" not in out.replace("&amp;commat;", ""), out
+
+
+@pytest.mark.parametrize("text", ["```mermaid\nA@{ img: \"https://x.example/a.png\" }\n```", "~~~ geojson\n{}\n~~~",
+                                  "> ```topojson\n> {}\n> ```", "```STL\nsolid x\n```"])
+def test_no_rendered_block_survives(text):
+    import re
+    out = triage.sanitize(text)
+    assert not re.search(r"`{3,}|~{3,}", out), out          # no fence of any language or container is left
+
+
+@pytest.mark.parametrize("text", ["https://github.com/user-attachments/assets/0a1b2c3d-1111-2222-3333-444455556666",
+                                  "see https://user-images.githubusercontent.com/1/2.mp4 here",
+                                  "https://private-user-images.githubusercontent.com/1/2.mov"])
+def test_no_bare_attachment_link_is_embedded(text):
+    out = triage.sanitize(text).lower()
+    assert "github.com/" not in out and "githubusercontent.com/" not in out, out   # the host is broken: never embedded
+
+
+@pytest.mark.parametrize("text", ["cost $\\phantom{hidden}$ and $5", "\\$\\phantom{hidden}\\$", "```math\n\\phantom{x}\n```",
+                                  "- ```mermaid\n  A@{ img: \"https://x.example/a.png\" }\n  ```", "1. ```mermaid\n```",
+                                  "> - ```geojson\n> {}\n> ```"])
+def test_no_math_or_fence_in_any_container_survives(text):
+    import re
+    for out in (triage.sanitize(text), triage.sanitize(triage.sanitize(text))):   # ticket_body sanitizes twice
+        assert "$" not in out and not re.search(r"`{3,}|~{3,}", out), out
+
+
+@pytest.mark.parametrize("text", ["https://github.com/owner/repo/assets/12345/0a1b2c3d-1111-2222-3333-444455556666",
+                                  "HTTPS://GITHUB.COM/USER-ATTACHMENTS/ASSETS/0a1b2c3d-1111-2222-3333-444455556666"])
+def test_every_attachment_link_form_is_broken(text):
+    for out in (triage.sanitize(text), triage.sanitize(triage.sanitize(text))):
+        assert "github.com/" not in out.lower(), out
+
+
+@pytest.mark.parametrize("text", ["`https://github.com/user-attachments/assets/a", "https://github.com/user-attachments/assets/a`",
+                                  "www.github.com/user-attachments/assets/a", "github.com/o/r/assets/1/a"])
+def test_attachment_links_are_broken_whatever_surrounds_them(text):
+    assert "github.com/" not in triage.sanitize(text).lower()
+
+
+def test_an_ordinary_github_link_is_kept():
+    assert triage.sanitize("see https://github.com/o/r/issues/5") == "see https://github.com/o/r/issues/5"
+
+
+def test_invisible_characters_are_removed():
+    out = triage.sanitize("ok\U000e0041\U000e0042 \u202eevil\u202c text")
+    assert out == "ok evil text"
+
+
+def test_sanitizing_twice_keeps_every_guarantee():
+    import re
+    text = "![x](u) <img src=x> [r]: u $m$ ```mermaid\n``` &#64;bob @bob https://github.com/user-attachments/assets/a"
+    once = triage.sanitize(text)
+    twice = triage.sanitize(once)
+    for out in (once, twice):
+        assert "<" not in out and not re.search(r"!\[|\]:|`{3,}|\$", out) and not re.search(r"@[A-Za-z0-9]", out), out

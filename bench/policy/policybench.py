@@ -65,6 +65,23 @@ push and do not use gh.
 """
 
 
+_DATA_PATH = re.compile(r"bench/results/[\w.\-/]+")
+_FENCE = re.compile(r"```.*?```", re.S)
+
+
+def without_missing_data(body: str, w: Path) -> str:
+    """A ticket's fenced reproduction blocks that use data under bench/results/ which is not in the checkout are replaced by
+    one line saying so (#336). Without it every agent tried the missing path (2.0 to 3.4 calls per run) and reported that
+    it could not run the reproduction. Blocks that name nothing missing, and all other text, stay as filed."""
+    def swap(m):
+        gone = [p for p in _DATA_PATH.findall(m.group(0)) if not (w / p.rstrip("/")).exists()]
+        if not gone:
+            return m.group(0)
+        return (f"(Reproduction command omitted: the data it uses, {gone[0]}, is not in this checkout. "
+                "The regression test you write is the check.)")
+    return _FENCE.sub(swap, body)
+
+
 def checkout(w: Path, arm: str):
     if w.exists():
         shutil.rmtree(w)
@@ -83,11 +100,10 @@ def checkout(w: Path, arm: str):
         for t in TRACE:
             p = w / t
             shutil.rmtree(p) if p.is_dir() else p.unlink(missing_ok=True)
-        for t in [*(w / "scripts").glob("devkb_guardrail*.py"), *(w / "tests").glob("*.py")]:
-            # the guardrail's scripts go with it, and so does every test that exercises them, so the suite starts green
-            if t.parent.name == "scripts" or "devkb_guardrail" in t.read_text(errors="replace"):
-                t.unlink(missing_ok=True)
-        remove_dependents(w / "tests")
+        for t in (w / "scripts").glob("devkb_guardrail*.py"):    # the guardrail's scripts go with it
+            t.unlink(missing_ok=True)
+    if arm != "nonekeep" and (arm == "none" or os.environ.get("POLICY_EQUAL_SUITE", "1") == "1"):
+        trim_tests(w)                                 # every arm runs the same suite as `none` (#331); nonekeep keeps all
     if env:                                           # the arm's hook runs the tool environment's guardrail
         st_path = w / ".claude" / "settings.json"
         st = json.loads(st_path.read_text()) if st_path.exists() else {}
@@ -121,13 +137,32 @@ def checkout(w: Path, arm: str):
     base_suite = subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-x"], cwd=w,
                                 capture_output=True, text=True, timeout=1800)
     failed = [l.split(" - ")[0] for l in base_suite.stdout.splitlines() if l.startswith(("FAILED ", "ERROR "))]
-    meta = {"arm": arm, "base_suite": (base_suite.stdout.strip().splitlines() or [""])[-1], "base_failed": failed[:5],
+    n_tests = collected(subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
+                                       cwd=w, capture_output=True, text=True, timeout=600).stdout)
+    meta = {"arm": arm, "tests_collected": n_tests, "base_suite": (base_suite.stdout.strip().splitlines() or [""])[-1], "base_failed": failed[:5],
             "base_green": base_suite.returncode == 0,
             "devkb_commit": env["commit"] if env else None, "hook_sha": env["hook_sha"] if env else None}
     (w / ".bench-arm.json").write_text(json.dumps(meta) + "\n")
     (w / ".bench-base").write_text(sb.sh(["git", "rev-parse", "HEAD"], cwd=w).stdout.strip())
     if not meta["base_green"]:                        # a red base would be counted against the agent (#221)
         raise RuntimeError(f"{w.name}: the checkout's own suite is red before the agent starts: {meta['base_suite']} {failed[:3]}")
+
+
+def trim_tests(w: Path) -> None:
+    """Remove every test that exercises the guardrail's scripts, and every test module that imports one that is gone, so
+    the suite starts green in the arm that has no guardrail, and is the same suite in every other arm (#331): a cost,
+    turn or wall-time difference then does not include the suite's size. POLICY_EQUAL_SUITE=0 keeps the other arms' tests
+    (for a ticket about the guardrail itself; use the nonekeep arm as its control)."""
+    for t in (w / "tests").glob("*.py"):
+        if "devkb_guardrail" in t.read_text(errors="replace"):
+            t.unlink(missing_ok=True)
+    remove_dependents(w / "tests")
+
+
+def collected(out: str) -> int | None:
+    """The number of tests in `pytest --collect-only -q` output (its last line: 'N tests collected in …'), else None."""
+    m = re.search(r"(\d+) tests? collected", (out or "").strip().splitlines()[-1] if (out or "").strip() else "")
+    return int(m.group(1)) if m else None
 
 
 def remove_dependents(tests: Path) -> None:
@@ -168,7 +203,9 @@ def template_for(arm: str) -> Path:
     copied for each run: the 4-5 minutes of setup a run used to repeat (POLICY_TEMPLATES=0 turns it off)."""
     base = sb.sh(["git", "-C", str(sb.REPO), "rev-parse", f"{BASES[arm]}^{{commit}}"]).stdout.strip()
     envc = toolenv.resolve(ENV_REF[arm]()) if arm in ENV_REF else "none"
-    t = TEMPLATES / f"{arm}-{base[:12]}-{envc[:12]}"
+    suite = "eq" if os.environ.get("POLICY_EQUAL_SUITE", "1") == "1" else "full"      # the suite is content: part of the key (#331)
+    post = "-post" if os.environ.get("POLICY_PREREGISTER_POST") == "1" else ""      # it adds a hook to the checkout (#307)
+    t = TEMPLATES / f"{arm}-{base[:12]}-{envc[:12]}-suite{suite}{post}"
     with toolenv.held(TEMPLATES / f".{t.name}.lock"):   # runs of one arm, in this or another benchmark process, wait
                                                         # for the same template: never built twice, never deleted in use
         if not (t / ".bench-ready").exists():
@@ -221,8 +258,8 @@ def run_one(issue: str, arm: str, rep: int) -> str:
 def _run_one(issue: str, arm: str, rep: int) -> str:
     tag = f"p{issue}-{arm}-r{rep}"
     out = B / "runs" / tag
-    if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") != "error":
-        return f"skip {tag}"                          # a run that ended in an error is run again
+    if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") not in ("error", "base-red"):
+        return f"skip {tag}"                          # an error, or a refused red base, is set up again (#305)
     out.mkdir(parents=True, exist_ok=True)
     w = B / "work" / tag
     try:
@@ -230,12 +267,12 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
             from_template(template_for(arm), w)
         else:
             checkout(w, arm)
-    except RuntimeError as e:                         # a red base (#221): recorded, never run or scored
+    except RuntimeError as e:                         # a red base (#221): recorded, not run or scored; set up again next batch (#305)
         (out / "end").write_text(json.dumps({"exit": "base-red", "seconds": 0, "error": str(e)[-400:]}))
         return f"refused {tag}: {e}"
     except Exception as e:  # noqa: BLE001  a setup that fails is recorded, never a run that silently disappears
-        (out / "end").write_text(json.dumps({"exit": "base-red", "seconds": 0, "error": f"setup: {type(e).__name__}: {e}"[-400:]}))
-        return f"refused {tag}: setup failed: {e}"
+        (out / "end").write_text(json.dumps({"exit": "error", "seconds": 0, "error": f"setup: {type(e).__name__}: {e}"[-400:]}))
+        return f"error {tag}: setup failed: {e}"       # not a red base: run again in the next batch (#305)
     t = json.loads(sb.sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
     for extra in GROUPS.get(issue, []):            # tickets done as one job (same code): bench/policy/groups.json
         t2 = json.loads(sb.sh(["gh", "issue", "view", extra, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
@@ -248,16 +285,20 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     else:
         mcp = str(B / "no-mcp.json")
         Path(mcp).write_text(json.dumps({"mcpServers": {}}))
-    prompt = (sb.PROMPT if issue == "117" else PROMPT).format(title=t["title"], body=t["body"])
+    prompt = (sb.PROMPT if issue == "117" else PROMPT).format(title=t["title"], body=without_missing_data(t["body"], w))
     if os.environ.get("POLICY_PREREGISTER_POST") == "1":
         prompt += SETTINGS_NOTE
-    deny = sb.DENY + (["Bash(devkb:*)"] if arm in ("none", "nonekeep") else [])
+    deny = sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if arm in ("none", "nonekeep") else [])   # both forms (#335)
     meta = json.loads((w / ".bench-arm.json").read_text())
     env_bin = tool_of(arm, toolenv.build(ENV_REF[arm]()) if arm in ENV_REF else None)
     cmd = ["claude", "-p", prompt, "--model", sb.MODEL, *SOURCES, "--output-format",
            "stream-json", "--verbose", "--max-turns", "250" if issue in ("117", "131") else "150", "--permission-mode", "acceptEdits", "--strict-mcp-config",
            "--mcp-config", mcp, "--allowedTools", *sb.ALLOW, "--disallowedTools", *deny]
-    env = dict(os.environ, DEVKB_GUARDRAIL={"before": "0", "none": "0", "nonekeep": "0", "cli130": "enforce"}.get(arm, "1"),
+    # The Bash tool backgrounds a command after 120 s by default; a full suite that runs about that long then costs the agent
+    # extra turns to wait for it, in one arm and not the other (#334). Every arm gets the same, longer limit.
+    limit = os.environ.get("POLICY_BASH_TIMEOUT_MS", "600000")
+    env = dict(os.environ, BASH_DEFAULT_TIMEOUT_MS=limit, BASH_MAX_TIMEOUT_MS=limit,
+               DEVKB_GUARDRAIL={"before": "0", "none": "0", "nonekeep": "0", "cli130": "enforce"}.get(arm, "1"),
                PATH=f"{Path(env_bin).parent}:{w / '.venv' / 'bin'}:{os.environ['PATH']}", **ARM_ENV.get(arm, {}))
     (out / "arm.json").write_text(json.dumps(meta) + "\n")
     t0 = time.time()
@@ -288,24 +329,25 @@ def _failed_ids(stdout: str) -> list[str]:
 
 
 def run_suite(w: Path, timeout: int = 1800) -> dict:
-    """The checkout's full suite, with the ids of what failed; a red suite's failed tests are run once more on their own
-    (#260). Tests that pass on that second run are flaky (load-sensitive): recorded, and not held against the change.
-    The suite counts as green only when every failed test passed the second time."""
+    """The checkout's full suite, with the ids of what failed. A red suite is run in full once more (#301): a failed
+    test is flaky (load-sensitive, recorded, not held against the change) only when the whole suite passes the second
+    time. A test that passes alone but fails again in the second full run is order-dependent, which is the change's
+    failure, so the suite stays red. (#260 re-ran the failed tests alone, which let an order dependence pass as flaky.)"""
     py = str(w / ".venv/bin/python")
-    t = subprocess.run([py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"], cwd=w, capture_output=True, text=True,
-                       timeout=timeout)
+    cmd = [py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"]
+    t = subprocess.run(cmd, cwd=w, capture_output=True, text=True, timeout=timeout)
     last = (t.stdout.strip().splitlines() or [""])[-1]
     failed = _failed_ids(t.stdout)
     row = {"suite_pass": t.returncode == 0, "suite": last, "suite_failed": failed, "suite_flaky": []}
     if t.returncode == 0 or not failed:                 # green, or red with nothing to re-run (a crash): as it is
         return row
-    r = subprocess.run([py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider", *failed], cwd=w, capture_output=True,
-                       text=True, timeout=timeout)
-    still = _failed_ids(r.stdout) if r.returncode != 0 else []
-    if r.returncode != 0 and not still:                 # the re-run itself broke: nothing can be called flaky
-        still = failed
-    row.update(suite_failed=still, suite_flaky=[x for x in failed if x not in still], suite_pass=not still,
-               suite_first=last)
+    r = subprocess.run(cmd, cwd=w, capture_output=True, text=True, timeout=timeout)
+    if r.returncode == 0:                               # green on the second full run: the first failures were flaky
+        row.update(suite_failed=[], suite_flaky=failed, suite_pass=True, suite_first=last)
+        return row
+    again = _failed_ids(r.stdout)
+    still = [x for x in failed if x in again] or again or failed   # red twice: the ones that failed both times first
+    row.update(suite_failed=still, suite_flaky=[], suite_pass=False, suite_first=last)
     return row
 
 
@@ -335,6 +377,7 @@ def score_run(issue: str, out: Path) -> dict | None:
             "diff": sb.sh(["git", "diff", "--shortstat", base], cwd=w).stdout.strip(),
             "accept_sha256": hashlib.sha256(acc.read_bytes()).hexdigest(),          # which check scored it (#223)
             "base_green": arm_meta.get("base_green"), "base_suite": arm_meta.get("base_suite"),   # #221
+            "tests_collected": arm_meta.get("tests_collected"),                                    # #331
             "devkb_commit": arm_meta.get("devkb_commit"), "hook_sha": arm_meta.get("hook_sha"),   # #225
             "telemetry": sum(len((d / ".devkb" / "process-api-telemetry.jsonl").read_text().splitlines())
                              for d in [w, *(w / "corpus" / r for r in sb.CORPUS_REPOS)]
@@ -364,14 +407,25 @@ def score(issues):
             rows.append(r)
             print(r["run"], "pass" if r["acceptance"].get("pass") else "FAIL", "suite" if r["suite_pass"] else "SUITE-RED",
                   f"${r['cost']:.2f}", "devkb", r["devkb_queries"], "guard", r["guardrail_fired"], "log", r["dogfood_log"], flush=True)
+    only = set(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))
+    scored = {r["run"] for r in rows}
+
+    def other_arms(path):
+        """The rows already in `path` of the arms POLICY_ARMS leaves out of this scoring: re-scoring one arm replaces only
+        that arm's rows, and the release table keeps its baseline (#306)."""
+        if not only or not path.exists():
+            return []
+        return [r for r in (json.loads(l) for l in path.read_text().splitlines() if l.strip())
+                if r.get("issue") in issues and r.get("arm") not in only and r.get("run") not in scored]
+    keep_policy = other_arms(B / "results-policy.jsonl")
+    keep_issue = {i: other_arms(B / f"results-{i}.jsonl") for i in issues}
     with open(B / "results-policy.jsonl", "w") as f:
-        for r in rows:
+        for r in keep_policy + rows:
             f.write(json.dumps(r) + "\n")
     for issue in issues:                              # one file per ticket, every run scored by today's check (#223)
         with open(B / f"results-{issue}.jsonl", "w") as f:
-            for r in rows:
-                if r["issue"] == issue:
-                    f.write(json.dumps(r) + "\n")
+            for r in [x for x in keep_issue[issue] if x.get("issue") == issue] + [r for r in rows if r["issue"] == issue]:
+                f.write(json.dumps(r) + "\n")
 
 
 if __name__ == "__main__":
