@@ -93,10 +93,13 @@ def test_nothing_in_scope_passes_through(repo, tmp_path):
     ("grep -rn extract . && ls", "duplicate:call-sites"),
 ])
 def test_lines_grep_prints_anyway_are_not_added_beside_it(repo, tmp_path, command, reason):
-    """SPEC-DKB-007 R5 (#217): grep runs and prints these lines; the same lines beside them would only cost tokens."""
+    """SPEC-DKB-007 R5 (#217): grep runs and prints these lines; the same lines beside them would only cost tokens. What is
+    added, if anything, is the one line naming the devkb command that answers the search (#375), never a line of the answer."""
     hso, row = decide(repo, tmp_path, "Bash", {"command": command})
     answer = hso.get("permissionDecisionReason", "") + hso.get("additionalContext", "")
-    assert not sub(hso) and (not answer or answer.startswith("devkb guardrail: this is a code search"))
+    assert not sub(hso)
+    assert (not answer or answer.startswith("devkb guardrail: this is a code search")
+            or (answer.startswith("Next time ask devkb directly: `devkb ") and "\n" not in answer.strip() and ".py:" not in answer))
     assert row["action"] == "pass-through" and row["reason"] == reason
 
 
