@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE / "bench" / "policy"))
 pb = importlib.import_module("policybench")
@@ -25,7 +27,11 @@ def test_allow_covers_both_ways_to_call_devkb():
 
 
 def test_every_devkb_command_in_the_policy_file_is_allowed():
-    """The commands AGENTS.md tells an agent to run (in backticks, starting `devkb ` or `.venv/bin/devkb `) are matched by ALLOW."""
+    """The commands AGENTS.md tells an agent to run (in backticks, starting `devkb ` or `.venv/bin/devkb `) are matched by ALLOW.
+    The no-devkb benchmark arm deletes the policy file; there is nothing to check there (and a failing test would make that arm's
+    base suite red, which refuses every one of its runs)."""
+    if not (HERE / "AGENTS.md").exists():
+        pytest.skip("this checkout has no policy file (the no-devkb arm)")
     text = (HERE / "AGENTS.md").read_text()
     cmds = {m.group(1) for m in re.finditer(r"`((?:\.venv/bin/)?devkb (?:symbol|uses|outline|pack|docs|misses|build)[^`]*)`", text)}
     assert cmds, "the policy file names no devkb command: the test would pass for nothing"
