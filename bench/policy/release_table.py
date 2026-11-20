@@ -31,6 +31,11 @@ def location_given(arm: str) -> bool:
     return arm not in HIDDEN_LOCATION
 
 
+def base_for(arm: str, arms: list[str], sums: dict) -> dict | None:
+    """The no-devkb arm an arm is compared with: the one given the ticket the same way, hidden against hidden (#337)."""
+    return next((sums[b] for b in arms if b in NONE and location_given(b) == location_given(arm)), None)
+
+
 def counts(run: str) -> tuple[int, int, int] | None:
     """(devkb queries the agent made, devkb runs on its own code, searches the hook replaced) in one transcript, or None
     when the transcript is not under bench/policy/runs (#304): the row's stored counts are used then, never zeros."""
@@ -177,7 +182,7 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
             m = sums[a]
             per_arm.setdefault(a, []).append(m)
             # the no-devkb arm given the ticket the same way: hidden against hidden, as filed against as filed (#337)
-            base = next((sums[b] for b in arms if b in NONE and location_given(b) == location_given(a)), None)
+            base = base_for(a, arms, sums)
             vs = ""
             if base is not None and a not in NONE:
                 dc, dk = 100 * (m["cost"] / base["cost"] - 1), 100 * (m["ctx"] / base["ctx"] - 1)

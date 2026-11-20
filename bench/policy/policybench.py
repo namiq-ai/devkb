@@ -94,51 +94,108 @@ def without_missing_data(body: str, w: Path) -> str:
 # name it gave masked wherever the ticket repeats them. Set up exactly as their base arm (same template); only the text differs.
 HIDE_LOCATION = {"nonehid": "none", "mainhid": "main"}
 WITHHELD = "(withheld)"
-_SECTION = re.compile(r"(?ms)^\*\*(?P<h>[^*\n]+?):?\*\*:?(?P<t>.*?)(?=^\*\*[^*\n]+?:?\*\*|\Z)")
+_SECTION = re.compile(r"(?ms)^(?:\*\*(?P<h>[^*\n]+?):?\*\*:?|#{1,6}[ \t]+(?P<g>[^\n]+?)[ \t]*$)(?P<t>.*?)"
+                      r"(?=^\*\*[^*\n]+?:?\*\*|^#{1,6}[ \t]|\Z)")
+_FENCED = re.compile(r"(?ms)^(```|~~~).*?^\1[ \t]*$")
 _FILE = re.compile(r"(?<![\w/.-])(?:[\w.-]+/)*[\w.-]+\.(?:py|md|json|jsonl|toml|ya?ml|sh|c|cc|cpp|h|hpp|cs|ts|js)\b")
-_CODE = re.compile(r"`([^`\n]+)`")
 _NAME = re.compile(r"[A-Za-z_][\w.]*(?:::[A-Za-z_]\w*)*")
+_VERSION = re.compile(r"^v?\d")
+
+
+def _sections(body: str):
+    """(heading, start, end) of each `**Heading:**` or `## Heading` section, outside code fences; an inline
+    `**Where to start:**` (not at a line start) is its own section up to the next blank line."""
+    plain = _FENCED.sub(lambda m: " " * len(m.group(0)), body)     # a bold line inside a fence is not a section
+    out = [((m.group("h") or m.group("g") or "").strip().lower(), m.start(), m.end()) for m in _SECTION.finditer(plain)]
+    if not any(h.startswith("where to start") for h, _a, _b in out):
+        m = re.search(r"\*\*Where to start:?\*\*:?.*?(?=\n\s*\n|\Z)", plain, re.S)
+        if m:
+            out.append(("where to start", m.start(), m.end()))
+    return out
+
+
+def _code_like(n: str) -> bool:
+    if _VERSION.match(n) or any(len(part) < 2 for part in re.split(r"\.|::", n)):
+        return False                              # v0.2.11, e.g: not code names (#385 review)
+    return "_" in n or "." in n or "::" in n or bool(re.search(r"[a-z][A-Z]", n))
 
 
 def location_names(body: str) -> list[str]:
-    """The files and code names a ticket's "Where to start" gives, longest first. A code name is a token that looks like
-    code (an underscore, a dot, `::` or CamelCase), so plain words and command names (`run`, `uses`, `devkb`) stay."""
+    """What the location gives away, longest first: the files and code names a ticket's "Where to start" names (with the
+    stems of its dotted names and of its files), and the files its "Scope" names. A code name looks like code (an
+    underscore, a dot, `::` or CamelCase), so plain words and command names (`run`, `uses`, `devkb`) stay."""
     names: set[str] = set()
-    for m in _SECTION.finditer(body):
-        if m.group("h").strip().lower().startswith("where to start"):
-            t = m.group("t")
-            files = set(_FILE.findall(t))
-            names |= files | {f.rsplit("/", 1)[-1] for f in files}
+
+    def add_file(f: str) -> None:
+        base = f.rsplit("/", 1)[-1]
+        names.update({f, base})
+        stem = base.rsplit(".", 1)[0]
+        # the module's own name, where the ticket uses it as code (`storybench.ALLOW`, `import read_tools`), never a word
+        # like "service" in prose (#385 review)
+        if "_" in stem or re.search(rf"\b{re.escape(stem)}\.(?:[a-z_]\w*\(|[A-Z][A-Z_]+\b)|\b(?:import|from)\s+{re.escape(stem)}\b", body):
+            names.add(stem)
+    for h, a, b in _sections(body):
+        t = body[a:b]
+        if h.startswith("scope"):                 # a Scope file is withheld wherever it appears (#385 review)
+            for f in _FILE.findall(t):
+                add_file(f)
+        if h.startswith("where to start"):
+            for f in _FILE.findall(t):
+                add_file(f)
             for n in _NAME.findall(_FILE.sub(" ", t)):
                 n = n.rstrip(".")
-                if len(n) > 2 and ("_" in n or "." in n or "::" in n or re.search(r"[a-z][A-Z]", n)):
+                if len(n) > 2 and _code_like(n):
                     names.add(n)
+                    parts = re.split(r"\.|::", n)
+                    names.update(p for p in parts if len(p) > 2 and _code_like(p))      # `_match` of `x._match`
+                    if len(parts) > 1 and (_code_like(parts[0]) or re.search(r"[A-Z]", parts[0][:1])):
+                        names.add(parts[0])                                           # the module or class: `build_symbols`, `Packer`
     return sorted(names, key=len, reverse=True)
 
 
 def without_location(title: str, body: str) -> tuple[str, str]:
-    """(title, body) with the location withheld (#337): the "Where to start" section goes, the "Scope" section's files and
-    every name "Where to start" gave are masked in title and body alike."""
+    """(title, body) with the location withheld (#337): the "Where to start" section is replaced by one line; every name
+    `location_names` gives is masked wherever title and body repeat it, with what qualifies it (`Packer._resolve`,
+    `bench/policy/x.py`), and so are the line numbers around it (`x.py:1471`, `L636`). Code fences are masked too: a
+    reproduction that names the place gives the place away."""
     names = location_names(body)
     pieces, last = [], 0
-    for m in _SECTION.finditer(body):
-        pieces.append(body[last:m.start()])
-        head = m.group("h").strip().lower()
-        if head.startswith("where to start"):
-            pieces.append("**Where to start:** (withheld for this benchmark run)\n\n")
-        elif head.startswith("scope"):
-            pieces.append(_FILE.sub(WITHHELD, m.group(0)))
-        else:
-            pieces.append(m.group(0))
-        last = m.end()
+    for h, a, b in sorted(_sections(body), key=lambda x: x[1]):
+        if a < last:
+            continue
+        pieces.append(body[last:a])
+        pieces.append("**Where to start:** (withheld for this benchmark run)\n\n" if h.startswith("where to start") else body[a:b])
+        last = b
     pieces.append(body[last:])
     body = "".join(pieces)
 
     def mask(text: str) -> str:
         for n in names:
-            text = re.sub(rf"(?<![\w/.:-]){re.escape(n)}(?![\w])", WITHHELD, text)
+            text = re.sub(rf"(?:(?<=[^\w])|^)(?:[\w.-]*(?:\.|::|/))*{re.escape(n)}(?![\w])", WITHHELD, text, flags=re.M)
+        if names:                                # a withheld name's line, and line numbers anywhere, name the place too
+            text = re.sub(rf"{re.escape(WITHHELD)}(?::\d+(?:-\d+)?)+", WITHHELD, text)
+            text = re.sub(r"(?<![\w])~?L\d+(?:[-\u2013]L?\d+)?\b", WITHHELD, text)
         return text
     return mask(title), mask(body)
+
+
+def arms_for(arms: list[str]) -> list[str]:
+    """The arms a batch runs and scores: with POLICY_HIDE_START=1 (the ticket's option name), every arm runs in its hidden
+    form (#337), and an arm that has none stops the batch rather than keep the location unnoticed (#385 review). `run`
+    and `score` both go through here."""
+    if os.environ.get("POLICY_HIDE_START") != "1":
+        return arms
+    hid = {v: k for k, v in HIDE_LOCATION.items()}
+    missing = [a for a in arms if a not in hid and a not in HIDE_LOCATION]
+    if missing:
+        raise SystemExit(f"POLICY_HIDE_START=1: no hidden form for arm(s) {', '.join(missing)}; hidden forms exist for "
+                         f"{', '.join(sorted(hid))}")
+    return [hid.get(a, a) for a in arms]
+
+
+def split_arm(arm: str) -> tuple[str, bool]:
+    """(the arm a run is set up as, whether its ticket's location is withheld) (#337)."""
+    return HIDE_LOCATION.get(arm, arm), arm in HIDE_LOCATION
 
 
 def prompt_for(issue: str, title: str, body: str, w: Path, hide: bool = False) -> str:
@@ -343,8 +400,7 @@ def run_one(issue: str, arm: str, rep: int) -> str:
 
 def _run_one(issue: str, arm: str, rep: int) -> str:
     tag = f"p{issue}-{arm}-r{rep}"
-    hide = arm in HIDE_LOCATION                       # #337: set up as the base arm; only the ticket's text differs
-    arm = HIDE_LOCATION.get(arm, arm)
+    arm, hide = split_arm(arm)                        # #337: set up as the base arm; only the ticket's text differs
     out = B / "runs" / tag
     if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") not in ("error", "base-red"):
         return f"skip {tag}"                          # an error, or a refused red base, is set up again (#305)
@@ -482,7 +538,7 @@ def score(issues):
     """Every run's row: the one saved when the run ended, unless its hidden check changed since (or POLICY_RESCORE=1)."""
     rows = []
     for issue in issues:
-        only = set(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))
+        only = set(arms_for(list(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))))   # as `run` ran them
         acc = B / "accept" / (f"{issue}-group.py" if (B / "accept" / f"{issue}-group.py").exists() else f"{issue}.py")
         sha = hashlib.sha256(acc.read_bytes()).hexdigest() if acc.exists() else ""
         for out in sorted((B / "runs").glob(f"p{issue}-*")):
@@ -500,7 +556,7 @@ def score(issues):
             rows.append(r)
             print(r["run"], "pass" if r["acceptance"].get("pass") else "FAIL", "suite" if r["suite_pass"] else "SUITE-RED",
                   f"${r['cost']:.2f}", "devkb", r["devkb_queries"], "guard", r["guardrail_fired"], "log", r["dogfood_log"], flush=True)
-    only = set(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))
+    only = set(arms_for(list(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))))
     scored = {r["run"] for r in rows}
 
     def other_arms(path):
@@ -545,9 +601,7 @@ if __name__ == "__main__":
             if v == "origin/main":
                 BASES[k] = os.environ["POLICY_MAIN"]
         print(f"batch pinned to main {os.environ['POLICY_MAIN'][:12]}", flush=True)
-        if os.environ.get("POLICY_HIDE_START") == "1":   # the ticket's option name: every arm with a hidden form, hidden (#337)
-            hid = {v: k for k, v in HIDE_LOCATION.items()}
-            arms = [hid.get(a, a) for a in arms]
+        arms = arms_for(arms)
         jobs = [(i, arm, r) for i in issues for arm in arms for r in range(first, first + reps)]
         random.Random(126).shuffle(jobs)
         with cf.ThreadPoolExecutor(par) as ex:

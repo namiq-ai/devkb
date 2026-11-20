@@ -54,3 +54,43 @@ def test_hidden_arms_map_to_their_base_arms():
 def test_the_release_table_compares_like_with_like():
     assert rt.location_given("main") and rt.location_given("none") and not rt.location_given("mainhid")
     assert "nonehid" in rt.NONE and rt.ORDER.index("nonehid") < rt.ORDER.index("mainhid")
+
+
+def test_a_name_is_withheld_with_whatever_qualifies_it_and_its_line_numbers():
+    body = ("**Who is affected:** `Packer._resolve` and `bench/policy/packs.py:120` (L88).\n\n"
+            "**Where to start:** `_resolve` in `packs.py`.\n\n**Done when:** green.\n")
+    _t, b = pb.without_location("t", body)
+    assert "_resolve" not in b and "packs.py" not in b and ":120" not in b and "L88" not in b
+
+
+def test_scope_files_are_withheld_everywhere_and_version_tags_and_plain_words_are_kept():
+    body = ("**Reproduce:** `git checkout v0.2.11 && devkb build` then read `devkb/build_symbols.py:1471`, e.g. the log.\n\n"
+            "**Scope:** `devkb/build_symbols.py`.\n\n**Where to start:** `foo_bar`.\n")
+    _t, b = pb.without_location("t", body)
+    assert "build_symbols" not in b and ":1471" not in b
+    assert "v0.2.11" in b and "e.g." in b and "devkb build" in b
+
+
+def test_a_heading_where_to_start_and_bold_inside_a_fence():
+    body = "## Where to start\n\n`foo_bar` in `devkb/x.py`.\n\n## Done when\n\n```\n**Complete.**\nfoo_bar\n```\n"
+    assert "foo_bar" in pb.location_names(body) and "devkb/x.py" in pb.location_names(body)
+    _t, b = pb.without_location("t", body)
+    assert "foo_bar" not in b and "(withheld for this benchmark run)" in b
+
+
+def test_the_hide_option_maps_run_and_score_alike_and_refuses_an_arm_without_a_hidden_form(monkeypatch):
+    import pytest
+    monkeypatch.delenv("POLICY_HIDE_START", raising=False)
+    assert pb.arms_for(["none", "main"]) == ["none", "main"]
+    monkeypatch.setenv("POLICY_HIDE_START", "1")
+    assert pb.arms_for(["none", "main"]) == ["nonehid", "mainhid"]
+    with pytest.raises(SystemExit, match="nonekeep"):
+        pb.arms_for(["nonekeep", "main"])
+    assert pb.split_arm("mainhid") == ("main", True) and pb.split_arm("main") == ("main", False)
+
+
+def test_each_arm_is_compared_with_the_no_devkb_arm_given_the_ticket_the_same_way():
+    sums = {"none": "N", "main": "M", "nonehid": "NH", "mainhid": "MH"}
+    arms = ["none", "main", "nonehid", "mainhid"]
+    assert rt.base_for("mainhid", arms, sums) == "NH" and rt.base_for("main", arms, sums) == "N"
+    assert rt.base_for("mainhid", ["none", "mainhid"], sums) is None     # never the location-given control
