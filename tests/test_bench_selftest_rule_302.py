@@ -52,3 +52,10 @@ def test_a_quoted_fixture_project_is_a_self_test_like_an_unquoted_one():
         assert sb.devkb_commands(f"devkb symbol foo --project {q}") == (0, 1), q
         assert sb.devkb_commands(f"devkb uses foo --project={q}") == (0, 1), q
     assert sb.devkb_commands('devkb symbol foo --project "."') == (1, 0)
+
+
+def test_303_a_cut_off_runs_unknown_cost_is_left_out_of_the_mean_not_counted_as_zero():
+    base = {k: 0 for k in ("turns", "grep", "nav", "own", "sub", "ctx", "out", "wall", "answers", "answer_chars")}
+    rows = [{**base, "ok": True, "suite": True, "cost": 2.0}, {**base, "ok": False, "suite": False, "cost": None, "cut_off": True}]
+    m = rt.summary(rows)
+    assert m["cost"] == 2.0 and m["cost_lo"] == 2.0 and m["cut_off"] == 1 and m["n"] == 2
