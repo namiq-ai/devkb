@@ -110,7 +110,7 @@ def render_stats(repo: Path) -> str:
     return "\n".join(out)
 
 
-ACTIONS = ("substitute", "read-answer", "alongside", "span-hint", "remind", "pass-through", "repeat")   # every action (#214)
+ACTIONS = ("substitute", "read-answer", "alongside", "span-hint", "teach", "remind", "pass-through", "repeat")   # every action (#214, #375)
 
 
 def guardrail_log() -> Path:

@@ -35,8 +35,12 @@ def repo(tmp_path_factory):
     return root
 
 
-def hook(repo, home, command, session, **extra):
-    ev = {"tool_name": "Bash", "cwd": str(repo), "session_id": session, "tool_use_id": f"{session}-{command}",
+_ids = [0]
+
+
+def hook(repo, home, command, session, cwd=None, **extra):
+    _ids[0] += 1                                 # every call its own tool use: a repeated id is a duplicate event (first_copy)
+    ev = {"tool_name": "Bash", "cwd": str(cwd or repo), "session_id": session, "tool_use_id": f"t375-{_ids[0]}",
           "tool_input": {"command": command}}
     out = run(PRE, home, ev, **extra)
     h = json.loads(out)["hookSpecificOutput"] if out.strip() else {}
@@ -51,6 +55,10 @@ def spend_reminder(repo, home, session):
     ("grep -n helper pkg/use.py", "devkb uses helper --project ."),                  # duplicate:in-file
     ("grep -rn -A8 helper pkg/", "devkb symbol helper --source --project ."),         # duplicate:read-body
     ("grep -rn helper . && ls", "devkb uses helper --project ."),                     # duplicate:call-sites
+    ("grep -rn helper . | grep -v lib", "devkb uses helper --project ."),             # duplicate:call-sites-filtered
+    ("grep -n helper pkg/use.py | head -5", "devkb uses helper --project ."),         # a cut search: not dropped (#281)
+    ("grep -rn -A8 helper pkg/ | head -20", "devkb symbol helper --source --project ."),
+    ("grep -rni HELPER . && ls", "devkb uses helper --project ."),                    # -i: the symbol's own spelling
 ])
 def test_a_duplicate_answer_adds_only_the_command(repo, tmp_path, command, teach):
     spend_reminder(repo, tmp_path, "s-dup")
@@ -93,9 +101,44 @@ def test_the_reminder_names_the_checkouts_devkb_when_none_is_on_path(repo, tmp_p
     exe.parent.mkdir(parents=True)
     exe.write_text("#!/bin/sh\n")
     try:
-        _, text = hook(repo, tmp_path, 'grep -rn "def nosuchname_w" pkg/', "s-rem-venv", PATH="/usr/bin:/bin")
+        _, text = hook(repo, tmp_path, 'grep -rn "def nosuchname_w" pkg/', "s-rem-venv", PATH="/usr/bin:/bin")   # at the root
     finally:
         exe.unlink()
         exe.parent.rmdir()
         exe.parent.parent.rmdir()
     assert "`.venv/bin/devkb symbol|uses|outline|pack" in text
+
+
+def log_rows(home):
+    log = home / ".claude" / "hooks" / "devkb-guardrail.log"
+    return [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
+
+
+def test_a_teach_is_logged_as_its_own_decision_with_its_size(repo, tmp_path):
+    spend_reminder(repo, tmp_path, "s-log")
+    _, text = hook(repo, tmp_path, "grep -n helper pkg/use.py", "s-log")
+    row = [r for r in log_rows(tmp_path) if r["session"] == "s-log"][-1]
+    assert row["action"] == "teach" and row["reason"] == "duplicate:in-file" and row["chars"] == len(text)
+    from devkb import outcomes
+    assert "teach" in outcomes.ACTIONS
+
+
+def test_the_same_command_from_another_directory_is_taught_its_own_project(repo, tmp_path):
+    spend_reminder(repo, tmp_path, "s-cwd")
+    assert hook(repo, tmp_path, "grep -rn helper . && ls", "s-cwd")[1].endswith("--project .`")
+    assert hook(repo, tmp_path, "grep -rn helper . && ls", "s-cwd", cwd=repo / "pkg")[1].endswith("--project ..`")
+
+
+def test_with_only_the_checkouts_devkb_every_line_names_it_from_where_the_search_ran(repo, tmp_path):
+    exe = repo / ".venv" / "bin" / "devkb"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("#!/bin/sh\n")
+    try:
+        _, rem = hook(repo, tmp_path, 'grep -rn "def nosuchname_v" .', "s-venv", cwd=repo / "pkg", PATH="/usr/bin:/bin")
+        _, teach = hook(repo, tmp_path, "grep -n helper use.py", "s-venv", cwd=repo / "pkg", PATH="/usr/bin:/bin")
+    finally:
+        exe.unlink()
+        exe.parent.rmdir()
+        exe.parent.parent.rmdir()
+    assert "`../.venv/bin/devkb symbol|uses|outline|pack" in rem
+    assert teach == f"{TEACH}`../.venv/bin/devkb uses helper --project ..`"
