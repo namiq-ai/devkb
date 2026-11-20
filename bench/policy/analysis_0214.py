@@ -1,6 +1,7 @@
 """The facts behind the 0.2.14 benchmark of tickets #301-#307 and #331, as tables (docs/analysis/benchmark-0.2.14-facts.md).
 
-  python bench/policy/analysis_0214.py [--runs DIR] [--guard-log FILE]
+  python bench/policy/analysis_0214.py [--results DIR] [--runs DIR] [--guard-log FILE]
+  (--results bench/policy/rerun-0.2.14 for the 16-run re-run on the final harness; the default is the 48-run baseline)
 
 Reads results-<N>.jsonl (committed, one row per run) and, from --runs (default bench/policy/runs: the run streams, not
 committed: they hold local paths), each run's stream.jsonl. Every number in the document comes from here. Standard library only.
@@ -29,6 +30,7 @@ def arg(flag, default):
     return sys.argv[sys.argv.index(flag) + 1] if flag in sys.argv else default
 
 
+RES = Path(arg("--results", str(B)))                  # the directory of the results-<N>.jsonl rows (the 48-run baseline is bench/policy itself)
 RUNS = Path(arg("--runs", str(B / "runs")))
 GUARD = Path(arg("--guard-log", str(Path.home() / ".claude" / "hooks" / "devkb-guardrail.log")))
 
@@ -41,7 +43,7 @@ def ts(e):
 def rows():
     out = []
     for t in TICKETS:
-        for line in open(B / f"results-{t}.jsonl"):
+        for line in open(RES / f"results-{t}.jsonl"):
             if line.strip():
                 out.append(json.loads(line))
     return out
