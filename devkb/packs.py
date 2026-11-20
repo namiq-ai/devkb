@@ -226,6 +226,71 @@ class Packer:
             lines.append(f"- `{rel}`{more} — `{self.call_site(c, self._name(s))}`")
         return lines or ["- none in the graph"]
 
+    def _test_tree(self, rel: str, text: str):
+        """A test file's syntax tree, parsed once per Packer; None when it does not parse."""
+        cache = self.__dict__.setdefault("_trees", {})
+        if rel not in cache:
+            import ast  # noqa: PLC0415
+            try:
+                cache[rel] = ast.parse(text)
+            except (SyntaxError, ValueError, RecursionError):
+                cache[rel] = None
+        return cache[rel]
+
+    def _test_texts(self, needles: tuple[str, ...]) -> list[tuple[str, str]]:
+        """(test file, text) for each Python test file whose text holds one of `needles`: only those are parsed."""
+        texts = self.__dict__.get("_texts")
+        if texts is None:
+            texts = self.__dict__["_texts"] = [(rel, "\n".join(self._file(rel))) for rel in
+                                               sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and self.api._is_test(r))]
+        return [(rel, text) for rel, text in texts if any(n in text for n in needles)]
+
+    def _unfollowed_note(self, path: str, listed: dict) -> list[str]:
+        """A line saying the test list may be incomplete when a test file outside it loads modules from `path`'s
+        directory in a way the graph cannot follow (#382): by a computed name or path, or two modules under one name.
+        Nothing otherwise."""
+        if not path.endswith(".py"):
+            return []
+        from devkb.build_symbols import unfollowed_loads  # noqa: PLC0415
+        here = path.rsplit("/", 1)[0] if "/" in path else ""
+        loads = self.__dict__.get("_unfollowed")
+        if loads is None:                                # once per Packer: a batch of packs reads each test once
+            loads = self.__dict__["_unfollowed"] = [
+                (rel, line, dirs) for rel, text in self._test_texts(("import_module(", "spec_from_file_location("))
+                for tree in [self._test_tree(rel, text)] if tree is not None for line, dirs in unfollowed_loads(tree, rel)]
+        sites = [f"{rel}:{line}" for rel, line, dirs in loads if rel not in listed and (here in dirs or path in dirs)]
+        if not sites:
+            return []
+        where = f"`{here}`" if here else "the repository root"
+        shown = ", ".join(f"`{s}`" for s in sites[:3]) + (f" and {len(sites) - 3} more" if len(sites) > 3 else "")
+        return [f"- may be incomplete: {len(sites)} test site(s) load a module from {where} in a way the graph cannot "
+                f"follow (a name or path computed at run time, or one name for two modules: {shown}); if they load "
+                f"this file, they are not listed"]
+
+    def _named_by_path(self, path: str, listed: dict) -> dict[str, int]:
+        """{test file: line} for test files outside `listed` that build `path` from their own location out of literal
+        pieces (`ROOT / "scripts" / "g.py"`, `ROOT = Path(__file__).parents[1]`): they run or load the file by path,
+        with no call the graph can attribute (#382)."""
+        if not path.endswith(".py"):
+            return {}
+        from devkb.build_symbols import literal_paths  # noqa: PLC0415
+        out = {}
+        paths = self.__dict__.setdefault("_paths", {})
+        for rel, text in self._test_texts((path.rsplit("/", 1)[-1],)):
+            if rel in listed or rel == path:
+                continue
+            if rel not in paths:
+                tree = self._test_tree(rel, text)
+                paths[rel] = literal_paths(tree, rel) if tree is not None else []
+            hits = [line for line, p in paths[rel] if p == path]
+            if hits:
+                out[rel] = hits[0]
+        return out
+
+    def _path_lines(self, named: dict[str, int]) -> list[str]:
+        return [f"- `{rel}` — names it by path: `{rel}:{line}: {self._file(rel)[line - 1].strip()[:160]}`"
+                for rel, line in sorted(named.items())]
+
     def _run(self, files: list[str]) -> str:
         return self.api._run_line(sorted(files)) if files else ""
 
@@ -388,7 +453,8 @@ class Packer:
                 out.append(f"  - `{self.call_site(a, self._name(b))}`")
         if not hs and self.idx.ep_by_owner:
             out.append("- none: no route handler reaches it through calls the graph resolves")
-        out += ["", f"## Test files to run ({len(tests)}): every test calling it or a function on those paths"] + self._tests_section(tests)
+        out += ["", f"## Test files to run ({len(tests)}): every test calling it or a function on those paths"] + self._tests_section(tests) \
+            + self._unfollowed_note(self.api._key(i).split("::")[0], tests)
         if tests:
             out += ["", f"Run: `{self._run(list(tests))}`"]
         cov = self.coverage(sorted(closure, key=self.api._key)[:40], set(tests) | {self.api._key(x).split('::')[0] for x in closure})
@@ -426,9 +492,12 @@ class Packer:
         if not used:
             out.append("- none: nothing outside this file calls into it through calls the graph resolves")
         out += ["", f"## Files that depend on it ({len(dependants)})"] + [f"- `{f}`" for f in dependants[:40]]
-        out += ["", f"## Tests that exercise it, directly or through callers ({len(tests)})"] + self._tests_section(tests)
-        if tests:
-            out += ["", f"Run: `{self._run(list(tests))}`"]
+        named = self._named_by_path(path, tests)
+        out += ["", f"## Tests that exercise it, directly or through callers ({len(tests) + len(named)})"] \
+            + (self._tests_section(tests) if tests or not named else []) + self._path_lines(named) \
+            + self._unfollowed_note(path, {**tests, **named})
+        if tests or named:
+            out += ["", f"Run: `{self._run(list(tests) + list(named))}`"]
         out += self._config_section(path, syms)
         out += ["", "## Coverage", self.coverage(sorted(syms, key=self.api._key)[:40], set(dependants) | set(tests))]
         return "\n".join(out + ["", HOW_TO_USE])
