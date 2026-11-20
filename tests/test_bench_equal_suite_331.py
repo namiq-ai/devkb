@@ -109,3 +109,18 @@ def test_rows_scored_before_this_change_have_no_start_figures_and_the_table_stil
     old = {k: v for k, v in _row("none", 1, 1).items() if k not in ("tests_collected", "first_ctx")}
     out = rt.table([("9", [old, {**old, "arm": "main"}])])
     assert "| #9 | none | unknown | unknown |" in out and "WARNING" not in out
+
+
+def test_the_template_key_includes_the_suite_setting_so_an_old_or_other_template_is_never_reused(tmp_path, monkeypatch):
+    monkeypatch.setattr(pb, "TEMPLATES", tmp_path)
+    monkeypatch.setattr(sb, "REPO", HERE)
+    monkeypatch.setitem(pb.BASES, "climain", "HEAD")
+    built = []
+    monkeypatch.setattr(pb, "checkout", lambda t, arm: (built.append(Path(t).name), Path(t).mkdir(parents=True))[0])
+    (tmp_path / "climain-oldtemplate-without-the-suite-in-its-name").mkdir()
+    monkeypatch.delenv("POLICY_EQUAL_SUITE", raising=False)
+    eq = pb.template_for("climain")
+    monkeypatch.setenv("POLICY_EQUAL_SUITE", "0")
+    full = pb.template_for("climain")
+    assert eq != full and eq.name.endswith("-suiteeq") and full.name.endswith("-suitefull")
+    assert pb.template_for("climain") == full and len(built) == 2                  # same setting: reused, not rebuilt

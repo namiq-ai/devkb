@@ -186,7 +186,8 @@ def template_for(arm: str) -> Path:
     copied for each run: the 4-5 minutes of setup a run used to repeat (POLICY_TEMPLATES=0 turns it off)."""
     base = sb.sh(["git", "-C", str(sb.REPO), "rev-parse", f"{BASES[arm]}^{{commit}}"]).stdout.strip()
     envc = toolenv.resolve(ENV_REF[arm]()) if arm in ENV_REF else "none"
-    t = TEMPLATES / f"{arm}-{base[:12]}-{envc[:12]}"
+    suite = "eq" if os.environ.get("POLICY_EQUAL_SUITE", "1") == "1" else "full"      # the suite is content: part of the key (#331)
+    t = TEMPLATES / f"{arm}-{base[:12]}-{envc[:12]}-suite{suite}"
     with toolenv.held(TEMPLATES / f".{t.name}.lock"):   # runs of one arm, in this or another benchmark process, wait
                                                         # for the same template: never built twice, never deleted in use
         if not (t / ".bench-ready").exists():
