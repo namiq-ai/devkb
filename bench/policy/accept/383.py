@@ -10,7 +10,7 @@ py = str(W / ".venv/bin/python") if (W / ".venv/bin/python").exists() else (str(
 res = {}
 with tempfile.TemporaryDirectory() as td:
     env = dict(os.environ, HOME=str(Path(td)), PYTHONPATH=str(W), PYTHONWARNINGS="ignore")
-    for k in ("DEVKB_GUARDRAIL", "DEVKB_TELEMETRY", "DEVKB_MISSLOG"):
+    for k in ("DEVKB_GUARDRAIL", "DEVKB_TELEMETRY", "DEVKB_MISSLOG", "DEVKB_DIR"):
         env.pop(k, None)
 
     def clone(name):
@@ -26,10 +26,12 @@ with tempfile.TemporaryDirectory() as td:
     a = clone("with_flag")
     p = build(a, "--allow-foreign-checkout")
     out = p.stdout + p.stderr
-    res["flag_accepted"] = "unrecognized arguments" not in out
+    res["flag_accepted"] = "unrecognized arguments" not in out and p.returncode == 0
     res["both_stages_built"] = (a / ".devkb" / "nodes.jsonl").exists() and (a / ".devkb" / "edges.jsonl").exists() \
         and (a / ".devkb" / "symbols-nodes.jsonl").exists()
     b = clone("without_flag")
     q = build(b)
-    res["refusal_kept_without_flag"] = "allow-foreign-checkout" in (q.stdout + q.stderr) and not (b / ".devkb" / "nodes.jsonl").exists()
+    res["refusal_kept_without_flag"] = q.returncode != 0 and "allow-foreign-checkout" in (q.stdout + q.stderr) \
+        and not (b / ".devkb" / "nodes.jsonl").exists()
+    res["refused_build_writes_no_symbols"] = not list((b / ".devkb").glob("symbols-*"))
 print(json.dumps({"results": res, "pass": all(res.values())}))

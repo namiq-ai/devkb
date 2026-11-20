@@ -21,10 +21,9 @@ for spec in sys.argv[4:]:
     t = time.time()
     env = dict(os.environ, PYTHONPATH=code)
     cmd = lambda mod, *extra: [py, "-P", "-W", "ignore", "-m", mod, "--project", path, *extra]
-    if (Path(path) / "devkb" / "cli.py").exists():     # devkb's own repository carries its own code: only `devkb.build` takes the flag
-        steps = [cmd("devkb.build_symbols"), cmd("devkb.build", "--allow-foreign-checkout")]
-    else:
-        steps = [cmd("devkb.build_symbols"), cmd("devkb.build")]
+    # devkb's own repository carries its own code, so both stages need the other-checkout flag there (ODSF-104, #383)
+    extra = ("--allow-foreign-checkout",) if (Path(path) / "devkb" / "cli.py").exists() else ()
+    steps = [cmd("devkb.build_symbols", *extra), cmd("devkb.build", *extra)]
     for step in steps:
         r = subprocess.run(step, env=env, capture_output=True, text=True)
         if r.returncode:

@@ -1972,17 +1972,29 @@ def build(code: str) -> tuple[DevKBGraph, Path]:
     return graph, ctx.devkb_dir
 
 
+def refuse_foreign_checkout(code: str, allowed: bool) -> None:
+    """The other-checkout guard of `devkb.build` (ODSF-104), applied to the symbol stage as well, which runs first and
+    would otherwise replace the target's symbol layer before the graph build refuses (#383). Same exemption: a build
+    written outside the target (DEVKB_DIR) cannot replace its graph."""
+    from devkb.build import BUILDER_ROOT, check_builder_matches_target  # noqa: PLC0415  (build imports this module)
+    ctx = resolve(code)
+    mismatch = check_builder_matches_target(ctx.repo_root, BUILDER_ROOT)
+    if mismatch and not allowed and ctx.devkb_dir.resolve().is_relative_to(ctx.repo_root.resolve()):
+        raise ValueError(mismatch)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Refresh devkb's Symbol graph for one project (BL-3, standalone)")
     ap.add_argument("--project", required=True, help="Project code, e.g. ODSF (see projects.json)")
-    # `devkb build` hands the same arguments to this and to build.py; the GitHub layer belongs to the latter, and so
-    # does the other-checkout guard (ODSF-104), whose refusal names --allow-foreign-checkout (#383).
+    # `devkb build` hands the same arguments to this and to build.py; the GitHub layer belongs to the latter.
     ap.add_argument("--github", action="store_true", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--no-github", dest="github", action="store_false", help=argparse.SUPPRESS)
-    ap.add_argument("--allow-foreign-checkout", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--allow-foreign-checkout", action="store_true",
+                    help="build another checkout of this repository with this checkout's code (ODSF-104, #383)")
     args = ap.parse_args()
 
     try:
+        refuse_foreign_checkout(args.project, args.allow_foreign_checkout)
         graph, devkb_dir = build(args.project)
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)

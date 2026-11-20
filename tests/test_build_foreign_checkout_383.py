@@ -46,3 +46,4 @@ def test_without_the_flag_the_build_still_refuses(tmp_path):
     assert p.returncode != 0
     assert "pass --allow-foreign-checkout" in p.stderr
     assert not (d / ".devkb" / "nodes.jsonl").exists()
+    assert not list((d / ".devkb").glob("symbols-*"))          # the symbol stage refuses too, before it writes
