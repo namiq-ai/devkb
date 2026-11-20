@@ -606,6 +606,32 @@ def search_part(cmd: str) -> str:
     return cmd
 
 
+def output_limit(tool: str, inp: dict) -> int | None:
+    """How many lines the search prints at most when its output is cut: Grep's `head_limit`, the smallest `| head -N` /
+    `| tail -N` after the search. 0 when the cut is not a cap (`tail -n +N`); None when the output is not cut (#281)."""
+    if tool == "Grep":
+        n = inp.get("head_limit")
+        return int(n) if isinstance(n, int) and n > 0 else None
+    cmd = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", search_part(inp.get("command", "")))
+    limit = None
+    for st in (s.split() for s in cmd.split("|")[1:]):
+        if is_trim_stage(st):
+            m = re.search(r"(\+?)(\d+)", " ".join(st[1:]))
+            n = 0 if m.group(1) else int(m.group(2))
+            limit = n if limit is None else min(limit, n)
+    return limit
+
+
+def within_limit(out: dict | None, limit: int | None) -> dict | None:
+    """The answer, or None (the search runs) when a cut search would print fewer lines than the answer carries (#281)."""
+    if out is None or limit is None:
+        return out
+    h = out.get("hookSpecificOutput", {})
+    text = h.get("permissionDecisionReason") or h.get("additionalContext") or ""
+    rows = sum(1 for ln in text.splitlines() if re.match(r"^(?:\S+:)?\d+:", ln))
+    return out if 0 < rows <= limit and "more lines" not in text else None
+
+
 def search_flags(tool: str, inp: dict) -> set[str]:
     """The output-changing options of the first search: c (count), l/L (file names), v (invert), as letters."""
     if tool == "Grep":
@@ -1347,7 +1373,7 @@ def main() -> int:
     if not first_copy(ev):
         return 0
     try:
-        out = emit(ev, answer_or_record(ev, repo, tool, inp, pattern, paths, why))
+        out = emit(ev, within_limit(answer_or_record(ev, repo, tool, inp, pattern, paths, why), output_limit(tool, inp)))
     except Exception:  # noqa: BLE001  devkb must never get in the search's way
         out = None
     if out:
