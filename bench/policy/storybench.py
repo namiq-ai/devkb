@@ -175,6 +175,7 @@ def transcript(path: Path) -> dict:
     kinds, calls, chars, msgs = {}, Counter(), Counter(), set()
     res, session, dq, nav, own, outs, edited, root, seen_ctx, first_ctx = {}, None, 0, 0, 0, {}, False, None, 0, None
     backgrounded = 0
+    hook_outputs = []                                      # what each hook run said (hook_response events, #330)
     for line in open(path):
         try:
             e = json.loads(line)
@@ -184,6 +185,12 @@ def transcript(path: Path) -> dict:
             session, root = e.get("session_id"), e.get("cwd") or root
         if e.get("type") == "result":
             res = e
+        if e.get("type") == "system" and e.get("subtype") == "hook_response" and (e.get("output") or "").strip():
+            try:                                   # the reminder or answer is the hook's additionalContext
+                text = json.loads(e["output"]).get("hookSpecificOutput", {}).get("additionalContext") or e["output"]
+            except (ValueError, AttributeError):
+                text = e["output"]
+            hook_outputs.append(str(text))
         m = e.get("message")
         if not isinstance(m, dict):
             continue
@@ -227,6 +234,7 @@ def transcript(path: Path) -> dict:
     # turns: the result's num_turns counts only the last turn of a session (#258); each assistant message is one
     # model call. out_tokens: modelUsage holds the session's totals; per-message usage in the stream is partial.
     return {"session": session, "turns": len(msgs), "cost": None if cut_off else res.get("total_cost_usd", 0), "cut_off": cut_off, "first_ctx": first_ctx, "backgrounded": backgrounded,
+            "hook_outputs": len(hook_outputs), "hook_first_output": hook_outputs[0][:400] if hook_outputs else None,
             "model_calls": len(msgs), "ctx_tokens": ctx, "out_tokens": out,
             "devkb_queries": dq, "devkb_nav": nav, "devkb_selftest": own, "calls": dict(calls), "chars": dict(chars), "guardrail_fired": fired,
             "guardrail_actions": actions}
