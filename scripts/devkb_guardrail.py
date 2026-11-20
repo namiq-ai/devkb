@@ -1025,8 +1025,11 @@ def graph_stale(repo: Path, scope: list[str] | None) -> bool:
     if p.returncode:
         return True
     for line in p.stdout.splitlines():
-        rel = line[3:].split(" -> ")[-1].strip('"')
-        if Path(rel).suffix.lower() in CODE_EXTS and (line.startswith("??") or misses.changed_since_build(repo, rel)):
+        paths = [x.strip('"') for x in line[3:].split(" -> ")]
+        if not any(Path(x).suffix.lower() in CODE_EXTS for x in paths):
+            continue
+        # a renamed, added or deleted code file changes what the search finds, whatever the graph says about its path (#279)
+        if line.startswith("??") or any(c in line[:2] for c in "RAD") or misses.changed_since_build(repo, paths[-1]):
             return True
     return False
 
