@@ -270,7 +270,7 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     prompt = (sb.PROMPT if issue == "117" else PROMPT).format(title=t["title"], body=t["body"])
     if os.environ.get("POLICY_PREREGISTER_POST") == "1":
         prompt += SETTINGS_NOTE
-    deny = sb.DENY + (["Bash(devkb:*)"] if arm in ("none", "nonekeep") else [])
+    deny = sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if arm in ("none", "nonekeep") else [])   # both forms (#335)
     meta = json.loads((w / ".bench-arm.json").read_text())
     env_bin = tool_of(arm, toolenv.build(ENV_REF[arm]()) if arm in ENV_REF else None)
     cmd = ["claude", "-p", prompt, "--model", sb.MODEL, *SOURCES, "--output-format",
