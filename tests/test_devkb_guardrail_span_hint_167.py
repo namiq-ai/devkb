@@ -42,8 +42,7 @@ def ctx(hso):
                                            ("Bash", {"command": "sed -n 4,10p pkg/mod.py"}, 10)])
 def test_cut_short_range_gets_hint(repo, tmp_path, tool, inp, stop):
     hso, row = decide(repo, tmp_path, tool, inp)
-    assert ctx(hso) == (f"this range stops at L{stop}; pure_search runs L4–L11\n"
-                        "Next time ask devkb directly: `devkb symbol pure_search --source --project .`")   # #375
+    assert ctx(hso) == f"this range stops at L{stop}; pure_search runs L4–L11"
     assert hso.get("permissionDecision") is None
     assert row["action"] == "span-hint"
 

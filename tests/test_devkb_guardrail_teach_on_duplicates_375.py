@@ -1,5 +1,6 @@
-"""#375: when grep prints devkb's whole answer itself, the agent is still told which devkb command gives it (once per command
-and session, never the answer's lines); a cut-short read names the command for the whole definition; the reminder names the
+"""#375: with DEVKB_GUARDRAIL_TEACH_ALL=1, when grep prints devkb's whole answer itself, the agent is still told which devkb
+command gives it (once per command and session, never the answer's lines), and a cut-short read names the command for the
+whole definition. Off by default: measured, it did not bring agents to devkb and cost more. Always: the reminder names the
 command form the session has and the MCP tools only when they are configured."""
 from __future__ import annotations
 
@@ -43,7 +44,7 @@ def hook(repo, home, command, session, cwd=None, **extra):
     _ids[0] += 1                                 # every call its own tool use: a repeated id is a duplicate event (first_copy)
     ev = {"tool_name": "Bash", "cwd": str(cwd or repo), "session_id": session, "tool_use_id": f"t375-{_ids[0]}",
           "tool_input": {"command": command}}
-    out = run(PRE, home, ev, **extra)
+    out = run(PRE, home, ev, **{"DEVKB_GUARDRAIL_TEACH_ALL": "1", **extra})
     h = json.loads(out)["hookSpecificOutput"] if out.strip() else {}
     return h.get("permissionDecision"), h.get("additionalContext", "")
 
@@ -172,3 +173,10 @@ def test_from_a_symlinked_directory_the_checkouts_devkb_path_runs(repo, tmp_path
         exe.parent.parent.rmdir()
     cmd = teach.split("`")[1].split()[0]
     assert (link / "pkg" / cmd).resolve() == exe.resolve() or Path(cmd).resolve() == exe.resolve(), teach
+
+
+def test_off_by_default_a_duplicate_and_a_cut_read_add_no_teach_line(repo, tmp_path):
+    spend_reminder(repo, tmp_path, "s-default")
+    assert hook(repo, tmp_path, "grep -n helper pkg/use.py", "s-default", DEVKB_GUARDRAIL_TEACH_ALL="") == (None, "")
+    row = [r for r in log_rows(tmp_path) if r["session"] == "s-default"][-1]
+    assert row["action"] == "pass-through" and row["reason"] == "duplicate:in-file" and row["chars"] == 0

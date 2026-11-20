@@ -52,7 +52,8 @@ ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest
 ARM_ENV = {"release": {"DEVKB_GUARDRAIL_KEEP": "1"}, "main": {"DEVKB_GUARDRAIL_KEEP": "1"},
            "noteach": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH": "0"},   # main without D1 (on by default, #267)
            "outline": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_OUTLINE": "1"},
-           "hookmain": {"DEVKB_GUARDRAIL_KEEP": "1"}, "teachall": {"DEVKB_GUARDRAIL_KEEP": "1"}}
+           "hookmain": {"DEVKB_GUARDRAIL_KEEP": "1"},
+           "teachall": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH_ALL": "1"}}   # the setting, off by default (#375)
 HIDDEN = ("bench/policy/accept",)                               # the hidden checks: never in an agent's checkout (#223)
 GROUPS = json.loads((Path(__file__).resolve().parent / "groups.json").read_text())   # tickets done as one job
 # after2 (the revised #126 + #127): navigation through the branch's own devkb, which records every query

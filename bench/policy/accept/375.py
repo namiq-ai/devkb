@@ -10,7 +10,10 @@ checkout's own PreToolUse hook (scripts/devkb_guardrail.py) on a fixture reposit
 - teach_off: with DEVKB_GUARDRAIL_TEACH=0 the duplicate adds nothing;
 - span_hint_teaches: `sed -n 1,3p pkg/long.py`, which stops inside `long_one`, names `devkb symbol long_one --source`;
 - reminder_no_mcp_no_log: the reminder names a devkb command and, with no MCP server configured, neither `mcp__devkb` nor a
-  dogfood log."""
+  dogfood log;
+- off_by_default: without DEVKB_GUARDRAIL_TEACH_ALL=1 a duplicate adds nothing. The owner's decision after the keep-or-drop
+  benchmark (17 teach lines seen against 7, 0 direct devkb queries in both arms, +12.6% cost): the teach checks above run
+  with the setting on (revised 2026-11-20)."""
 import json, os, re, subprocess, sys, tempfile
 from pathlib import Path
 
@@ -39,7 +42,8 @@ with tempfile.TemporaryDirectory() as td:
         py = "/home/namiq/orchestra/ip/devkb/.venv/bin/python"
     if not Path(py).exists():
         py = sys.executable
-    base_env = dict(os.environ, HOME=str(home), PYTHONPATH=str(W), PYTHONWARNINGS="ignore", DEVKB_GUARDRAIL="1")
+    base_env = dict(os.environ, HOME=str(home), PYTHONPATH=str(W), PYTHONWARNINGS="ignore", DEVKB_GUARDRAIL="1",
+                    DEVKB_GUARDRAIL_TEACH_ALL="1")
     for k in ("DEVKB_GUARDRAIL_TEACH", "DEVKB_TELEMETRY", "DEVKB_MISSLOG", "DEVKB_GUARDRAIL_KEEP", "DEVKB_GUARDRAIL_OUTLINE"):
         base_env.pop(k, None)
     subprocess.run([py, "-P", "-m", "devkb.cli", "build", "--project", str(A)], cwd=A, env=base_env, capture_output=True, timeout=600)
@@ -91,6 +95,11 @@ with tempfile.TemporaryDirectory() as td:
 
     _, t5 = hook("sed -n 1,3p pkg/long.py", session="acc375-span")
     res["span_hint_teaches"] = "long_one" in t5 and "devkb symbol long_one --source" in t5
+
+    s = "acc375-default"
+    warm(s)
+    _, t7 = hook("grep -n helper pkg/use.py", session=s, DEVKB_GUARDRAIL_TEACH_ALL="")
+    res["off_by_default"] = t7 == ""
 
     _, t6 = hook('grep -rn "def nosuchname_r" pkg/', session="acc375-remind")
     res["reminder_no_mcp_no_log"] = (t6.startswith("devkb guardrail:") and "devkb " in t6.replace("devkb guardrail:", "")

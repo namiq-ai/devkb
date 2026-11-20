@@ -114,7 +114,8 @@ def test_the_hook_pair_takes_its_hooks_from_fixed_commits_and_its_checkout_from_
     monkeypatch.setenv("POLICY_MAIN", "4155904")
     assert pb.ENV_REF["hookmain"]() == "f39cb29" and pb.ENV_REF["teachall"]() == "dace8e9"
     assert pb.BASES["hookmain"] == pb.BASES["teachall"] == "origin/main"   # pinned to POLICY_MAIN when a batch starts
-    assert pb.ARM_ENV["hookmain"] == pb.ARM_ENV["teachall"] == {"DEVKB_GUARDRAIL_KEEP": "1"}
+    assert pb.ARM_ENV["hookmain"] == {"DEVKB_GUARDRAIL_KEEP": "1"}
+    assert pb.ARM_ENV["teachall"] == {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH_ALL": "1"}
 
 
 def test_a_teachall_batch_without_its_hook_commit_stops_before_any_run(monkeypatch):

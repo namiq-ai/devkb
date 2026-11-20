@@ -93,14 +93,11 @@ def test_nothing_in_scope_passes_through(repo, tmp_path):
     ("grep -rn extract . && ls", "duplicate:call-sites"),
 ])
 def test_lines_grep_prints_anyway_are_not_added_beside_it(repo, tmp_path, command, reason):
-    """SPEC-DKB-007 R5 (#217): grep runs and prints these lines; the same lines beside them would only cost tokens. What is
-    added, if anything, is the one line naming the devkb command that answers the search (#375), never a line of the answer."""
+    """SPEC-DKB-007 R5 (#217): grep runs and prints these lines; the same lines beside them would only cost tokens."""
     hso, row = decide(repo, tmp_path, "Bash", {"command": command})
     answer = hso.get("permissionDecisionReason", "") + hso.get("additionalContext", "")
-    assert not sub(hso)
-    assert (not answer or answer.startswith("devkb guardrail: this is a code search")
-            or (answer.startswith("Next time ask devkb directly: `devkb ") and "\n" not in answer.strip() and ".py:" not in answer))
-    assert row["action"] == "teach" and row["reason"] == reason   # #375: the command, logged as its own decision
+    assert not sub(hso) and (not answer or answer.startswith("devkb guardrail: this is a code search"))
+    assert row["action"] == "pass-through" and row["reason"] == reason
 
 
 @pytest.mark.parametrize("command,intent", [
@@ -116,11 +113,11 @@ def test_counts_file_lists_and_inverted_searches_get_no_answer(repo, tmp_path, c
 
 @pytest.mark.parametrize("inp,action,reason", [
     ({"pattern": "extract", "output_mode": "count"}, "pass-through", "intent:count"),
-    ({"pattern": "extract", "output_mode": "content", "-i": True}, "teach", "duplicate:call-sites"),
-    ({"pattern": "extract", "output_mode": "content", "-C": 5}, "teach", "duplicate:read-body"),
+    ({"pattern": "extract", "output_mode": "content", "-i": True}, "pass-through", "duplicate:call-sites"),
+    ({"pattern": "extract", "output_mode": "content", "-C": 5}, "pass-through", "duplicate:read-body"),
     ({"pattern": "extract", "output_mode": "content", "multiline": True}, "pass-through", "intent:unknown"),
     ({"pattern": "extract"}, "pass-through", "intent:list-files"),   # the default output_mode: a file list
-    ({"pattern": "extract", "output_mode": "content", "path": "pkg/use.py"}, "teach", "duplicate:in-file"),
+    ({"pattern": "extract", "output_mode": "content", "path": "pkg/use.py"}, "pass-through", "duplicate:in-file"),
 ])
 def test_grep_tool_variants(repo, tmp_path, inp, action, reason):
     hso, row = decide(repo, tmp_path, "Grep", inp)

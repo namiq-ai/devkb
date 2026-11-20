@@ -757,11 +757,18 @@ def answer_fields(answer: str | None) -> dict:
     return {"answer_sha1": sha, "answer_chars": len(answer), "answer_head": (lines[0] if lines else "")[:160]}
 
 
+def teach_all() -> bool:
+    """The teach line on a duplicate and on a span-hint (#375): off unless DEVKB_GUARDRAIL_TEACH_ALL=1. Measured on 9
+    tickets x 3 runs per arm (hook of f39cb29 against dace8e9): agents saw the line 17 times against 7, made 0 direct devkb
+    queries in both arms, and cost 12.6% more (context +20%, turns +24%), so by #218's rule it is not on by default."""
+    return os.environ.get("DEVKB_GUARDRAIL_TEACH_ALL") == "1"
+
+
 def teach_only(ev: dict, inp: dict) -> dict | None:
     """#375: grep prints devkb's whole answer itself, so the answer is not repeated; the agent is still told, once per
     command and session, which devkb command answers this search. Before, nothing was said, and in 149 benchmark runs
     92 complete answers went by without the agent seeing a devkb command (83 answers carried one)."""
-    if os.environ.get("DEVKB_GUARDRAIL_TEACH", "1") == "0" or not ev.get("_teach"):
+    if not teach_all() or os.environ.get("DEVKB_GUARDRAIL_TEACH", "1") == "0" or not ev.get("_teach"):
         return None
     sid = "".join(c for c in str(ev.get("session_id") or "") if c.isalnum() or c in "-_")[:80]
     key = hashlib.sha1(json.dumps([sid, "teach", str(ev.get("cwd") or ""), json.dumps(inp, sort_keys=True)]).encode()).hexdigest()
@@ -1480,8 +1487,9 @@ def span_hint(ev: dict, tool: str, inp: dict) -> dict | None:
         pass
     msg = f"this range stops at L{b}; {s['q']} runs L{s['ls']}\u2013L{s['le']}"
     log_decision(ev, repo, tool, "span-hint", [s["q"]], [], len(msg), f"{rel}:{a}-{b}")
-    SEARCH_CWD[:] = [cwd]                         # --project as typed from where the read ran (#283)
-    ev["_teach"] = f"{devkb_exe(repo)} symbol {shlex.quote(s['q'])} --source --project {project_arg(repo)}"   # the whole definition (#375)
+    if teach_all():                               # the whole definition, when the setting is on (#375)
+        SEARCH_CWD[:] = [cwd]                     # --project as typed from where the read ran (#283)
+        ev["_teach"] = f"{devkb_exe(repo)} symbol {shlex.quote(s['q'])} --source --project {project_arg(repo)}"
     return emit(ev, {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": msg}})
 
 
