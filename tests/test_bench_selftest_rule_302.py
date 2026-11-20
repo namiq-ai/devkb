@@ -59,3 +59,24 @@ def test_303_a_cut_off_runs_unknown_cost_is_left_out_of_the_mean_not_counted_as_
     rows = [{**base, "ok": True, "suite": True, "cost": 2.0}, {**base, "ok": False, "suite": False, "cost": None, "cut_off": True}]
     m = rt.summary(rows)
     assert m["cost"] == 2.0 and m["cost_lo"] == 2.0 and m["cut_off"] == 1 and m["n"] == 2
+
+
+def _row(**kw):
+    return {"run": "elsewhere-r1", "turns": 3, "calls": {}, "ctx_tokens": 1, "cost": 1.0, "seconds": 60, "suite_pass": True,
+            "devkb_nav": 7, "devkb_selftest": 2, **kw}
+
+
+def test_304_a_row_whose_transcript_is_not_under_runs_uses_its_stored_counts(tmp_path, monkeypatch):
+    monkeypatch.setattr(rt, "B", tmp_path)
+    monkeypatch.setattr(rt, "guard_rows", lambda s: [])
+    assert rt.counts("elsewhere-r1") is None
+    p = rt.per_run(_row())
+    assert (p["nav"], p["own"]) == (7, 2)
+
+
+def test_304_a_found_transcript_still_wins_over_the_stored_counts(tmp_path, monkeypatch):
+    monkeypatch.setattr(rt, "B", tmp_path)
+    monkeypatch.setattr(rt, "guard_rows", lambda s: [])
+    (tmp_path / "runs" / "elsewhere-r1").mkdir(parents=True)
+    (tmp_path / "runs" / "elsewhere-r1" / "stream.jsonl").write_text("".join(json.dumps(x) + "\n" for x in _lines("/w")))
+    assert (rt.per_run(_row())["nav"], rt.per_run(_row())["own"]) == (1, 0)
