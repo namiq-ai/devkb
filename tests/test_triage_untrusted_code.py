@@ -126,6 +126,11 @@ def _worktree(tmp_path):
 
 def _draft(monkeypatch, tmp_path, agent, tests=None):
     work = _worktree(tmp_path)
+    monkeypatch.setattr(triage, "TREE", tmp_path / "base")
+    real_run = triage.run
+    # the draft fetches REPO's main into the triage checkout first (#208): never the network or the live checkout here
+    monkeypatch.setattr(triage, "run", lambda cmd, *a, **k: None if cmd[:4] == ["git", "-C", str(triage.TREE), "fetch"]
+                        else real_run(cmd, *a, **k))
     monkeypatch.setattr(triage, "worktree_for", lambda name, ref: work)
     monkeypatch.setattr(triage, "claude", lambda p, cwd, tools: (agent(work), ("{}", 0.0))[1])
     ran = []
