@@ -65,6 +65,23 @@ push and do not use gh.
 """
 
 
+_DATA_PATH = re.compile(r"bench/results/[\w.\-/]+")
+_FENCE = re.compile(r"```.*?```", re.S)
+
+
+def without_missing_data(body: str, w: Path) -> str:
+    """A ticket's fenced reproduction blocks that use data under bench/results/ which is not in the checkout are replaced by
+    one line saying so (#336). Without it every agent tried the missing path (2.0 to 3.4 calls per run) and reported that
+    it could not run the reproduction. Blocks that name nothing missing, and all other text, stay as filed."""
+    def swap(m):
+        gone = [p for p in _DATA_PATH.findall(m.group(0)) if not (w / p.rstrip("/")).exists()]
+        if not gone:
+            return m.group(0)
+        return (f"(Reproduction command omitted: the data it uses, {gone[0]}, is not in this checkout. "
+                "The regression test you write is the check.)")
+    return _FENCE.sub(swap, body)
+
+
 def checkout(w: Path, arm: str):
     if w.exists():
         shutil.rmtree(w)
@@ -267,7 +284,7 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     else:
         mcp = str(B / "no-mcp.json")
         Path(mcp).write_text(json.dumps({"mcpServers": {}}))
-    prompt = (sb.PROMPT if issue == "117" else PROMPT).format(title=t["title"], body=t["body"])
+    prompt = (sb.PROMPT if issue == "117" else PROMPT).format(title=t["title"], body=without_missing_data(t["body"], w))
     if os.environ.get("POLICY_PREREGISTER_POST") == "1":
         prompt += SETTINGS_NOTE
     deny = sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if arm in ("none", "nonekeep") else [])   # both forms (#335)
