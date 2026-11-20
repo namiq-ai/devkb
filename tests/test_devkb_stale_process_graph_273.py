@@ -37,7 +37,7 @@ def test_no_answer_uses_an_older_process_graphs_line_numbers(tmp_path):
     env.update(PYTHONPATH=str(ROOT), HOME=str(home), DEVKB_MISSLOG="0", PYTHONWARNINGS="ignore")
     subprocess.run([sys.executable, "-P", "-m", "devkb.cli", "build", "--project", str(A)], cwd=A, env=env, capture_output=True, check=True)
     (A / "pkg" / "core.py").write_text("\n\n\n\n\nLIMIT = 3\n\n\ndef compute(x):\n    return x * LIMIT\n")
-    _git(A, "commit", "-qam", "b")
+    _git(A, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qam", "b")
     subprocess.run([sys.executable, "-P", "-m", "devkb.build_symbols", "--project", str(A)], cwd=A, env=env, capture_output=True)
     out = ""
     for j, c in enumerate(("ls", 'grep -rn "^LIMIT\\|def compute" pkg/')):
