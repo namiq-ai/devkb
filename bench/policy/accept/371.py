@@ -46,8 +46,10 @@ with tempfile.TemporaryDirectory() as td:
     res["test_exists"] = "def test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method" in (W / "tests/test_csharp_symbols.py").read_text()
     res["passes"] = run(W)
     res["passes_without_wall_clocks"] = run(W, str(td / "uneven"))
-    old = subprocess.run(["git", "-C", "/home/namiq/orchestra/ip/devkb", "show", f"{GUARDED}^:devkb/csharp_symbols.py"],
-                         capture_output=True, text=True)
+    for repo in (W, Path(__file__).resolve().parents[3]):   # the checkout's history, else the harness repository's
+        old = subprocess.run(["git", "-C", str(repo), "show", f"{GUARDED}^:devkb/csharp_symbols.py"], capture_output=True, text=True)
+        if old.returncode == 0:
+            break
     if old.returncode == 0:
         cp = td / "copy"
         shutil.copytree(W, cp, ignore=shutil.ignore_patterns(".git", ".venv", ".devkb", "corpus", "__pycache__"))
