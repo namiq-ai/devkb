@@ -169,6 +169,14 @@ def devkb_commands(command: str, edited: bool = False) -> tuple[int, int]:
     return nav, own
 
 
+def redact(text: str, root: str | None = None) -> str:
+    """Recorded hook text names the repository it served, which is a run's checkout under the owner's home directory: a row
+    that is committed or shared must not carry it (#356). The checkout becomes `<checkout>`, the home directory `~`."""
+    if root:
+        text = text.replace(root, "<checkout>")
+    return text.replace(str(Path.home()), "~")
+
+
 def transcript(path: Path) -> dict:
     sys.path.insert(0, str(REPO / "bench" / "audit"))
     from toolmix import classify, devkb_queries, size  # noqa: PLC0415
@@ -190,7 +198,7 @@ def transcript(path: Path) -> dict:
                 text = json.loads(e["output"]).get("hookSpecificOutput", {}).get("additionalContext") or e["output"]
             except (ValueError, AttributeError):
                 text = e["output"]
-            hook_outputs.append(str(text))
+            hook_outputs.append(redact(str(text), root))
         m = e.get("message")
         if not isinstance(m, dict):
             continue
