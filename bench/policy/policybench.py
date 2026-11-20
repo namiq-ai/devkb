@@ -221,8 +221,8 @@ def run_one(issue: str, arm: str, rep: int) -> str:
 def _run_one(issue: str, arm: str, rep: int) -> str:
     tag = f"p{issue}-{arm}-r{rep}"
     out = B / "runs" / tag
-    if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") != "error":
-        return f"skip {tag}"                          # a run that ended in an error is run again
+    if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") not in ("error", "base-red"):
+        return f"skip {tag}"                          # an error, or a refused red base, is set up again (#305)
     out.mkdir(parents=True, exist_ok=True)
     w = B / "work" / tag
     try:
@@ -230,12 +230,12 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
             from_template(template_for(arm), w)
         else:
             checkout(w, arm)
-    except RuntimeError as e:                         # a red base (#221): recorded, never run or scored
+    except RuntimeError as e:                         # a red base (#221): recorded, not run or scored; set up again next batch (#305)
         (out / "end").write_text(json.dumps({"exit": "base-red", "seconds": 0, "error": str(e)[-400:]}))
         return f"refused {tag}: {e}"
     except Exception as e:  # noqa: BLE001  a setup that fails is recorded, never a run that silently disappears
-        (out / "end").write_text(json.dumps({"exit": "base-red", "seconds": 0, "error": f"setup: {type(e).__name__}: {e}"[-400:]}))
-        return f"refused {tag}: setup failed: {e}"
+        (out / "end").write_text(json.dumps({"exit": "error", "seconds": 0, "error": f"setup: {type(e).__name__}: {e}"[-400:]}))
+        return f"error {tag}: setup failed: {e}"       # not a red base: run again in the next batch (#305)
     t = json.loads(sb.sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
     for extra in GROUPS.get(issue, []):            # tickets done as one job (same code): bench/policy/groups.json
         t2 = json.loads(sb.sh(["gh", "issue", "view", extra, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
