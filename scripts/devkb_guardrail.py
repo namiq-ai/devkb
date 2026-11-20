@@ -566,6 +566,15 @@ def context_lines(tool: str, inp: dict) -> int:
     return max((int(n) for _k, n in m), default=0)
 
 
+def asks_context(tool: str, inp: dict) -> bool:
+    """The search asks for context lines, before or after (`-A`, `-B`, `-C`, `-NUM`, the Grep tool's options): grep's lines
+    around the match are what it wants, and an answer built from the definition does not carry them (#280)."""
+    if tool == "Grep":
+        return any(inp.get(k) for k in ("-A", "-B", "-C", "context"))
+    cmd = re.sub(r"'[^']*'|\"[^\"]*\"", "''", search_part(inp.get("command", "")))
+    return bool(re.search(r"(?:^|\s)-[A-Za-z]*[ABC]\s*\d+|(?:^|\s)--(?:after|before)?-?context(?:=|\s)\d+|(?:^|\s)-\d+\b", cmd))
+
+
 def body_lines(answer: str) -> int:
     """How many lines the definition answer's body spans (its span when the body is not shown)."""
     m = re.search(r"lines (\d+)-(\d+)", answer)
@@ -760,7 +769,24 @@ def shown_path(rel: str, repo: Path) -> str:
     return rel
 
 
-def definition_answer(repo: Path, name: str, scope: list[str] | None, globs: list[str] | None = None) -> tuple[str, str] | None:
+def definition_body(repo: Path, m: dict) -> dict:
+    """The body of one definition: the graph's own when it carries it, else the file's lines of the exact span (only the first
+    match of a `devkb symbol` answer carries source, #280). The caller has checked the file is unchanged since the build."""
+    src = m.get("source") or {}
+    if src.get("lines") is not None or m.get("range") != "exact" or not m.get("le") or not m.get("ls"):
+        return src
+    ls, le = int(m["ls"]), int(m["le"])
+    if le - ls + 1 > READ_CAP:
+        return {"lines": None, "more": True}
+    try:
+        lines = (repo / m["k"].split("::", 1)[0]).read_text(errors="replace").splitlines()
+    except OSError:
+        return src
+    return {"lines": lines[ls - 1:le]} if le <= len(lines) else src
+
+
+def definition_answer(repo: Path, name: str, scope: list[str] | None, globs: list[str] | None = None,
+                      body: bool = True) -> tuple[str, str] | None:
     """SPEC-DKB-006 R1-R3: (answer, reason) for a definition search, or None when the search should run. One definition in
     the searched scope: `file:line:` as grep prints it, then the body (at most READ_CAP lines; beyond that the location and
     span). Several: the locations only. A file changed since the graph was built: None."""
@@ -775,11 +801,13 @@ def definition_answer(repo: Path, name: str, scope: list[str] | None, globs: lis
     if not defs or any(not m.get("ls") or misses.changed_since_build(repo, m["k"].split("::", 1)[0]) for m in defs):
         return None
     where = [f"{shown_path(m['k'].split('::', 1)[0], repo)}:{m['ls']}:{m.get('sig', '')}" for m in defs]
+    if not body:                                 # a locate search (no context option): grep's own lines, the locations (#280)
+        return ("\n".join(where), "locations")
     if len(defs) > 1:
         return (f"{len(defs)} definitions of {name}; locations only, no body (name one to read it):\n" + "\n".join(where),
                 "locations")
     m = defs[0]
-    f, src = m["k"].split("::", 1)[0], m.get("source") or {}
+    f, src = m["k"].split("::", 1)[0], definition_body(repo, m)
     span = f"{f} lines {m['ls']}-{m['le']}" if m.get("range") == "exact" and m.get("le") else f"{f} from line {m['ls']}"
     if src.get("lines") is None or src.get("more") or src.get("approx"):
         why = (f"longer than {READ_CAP} lines" if src.get("more") or src.get("too_long") else "its end is not known")
@@ -1091,7 +1119,7 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         why = "longer-names" if not partial else "partial-names"   # grep also prints other definitions (#277, #278)
     if dname and why is None:
         scope = scope_of(paths or [], repo)
-        ans = definition_answer(repo, dname, scope, search_globs(tool, inp))
+        ans = None if asks_context(tool, inp) else definition_answer(repo, dname, scope, search_globs(tool, inp), body=False)
         if ans:                                  # one name, found in the graph: the answer does not need the caller pack
             if again(ev, inp):
                 log_decision(ev, repo, tool, "repeat", names, queries, len(ans[0]), "repeat", scope)
@@ -1108,8 +1136,8 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     if queries and len(queries) == len(names) and all(q["verdict"] == "complete" for q in queries):
         scope = scope_of(paths or [], repo)
         if intent == "read-body":                # the lines around a name (or several definitions): the bodies
-            got = [definition_answer(repo, n, scope, search_globs(tool, inp)) for n in names]
-            if all(got) and all(context_lines(tool, inp) < body_lines(x[0]) for x in got):   # grep's context cuts it short
+            got = [definition_answer(repo, n, scope, search_globs(tool, inp)) for n in names] if dname else []
+            if got and all(got) and all(context_lines(tool, inp) < body_lines(x[0]) for x in got):   # grep's context cuts it short
                 body = "\n\n".join(x[0] for x in got)
                 body = body if len(body) <= MAX_ANSWER else body[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
                 log_decision(ev, repo, tool, "alongside", names, queries, len(body), f"body:{got[0][1]}", scope)

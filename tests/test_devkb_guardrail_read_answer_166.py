@@ -46,18 +46,17 @@ def text(hso):
 @pytest.mark.parametrize("tool,inp", [("Bash", {"command": 'grep -n "def compute" pkg/'}),
                                       ("Grep", {"pattern": "def compute", "path": "pkg", "output_mode": "content", "-n": True}),
                                       ("Bash", {"command": 'grep -rn "^\\s*compute\\s*(" pkg/'})])
-def test_one_definition_gives_location_and_body(repo, tmp_path, tool, inp):
+def test_one_definition_gives_the_location_only_280(repo, tmp_path, tool, inp):
     hso, row = decide(repo, tmp_path, tool, inp)
     assert sub(hso) and row["action"] == "read-answer" and row["reason"].startswith("definition")
     t = text(hso)
-    assert "pkg/calc.py:1:" in t and "y = x + 1" in t and "return y" in t
+    assert "pkg/calc.py:1:" in t and "y = x + 1" not in t and "return y" not in t   # #280: locate is grep's one line
 
 
-def test_long_function_gives_span_and_cap_note(repo, tmp_path):
+def test_long_function_gives_the_location_only_280(repo, tmp_path):
     hso, row = decide(repo, tmp_path, "Bash", {"command": 'grep -n "def big(" pkg/'})   # bounded: only big itself (#277)
     t = text(hso)
-    assert row["action"] == "read-answer" and "pkg/big.py:1:" in t and "lines 1-121" in t and "longer than 80" in t
-    assert "x += 100" not in t
+    assert row["action"] == "read-answer" and "pkg/big.py:1:" in t and "x += 100" not in t
 
 
 def test_a_definition_search_that_also_matches_a_longer_name_is_not_replaced(repo, tmp_path):
@@ -89,11 +88,10 @@ def test_search_for_uses_is_not_a_read(repo, tmp_path):
 
 @pytest.mark.parametrize("command", ['grep -n "def compute" -A30 pkg/calc.py', 'grep -n "def compute" -A 30 pkg/calc.py',
                                      'grep -rn "def compute" -C5 pkg/'])
-def test_a_definition_search_with_context_lines_gets_the_body(repo, tmp_path, command):
-    """#166 clarification: context lines on a definition search are the agent reading the body."""
+def test_a_definition_search_with_context_lines_is_not_replaced_280(repo, tmp_path, command):
+    """#280: grep prints the lines the context options ask for; a replacement that does not carry them is wrong, so it runs."""
     hso, row = decide(repo, tmp_path, "Bash", {"command": command})
-    assert sub(hso) and row["action"] == "read-answer"
-    assert "pkg/calc.py:1:" in text(hso) and "return y" in text(hso)
+    assert not sub(hso) and (row or {}).get("action") != "read-answer"
 
 
 def test_an_option_value_is_not_a_path_172():
@@ -102,3 +100,22 @@ def test_an_option_value_is_not_a_path_172():
     for c in ('grep -n "def compute" -A 30 pkg/calc.py', 'grep -nA 5 compute pkg/calc.py', 'grep -m 3 -n compute pkg/calc.py'):
         paths, _ = g.bash_search(c, Path("/r"))
         assert [p.name for p in paths] == ["calc.py"], c
+
+
+def test_a_definition_search_with_before_context_is_not_replaced_280(repo, tmp_path):
+    hso, row = decide(repo, tmp_path, "Bash", {"command": 'grep -n "def compute" -B3 pkg/calc.py'})
+    assert not sub(hso) and (row or {}).get("action") != "read-answer"
+
+
+def test_a_call_site_search_with_context_is_not_answered_with_the_body_280(repo, tmp_path):
+    hso, _ = decide(repo, tmp_path, "Bash", {"command": 'grep -rn "compute(" pkg -A2'})
+    assert "y = x + 1" not in hso.get("additionalContext", "") + text(hso)
+
+
+def test_every_defining_file_gets_its_body_280(tmp_path):
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import devkb_guardrail as g
+    m = {"k": "pkg/two.py::dup", "ls": 1, "le": 2, "range": "exact", "source": None}
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg/two.py").write_text("def dup(x):\n    return -x\n")
+    assert g.definition_body(tmp_path, m) == {"lines": ["def dup(x):", "    return -x"]}
