@@ -327,7 +327,25 @@ def _bound_names(fn: ast.AST) -> set[str]:
             out.update((al.asname or al.name).split(".")[0] for al in n.names)
         elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             out.add(n.name)
+        else:
+            out.update(_pattern_binding(n))
     return out
+
+
+def _pattern_binding(n: ast.AST) -> set[str]:
+    """The name an `except ... as NAME` handler or a `case` pattern (capture, `*rest`, `**rest`) binds, else nothing (#287)."""
+    if isinstance(n, ast.ExceptHandler) and n.name:
+        return {n.name}
+    if isinstance(n, (ast.MatchAs, ast.MatchStar)) and n.name:
+        return {n.name}
+    if isinstance(n, ast.MatchMapping) and n.rest:
+        return {n.rest}
+    return set()
+
+
+def _lambda_params(n: ast.Lambda) -> set[str]:
+    a = n.args
+    return {x.arg for x in (*a.posonlyargs, *a.args, *a.kwonlyargs, a.vararg, a.kwarg) if x is not None}
 
 
 def _value_refs(tree: ast.Module) -> list[tuple[str, str | None, str, int]]:
@@ -384,25 +402,33 @@ def _uses_in_tree(tree: ast.Module) -> tuple[list[tuple[str, str | None, str, in
     refs: list[tuple[str, str | None, str, int]] = []
     keys: list[tuple[str, str, str, int]] = []
 
-    def visit(n: ast.AST, scope: list[str], bound: set[str]) -> None:
+    def visit(n: ast.AST, scope: list[str], bound: set[str], head_bound: set[str] | None = None) -> None:
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             head = [*n.decorator_list, *getattr(n, "bases", ()), *getattr(n, "keywords", ())]
             if not isinstance(n, ast.ClassDef):
                 head += [*n.args.defaults, *(d for d in n.args.kw_defaults if d is not None)]
-            for h in head:
-                visit(h, scope, bound)
+            for h in head:              # evaluated in the enclosing scope: inside a class body, the class's own names (#287)
+                visit(h, scope, head_bound if head_bound is not None else bound)
             if isinstance(n, ast.ClassDef):
                 # a class body's own assignments shadow the module name for the statements after them, but not inside
                 # its methods, which skip class scope (#199)
                 own: set[str] = set()
                 for b in n.body:
-                    visit(b, [*scope, n.name], bound if isinstance(b, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else bound | own)
+                    visit(b, [*scope, n.name], bound if isinstance(b, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else bound | own,
+                          bound | own)
                     own |= _assigned_names(b)
                 return
             inner = bound | (_bound_names(n) - _declared_global(n))   # `global X`: X is the module's, read or written (#198)
             for b in n.body:
                 visit(b, [*scope, n.name], inner)
             return
+        if isinstance(n, ast.Lambda):
+            for d in (*n.args.defaults, *(d for d in n.args.kw_defaults if d is not None)):
+                visit(d, scope, bound)
+            visit(n.body, scope, bound | _lambda_params(n))
+            return
+        if isinstance(n, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+            bound = bound | {t.id for g in n.generators for t in ast.walk(g.target) if isinstance(t, ast.Name)}
         where = ".".join(scope) or MODULE_CALLER
         if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name) and n.target.id not in bound \
                 and _CONST_NAME.fullmatch(n.target.id):
@@ -411,8 +437,10 @@ def _uses_in_tree(tree: ast.Module) -> tuple[list[tuple[str, str | None, str, in
             if isinstance(n.ctx, ast.Load) and n.id not in bound and _CONST_NAME.fullmatch(n.id):
                 refs.append((where, None, n.id, n.lineno))
         elif isinstance(n, ast.Attribute):
-            if isinstance(n.ctx, ast.Load) and isinstance(n.value, ast.Name) and _CONST_NAME.fullmatch(n.attr):
-                refs.append((where, n.value.id, n.attr, n.lineno))
+            if isinstance(n.ctx, ast.Load) and _CONST_NAME.fullmatch(n.attr):
+                recv = n.value.id if isinstance(n.value, ast.Name) else _dotted(n.value)   # `pkg.sub.mod.NAME` (#287)
+                if recv:
+                    refs.append((where, recv, n.attr, n.lineno))
         elif isinstance(n, ast.Subscript):
             k = _str_const(n.slice)
             if k:
@@ -1765,9 +1793,10 @@ def extract(repo_root: Path) -> DevKBGraph:
             elif receiver is None and name in bare_imports and name not in in_file:
                 module, original = bare_imports[name]
                 target = _resolve_cross_file_symbol(module, rel_path, original, per_file_symbols)
-            elif receiver is not None and receiver not in in_file:
-                for module in receivers.get(receiver, []):
-                    target = _resolve_cross_file_symbol(module, rel_path, name, per_file_symbols)
+            elif receiver is not None and receiver.split(".")[0] not in in_file:
+                root, _, rest = receiver.partition(".")   # `pkg.sub.mod.NAME` after `import pkg.sub.mod` (#287)
+                for module in receivers.get(root, []):
+                    target = _resolve_cross_file_symbol(f"{module}.{rest}" if rest else module, rel_path, name, per_file_symbols)
                     if target:
                         break
             if not target or kind_of.get(target) != "constant":
