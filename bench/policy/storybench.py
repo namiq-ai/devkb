@@ -173,7 +173,7 @@ def transcript(path: Path) -> dict:
     sys.path.insert(0, str(REPO / "bench" / "audit"))
     from toolmix import classify, devkb_queries, size  # noqa: PLC0415
     kinds, calls, chars, msgs = {}, Counter(), Counter(), set()
-    res, session, dq, nav, own, outs, edited, root, seen_ctx = {}, None, 0, 0, 0, {}, False, None, 0
+    res, session, dq, nav, own, outs, edited, root, seen_ctx, first_ctx = {}, None, 0, 0, 0, {}, False, None, 0, None
     for line in open(path):
         try:
             e = json.loads(line)
@@ -191,6 +191,8 @@ def transcript(path: Path) -> dict:
             outs[m["id"]] = max(outs.get(m["id"], 0), (m.get("usage") or {}).get("output_tokens", 0))
             u = m.get("usage") or {}
             seen_ctx = max(seen_ctx, sum(u.get(k, 0) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")))
+            if first_ctx is None:                  # the run's starting context: the policy, hook and tool text, before any work (#331)
+                first_ctx = sum(u.get(k, 0) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
         for x in m.get("content") or []:
             if not isinstance(x, dict):
                 continue
@@ -220,7 +222,7 @@ def transcript(path: Path) -> dict:
     fired, actions = guardrail_actions(session)
     # turns: the result's num_turns counts only the last turn of a session (#258); each assistant message is one
     # model call. out_tokens: modelUsage holds the session's totals; per-message usage in the stream is partial.
-    return {"session": session, "turns": len(msgs), "cost": None if cut_off else res.get("total_cost_usd", 0), "cut_off": cut_off,
+    return {"session": session, "turns": len(msgs), "cost": None if cut_off else res.get("total_cost_usd", 0), "cut_off": cut_off, "first_ctx": first_ctx,
             "model_calls": len(msgs), "ctx_tokens": ctx, "out_tokens": out,
             "devkb_queries": dq, "devkb_nav": nav, "devkb_selftest": own, "calls": dict(calls), "chars": dict(chars), "guardrail_fired": fired,
             "guardrail_actions": actions}

@@ -55,6 +55,9 @@ backfilled).
 2. **Two arms, from the base commit, before you look at your own fix.** `none` (no devkb) and `main` (devkb CLI), same model,
    same prompt, one shuffled batch, at least 3 repetitions:
    `POLICY_ARMS=none,main POLICY_MAIN=<base sha> .venv/bin/python bench/policy/policybench.py run <N> --reps 3`, then `score <N>`.
+   Every arm runs the same suite (#331): the harness removes the guardrail's tests from all arms, and the table prints each arm's
+   collected-test count and first-call context, with a warning when the counts differ. For a ticket about the guardrail itself,
+   set `POLICY_EQUAL_SUITE=0` and use `nonekeep` as the control.
    The rules are `docs/BENCHMARK.md`'s: same model in every arm, one session per batch, pinned commits, never tune on the
    benchmark's own tasks, report everything (arms that cost more, runs that failed, runs cut off).
 3. **PR review, two ways.** With and without devkb's `review_pack` (#316), posted as a GitHub review (`gh pr review`), then
