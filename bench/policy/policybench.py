@@ -276,7 +276,11 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     cmd = ["claude", "-p", prompt, "--model", sb.MODEL, *SOURCES, "--output-format",
            "stream-json", "--verbose", "--max-turns", "250" if issue in ("117", "131") else "150", "--permission-mode", "acceptEdits", "--strict-mcp-config",
            "--mcp-config", mcp, "--allowedTools", *sb.ALLOW, "--disallowedTools", *deny]
-    env = dict(os.environ, DEVKB_GUARDRAIL={"before": "0", "none": "0", "nonekeep": "0", "cli130": "enforce"}.get(arm, "1"),
+    # The Bash tool backgrounds a command after 120 s by default; a full suite that runs about that long then costs the agent
+    # extra turns to wait for it, in one arm and not the other (#334). Every arm gets the same, longer limit.
+    limit = os.environ.get("POLICY_BASH_TIMEOUT_MS", "600000")
+    env = dict(os.environ, BASH_DEFAULT_TIMEOUT_MS=limit, BASH_MAX_TIMEOUT_MS=limit,
+               DEVKB_GUARDRAIL={"before": "0", "none": "0", "nonekeep": "0", "cli130": "enforce"}.get(arm, "1"),
                PATH=f"{Path(env_bin).parent}:{w / '.venv' / 'bin'}:{os.environ['PATH']}", **ARM_ENV.get(arm, {}))
     (out / "arm.json").write_text(json.dumps(meta) + "\n")
     t0 = time.time()

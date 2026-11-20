@@ -174,6 +174,7 @@ def transcript(path: Path) -> dict:
     from toolmix import classify, devkb_queries, size  # noqa: PLC0415
     kinds, calls, chars, msgs = {}, Counter(), Counter(), set()
     res, session, dq, nav, own, outs, edited, root, seen_ctx, first_ctx = {}, None, 0, 0, 0, {}, False, None, 0, None
+    backgrounded = 0
     for line in open(path):
         try:
             e = json.loads(line)
@@ -196,6 +197,9 @@ def transcript(path: Path) -> dict:
         for x in m.get("content") or []:
             if not isinstance(x, dict):
                 continue
+            if x.get("type") == "tool_result" and "was moved to the background" in (
+                    x["content"] if isinstance(x.get("content"), str) else json.dumps(x.get("content"))):
+                backgrounded += 1                     # a command the Bash tool backgrounded at its timeout (#334)
             if x.get("type") == "tool_use":
                 k = "devkb" if x["name"].startswith("mcp__devkb") else classify(x["name"], x.get("input", {}))
                 kinds[x["id"]] = k
@@ -222,7 +226,7 @@ def transcript(path: Path) -> dict:
     fired, actions = guardrail_actions(session)
     # turns: the result's num_turns counts only the last turn of a session (#258); each assistant message is one
     # model call. out_tokens: modelUsage holds the session's totals; per-message usage in the stream is partial.
-    return {"session": session, "turns": len(msgs), "cost": None if cut_off else res.get("total_cost_usd", 0), "cut_off": cut_off, "first_ctx": first_ctx,
+    return {"session": session, "turns": len(msgs), "cost": None if cut_off else res.get("total_cost_usd", 0), "cut_off": cut_off, "first_ctx": first_ctx, "backgrounded": backgrounded,
             "model_calls": len(msgs), "ctx_tokens": ctx, "out_tokens": out,
             "devkb_queries": dq, "devkb_nav": nav, "devkb_selftest": own, "calls": dict(calls), "chars": dict(chars), "guardrail_fired": fired,
             "guardrail_actions": actions}
