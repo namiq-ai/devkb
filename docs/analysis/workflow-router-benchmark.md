@@ -90,3 +90,24 @@ the earlier waves' (17.8), so the comparison holds only within the batch.
 
 **What it supports.** The ranking is correct on the recorded queries and costs nothing at run time, so it is safe to ship. It
 does not by itself change what agents do; the bound is how seldom they ask.
+
+---
+
+# Update 2 (2026-11-21): the guardrail fixes, replayed offline
+
+Question: would answering more of the searches agents already run (the guardrail) change much? Replayed on the 48 devkb-arm
+runs of tickets 118, 120, 203, 205, 286, 287 (394 grep/rg searches), no model runs: `bench/policy/hook_replay.py` (the
+guardrail's decisions on each run's calls, on the ticket's base tree) and `bench/policy/stale_replay.py` (the staleness rule).
+
+| | result |
+|---|---|
+| the guardrail today, replayed | 54 of 381 decisions answered (14%; the live runs gave 9%): 40 span hints (about 50 characters) and 14 `alongside`; **no `substitute` at all**, so no grep was replaced by a graph answer in these runs |
+| withheld, before the first edit (269 decisions) | not complete 116, duplicate of an earlier answer 70, file lists 16 |
+| fix 1, a rebuild when the graph is stale | **not viable**: a full `devkb build` takes 12-13 s on these checkouts (the hook's limit is 20 s) and would repeat after every edit |
+| fix 1', stale only when a file the names depend on changed | 275 of 394 searches (70%) came before the run's first edit, so staleness could not have withheld them. Of 42 searches after it that name a graph symbol, 15 would be answered and 27 not (the agent had edited the files it was searching): **15 of 394, under 4%** |
+| fix 2, an `alongside` answer for the names that are Complete, with the others listed | answered 54 -> 75 (14% -> 19%); +127 characters per run (about 32 tokens). The 21 new answers are beside grep, so they replace nothing; many are for ordinary words that happen to be symbols (`macro`, `kind`, `build`, `calls`). In 0 of the 21 did the agent's next call look the same names up again. Value not demonstrated; the change was not kept (patch: not in the repository) |
+
+**Reading.** Even with both fixes the answered share would rise from 14% to about 23%, and the added answers are hints beside
+grep, not replacements. The searches agents run are mostly one-file reads (`in-file`, `read-body`), where grep prints the lines
+the answer would. The guardrail's ceiling on tickets of this kind is therefore low, and the answered share is not the number
+that would move turns or tokens.
