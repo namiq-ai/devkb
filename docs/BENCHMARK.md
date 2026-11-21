@@ -83,6 +83,42 @@ Runs recorded before these fields existed (the paper's) show input and cache wri
   or a new repository, and say which runs came before and after a fix.
 - **Report everything**: arms that cost more, tasks the graph got wrong, runs that failed.
 
+## Permission denials (#369)
+
+A refused command costs the agent a turn and a retry in whichever arm it falls, so it is noise in the cost columns.
+The 0.2.14 re-run had 1.6 denials per run; the 72 runs of #337's experiment and #382, #383, #367 had 3.9 (280).
+
+**How they were found.** `bench/policy/probes/permission_probe.py` runs one headless `claude -p` per command form, with
+the benchmark's own `--allowedTools`/`--disallowedTools`, `--permission-mode acceptEdits` and setting sources, in a
+scratch git checkout, and records whether the session refused it. Each form was probed three times; the answer was
+the same every time. Denied commands from the runs, replayed verbatim (the checkout path rewritten), were refused
+again, so the probe reproduces the runs.
+
+| Form | Refused | Example |
+|---|---|---|
+| a path outside the checkout | yes | `ls ..`, `ls /home/...`, `cd /tmp/x && ...` |
+| a shell loop | yes | `for f in a b; do echo $f; done` |
+| a variable | yes | `R=$PWD; ls $R` |
+| command substitution | yes | `ls $(pwd)/sub` |
+| a subshell | yes | `(cd sub && ls)` |
+| a brace group with a quoted string (Python dict literals in a heredoc) | yes | `cat > f.py <<'E'` with `{"a": 1}`; `echo {a,b}` |
+| the venv by its absolute path | yes | `/abs/checkout/.venv/bin/python -c ...` |
+| `cd` inside the checkout, then a command | no | `cd <checkout> && ls`, `cd sub && ls` |
+| a heredoc without braces, a redirect into the checkout, `sed -i` | no | `python3 - <<'E'`, `echo hi > sub/y.txt` |
+| compound commands and pipes of allowed commands | no | `ls; ls sub`, `.venv/bin/python -c ... 2>&1 \| tail -1` |
+
+So `cd` is not the cause, though most refused commands begin with it (149 of 280): what follows it is. Of the 280,
+127 named a path outside the checkout, 10 each used a loop, a subshell or `$(...)`, 5 a variable and 3 the absolute
+venv path; most of the rest were heredocs that write Python with dict literals.
+
+**The fix**, the same for every arm: a paragraph in both prompts (`COMMANDS` in `bench/policy/storybench.py`) that
+says to run one simple command or a short `&&` chain from the checkout root, without loops, variables, `$(...)` or
+subshells, to call the venv as `.venv/bin/python`, to stay inside the checkout, and to create and change files with
+the Write and Edit tools rather than heredocs. No allow rule was added: the refused forms are refused by the session's
+command checks, not for a missing tool, and a broader rule would weaken the deny list. `permissions(arm)` in
+`policybench.py` gives every arm the same allow list; `tests/test_bench_same_permissions_369.py` asserts it and the
+shared prompt.
+
 ## The registry today
 
 Every pack in the registry scores 1.0 against the truth at the pinned commits (55 tasks, 2026-11-14).
