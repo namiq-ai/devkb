@@ -200,6 +200,8 @@ def devkb_targets(name: str, inp: dict) -> list[str]:
     base name, `Class::method` and `a.b` by the last part; a regex, a free-text docs query and a name under 3 chars
     carry no target."""
     raw: list[str] = []
+    if name in ("mcp__devkb__search_docs", "mcp__devkb__docs"):
+        return []                                                     # free text, as the shell form `devkb docs` is
     if name.startswith("mcp__devkb"):
         raw = [str(inp.get(k, "")) for k in ("query", "subject", "path", "name") if inp.get(k)]
     elif name == "Bash":

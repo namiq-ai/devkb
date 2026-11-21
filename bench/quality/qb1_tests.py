@@ -70,7 +70,14 @@ def section_mentions(out: str) -> set[str]:
     return set(re.findall(r"tests/[\w./-]+\.py", m[1])) if m else set()
 
 
+def norm(sha: str) -> str:
+    """One spelling of a commit (the 7-character abbreviation), so a snapshot typed in full and in short is the same snapshot."""
+    p = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short=7", f"{sha}^{{commit}}"], capture_output=True, text=True)
+    return p.stdout.strip() or sha
+
+
 def snapshot(sha: str, force: bool = False) -> None:
+    sha = norm(sha)
     d = CACHE / sha
     d.mkdir(parents=True, exist_ok=True)
     if force:
@@ -263,6 +270,9 @@ def truth(item: dict, by_line, wide) -> tuple[set, set]:
 
 
 def score(shas: list[str]) -> None:
+    shas = [norm(s) for s in shas]
+    out_file = CACHE / "qb1-results.json"
+    kept = [r for r in (json.loads(out_file.read_text()) if out_file.exists() else []) if r["snapshot"] not in shas]   # scoring one snapshot must not drop the others
     rows = []
     for sha in shas:
         by_line, wide = coverage_tables(sha)
@@ -278,8 +288,7 @@ def score(shas: list[str]) -> None:
                          "chars": pr.pop("_chars"),
                          **{f"{a}": {"n": len(p), "rec_all": len(p & ta) / len(ta), "rec_spec": (len(p & ts) / len(ts)) if ts else None,
                                      "prec": (len(p & ta) / len(p)) if p else None} for a, p in pr.items()}})
-    out = CACHE / "qb1-results.json"
-    out.write_text(json.dumps(rows, indent=1))
+    out_file.write_text(json.dumps(kept + rows, indent=1))
     report(rows)
 
 
@@ -301,6 +310,9 @@ def paired(rows: list[dict], a: str, b: str, key: str = "rec_all") -> str:
 
 def report(rows: list[dict]) -> None:
     cov = [r for r in rows if r["covered"]]
+    if not cov:
+        print(f"{len(rows)} items; none scored (no covering test at these snapshots)")
+        return
     print(f"{len(rows)} items; {len(rows) - len(cov)} changed functions no test covers at the snapshot; {len(cov)} scored")
     print(f"truth per item: median {st.median(r['truth'] for r in cov)} test files; {st.median(r['specific'] for r in cov)} after dropping wide tests")
     print("\n| arm | files named | recall (all) | recall (specific) | missed-guard | precision |\n|---|---|---|---|---|---|")

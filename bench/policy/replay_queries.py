@@ -17,12 +17,44 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-WORK = Path.home() / ".cache" / "devkb" / "policy-work"
+WORK = Path(os.environ.get("POLICY_WORK_DIR") or Path.home() / ".cache" / "devkb" / "policy-work")          # as policybench.work_dir()
 TICKETS = tuple(os.environ.get("REPLAY_TICKETS", "118,120,203,205").split(","))   # REPLAY_TICKETS=301,302,... for a held-out set
 sys.path.insert(0, str(HERE))
+import searches  # noqa: E402
 import storybench as sb  # noqa: E402
 
-QUERY = re.compile(r"(?:\S*/)?devkb\s+(symbol|outline|uses|pack|docs)\b([^;&|\n]*)")
+QUERY = re.compile(r"(?:\S*/)?devkb\s+(symbol|outline|uses|pack|docs)\b")
+REDIRECT = re.compile(r"^\d*>{1,2}(&\d+|\S*)$|^&>\S*$")
+
+
+def parse_query(seg: str) -> tuple[str, list[str]] | None:
+    """(kind, argument list) of one `devkb symbol|outline|uses|pack|docs ...` command, read as a shell would read it but never run by one:
+    redirects (`2>&1`, `> out`) are dropped, `--project X` is dropped (the replay supplies its own), a command that substitutes or
+    expands anything (`$(`, backticks, `$VAR`) is not replayed (None). The first version took the text up to the next `&` and ran it
+    through a shell, so `2>&1` turned `--project` into a redirect target."""
+    import shlex
+    if re.search(r"\$\(|`|\$\{?\w", seg):
+        return None
+    try:
+        toks = shlex.split(seg)
+    except ValueError:
+        return None
+    k = next((i for i, t in enumerate(toks) if t.split("/")[-1] == "devkb" and i + 1 < len(toks) and toks[i + 1] in ("symbol", "outline", "uses", "pack", "docs")), None)
+    if k is None:
+        return None
+    args, i = [], k + 2
+    while i < len(toks):
+        t = toks[i]
+        if t == "--project" or t == "-p":
+            i += 2
+        elif t.startswith("--project="):
+            i += 1
+        elif t in (">", ">>", "2>", "&>") or REDIRECT.match(t):
+            i += 2 if t in (">", ">>", "2>", "&>") else 1
+        else:
+            args.append(t)
+            i += 1
+    return toks[k + 1], args
 
 
 def rel(path: str, run: str) -> str:
@@ -55,18 +87,18 @@ def extract(out: Path) -> None:
         for i, (name, inp) in enumerate(calls):
             if name != "Bash":
                 continue
-            for seg in re.split(r"&&|;|\n", inp.get("command", "") or ""):
-                q = QUERY.search(seg.split("|")[0])
-                if not q or "--project" in seg and re.search(r"--project\s+\S*corpus", seg):
+            for seg in searches._segments(inp.get("command", "") or ""):
+                q = parse_query(seg)
+                if not q or re.search(r"--project\s+\S*corpus", seg):
                     continue
                 after = set()
-                for nm, ip in calls[i:]:
+                for nm, ip in calls[i + 1:]:                          # what the agent did AFTER the query: its own command names the file it asks about
                     if nm in ("Edit", "Write", "MultiEdit", "Read"):
                         after.add(rel(str(ip.get("file_path", "")), run))
                     elif nm == "Bash":
                         after.update(rel(x, run) for x in re.findall(r"[\w./-]+\.(?:py|h|cc|cpp|ts|md)\b", ip.get("command", "") or ""))
                 edited = {rel(str(ip.get("file_path", "")), run) for nm, ip in calls if nm in ("Edit", "Write", "MultiEdit")}
-                rows.append({"run": run, "ticket": m[1], "arm": m[2], "kind": q[1], "args": q[2].strip(), "after": sorted(after),
+                rows.append({"run": run, "ticket": m[1], "arm": m[2], "kind": q[0], "args": " ".join(q[1]), "argv": q[1], "after": sorted(after),
                              "edited": sorted(edited), "index": i, "prompt": prompt[:8000]})
     out.write_text(json.dumps(rows, indent=1))
     print(len(rows), "queries from", len({r["run"] for r in rows}), "runs")
@@ -76,7 +108,10 @@ def base_graph(ticket: str, keep: Path, devkb: str) -> Path:
     d = keep / f"t{ticket}"
     if (d / ".devkb" / "nodes.jsonl").exists():
         return d
-    run = next(p for p in sorted([*WORK.glob(f"p{ticket}-rmain-r*"), *WORK.glob(f"p{ticket}-main-r*")]))
+    cands = sorted(p for p in WORK.glob(f"p{ticket}-*-r*") if (p / ".git").exists() and "none" not in p.name)
+    if not cands:
+        raise SystemExit(f"no run checkout of ticket {ticket} under {WORK} to take its base commit from (POLICY_WORK_DIR sets the folder)")
+    run = cands[0]                                                    # every arm of a ticket starts from the same initial commit
     first = subprocess.run(["git", "-C", str(run), "rev-list", "--max-parents=0", "HEAD"], capture_output=True, text=True).stdout.split()[0]
     d.mkdir(parents=True, exist_ok=True)
     arc = subprocess.run(["git", "-C", str(run), "archive", first], capture_output=True).stdout
@@ -153,11 +188,9 @@ def run(inp: Path, devkb: str, keep: Path, use_context: bool = False) -> list[di
             sys.path.insert(0, str(REPO))
             from devkb import session_context  # noqa: PLC0415
             session_context.record(d, r["prompt"])
-        cmd = f"{devkb} {r['kind']} {r['args']}"
-        cmd = re.sub(r"--project\s+\S+", "", cmd) + f" --project {d}"
-        cmd = re.sub(r"^\S*devkb", devkb, cmd.replace(".venv/bin/devkb", devkb))
-        p = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=d, timeout=120)
-        res.append({**r, **judge(r, p.stdout + p.stderr, changed_symbols(r["run"], r["ticket"], keep, devkb)), "cmd": cmd.replace(str(d), "<t>")[:140]})
+        argv = [devkb, r["kind"], *r.get("argv", r["args"].split()), "--project", str(d)]
+        p = subprocess.run(argv, capture_output=True, text=True, cwd=d, timeout=120)                 # an argument list: nothing is expanded or redirected
+        res.append({**r, **judge(r, p.stdout + p.stderr, changed_symbols(r["run"], r["ticket"], keep, devkb)), "cmd": " ".join(argv).replace(str(d), "<t>")[:140]})
     return res
 
 

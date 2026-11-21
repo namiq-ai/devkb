@@ -62,7 +62,10 @@ def main(tickets: list[str]) -> None:
         for line in open(f):
             if not line.startswith("{"):
                 continue
-            e = json.loads(line)
+            try:
+                e = json.loads(line)
+            except ValueError:                                  # a cut-off run can end mid-line
+                continue
             if e.get("type") == "assistant":
                 calls += [b for b in e["message"].get("content", []) if b.get("type") == "tool_use"]
             elif e.get("type") == "user" and isinstance(e["message"].get("content"), list):

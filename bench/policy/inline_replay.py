@@ -64,7 +64,10 @@ def main(tickets: list[str]) -> None:
         run, opened, calls = f.parent.name, [], []
         for line in open(f):
             if line.startswith("{"):
-                e = json.loads(line)
+                try:
+                    e = json.loads(line)
+                except ValueError:                                  # a cut-off run can end mid-line
+                    continue
                 if e.get("type") == "assistant":
                     calls += [(b["name"], b.get("input") or {}) for b in e["message"].get("content", []) if b.get("type") == "tool_use"]
         tot["runs"] += 1

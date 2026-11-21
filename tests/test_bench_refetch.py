@@ -32,8 +32,6 @@ def test_targets_are_names_and_file_base_names():
 def test_a_grep_or_read_of_the_target_after_the_query_is_a_refetch():
     calls = [bash("devkb symbol mask_source --project ."), ("Read", {"file_path": "/w/devkb/cpp_symbols.py"}),
              bash("grep -n mask_source devkb/*.py")]
-    calls = [bash("devkb symbol mask_source --project ."), ("Read", {"file_path": "/w/devkb/cpp_symbols.py"}),
-             bash("grep -n mask_source devkb/*.py")]
     assert sb.refetch(calls) == {"queries": 1, "refetched": 1, "grep": 1, "read": 0, "outline_read": 0}   # the Read names no target
     # an outline followed by a read of the file is its use, counted apart; a grep after an outline is a refetch
     assert sb.refetch([bash("devkb outline devkb/cpp_resolve.py"), ("Read", {"file_path": "/w/devkb/cpp_resolve.py", "limit": 50})]) \

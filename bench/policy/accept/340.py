@@ -19,7 +19,7 @@ def capture(arm, body="The ticket body.", keep_b=False):
         Path(w).mkdir(parents=True, exist_ok=True)
         (Path(w) / ".bench-arm.json").write_text("{}")
     real_run, real_sh = subprocess.run, sb.sh
-    pb.template_for = lambda a: Path(td) / "t"
+    pb.template_for = lambda a, issue=None: Path(td) / "t"
     pb.from_template = fake_from_template
     pb.toolenv.build = lambda ref: {"bin": str(Path(td) / "bin" / "devkb"), "commit": "x", "hook_sha": "x"}
     pb.score_run = lambda *a, **k: None
@@ -69,7 +69,7 @@ try:
     td = tempfile.mkdtemp(); pb.B = Path(td)
     def fake_from_template(t, w):
         Path(w).mkdir(parents=True, exist_ok=True); (Path(w) / ".bench-arm.json").write_text("{}")
-    pb.template_for = lambda a: Path(td) / "t"; pb.from_template = fake_from_template; pb.score_run = lambda *a, **k: None
+    pb.template_for = lambda a, issue=None: Path(td) / "t"; pb.from_template = fake_from_template; pb.score_run = lambda *a, **k: None
     pb.toolenv.build = lambda ref: {"bin": str(Path(td) / "bin" / "devkb"), "commit": "x", "hook_sha": "x"}
     sb.sh = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, json.dumps({"title": "T", "body": "b"}), "") if cmd[:2] == ["gh", "issue"] else subprocess.run(cmd, check=True, capture_output=True, text=True, **kw)
     pb.subprocess.run = run_that_writes

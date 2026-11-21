@@ -198,7 +198,7 @@ def strat_boot(cells: list[tuple[list[float], list[float]]], n: int = 3000, seed
 def compare_arms(pairs: list[tuple[str, list[dict]]], a: str, b: str) -> list[str]:
     """Arm `a` against arm `b` run for run, whichever they are: the table above compares with the no-devkb arm only. Only the
     tickets that have both arms count; the rows are runs of one batch only if the caller has checked that they are."""
-    keys = {"turns": lambda x: x["turns"], "cost $": lambda x: x["cost"] if x["cost"] is not None else 0.0, "context k": lambda x: x["ctx"] / 1e3,
+    keys = {"turns": lambda x: x["turns"], "cost $": lambda x: x["cost"], "context k": lambda x: x["ctx"] / 1e3,                  # a cut-off run's cost is None: left out (#303)
             "search calls": lambda x: x["grep"], "devkb nav": lambda x: x["nav"], "hidden check passed": lambda x: 1.0 if x["ok"] and x["suite"] else 0.0}
     cells = []
     for t, rows in pairs:
@@ -211,7 +211,11 @@ def compare_arms(pairs: list[tuple[str, list[dict]]], a: str, b: str) -> list[st
            "90% interval from resampling runs within each ticket, tickets weighted equally:", "",
            f"| | {b} | {a} | difference (90% interval) |", "|---|---|---|---|"]
     for k, f in keys.items():
-        data = [([f(x) for x in ra], [f(x) for x in rb]) for _t, ra, rb in cells]
+        data = [([f(x) for x in ra if f(x) is not None], [f(x) for x in rb if f(x) is not None]) for _t, ra, rb in cells]
+        data = [d for d in data if d[0] and d[1]]
+        if not data:
+            out.append(f"| {k} | - | - | no run of both arms has it |")
+            continue
         mean, lo, hi = strat_boot([(x, y) for x, y in data])
         ma, mb = st.mean(st.mean(x) for x, _ in data), st.mean(st.mean(y) for _, y in data)
         out.append(f"| {k} | {mb:.2f} | {ma:.2f} | {mean:+.2f} ({lo:+.2f} to {hi:+.2f}) |")

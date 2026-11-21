@@ -23,3 +23,7 @@ bench/policy/runs/
 bench/policy/toolenvs/
 bench/policy/toolenv-*/
 bench/policy/templates/
+
+# benchmark harness output that must not be committed (raw agent transcripts carry local paths)
+bench/policy/runs-archive/
+bench/policy/no-mcp.json

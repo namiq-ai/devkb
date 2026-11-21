@@ -61,7 +61,10 @@ def run_calls(stream: Path):
     for line in open(stream):
         if not line.startswith("{"):
             continue
-        e = json.loads(line)
+        try:
+            e = json.loads(line)
+        except ValueError:                                  # a cut-off run can end mid-line
+            continue
         if e.get("type") == "assistant":
             for b in e["message"].get("content", []):
                 if b.get("type") == "tool_use":

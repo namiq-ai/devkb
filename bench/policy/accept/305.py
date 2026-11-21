@@ -28,7 +28,7 @@ def attempt(td, end, exc):
     if end is not None:
         (out / "end").write_text(json.dumps(end))
     calls.clear()
-    pb.template_for = lambda arm: "x"
+    pb.template_for = lambda arm, issue=None: "x"
     pb.from_template = stub(exc)
     pb.checkout = stub(exc)
     try:

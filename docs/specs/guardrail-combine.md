@@ -77,7 +77,7 @@ times; in 18 the range overlaps the symbol's exact span.
 
 Estimate: T1 saves about 250 tokens and costs about 32 per run, a net of about 200 once, and more through the later turns that
 re-read it (cache reads): roughly 0.3% of a run's context. T2 saves up to 0.25 call per run. **Together under 2% of turns and
-well under 1% of cost.** That is below anything a live batch here can detect (a 5% effect needs about 250 runs per arm). The
+well under 1% of cost.** That is below anything a live batch here can detect (a 5% effect needs about 365 runs per arm on turns, 206 on cost, at this batch's spread). The
 case for building it is not the size of the gain. It is that it removes the one cost of the guardrail's replacement path, the
 re-ask, so the answered share can rise without a penalty, and the two measures to watch are exactness (T1) and avoided calls (T2).
 

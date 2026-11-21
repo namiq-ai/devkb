@@ -53,9 +53,11 @@ def table(rows: list[dict], label: str) -> None:
 
 
 def main() -> None:
-    tuning = set(sys.argv[sys.argv.index("--tuning") + 1].split(",")) if "--tuning" in sys.argv else set(TUNING)
+    tuning = {s[:7] for s in (sys.argv[sys.argv.index("--tuning") + 1].split(",") if "--tuning" in sys.argv else TUNING)}      # 7 characters, however a sha was typed
     rows = json.loads((CACHE / "qb1-results.json").read_text())
-    snaps = sorted({r["snapshot"] for r in rows})
+    snaps = sorted({r["snapshot"][:7] for r in rows})
+    for r in rows:
+        r["snapshot"] = r["snapshot"][:7]
     print("per snapshot (items; recall original / shipped / import / grep):")
     for s in snaps:
         c = [r for r in rows if r["snapshot"] == s and r["covered"]]

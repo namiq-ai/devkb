@@ -592,7 +592,7 @@ def check_collisions(jobs: list[tuple[str, str, int]], resume: bool) -> list[str
     if done and not resume:
         raise SystemExit(f"{len(done)} of these {len(jobs)} runs already exist and would be silently skipped: {', '.join(done[:6])}"
                          f"{' ...' if len(done) > 6 else ''}\nA batch compares arms that ran together: archive them (bench/policy/runs-archive/), "
-                         "or pass --resume to keep them and run the rest (they are listed, not hidden).")
+                         "or move them aside, or pass --resume to keep them and run the rest (they are listed, not hidden).")
     if done:
         print(f"--resume: keeping {len(done)} finished runs: {', '.join(done)}", flush=True)
     return done
@@ -788,7 +788,7 @@ def score(issues):
 def check_arms(arms: list[str]) -> None:
     """Stop a batch before any run when an arm cannot say which commit its hook comes from (#375)."""
     if {"rmain", "router", "ctx", "rmainhid", "routerhid", "ctxhid"} & set(arms) and not os.environ.get("POLICY_ROUTER"):
-        raise SystemExit("the rmain and router arms need POLICY_ROUTER: the commit of the devkb they run (docs/specs/workflow-router.md)")
+        raise SystemExit("the rmain, router and ctx arms (and their hidden forms) need POLICY_ROUTER: the commit of the devkb they run (docs/specs/workflow-router.md)")
     if "teachall" in arms and not os.environ.get("POLICY_TEACHALL"):
         raise SystemExit("the teachall arm needs POLICY_TEACHALL: the commit whose hook it runs (#375)")
 
