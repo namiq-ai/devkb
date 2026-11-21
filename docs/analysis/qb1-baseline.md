@@ -73,6 +73,37 @@ import search and far above grep's. The design's gate (15 points over the best b
 narrowly missed pooled (13 points), with the interval above zero throughout. Limits: 23 items from 6 snapshots, some sharing changed
 functions; file-level truth from coverage; the three held-out snapshots had one failing test run among them (see `health`).
 
+## Original against shipped, all at once (2026-11-21; `qb1_compare.py`)
+One scoring pass over eight snapshots, so every arm saw the same 27 scored items: **13 tuning** (three snapshots the changes were designed
+against) and **14 held-out** (five snapshots never used for design, two of them added for this comparison). *Original* is each snapshot's
+own devkb (`pack file` plus `pack refactor` as first measured); *shipped* is this branch (`pack file` with direct marking, `pack refactor`
+with the mention section and "Incomplete for tests"). Cost is the characters of the packs an agent would ask for (one `pack file` per
+changed file, one `pack refactor` per changed function) at 4 characters a token.
+
+| set | arm | recall | precision | tokens per item | found per 1k tokens |
+|---|---|---|---|---|---|
+| tuning (13) | original pack | 0.73 (0.66-0.80) | 0.64 | 4091 | 3.6 |
+| | **shipped pack** | **0.85** (0.78-0.91) | 0.62 | 4844 | 3.4 |
+| | import / grep | 0.69 / 0.72 | 0.65 / 0.48 | - | - |
+| **held-out (14)** | original pack | 0.78 (0.71-0.86) | 0.58 | 2896 | 3.7 |
+| | **shipped pack** | **0.82** (0.75-0.90) | 0.57 | 3034 | 3.8 |
+| | import / grep | 0.61 / 0.71 | 0.56 / 0.45 | - | - |
+| all (27) | original pack | 0.76 (0.71-0.81) | 0.61 | 3471 | 3.7 |
+| | **shipped pack** | **0.84** (0.78-0.89) | 0.59 | 3905 | 3.6 |
+| | import / grep | 0.65 / 0.72 | 0.61 / 0.47 | - | - |
+
+Paired recall, 90% over items: shipped - original **+0.08** all (+0.04 to +0.13), +0.12 tuning, **+0.04 held-out (+0.01 to +0.09)**;
+shipped - import +0.19 all, **+0.21 held-out (+0.10 to +0.35)**; shipped - grep +0.12 all, **+0.11 held-out (+0.04 to +0.20)**.
+Cost of the shipped changes: +1737 characters per item (+434 tokens, +13%) over all, +553 (+138 tokens, +5%) on held-out, +3013 (+753
+tokens, +18%) on the tuning items, which have more changed functions.
+
+**Reading.** The shipped pack names more of the covering tests than the original, but the gain that survives on items never used for design
+is small: +0.04, against +0.12 on the items the changes were designed against. The larger part of that tuning gain was overfit. What is
+robust is the pack's lead over the two baselines, which the original pack already had (+0.17 over import, +0.07 over grep on held-out) and
+the shipped pack keeps (+0.21, +0.11). Efficiency is flat: covering tests named per 1000 tokens of pack read is 3.7 original and 3.6
+shipped over all items, so the extra recall costs about what it adds in reading. Precision falls by 0.02. Two of the five held-out snapshots had
+a failing test in the coverage run (`health`); one test file at one snapshot is a hole in the truth.
+
 ## Decision (the loop in `docs/analysis/improvement-plan-data-loop.md`)
 The one change this suggests is small: attribute a Python call `x.name(...)` when `x` came from tuple-unpacking a helper that
 returns constructed objects. With about 8 distinct pairs behind it the expected gain is about 2 points of recall, so it is no

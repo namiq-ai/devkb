@@ -210,11 +210,17 @@ def section_tests(out: str) -> set[str]:
 
 def predict(sha: str, item: dict, texts: dict[str, str]) -> dict[str, set]:
     files = sorted({c["file"] for c in item["changed"]})
-    pf = set().union(*[section_tests(devkb(sha, "pack", "--project", str(tree(sha)), "file", f)) for f in files])
-    pn = set()
+    orig_chars = ship_chars = 0                          # what the packs an agent would ask for cost to read: the original and the shipped
+    pf, pn = set(), set()
+    for f in files:
+        o = devkb(sha, "pack", "--project", str(tree(sha)), "file", f)
+        pf |= section_tests(o)
+        orig_chars += len(o)
     for c in item["changed"]:
         subj = c["qual"].replace(".", "::", 1) if "." in c["qual"] else c["qual"]
-        pn |= section_tests(devkb(sha, "pack", "--project", str(tree(sha)), "refactor", subj))
+        o = devkb(sha, "pack", "--project", str(tree(sha)), "refactor", subj)
+        pn |= section_tests(o)
+        orig_chars += len(o)
     imp, nam, grp = set(), set(), set()
     for f in files:
         m = mod_of(f)
@@ -230,6 +236,7 @@ def predict(sha: str, item: dict, texts: dict[str, str]) -> dict[str, set]:
         o = devkb_now(sha, "pack", "--project", str(tree(sha)), "file", f)
         pf_now |= section_tests(o)
         pd_now |= section_direct(o)
+        ship_chars += len(o)
     pm = set()                                          # the current `pack refactor` on this snapshot: named tests plus the ones that mention the name
     pn_now = set()
     for c in item["changed"]:
@@ -237,10 +244,14 @@ def predict(sha: str, item: dict, texts: dict[str, str]) -> dict[str, set]:
         o = devkb_now(sha, "pack", "--project", str(tree(sha)), "refactor", subj)
         pn_now |= section_tests(o)
         pm |= section_mentions(o)
+        ship_chars += len(o)
     real = set(texts)                                   # `tests/conftest.py` and helper modules can never be in the truth
     return {"devkb-file": pf & real, "devkb-fn": pn & real, "devkb": (pf | pn) & real, "import": imp, "name": nam, "grep": grp,
             "devkb-fn+mentions": (pn_now | pm) & real, "devkb-file+fn+mentions": (pf | pn_now | pm) & real,
-            "devkb-file direct only": pd_now & real, "devkb-file direct+fn+mentions": (pd_now | pn_now | pm) & real}
+            "devkb-file direct only": pd_now & real, "devkb-file direct+fn+mentions": (pd_now | pn_now | pm) & real,
+            "original": (pf | pn) & real,                # each snapshot's own devkb: pack file and pack refactor as first measured
+            "shipped": (pf_now | pn_now | pm) & real,    # this checkout: pack file (direct marking) and pack refactor (mentions, Incomplete)
+            "_chars": {"original": orig_chars, "shipped": ship_chars}}
 
 
 def truth(item: dict, by_line, wide) -> tuple[set, set]:
@@ -264,6 +275,7 @@ def score(shas: list[str]) -> None:
             pr = predict(sha, it, texts)
             rows.append({"snapshot": sha, "commit": it["commit"], "subject": it["subject"], "covered": True, "truth": len(ta), "specific": len(ts),
                          "wide_removed": len(ta) - len(ts), "functions": len(it["changed"]),
+                         "chars": pr.pop("_chars"),
                          **{f"{a}": {"n": len(p), "rec_all": len(p & ta) / len(ta), "rec_spec": (len(p & ts) / len(ts)) if ts else None,
                                      "prec": (len(p & ta) / len(p)) if p else None} for a, p in pr.items()}})
     out = CACHE / "qb1-results.json"
