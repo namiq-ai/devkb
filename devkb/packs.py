@@ -245,6 +245,25 @@ class Packer:
                                                sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and self.api._is_test(r))]
         return [(rel, text) for rel, text in texts if any(n in text for n in needles)]
 
+    def _mentioned_in_tests(self, name: str, listed) -> dict[str, int]:
+        """{test file: first line} for Python test files outside `listed` that call `name` or hold it as a quoted string (not in a comment) with no call
+        the graph resolved to it: a call through a receiver the graph cannot type, or the name in a string. The list of tests the
+        graph names is then not the whole story (QB1: `pack refactor` named no covering test for 7 of 13 changes). Names under four
+        letters are not looked for: too many unrelated mentions."""
+        if len(name) < 4:
+            return {}
+        n = re.escape(name)
+        rx = re.compile(rf"(?:\.{n}\s*\(|(?<![\w.]){n}\s*\(|[\"']{n}[\"'])")       # a call, a method call, or the name as a string key
+        out: dict[str, int] = {}
+        for rel, text in self._test_texts((name,)):
+            if rel in listed:
+                continue
+            for ln, line in enumerate(text.splitlines(), 1):
+                if rx.search(line) and not line.lstrip().startswith("#"):
+                    out[rel] = ln
+                    break
+        return out
+
     def _unfollowed_note(self, path: str, listed: dict) -> list[str]:
         """A line saying the test list may be incomplete when a test file outside it loads modules from `path`'s
         directory in a way the graph cannot follow (#382): by a computed name or path, or two modules under one name.
@@ -556,13 +575,22 @@ class Packer:
             site = next((s for s in self.idx.props[i].get("ref_sites") or [] if str(s).startswith(f + ":")), None) if c in readers else None
             out.append(f"- `{f}`{more} — " + (f"reads it at `{site}`" if site else f"`{self.call_site(c, self._name(i))}`{self._via(c, i)}"))
         out += ["", f"## Test files among them ({len(tests)})"] + ([f"- `{f}`" for f in tests] or ["- none"])
+        mentioned = self._mentioned_in_tests(self._name(i), set(tests))
+        if mentioned:
+            shown = sorted(mentioned.items())[:8]
+            out += ["", f"## Test files that mention it with no call the graph resolved ({len(mentioned)})"] \
+                + [f"- `{f}:{ln}`" for f, ln in shown] + ([f"- … {len(mentioned) - len(shown)} more"] if len(mentioned) > len(shown) else []) \
+                + ["(A call through a receiver the graph cannot type, or the name in a string. Read these before trusting the test list above.)"]
         if role:
             out += ["", f"## Files role {role} must not edit ({len(blocked)})"] + ([f"- `{f}`" for f in blocked] or ["- none"])
         if own not in by_file:
             out += ["", f"(The defining file `{own}` is not counted as a caller.)"]
         if self.api._calls_itself(i):
             out += ["", f"(It calls itself at `{self.call_site(i, self._name(i))}`; that call is not counted as a caller.)"]
-        out += ["", "## Coverage", star_coverage(self.coverage([i], set(files)), star)]
+        cov = star_coverage(self.coverage([i], set(files)), star)
+        if mentioned:                                    # the verdict must not say Complete over a list the section above contradicts
+            cov = f"**Incomplete for tests: {len(mentioned)} test file(s) mention `{self._name(i)}` and the graph attributes no call from them.** " + cov
+        out += ["", "## Coverage", cov]
         return "\n".join(out + ["", HOW_TO_USE])
 
 

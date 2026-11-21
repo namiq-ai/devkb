@@ -52,6 +52,18 @@ def devkb(sha: str, *args: str) -> str:
     return sh(PY, "-c", code, *args, cwd=t, timeout=300)
 
 
+def devkb_now(sha: str, *args: str) -> str:
+    """This checkout's devkb on the snapshot's tree and graph: what a change made now would say about the old commit."""
+    t = tree(sha)
+    code = "import sys; sys.path.insert(0, %r); from devkb.cli import main; sys.argv[0]='devkb'; sys.exit(main())" % str(ROOT)
+    return sh(PY, "-c", code, *args, cwd=t, timeout=300)
+
+
+def section_mentions(out: str) -> set[str]:
+    m = re.search(r"## Test files that mention it[^\n]*\n(.*?)(?:\n## |\n\(|\n---|\Z)", out, re.S)
+    return set(re.findall(r"tests/[\w./-]+\.py", m[1])) if m else set()
+
+
 def snapshot(sha: str, force: bool = False) -> None:
     d = CACHE / sha
     d.mkdir(parents=True, exist_ok=True)
@@ -207,8 +219,16 @@ def predict(sha: str, item: dict, texts: dict[str, str]) -> dict[str, set]:
         n = c["qual"].split(".")[-1]
         if len(n) >= MIN_NAME:
             grp |= {t for t, x in texts.items() if re.search(rf"\b{re.escape(n)}\b", x)}
+    pm = set()                                          # the current `pack refactor` on this snapshot: named tests plus the ones that mention the name
+    pn_now = set()
+    for c in item["changed"]:
+        subj = c["qual"].replace(".", "::", 1) if "." in c["qual"] else c["qual"]
+        o = devkb_now(sha, "pack", "--project", str(tree(sha)), "refactor", subj)
+        pn_now |= section_tests(o)
+        pm |= section_mentions(o)
     real = set(texts)                                   # `tests/conftest.py` and helper modules can never be in the truth
-    return {"devkb-file": pf & real, "devkb-fn": pn & real, "devkb": (pf | pn) & real, "import": imp, "name": nam, "grep": grp}
+    return {"devkb-file": pf & real, "devkb-fn": pn & real, "devkb": (pf | pn) & real, "import": imp, "name": nam, "grep": grp,
+            "devkb-fn+mentions": (pn_now | pm) & real, "devkb-file+fn+mentions": (pf | pn_now | pm) & real}
 
 
 def truth(item: dict, by_line, wide) -> tuple[set, set]:
@@ -260,7 +280,7 @@ def report(rows: list[dict]) -> None:
     print(f"{len(rows)} items; {len(rows) - len(cov)} changed functions no test covers at the snapshot; {len(cov)} scored")
     print(f"truth per item: median {st.median(r['truth'] for r in cov)} test files; {st.median(r['specific'] for r in cov)} after dropping wide tests")
     print("\n| arm | files named | recall (all) | recall (specific) | missed-guard | precision |\n|---|---|---|---|---|---|")
-    for a in ("devkb-file", "devkb-fn", "devkb", "import", "name", "grep"):
+    for a in ("devkb-file", "devkb-fn", "devkb", "import", "name", "grep", "devkb-fn+mentions", "devkb-file+fn+mentions"):
         ra = [r[a]["rec_all"] for r in cov]
         rs = [r[a]["rec_spec"] for r in cov if r[a]["rec_spec"] is not None]
         miss = sum(1 for r in cov if r[a]["rec_spec"] == 0)
