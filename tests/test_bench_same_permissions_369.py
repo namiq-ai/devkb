@@ -76,7 +76,11 @@ def test_denial_reasons_groups_by_the_sessions_own_reason(tmp_path):
              ("none", ".venv/bin/devkb build --project .", "Permission to use Bash with command .venv/bin/devkb build has been denied.",
               "devkb denied in a no-devkb arm"),
              ("main", "", "PreToolUse:Grep hook error: devkb answered this search from the graph (Complete)",
-              "the guardrail answered instead (a hook deny, by design)")]
+              "the guardrail answered instead (a hook deny, by design)"),
+             ("main", "cd w; cat > /tmp/x.py <<'E'\nx\nE", "Commands that change directories and write via output redirection "
+              "require explicit approval", "cd, then a redirect or a write"),     # wins over the /tmp path in it
+             ("main", "(cd sub && ls)", "This command uses a subshell that can't be checked", "$(...), a subshell or a loop"),
+             ("main", "ls a\\ b", "Contains backslash-escaped whitespace", "other")]
     for i, (arm, cmd, reason, want) in enumerate(cases):
         d = tmp_path / f"p1-{arm}-r{i}"
         d.mkdir()

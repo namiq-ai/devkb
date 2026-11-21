@@ -123,7 +123,8 @@ answering a Grep in the devkb arm, which Claude Code records as a denial (a hook
 design); the other 4 are **0.25 per run**, 2 in each arm (0.2.14 re-run on the same tickets, counted the same way:
 1.56 per run): two heredocs with braces and quotes, a redirect the checker could not read, and one other. Counted as
 the issue counts them (every recorded denial), the re-run has 0.375 per run, 0.5 in `main`: the 0.3 target holds only
-when the guardrail's substitutes are left out, which is the owner's call. Each run's `arm.json` records the prompt's
+when the guardrail's substitutes are left out. The owner's decision (2026-11-20): the target counts refused command
+forms, so the guardrail's substitutes and the no-devkb arms' devkb denials are left out; on that count it is met. Each run's `arm.json` records the prompt's
 and the paragraph's SHA-256 (`prompt_sha256`, `commands_sha256`). Hidden checks 8/8 (`none`) and 7/8
 (`main`), suites 16/16.
 
