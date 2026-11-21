@@ -80,6 +80,8 @@ def health(sha: str, rc: int | None = None) -> dict:
     a file that errored, failed to collect or was skipped is a hole in the truth."""
     import xml.etree.ElementTree as ET
     d = CACHE / sha
+    if rc is None and (d / "health.json").exists():                    # recomputing the summary must not lose the run's exit status
+        rc = json.loads((d / "health.json").read_text()).get("pytest_exit")
     out = {"pytest_exit": rc, "files": {}}
     try:
         for tc in ET.parse(d / "junit.xml").getroot().iter("testcase"):
@@ -243,6 +245,16 @@ def boot(xs: list[float], n=3000, seed=5) -> tuple[float, float]:
     return m[int(.05 * n)], m[int(.95 * n) - 1]
 
 
+def paired(rows: list[dict], a: str, b: str, key: str = "rec_all") -> str:
+    """Arm `a` minus arm `b` recall: the mean over items with a 90% interval over items, and the mean with each snapshot left out. The
+    13 items come from 3 snapshots and some share the changed functions, so an item-level interval is a floor on the spread."""
+    d = [r[a][key] - r[b][key] for r in rows if r["covered"] and r[a][key] is not None and r[b][key] is not None]
+    lo, hi = boot(d)
+    snaps = sorted({r["snapshot"] for r in rows if r["covered"]})
+    loo = ", ".join(f"without {s[:7]} {st.mean([r[a][key] - r[b][key] for r in rows if r['covered'] and r['snapshot'] != s]):+.2f}" for s in snaps)
+    return f"{a} - {b}: {st.mean(d):+.2f} ({lo:+.2f} to {hi:+.2f}); {loo}"
+
+
 def report(rows: list[dict]) -> None:
     cov = [r for r in rows if r["covered"]]
     print(f"{len(rows)} items; {len(rows) - len(cov)} changed functions no test covers at the snapshot; {len(cov)} scored")
@@ -255,6 +267,12 @@ def report(rows: list[dict]) -> None:
         pr = [r[a]["prec"] for r in cov if r[a]["prec"] is not None]
         lo, hi = boot(ra)
         print(f"| {a} | {st.median(r[a]['n'] for r in cov):.0f} | {st.mean(ra):.2f} ({lo:.2f}-{hi:.2f}) | {st.mean(rs):.2f} | {miss}/{len(rs)} | {st.mean(pr) if pr else 0:.2f} |")
+    print("\nPer snapshot, mean recall (items): " + "; ".join(
+        f"{s[:7]} ({sum(1 for r in cov if r['snapshot'] == s)} items) " + " / ".join(f"{a} {st.mean(r[a]['rec_all'] for r in cov if r['snapshot'] == s):.2f}" for a in ("devkb-file", "import", "grep"))
+        for s in sorted({r['snapshot'] for r in cov})))
+    print("Paired recall differences, 90% over items, and leaving one snapshot out:")
+    for a, b in (("devkb-file", "import"), ("devkb-file", "grep"), ("devkb", "import")):
+        print("  " + paired(rows, a, b))
 
 
 if __name__ == "__main__":

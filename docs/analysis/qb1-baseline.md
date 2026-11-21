@@ -10,25 +10,31 @@ next merged PRs (first-parent commits, up to 12 after the snapshot) that change 
 snapshot (median 22 files per item). No test covers more than 30% of the code, so the "wide test" filter removed nothing.
 Predictions are made at the snapshot, up to 12 commits behind the change, as an agent working there would have them.
 
-## Result (13 items; recall of the covering test files; the 90% interval is a bootstrap over items)
+## Result (13 items; recall of the covering test files; the 90% interval is a bootstrap over items). Re-run and corrected 2026-11-21
+After an independent audit: predictions count only real test files (`tests/test_*.py`; `conftest.py` and helper modules can never be
+in the truth, which understated `pack file` precision by about 0.04), and the three coverage runs were repeated with the pytest outcome
+recorded (`health`): every test file ran, none failed to collect or was skipped, the 42 files at the last snapshot with no `devkb/`
+coverage passed and exercise other code (the benchmark harness, scripts), and the recall figures reproduced exactly.
 
 | arm | files named (median) | recall | missed-guard | precision |
 |---|---|---|---|---|
-| `pack file` (devkb) | 26 | **0.73** (0.66-0.80) | 0 of 13 | 0.60 |
+| `pack file` (devkb) | 24 | **0.73** (0.66-0.80) | 0 of 13 | 0.64 |
 | `pack refactor` per function | 0 | 0.12 (0.04-0.20) | 7 of 13 | 1.00 |
 | tests that import the module | 22 | 0.69 (0.62-0.76) | 0 of 13 | 0.65 |
 | tests named after the module | 0 | 0.05 (0.02-0.08) | 7 of 13 | 0.94 |
 | tests that mention a changed function's name | 30 | 0.72 (0.56-0.86) | 1 of 13 | 0.48 |
 | union of `pack file`, import and grep | | 0.90 | | |
-| `pack file` plus import | | 0.76 | | |
 
-Missed-guard = an item where the arm named none of the covering tests.
+Per snapshot (5, 5 and 3 items), `pack file` / import / grep: 632f8d0 0.80 / 0.75 / 0.81; ea9d037 0.67 / 0.63 / 0.69; 215c505 0.72 / 0.69 / 0.64.
+Paired differences in recall, 90% over items: `pack file` - import **+0.04 (0.00 to +0.08)**, the same +0.04 with any one snapshot left out;
+`pack file` - grep +0.01 (-0.15 to +0.18). The 13 items cluster in 3 snapshots and some share changed functions, so these intervals are a
+floor on the spread.
 
 ## Reading
 - **The gate fails.** The design asked for recall 15 points above the best baseline; `pack file` is 1 point above grep and 4
-  above the import search, inside each other's intervals. On this measure the graph does not yet beat a one-line grep.
+  above the import search, a small and consistent edge over import (+0.04 in every leave-one-snapshot-out case) but nowhere near 15.
 - **There is headroom.** The three methods together reach 0.90, so 0.73 is not a ceiling, and 40% of what `pack file` lists
-  does not cover the change (precision 0.60).
+  does not cover the change (precision 0.64).
 - **Why `pack file` misses (corrected after an independent audit).** 73 of the 266 covering tests are not named. 36 of those
   mention the changed function's name in their text, but that count is inflated: it counts the same few test files once per item
   (`test_boundaries`, `test_language_profiles`, `test_devkb_cpp_calls_dkb003` recur across the `Packer.refactor` and
