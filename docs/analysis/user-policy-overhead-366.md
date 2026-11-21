@@ -59,8 +59,8 @@ Pooled (cost vs none: the mean of the tickets' ratios)
 | Arm | n | First-call context k | Over none | Turns (med) | Context k (med) | Cost (mean) | Cost vs none | Cache written k (mean) | Suite | Hidden check | devkb queries |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | none | 6 | 17.7-17.8 | 0 | 8 | 207 | $0.110 | +0% | 11 | 6/6 | 3/6 | 0 |
-| userpolicy | 6 | 19.3-19.4 | +1.6 to +1.6k | 10 | 275 | $0.124 | +12% | 13 | 6/6 | 3/6 | 0 |
-| userinit | 6 | 20.2-20.3 | +2.5 to +2.5k | 10 | 251 | $0.157 | +43% | 23 | 6/6 | 3/6 | 0 |
+| userpolicy | 6 | 19.3-19.4 | +1.6k | 10 | 275 | $0.124 | +12% | 13 | 6/6 | 3/6 | 0 |
+| userinit | 6 | 20.2-20.3 | +2.5k | 10 | 251 | $0.157 | +43% | 23 | 6/6 | 3/6 | 0 |
 | short | 6 | 18.1-18.3 | +0.4 to +0.5k | 10 | 265 | $0.127 | +15% | 14 | 6/6 | 3/6 | 0 |
 | outline | 6 | 21.0-21.9 | +3.3 to +4.1k | 10 | 264 | $0.124 | +12% | 14 | 6/6 | 3/6 | 0 |
 | inject | 6 | 19.9-20.1 | +2.1 to +2.4k | 10 | 264 | $0.128 | +17% | 14 | 6/6 | 3/6 | 0 |
@@ -78,7 +78,7 @@ Pooled (cost vs none: the mean of the tickets' ratios)
 **Per run:** 3 runs per cell show only effects above about 40% (#368), and costs moved ±25% between the two batches for
 the same arm and ticket. `userinit` costs the most on both tickets (+52% and +34% against `none`, +43% pooled), but mostly
 because of the prompt cache, not its 0.9k of tool definitions: its tool list was a prefix no earlier run had cached, so
-its runs wrote 24k cache tokens each on #383 against 9k for `none` (20k against 13k on #303), while `none` read its first
+its runs wrote 24.8k cache tokens each on #383 against 9.3k for `none` (20.4k against 13.0k on #303), while `none` read its first
 call wholly from cache (warmed by batch 1). Per-run cost in these batches ranks arms partly by how warm the cache was;
 a warm-up call per arm before a batch, or pricing cache reads and writes apart, would remove that. The other arms'
 differences (+10% to +36%) are within the noise. Correctness was the same in every arm (#383: 0/3 everywhere, its strict hidden check; #303: 3/3

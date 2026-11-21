@@ -48,7 +48,8 @@ def table(rows: list[dict], arms: list[str]) -> str:
             continue
         overs = [mean(cell(t, a), "first_call_tokens") - mean(cell(t, "none"), "first_call_tokens") for t in tickets]
         ratios = [mean(cell(t, a), "cost") / mean(cell(t, "none"), "cost") for t in tickets]
-        over = "0" if a == "none" else f"{min(overs) / 1000:+.1f} to {max(overs) / 1000:+.1f}k"
+        lo, hi = f"{min(overs) / 1000:+.1f}", f"{max(overs) / 1000:+.1f}"
+        over = "0" if a == "none" else f"{lo}k" if lo == hi else f"{lo} to {hi}k"
         out.append(line(a, xs, over, f"{100 * (st.mean(ratios) - 1):+.0f}%"))
     return "\n".join(out)
 
