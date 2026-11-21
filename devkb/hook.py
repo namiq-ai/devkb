@@ -113,8 +113,11 @@ def main(argv: list[str] | None = None) -> int:
     if args[:1] == ["prompt"]:
         from devkb import router  # noqa: PLC0415
         return router.main()
+    if args[:1] == ["context"]:
+        from devkb import router  # noqa: PLC0415
+        return router.main_context()
     if args[:1] != ["pre-edit"]:
-        print("usage: devkb hook pre-edit|prompt   (reads a Claude Code hook event on stdin)", file=sys.stderr)
+        print("usage: devkb hook pre-edit|prompt|context   (reads a Claude Code hook event on stdin)", file=sys.stderr)
         return 2
     try:
         out = pre_edit(json.loads(sys.stdin.read() or "{}"))

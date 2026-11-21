@@ -32,6 +32,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from devkb import session_context
+
 BUDGET = 3000          # characters, under 800 tokens (the reference architecture's cap)
 PER_PART = 1500        # characters one pack may take of the bundle
 MAX_SYMBOLS = 4
@@ -334,6 +336,7 @@ def log_decision(project: Path, event: dict, route: Route, text: str, detail: di
 def on_prompt(event: dict, backend: Backend | None = None) -> dict | None:
     """The UserPromptSubmit hook's JSON answer for one event; None when there is nothing to add."""
     project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or event.get("cwd") or ".").resolve()
+    record_task(project, event)
     if os.environ.get("DEVKB_ROUTER") == "0":
         return None
     has_graph = (project / ".devkb" / "nodes.jsonl").exists()
@@ -351,6 +354,22 @@ def on_prompt(event: dict, backend: Backend | None = None) -> dict | None:
     if not text:
         return None
     return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": text}}
+
+
+def record_task(project: Path, event: dict) -> None:
+    """Keep the words of the prompt where `symbol` can use them to break a tie (session_context). `DEVKB_CONTEXT=0` turns it off."""
+    if os.environ.get("DEVKB_CONTEXT") != "0" and len(event.get("prompt") or "") >= MIN_PROMPT:
+        session_context.record(project, event["prompt"])
+
+
+def main_context(event: dict | None = None) -> int:
+    """`devkb hook context`: only record the task, push nothing. The prompt hook for a project that wants the ranking and not the router."""
+    try:
+        ev = event if event is not None else json.loads(sys.stdin.read() or "{}")
+        record_task(Path(os.environ.get("CLAUDE_PROJECT_DIR") or ev.get("cwd") or ".").resolve(), ev)
+    except Exception as exc:  # a hook must never break the prompt  # noqa: BLE001
+        print(f"devkb context: {exc}", file=sys.stderr)
+    return 0
 
 
 def main(event: dict | None = None) -> int:

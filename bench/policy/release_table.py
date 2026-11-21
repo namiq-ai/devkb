@@ -23,8 +23,8 @@ B = Path(__file__).resolve().parent
 sys.path.insert(0, str(B))
 import storybench as sb  # noqa: E402  (the one rule for devkb commands, #258)
 NONE = ("none", "nonekeep", "nonehid")        # the no-devkb arms; rmain and router are compared with them
-ORDER = ("nonekeep", "none", "release", "climain", "cli130", "userpolicy", "userinit", "short", "inject", "main", "rmain", "router", "nonehid", "mainhid", "rmainhid", "routerhid")
-HIDDEN_LOCATION = ("nonehid", "mainhid", "rmainhid", "routerhid")          # the ticket's location withheld (#337); compared with each other
+ORDER = ("nonekeep", "none", "release", "climain", "cli130", "userpolicy", "userinit", "short", "inject", "main", "rmain", "router", "ctx", "nonehid", "mainhid", "rmainhid", "routerhid", "ctxhid")
+HIDDEN_LOCATION = ("nonehid", "mainhid", "rmainhid", "routerhid", "ctxhid")          # the ticket's location withheld (#337); compared with each other
 
 
 def location_given(arm: str) -> bool:
