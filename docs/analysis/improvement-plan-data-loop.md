@@ -15,7 +15,7 @@ Verdict: **confirmed** (matches the data), **corrected** (right direction, wrong
 |---|---|---|
 | hook fires, `DEVKB_ROUTER=0` falls back | confirmed | headless run: router on answered, off said NO CONTEXT. The router is `devkb/router.py`; `hook.py:73` is `pre_edit`, a different hook |
 | false `located`/ticket-key bypasses fixed; 27 usage-limit runs archived; self-inflicted flags isolated | confirmed | commits `3e37948`, `5932278`; `runs-archive/` |
-| refetch 39-40% | confirmed | 33 of 83 devkb queries (40%); by arm `router` 64%, `rmain` 43% |
+| refetch 39-40% | **corrected** | the first metric counted generic words and the by-design outline-then-read. Corrected (`storybench.refetch`): 14 of 76 queries (18%); `router` 33%, `rmain` 25%, `ctx` 7%; plus 19 outline-then-read, counted apart |
 | `ctx` "significantly improved" symbol top-1, 51% -> 81% | **corrected** | 14/27 -> 22/27 on the same queries the fix was designed from; no significance test; no held-out set. Live batch: -2.8 turns, interval (-6.6, +1.0), not significant |
 | 90 valid runs in a "30-row" snapshot | **corrected** | the table has 32 rows, 96 runs (6 tickets x 2 forms x up to 4 arms, 3 reps), none invalid |
 | turns/cost: none 18.6, rmain 17.8, router 20.3 | confirmed | 24 matched runs per arm; SD within a cell is 3.8 turns |

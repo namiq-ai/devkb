@@ -20,7 +20,7 @@ def _attempt(tmp_path, monkeypatch, end, exc):
         calls.append(1)
         raise exc
 
-    monkeypatch.setattr(pb, "template_for", lambda arm: "x")
+    monkeypatch.setattr(pb, "template_for", lambda arm, issue=None: "x")
     monkeypatch.setattr(pb, "from_template", boom)
     monkeypatch.setattr(pb, "checkout", boom)
     msg = pb._run_one("9", "none", 1)

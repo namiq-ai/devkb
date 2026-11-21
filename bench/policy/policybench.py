@@ -271,11 +271,19 @@ def prompt_for(issue: str, title: str, body: str, w: Path, hide: bool = False) -
                                                            commands=sb.COMMANDS)
 
 
-def checkout(w: Path, arm: str):
+def base_for(arm: str, issue: str | None = None) -> str:
+    """The commit an arm's checkout is made from. The arms that follow the batch's main (POLICY_MAIN) can follow a ticket's own base
+    instead: POLICY_BASES="118=SHA,120=SHA". One batch can then hold several tickets, shuffled together, each at its own base."""
+    base, main = BASES[arm], os.environ.get("POLICY_MAIN")
+    per = dict(x.split("=", 1) for x in os.environ.get("POLICY_BASES", "").split(",") if "=" in x)
+    return per.get(str(issue), base) if issue is not None and main and base == main else base
+
+
+def checkout(w: Path, arm: str, issue: str | None = None):
     if w.exists():
         shutil.rmtree(w)
     w.mkdir(parents=True)
-    tar = subprocess.run(["git", "-C", str(sb.REPO), "archive", BASES[arm]], check=True, capture_output=True).stdout
+    tar = subprocess.run(["git", "-C", str(sb.REPO), "archive", base_for(arm, issue)], check=True, capture_output=True).stdout
     subprocess.run(["tar", "-x", "-C", str(w)], input=tar, check=True)
     for h in HIDDEN:
         shutil.rmtree(w / h, ignore_errors=True)
@@ -422,7 +430,7 @@ def harness_state(repo: Path | None = None) -> str:
     def git(*a):
         return subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True).stdout
     return git("rev-parse", "HEAD").strip() + "\n" + git("status", "--porcelain", "--untracked-files=all", "--", ".", ":(exclude)bench/policy/results-*",
-                                                         ":(exclude)bench/policy/no-mcp.json")
+                                                         ":(exclude)bench/policy/no-mcp.json", ":(exclude)bench/policy/runs-archive")      # archiving a run is not a stray write
 
 
 TEMPLATES = Path(os.environ.get("POLICY_TEMPLATES_DIR") or CACHE / "policy-templates")   # outside the repository too (#340)
@@ -513,10 +521,10 @@ def write_user_policy(w: Path, env: dict | None, kind: str) -> None:
     (w / "CLAUDE.md").write_text(claude)
 
 
-def template_for(arm: str) -> Path:
+def template_for(arm: str, issue: str | None = None) -> Path:
     """One prepared checkout per arm and base commit (files, corpus, venv, graphs, base suite checked), made once and
     copied for each run: the 4-5 minutes of setup a run used to repeat (POLICY_TEMPLATES=0 turns it off)."""
-    base = sb.sh(["git", "-C", str(sb.REPO), "rev-parse", f"{BASES[arm]}^{{commit}}"]).stdout.strip()
+    base = sb.sh(["git", "-C", str(sb.REPO), "rev-parse", f"{base_for(arm, issue)}^{{commit}}"]).stdout.strip()
     envc = toolenv.resolve(ENV_REF[arm]()) if arm in ENV_REF else "none"
     suite = "eq" if os.environ.get("POLICY_EQUAL_SUITE", "1") == "1" else "full"      # the suite is content: part of the key (#331)
     post = "-post" if os.environ.get("POLICY_PREREGISTER_POST") == "1" else ""      # it adds a hook to the checkout (#307)
@@ -526,7 +534,7 @@ def template_for(arm: str) -> Path:
         if not (t / ".bench-ready").exists():
             if t.exists():
                 shutil.rmtree(t)
-            checkout(t, arm)                      # raises on a red base: then every run of this arm is refused
+            checkout(t, arm, issue)               # raises on a red base: then every run of this arm is refused
             (t / ".bench-ready").write_text(base + "\n")
     return t
 
@@ -570,19 +578,39 @@ def run_one(issue: str, arm: str, rep: int) -> str:
         return f"error {tag}: {type(e).__name__}: {e}"
 
 
+def finished(issue: str, arm: str, rep: int) -> bool:
+    """The run has ended and is kept: not an error and not a refused red base, which are set up again (#305)."""
+    end = B / "runs" / f"p{issue}-{arm}-r{rep}" / "end"
+    return end.exists() and json.loads(end.read_text()).get("exit") not in ("error", "base-red")
+
+
+def check_collisions(jobs: list[tuple[str, str, int]], resume: bool) -> list[str]:
+    """A batch compares arms that ran together. A run whose directory already holds a finished run would be skipped, and the batch
+    would then mix runs from two times and, often, two devkb commits. Refuse, naming them, unless `--resume` says to keep them;
+    then list them. Returns the kept runs."""
+    done = [f"p{i}-{arm}-r{r}" for i, arm, r in jobs if finished(i, arm, r)]
+    if done and not resume:
+        raise SystemExit(f"{len(done)} of these {len(jobs)} runs already exist and would be silently skipped: {', '.join(done[:6])}"
+                         f"{' ...' if len(done) > 6 else ''}\nA batch compares arms that ran together: archive them (bench/policy/runs-archive/), "
+                         "or pass --resume to keep them and run the rest (they are listed, not hidden).")
+    if done:
+        print(f"--resume: keeping {len(done)} finished runs: {', '.join(done)}", flush=True)
+    return done
+
+
 def _run_one(issue: str, arm: str, rep: int) -> str:
     tag = f"p{issue}-{arm}-r{rep}"
+    if finished(issue, arm, rep):
+        return f"skip {tag}"                          # only reached with --resume (the batch refuses otherwise)
     arm = split_arm(arm)[0]                           # #337: set up as the base arm; only the ticket's text differs (run_prompt)
     out = B / "runs" / tag
-    if (out / "end").exists() and json.loads((out / "end").read_text()).get("exit") not in ("error", "base-red"):
-        return f"skip {tag}"                          # an error, or a refused red base, is set up again (#305)
     out.mkdir(parents=True, exist_ok=True)
     w = work_dir() / tag
     try:
         if os.environ.get("POLICY_TEMPLATES", "1") == "1":
-            from_template(template_for(arm), w)
+            from_template(template_for(arm, issue), w)
         else:
-            checkout(w, arm)
+            checkout(w, arm, issue)
     except RuntimeError as e:                         # a red base (#221): recorded, not run or scored; set up again next batch (#305)
         (out / "end").write_text(json.dumps({"exit": "base-red", "seconds": 0, "error": str(e)[-400:]}))
         return f"refused {tag}: {e}"
@@ -785,6 +813,7 @@ if __name__ == "__main__":
         print(f"batch pinned to main {os.environ['POLICY_MAIN'][:12]}", flush=True)
         arms = arms_for(arms)
         jobs = [(i, arm, r) for i in issues for arm in arms for r in range(first, first + reps)]
+        check_collisions(jobs, "--resume" in a)
         random.Random(126).shuffle(jobs)
         with cf.ThreadPoolExecutor(par) as ex:
             for f in cf.as_completed([ex.submit(run_one, *j) for j in jobs]):

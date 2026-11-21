@@ -92,6 +92,13 @@ def guard_rows(session: str) -> list[dict]:
     return [r for r in _LOG if session and r.get("session") == session and r.get("action") not in (None, "remind", "pass-through")]
 
 
+def contaminated(r: dict) -> list[str]:
+    """What an agent or the harness wrote in the harness repository during the run, apart from moving a run to
+    `runs-archive/`: the benchmark's own housekeeping, which no agent can reach (#340). Rows scored before the harness learned
+    that carry such paths."""
+    return [x for x in r.get("contaminated") or [] if "runs-archive/" not in x]
+
+
 def per_run(r: dict) -> dict:
     c = counts(r["run"])
     nav, own, sub = c if c else (r.get("devkb_nav", 0), r.get("devkb_selftest", 0), 0)
@@ -179,8 +186,8 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
     problems = [p for t, rows in pairs if (p := check_hashes(t, rows))]
     if problems and not allow_mixed:
         raise SystemExit("refused, re-score first:\n  " + "\n  ".join(problems))
-    dirty = [(t, [r["run"] for r in rows if r.get("contaminated")]) for t, rows in pairs]
-    pairs = [(t, [r for r in rows if not r.get("contaminated")]) for t, rows in pairs]      # left out of every mean (#340)
+    dirty = [(t, [r["run"] for r in rows if contaminated(r)]) for t, rows in pairs]
+    pairs = [(t, [r for r in rows if not contaminated(r)]) for t, rows in pairs]      # left out of every mean (#340)
     lines = ["| Ticket | Arm | Location given | Runs | Wall min | Turns | Context k | Output k | Cost $ | Grep | devkb nav | Re-fetched | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
              "|" + "---|" * 18]
     per_arm: dict[str, list[dict]] = {}

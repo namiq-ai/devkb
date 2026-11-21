@@ -189,6 +189,12 @@ REFETCH_WINDOW = 2
 _FILE_EXT = "py|h|hh|hpp|c|cc|cpp|cxx|ts|tsx|js|jsx|json|md|yml|yaml|toml|rs|go|java|sh|txt|cfg|ini"
 
 
+def distinctive(t: str) -> bool:
+    """A target an agent could only re-fetch on purpose: a file with an extension, a name with `_` (but not a dunder such as `__init__`) or inner capitals, or a long
+    one. `cpp`, `resolve`, `constant` or `shadow` are words, and a grep that mentions one is not a second look at the answer."""
+    return bool(re.search(rf"\.(?:{_FILE_EXT})$", t)) or ("_" in t and not (t.startswith("__") and t.endswith("__"))) or bool(re.search(r"[a-z][A-Z]", t)) or len(t) >= 9
+
+
 def devkb_targets(name: str, inp: dict) -> list[str]:
     """What one devkb query asked about: the names and files it was given . A path counts by its
     base name, `Class::method` and `a.b` by the last part; a regex, a free-text docs query and a name under 3 chars
@@ -217,7 +223,7 @@ def devkb_targets(name: str, inp: dict) -> list[str]:
                 t = part.split("/")[-1]                                  # a file: its base name
             else:
                 t = re.split(r"::|\.|/", part)[-1]                       # Class::method, a.b, a path without extension
-            if len(t) >= 3 and t not in out:
+            if distinctive(t) and t not in out:
                 out.append(t)
     return out
 
@@ -246,16 +252,17 @@ def fetch_kind(name: str, inp: dict, targets: list[str]) -> str | None:
 def refetch(calls: list[tuple[str, dict]], window: int = REFETCH_WINDOW) -> dict:
     """How often an agent fetches again what devkb just answered. For each devkb navigation query with a target, did a
     grep, rg, Grep, Read, sed, cat or head naming that target follow, in the same shell command or within `window`
-    calls? {queries: with a target, refetched, grep, read}. The count is of queries, each at most once.
-    A re-fetch is not always waste (`outline` is followed by a ranged Read by design), so it is a measure of what
-    devkb did not replace, reported beside the calls themselves."""
-    q = rf = g = r = 0
+    calls? {queries: with a target, refetched, grep, read, outline_read}. The count is of queries, each at most once; targets are
+    distinctive names and files only. An `outline` followed by a read of the file and no grep is `outline_read`, not `refetched`:
+    reading the range the outline pointed at is its use. A re-fetch measures what devkb did not replace."""
+    q = rf = g = r = ow = 0
     for i, (name, inp) in enumerate(calls):
         if not (name.startswith("mcp__devkb") or (name == "Bash" and _QUERY.search(inp.get("command", "") or ""))):
             continue
         targets = devkb_targets(name, inp)
         if not targets:
             continue
+        outline = name == "mcp__devkb__outline" or (name == "Bash" and (_QUERY.search(inp.get("command", "") or "") or [None, None, ""])[1] == "outline")
         q += 1
         kinds = []
         if name == "Bash":                                   # a later segment of the same command
@@ -270,11 +277,13 @@ def refetch(calls: list[tuple[str, dict]], window: int = REFETCH_WINDOW) -> dict
         for nm, ip in calls[i + 1:i + 1 + window]:
             k = fetch_kind(nm, ip, targets)
             kinds += [k] if k else []
-        if kinds:
+        if outline and kinds and "grep" not in kinds:
+            ow += 1                                          # an outline, then a read of the file: what the outline is for
+        elif kinds:
             rf += 1
             g += "grep" in kinds
             r += "read" in kinds
-    return {"queries": q, "refetched": rf, "grep": g, "read": r}
+    return {"queries": q, "refetched": rf, "grep": g, "read": r, "outline_read": ow}
 
 
 

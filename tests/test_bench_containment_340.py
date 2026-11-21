@@ -47,7 +47,7 @@ def test_harness_state_sees_a_changed_tracked_file_and_a_new_file_but_not_the_ha
 def _run(tmp_path, monkeypatch, repo, writes):
     monkeypatch.setattr(pb, "B", tmp_path)
     monkeypatch.setattr(pb, "HARNESS_REPO", repo)
-    monkeypatch.setattr(pb, "template_for", lambda a: tmp_path / "t")
+    monkeypatch.setattr(pb, "template_for", lambda a, issue=None: tmp_path / "t")
     monkeypatch.setattr(pb, "from_template", lambda t, w: (Path(w).mkdir(parents=True), (Path(w) / ".bench-arm.json").write_text("{}")))
     monkeypatch.setattr(pb.toolenv, "build", lambda ref: {"bin": str(tmp_path / "devkb"), "commit": "x", "hook_sha": "x"})
     monkeypatch.setattr(pb, "score_run", lambda *a, **k: None)

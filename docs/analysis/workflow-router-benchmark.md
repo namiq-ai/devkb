@@ -136,4 +136,7 @@ The headline numbers reproduce from `score.json`. What was wrong or missing:
    runs whose flags list only my own moves of `runs-archive/` files. The harness now ignores `runs-archive/` (see the harness
    fixes), so the tool and this note agree.
 6. **Refetch.** The metric counted generic words (`cpp`, `resolve`, `constant`) as targets and counted an `outline` followed by a
-   ranged Read, which is by design. It is reported with the generic words removed and the outline case separated (harness fix).
+   ranged Read, which is by design. Corrected (`storybench.refetch`; targets are distinctive names and files, the outline case is
+   counted apart): **14 of 76 devkb queries (18%) were re-fetched**, not 33 of 83 (40%). By arm: `router` 7 of 21 (33%), `rmain`
+   4 of 16 (25%), `routerhid` 2 of 11, `ctxhid` 1 of 14, `rmainhid` 0 of 14; 19 further queries were an outline followed by the read it
+   points to. The 64% for the router arm quoted in earlier notes was the old metric.
