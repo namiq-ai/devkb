@@ -163,25 +163,29 @@ def _mcp(root: Path, toolset: str | None) -> str | None:
 
 
 HOOK_COMMAND = "devkb hook pre-edit"
+PROMPT_COMMAND = "devkb hook prompt"
 
 
 def _settings(root: Path, install: bool) -> str | None:
-    """`.claude/settings.json` with a PreToolUse hook that gives the agent the file's pack at its first edit; other
-    settings and hooks are kept, and removing devkb removes only this entry."""
+    """`.claude/settings.json` with devkb's two hooks: PreToolUse gives the agent the file's pack at its first edit, and
+    UserPromptSubmit routes a prompt to the graph's answer for its SDLC stage (devkb/router.py). Other settings and hooks
+    are kept, and removing devkb removes only these entries."""
     path = root / ".claude" / "settings.json"
     try:
         cfg = json.loads(path.read_text()) if path.exists() else {}
     except ValueError:
         raise SystemExit(f"{path} is not valid JSON; fix it or add the devkb hook by hand")
-    groups = cfg.setdefault("hooks", {}).setdefault("PreToolUse", [])
-    for g in groups:
-        g["hooks"] = [h for h in g.get("hooks", []) if HOOK_COMMAND not in h.get("command", "")]
-    groups[:] = [g for g in groups if g.get("hooks")]
-    if install:
-        groups.append({"matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
-                       "hooks": [{"type": "command", "command": HOOK_COMMAND, "timeout": 30}]})
-    if not groups:
-        cfg["hooks"].pop("PreToolUse")
+    mine = {"PreToolUse": (HOOK_COMMAND, {"matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash"}, 30),
+            "UserPromptSubmit": (PROMPT_COMMAND, {}, 20)}
+    for event, (command, extra, timeout) in mine.items():
+        groups = cfg.setdefault("hooks", {}).setdefault(event, [])
+        for g in groups:
+            g["hooks"] = [h for h in g.get("hooks", []) if command not in h.get("command", "")]
+        groups[:] = [g for g in groups if g.get("hooks")]
+        if install:
+            groups.append({**extra, "hooks": [{"type": "command", "command": command, "timeout": timeout}]})
+        if not groups:
+            cfg["hooks"].pop(event)
     if not cfg["hooks"]:
         cfg.pop("hooks")
     return json.dumps(cfg, indent=2) + "\n" if cfg else None

@@ -110,9 +110,11 @@ def test_claude_hook_is_optional_merged_idempotent_and_removed_with_devkb(tmp_pa
     groups = cfg["hooks"]["PreToolUse"]
     assert cfg["model"] == "x" and groups[0]["hooks"][0]["command"] == "mine"
     assert groups[1]["matcher"] == "Edit|Write|MultiEdit|NotebookEdit|Bash" and groups[1]["hooks"][0]["command"] == "devkb hook pre-edit"
+    assert cfg["hooks"]["UserPromptSubmit"] == [{"hooks": [{"type": "command", "command": "devkb hook prompt", "timeout": 20}]}]
     assert init.run(root, "lean-pack", hooks=False, dry_run=False, claude_hook=True) == [], "a second run changes nothing"
     init.run(root, None, hooks=False, dry_run=False)
     cfg = json.loads((root / ".claude" / "settings.json").read_text())
+    assert "UserPromptSubmit" not in cfg["hooks"]
     assert cfg["hooks"]["PreToolUse"] == [{"matcher": "Bash", "hooks": [{"type": "command", "command": "mine"}]}] and cfg["model"] == "x"
 
 

@@ -110,8 +110,11 @@ def pre_edit(event: dict, timeout: float = 25.0) -> dict | None:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
+    if args[:1] == ["prompt"]:
+        from devkb import router  # noqa: PLC0415
+        return router.main()
     if args[:1] != ["pre-edit"]:
-        print("usage: devkb hook pre-edit   (reads a Claude Code PreToolUse event on stdin)", file=sys.stderr)
+        print("usage: devkb hook pre-edit|prompt   (reads a Claude Code hook event on stdin)", file=sys.stderr)
         return 2
     try:
         out = pre_edit(json.loads(sys.stdin.read() or "{}"))
