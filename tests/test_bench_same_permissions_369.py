@@ -22,7 +22,8 @@ def test_every_arm_gets_the_same_command_and_only_the_devkb_deny_differs():
                 break
             out.append(a)
         return out
-    cmds = {a: pb.claude_cmd("1", a, "PROMPT", "mcp.json") for a in sorted(pb.BASES) + sorted(pb.HIDE_LOCATION)}
+    prompt = pb.prompt_for("1", "T", "Body.", None)
+    cmds = {a: pb.claude_cmd("1", a, prompt, "mcp.json") for a in sorted(pb.BASES) + sorted(pb.HIDE_LOCATION)}
     base = cmds["main"]
     for a, cmd in cmds.items():                               # the command a run starts, built for every arm
         assert flags(cmd, "--allowedTools") == sb.ALLOW, a
@@ -45,3 +46,10 @@ def test_the_run_starts_the_command_claude_cmd_builds():
     src = (ROOT / "bench" / "policy" / "policybench.py").read_text()
     run = src[src.index("def _run_one"):src.index("\ndef ", src.index("def _run_one") + 10)]
     assert "claude_cmd(issue, arm, prompt, mcp)" in run and "--allowedTools" not in run
+
+
+def test_a_prompt_without_the_command_rules_is_refused():
+    import pytest
+    with pytest.raises(ValueError):
+        pb.claude_cmd("1", "none", "a prompt someone stripped", "mcp.json")
+    assert sb.COMMANDS.strip() in pb.claude_cmd("1", "none", pb.prompt_for("1", "T", "B", None), "mcp.json")[2]

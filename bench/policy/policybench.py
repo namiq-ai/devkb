@@ -355,6 +355,8 @@ def permissions(arm: str) -> tuple[list[str], list[str]]:
 def claude_cmd(issue: str, arm: str, prompt: str, mcp: str) -> list[str]:
     """The `claude` command of a run. Only `arm` decides the deny list's devkb entries (permissions); everything else is
     the same in every arm (#369)."""
+    if sb.COMMANDS.strip() not in prompt:            # every arm's prompt says how to run commands, whatever came before
+        raise ValueError(f"the {arm} prompt lacks the command rules (storybench.COMMANDS, #369)")
     allow, deny = permissions(arm)
     return ["claude", "-p", prompt, "--model", sb.MODEL, *SOURCES, "--output-format",
             "stream-json", "--verbose", "--max-turns", "250" if issue in ("117", "131") else "150", "--permission-mode",
@@ -495,6 +497,8 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     env = dict(os.environ, BASH_DEFAULT_TIMEOUT_MS=limit, BASH_MAX_TIMEOUT_MS=limit,
                DEVKB_GUARDRAIL={"before": "0", "none": "0", "nonekeep": "0", "cli130": "enforce"}.get(arm, "1"),
                PATH=f"{Path(env_bin).parent}:{w / '.venv' / 'bin'}:{os.environ['PATH']}", **ARM_ENV.get(arm, {}))
+    meta["prompt_sha256"] = hashlib.sha256(cmd[2].encode()).hexdigest()       # what the agent was told, checkable later
+    meta["commands_sha256"] = hashlib.sha256(sb.COMMANDS.encode()).hexdigest()
     (out / "arm.json").write_text(json.dumps(meta) + "\n")
     t0 = time.time()
     before = harness_state()

@@ -16,7 +16,6 @@ res["probe_recorded"] = bool(re.search(r"(?i)claude -p|headless", sec))
 tests = [p for p in (W / "tests").glob("test_*.py") if re.search(r"ALLOW", p.read_text(errors="replace"))
          and re.search(r"(?i)every arm|all arms|for a(rm)? in|arms", p.read_text(errors="replace"))]
 res["same_rules_tested"] = bool(tests)
-# the prompt the bench gives, for an arm without and an arm with devkb: identical, and it says how to run commands
 # the policy prompt and the story prompt (issue 117): both must carry it
 code = ("import sys; sys.path.insert(0, 'bench/policy'); import policybench as pb\n"
         "a = pb.prompt_for('1', 'T', 'Body.', None); b = pb.prompt_for('117', 'T', 'Body.', None)\n"

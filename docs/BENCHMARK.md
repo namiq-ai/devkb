@@ -107,8 +107,8 @@ Without the 13 by design: 267, 3.7 per run. A headless probe (`bench/policy/prob
 `claude -p` per command form, with the benchmark's own `--allowedTools`, `--disallowedTools`, `--permission-mode` and
 setting sources, in a scratch checkout) confirmed the larger groups on minimal forms (`ls ..`, `echo {a,b}`, a heredoc
 with `{"a": 1}`, `R=...`, `$(...)`, a subshell, a loop and the venv by its absolute path were refused; `cd sub && ls`,
-pipes, `;`, a heredoc without braces and a simple `sed -i 's/x/y/'` were not). Six of the forms were run three times
-with the same answer; the others once. Simple forms understate the checks: a `sed -i` or a `cd` the probe passed is
+pipes, `;`, a heredoc without braces and a simple `sed -i 's/x/y/'` were not). Five forms were run three times with the
+same answer (`ls ..`, `echo {a,b}`, the heredoc with `{"a": 1}`, a loop, a plain heredoc); the others once. Simple forms understate the checks: a `sed -i` or a `cd` the probe passed is
 refused in the runs once its script holds quotes and parentheses, or once a git command or a write follows it.
 
 **The fix**, the same for every arm: a paragraph in both prompts (`COMMANDS` in `bench/policy/storybench.py`), one
@@ -120,8 +120,11 @@ which the prompt now names), the refusals come from the session's command checks
 **Re-run with the paragraph** (the 8 tickets of the 0.2.14 re-run, #301-#307 and #331, one run per arm, each at its own
 base; rows in `bench/results/2026-11-20-denials-369/rerun-rows.jsonl`): 6 refusals in 16 runs. Two are the guardrail
 answering a Grep in the devkb arm, which Claude Code records as a denial (a hook deny that carries devkb's answer, by
-design); the other 4 are **0.25 per run**, 2 in each arm (0.2.14 re-run on the same tickets: 1.6 per run): two heredocs
-with braces and quotes, a redirect the checker could not read, and one other. Hidden checks 8/8 (`none`) and 7/8
+design); the other 4 are **0.25 per run**, 2 in each arm (0.2.14 re-run on the same tickets, counted the same way:
+1.56 per run): two heredocs with braces and quotes, a redirect the checker could not read, and one other. Counted as
+the issue counts them (every recorded denial), the re-run has 0.375 per run, 0.5 in `main`: the 0.3 target holds only
+when the guardrail's substitutes are left out, which is the owner's call. Each run's `arm.json` records the prompt's
+and the paragraph's SHA-256 (`prompt_sha256`, `commands_sha256`). Hidden checks 8/8 (`none`) and 7/8
 (`main`), suites 16/16.
 
 `claude_cmd()` in `policybench.py` builds every run's command; `tests/test_bench_same_permissions_369.py` builds it for

@@ -73,7 +73,10 @@ def group(arm: str, cmd: str, reason: str) -> str:
 
 
 def main(paths: list[str]) -> int:
-    streams = [s for p in map(Path, paths) for s in ([p] if p.is_file() else sorted(p.glob("*/stream.jsonl")))]
+    streams = [s for p in map(Path, paths) for s in ([p] if p.is_file() else [p / "stream.jsonl"]
+                                                        if (p / "stream.jsonl").is_file() else sorted(p.glob("*/stream.jsonl")))]
+    if not streams:
+        raise SystemExit("no stream.jsonl in " + " ".join(paths))
     runs, by_arm, groups, examples = collections.Counter(), collections.Counter(), collections.Counter(), {}
     for s in streams:
         arm, rs = refusals(s)
