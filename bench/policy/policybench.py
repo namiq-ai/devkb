@@ -584,11 +584,8 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     except Exception as e:  # noqa: BLE001  a setup that fails is recorded, never a run that silently disappears
         (out / "end").write_text(json.dumps({"exit": "error", "seconds": 0, "error": f"setup: {type(e).__name__}: {e}"[-400:]}))
         return f"error {tag}: setup failed: {e}"       # not a red base: run again in the next batch (#305)
-    if arm == "userinit":                            # init's own MCP server, run by the arm's devkb (#366 review)
-        mcp = str(w / ".mcp.json")
-        cfg = json.loads(Path(mcp).read_text())
-        cfg["mcpServers"]["devkb"]["command"] = tool_of(arm, toolenv.build(ENV_REF[arm]()))
-        Path(mcp).write_text(json.dumps(cfg, indent=2) + "\n")
+    if arm == "userinit":                            # init's own MCP server, as committed: its `devkb` is the arm's,
+        mcp = str(w / ".mcp.json")                   # first on PATH (below), so the checkout stays clean (#366 review)
     elif arm.startswith("after"):                    # "cli": no MCP server, devkb only through the shell
         mcp = str(w / ".mcp.json")
         cfg = json.loads(Path(mcp).read_text())

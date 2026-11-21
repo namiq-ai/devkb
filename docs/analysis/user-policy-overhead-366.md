@@ -27,39 +27,44 @@ merge of #397, whose command paragraph now lengthens every arm's prompt alike).
 
 ## Results (batch 2)
 
+Made by `python bench/policy/arm_table.py bench/results/2026-11-20-user-policy-366/batch2-rows.jsonl`. Turns are the scored
+rows' turns (model calls), as in batch 1.
 
 #383
-| Arm | n | First-call context k | over none | Turns (med) | Context k (med) | Cost (mean) | Cost vs none | Suite | Hidden check | devkb queries |
-|---|---|---|---|---|---|---|---|---|---|---|
-| none | 3 | 17.8 | 0 | 13 | 214 | $0.097 | +0% | 3/3 | 0/3 | 0 |
-| userpolicy | 3 | 19.4 | +1.6k | 12 | 218 | $0.109 | +12% | 3/3 | 0/3 | 0 |
-| userinit | 3 | 20.3 | +2.5k | 10 | 199 | $0.148 | +52% | 3/3 | 0/3 | 0 |
-| short | 3 | 18.3 | +0.4k | 13 | 272 | $0.117 | +21% | 3/3 | 0/3 | 0 |
-| outline | 3 | 21.9 | +4.1k | 11 | 269 | $0.107 | +10% | 3/3 | 0/3 | 0 |
-| inject | 3 | 19.9 | +2.1k | 12 | 254 | $0.124 | +28% | 3/3 | 0/3 | 0 |
-| main | 3 | 21.9 | +4.1k | 11 | 229 | $0.112 | +16% | 3/3 | 0/3 | 0 |
+
+| Arm | n | First-call context k | Over none | Turns (med) | Context k (med) | Cost (mean) | Cost vs none | Cache written k (mean) | Suite | Hidden check | devkb queries |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| none | 3 | 17.8 | 0 | 9 | 214 | $0.097 | +0% | 9 | 3/3 | 0/3 | 0 |
+| userpolicy | 3 | 19.4 | +1.6k | 9 | 218 | $0.109 | +12% | 11 | 3/3 | 0/3 | 0 |
+| userinit | 3 | 20.3 | +2.5k | 8 | 199 | $0.148 | +52% | 25 | 3/3 | 0/3 | 0 |
+| short | 3 | 18.3 | +0.4k | 12 | 272 | $0.117 | +21% | 13 | 3/3 | 0/3 | 0 |
+| outline | 3 | 21.9 | +4.1k | 10 | 269 | $0.107 | +10% | 13 | 3/3 | 0/3 | 0 |
+| inject | 3 | 19.9 | +2.1k | 10 | 254 | $0.124 | +28% | 17 | 3/3 | 0/3 | 0 |
+| main | 3 | 21.9 | +4.1k | 9 | 229 | $0.112 | +16% | 16 | 3/3 | 0/3 | 0 |
 
 #303
-| Arm | n | First-call context k | over none | Turns (med) | Context k (med) | Cost (mean) | Cost vs none | Suite | Hidden check | devkb queries |
-|---|---|---|---|---|---|---|---|---|---|---|
-| none | 3 | 17.7 | 0 | 9 | 200 | $0.124 | +0% | 3/3 | 3/3 | 0 |
-| userpolicy | 3 | 19.3 | +1.6k | 17 | 275 | $0.138 | +12% | 3/3 | 3/3 | 0 |
-| userinit | 3 | 20.2 | +2.5k | 16 | 286 | $0.166 | +34% | 3/3 | 3/3 | 0 |
-| short | 3 | 18.1 | +0.5k | 15 | 264 | $0.136 | +10% | 3/3 | 3/3 | 0 |
-| outline | 3 | 21.0 | +3.3k | 15 | 259 | $0.141 | +14% | 3/3 | 3/3 | 0 |
-| inject | 3 | 20.1 | +2.4k | 17 | 275 | $0.132 | +6% | 3/3 | 3/3 | 0 |
-| main | 3 | 21.0 | +3.3k | 18 | 320 | $0.169 | +36% | 3/3 | 3/3 | 0 |
 
-Pooled
-| Arm | n | First-call context k | over none | Turns (med) | Context k (med) | Cost (mean) | Cost vs none (mean of ratios) | Suite | Hidden check | devkb queries |
-|---|---|---|---|---|---|---|---|---|---|---|
-| none | 6 | 17.7-17.8 | 0 | 11 | 207 | $0.110 | +0% | 6/6 | 3/6 | 0 |
-| userpolicy | 6 | 19.3-19.4 | +1.6 to +1.6k | 14 | 275 | $0.124 | +12% | 6/6 | 3/6 | 0 |
-| userinit | 6 | 20.2-20.3 | +2.5 to +2.5k | 13 | 251 | $0.157 | +43% | 6/6 | 3/6 | 0 |
-| short | 6 | 18.1-18.3 | +0.4 to +0.5k | 14 | 265 | $0.127 | +15% | 6/6 | 3/6 | 0 |
-| outline | 6 | 21.0-21.9 | +3.3 to +4.1k | 12 | 264 | $0.124 | +12% | 6/6 | 3/6 | 0 |
-| inject | 6 | 19.9-20.1 | +2.1 to +2.4k | 14 | 264 | $0.128 | +17% | 6/6 | 3/6 | 0 |
-| main | 6 | 21.0-21.9 | +3.3 to +4.1k | 12 | 244 | $0.141 | +26% | 6/6 | 3/6 | 0 |
+| Arm | n | First-call context k | Over none | Turns (med) | Context k (med) | Cost (mean) | Cost vs none | Cache written k (mean) | Suite | Hidden check | devkb queries |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| none | 3 | 17.7 | 0 | 8 | 200 | $0.124 | +0% | 13 | 3/3 | 3/3 | 0 |
+| userpolicy | 3 | 19.3 | +1.6k | 10 | 275 | $0.138 | +12% | 15 | 3/3 | 3/3 | 0 |
+| userinit | 3 | 20.2 | +2.5k | 10 | 286 | $0.166 | +34% | 20 | 3/3 | 3/3 | 0 |
+| short | 3 | 18.1 | +0.5k | 10 | 264 | $0.136 | +10% | 15 | 3/3 | 3/3 | 0 |
+| outline | 3 | 21.0 | +3.3k | 9 | 259 | $0.141 | +14% | 15 | 3/3 | 3/3 | 0 |
+| inject | 3 | 20.1 | +2.4k | 10 | 275 | $0.132 | +6% | 12 | 3/3 | 3/3 | 0 |
+| main | 3 | 21.0 | +3.3k | 11 | 320 | $0.169 | +36% | 22 | 3/3 | 3/3 | 0 |
+
+Pooled (cost vs none: the mean of the tickets' ratios)
+
+| Arm | n | First-call context k | Over none | Turns (med) | Context k (med) | Cost (mean) | Cost vs none | Cache written k (mean) | Suite | Hidden check | devkb queries |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| none | 6 | 17.7-17.8 | 0 | 8 | 207 | $0.110 | +0% | 11 | 6/6 | 3/6 | 0 |
+| userpolicy | 6 | 19.3-19.4 | +1.6 to +1.6k | 10 | 275 | $0.124 | +12% | 13 | 6/6 | 3/6 | 0 |
+| userinit | 6 | 20.2-20.3 | +2.5 to +2.5k | 10 | 251 | $0.157 | +43% | 23 | 6/6 | 3/6 | 0 |
+| short | 6 | 18.1-18.3 | +0.4 to +0.5k | 10 | 265 | $0.127 | +15% | 14 | 6/6 | 3/6 | 0 |
+| outline | 6 | 21.0-21.9 | +3.3 to +4.1k | 10 | 264 | $0.124 | +12% | 14 | 6/6 | 3/6 | 0 |
+| inject | 6 | 19.9-20.1 | +2.1 to +2.4k | 10 | 264 | $0.128 | +17% | 14 | 6/6 | 3/6 | 0 |
+| main | 6 | 21.0-21.9 | +3.3 to +4.1k | 10 | 244 | $0.141 | +26% | 19 | 6/6 | 3/6 | 0 |
 
 
 **First call** (constant per arm and base):

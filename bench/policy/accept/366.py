@@ -18,7 +18,7 @@ res["policy_from_devkb_init"] = bool(re.search(r"AGENTS_BLOCK|devkb\.init|\binit
 notes = [p for p in (W / "docs" / "analysis").glob("*.md")
          if "userpolicy" in (t := p.read_text(errors="replace")) and re.search(r"(?i)first[- ]call", t)]
 text = "\n".join(p.read_text(errors="replace") for p in notes)
-arms_in_bench = [a for a in re.findall(r"^\s*[\"'](\w+)[\"']:\s*[\"']origin/main[\"']", pb, re.M) if a in ("short", "outline", "inject")]
+arms_in_bench = [a for a in re.findall(r"^\s*[\"'](\w+)[\"']:\s*[\"']origin/main[\"']", pb, re.M) if a in ("short", "outline", "inject", "userinit")]
 res["note_gives_first_call_per_arm"] = bool(notes) and all(re.search(rf"\b{a}\b[^\n]*\d[\d.,]*\s*k", text)
                                                             for a in ("none", "userpolicy", "main", *arms_in_bench))
 tracked = subprocess.run(["git", "-C", str(W), "ls-files"], capture_output=True, text=True).stdout.splitlines()

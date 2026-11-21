@@ -95,3 +95,12 @@ def test_userinit_holds_everything_a_default_devkb_init_writes_and_no_guardrail(
     assert server["args"][-2:] == ["--toolset", pb.USER_INIT] and pb.USER_INIT == "lean-pack"
     assert not (w / ".claude" / "settings.json").exists()              # init installs no hook without --claude-hook
     assert "userinit" in rt.ORDER and pb.ENV_REF["userinit"] and "userinit" in pb.USER_POLICY
+
+
+def test_userinit_gets_no_guardrail_hook_and_runs_its_committed_mcp_config():
+    src = (ROOT / "bench" / "policy" / "policybench.py").read_text()
+    co = src[src.index("def checkout("):src.index("\ndef ", src.index("def checkout(") + 5)]
+    assert 'if env and arm != "userinit":' in co                         # the hook step skips userinit
+    run = src[src.index("def _run_one"):src.index("\ndef ", src.index("def _run_one") + 5)]
+    branch = run[run.index('if arm == "userinit":'):run.index("elif", run.index('if arm == "userinit":'))]
+    assert 'mcp = str(w / ".mcp.json")' in branch and "write_text" not in branch   # the checkout's file, unchanged
