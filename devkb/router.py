@@ -42,7 +42,7 @@ LOCATED = re.compile(rf"(?<![\w./-])((?:[\w.-]+/)*[\w.-]+\.{SRC})(?::|#L|\s+(?:l
 TRACE = re.compile(r"Traceback \(most recent call last\)|^\s+at \S+ \(.+:\d+:\d+\)|^\w*(?:Error|Exception)\b.*:", re.M)
 ERROR_LINE = re.compile(r"\b(?:\w+\.)*\w*(?:Error|Exception|Panic)\s*:\s*(.{6,200})$", re.M)
 QUOTED_ERROR = re.compile(r"[\"'`]([^\"'`\n]{12,160})[\"'`]")
-TICKET = re.compile(r"(?<![\w/&])(?:#|(?:issue|ticket|PR)\s+#?)(\d{1,6})\b|\b([A-Z][A-Z0-9]{1,9}-\d{1,6})\b", re.I)
+TICKET = re.compile(r"(?i:(?<![\w/&])(?:#|(?:issue|ticket|PR)\s+#?)(\d{1,6})\b)|\b([A-Z]{2,10}-\d{1,6})\b")
 CHANGE = re.compile(r"\b(change request|CR\b|review feedback|reviewer (?:asked|said|wants)|address(?:ing)? (?:the )?(?:review|comments)|"
                     r"per (?:the )?(?:feedback|review|new spec)|spec (?:changed|update))", re.I)
 RELEASE = re.compile(r"\b((?:prepare|cut|draft|ship|plan|do|make|start)\s+(?:the\s+|a\s+|our\s+)?(?:next\s+)?release|release\s+(?:notes|candidate|checklist|readiness|audit)|"

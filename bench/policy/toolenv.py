@@ -93,13 +93,17 @@ def _build(ref: str) -> dict:
     return out
 
 
-def hooks_settings(env: dict) -> dict:
-    """`.claude/settings.json` hooks that run the environment's own guardrail, not the checkout's copy."""
+def hooks_settings(env: dict, router: bool = False) -> dict:
+    """`.claude/settings.json` hooks that run the environment's own guardrail, not the checkout's copy. With `router`, also
+    the environment's own prompt router (`devkb hook prompt`, docs/specs/workflow-router.md): the one difference between
+    the rmain and router arms."""
     def cmd(script: str) -> str:
         return f'python3 "{script}" 2>/dev/null || true'
     out = {"PreToolUse": [{"matcher": "Read|Grep|Bash", "hooks": [{"type": "command", "timeout": 20, "command": cmd(env["hook"])}]}]}
     if Path(env["post"]).exists():
         out["PostToolUse"] = [{"matcher": "Grep|Bash", "hooks": [{"type": "command", "timeout": 20, "command": cmd(env["post"])}]}]
+    if router:
+        out["UserPromptSubmit"] = [{"hooks": [{"type": "command", "timeout": 20, "command": f'"{env["bin"]}" hook prompt 2>/dev/null || true'}]}]
     return out
 
 

@@ -43,6 +43,8 @@ BASES = {"before": "origin/main", "after": "ce284c4", "after2": os.environ.get("
          "userpolicy": "origin/main",                             # AGENTS.md/CLAUDE.md exactly as `devkb init` writes them
          "short": "origin/main",                                  # the same, the block cut to the lines agents act on
          "inject": "origin/main",                                 # userpolicy, plus the pack of the ticket's file in the prompt
+         "rmain": "origin/main",                                  # workflow router: the router commit's devkb and guardrail, no router
+         "router": "origin/main",                                 # the same, plus the prompt router (devkb hook prompt)
          "userinit": "origin/main"}                               # everything `devkb init` writes: + its MCP server, no guardrail
 # Tri-mode arms take their devkb (CLI, graph build, hook) from a tool environment built from an exact commit, never
 # from the checkout the agent edits (#225). POLICY_RELEASE / POLICY_MAIN override the refs.
@@ -54,6 +56,8 @@ ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest
            # base), the devkb and hook come from a fixed commit each
            "hookmain": lambda: os.environ.get("POLICY_HOOK_MAIN") or "origin/main",
            "teachall": lambda: os.environ["POLICY_TEACHALL"],
+           # rmain and router differ in one thing, the UserPromptSubmit hook: same devkb commit (POLICY_ROUTER), same checkout
+           **{a: (lambda: os.environ["POLICY_ROUTER"]) for a in ("rmain", "router")},
            **{a: (lambda: os.environ.get("POLICY_MAIN") or "origin/main") for a in ("userpolicy", "short", "inject", "userinit")}}
 # Every devkb arm keeps the answers its agents were given (#218); D1 and D2 are the two direct-path candidates.
 ARM_ENV = {"release": {"DEVKB_GUARDRAIL_KEEP": "1"}, "main": {"DEVKB_GUARDRAIL_KEEP": "1"},
@@ -61,7 +65,7 @@ ARM_ENV = {"release": {"DEVKB_GUARDRAIL_KEEP": "1"}, "main": {"DEVKB_GUARDRAIL_K
            "outline": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_OUTLINE": "1"},
            "hookmain": {"DEVKB_GUARDRAIL_KEEP": "1"},
            "teachall": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH_ALL": "1"},   # the setting, off by default (#375)
-           **{a: {"DEVKB_GUARDRAIL_KEEP": "1"} for a in ("userpolicy", "short", "inject", "userinit")}}
+           **{a: {"DEVKB_GUARDRAIL_KEEP": "1"} for a in ("userpolicy", "short", "inject", "userinit", "rmain", "router")}}
 # #366: the policy text of the user-facing arms. "full" is the block `devkb init` writes (devkb.init.AGENTS_BLOCK of the
 # arm's devkb), "short" the candidate below; the checkout's CLAUDE.md is then `@AGENTS.md`, as init writes it.
 USER_POLICY = {"userpolicy": "full", "short": "short", "inject": "full", "userinit": "full"}
@@ -112,7 +116,7 @@ def without_missing_data(body: str, w: Path) -> str:
 
 # The same arms with the ticket's location withheld (#337): "Where to start" removed, the files in "Scope" and every file or
 # name it gave masked wherever the ticket repeats them. Set up exactly as their base arm (same template); only the text differs.
-HIDE_LOCATION = {"nonehid": "none", "mainhid": "main"}
+HIDE_LOCATION = {"nonehid": "none", "mainhid": "main", "rmainhid": "rmain", "routerhid": "router"}
 WITHHELD = "(withheld)"
 _SECTION = re.compile(r"(?ms)^(?:\*\*(?P<h>[^*\n]+?):?\*\*:?|#{1,6}[ \t]+(?P<g>[^\n]+?)[ \t]*$)(?P<t>.*?)"
                       r"(?=^\*\*[^*\n]+?:?\*\*|^#{1,6}[ \t]|\Z)")
@@ -293,7 +297,7 @@ def checkout(w: Path, arm: str):
                                                       # installs none, so userinit has no hook (#366 review)
         st_path = w / ".claude" / "settings.json"
         st = json.loads(st_path.read_text()) if st_path.exists() else {}
-        st["hooks"] = toolenv.hooks_settings(env)
+        st["hooks"] = toolenv.hooks_settings(env, router=(arm == "router"))
         st_path.parent.mkdir(exist_ok=True)
         st_path.write_text(json.dumps(st, indent=2) + "\n")
     gi = w / ".gitignore"
@@ -641,6 +645,15 @@ def _failed_ids(stdout: str) -> list[str]:
     return ids
 
 
+def router_log(w: Path) -> list[dict]:
+    """The prompt router's decisions in a run's checkout (`.devkb/router.jsonl`): route and size of what it pushed."""
+    p = w / ".devkb" / "router.jsonl"
+    try:
+        return [{k: r.get(k) for k in ("route", "chars", "subjects")} for r in map(json.loads, p.read_text().splitlines())]
+    except (OSError, ValueError):
+        return []
+
+
 def run_suite(w: Path, timeout: int = 1800) -> dict:
     """The checkout's full suite, with the ids of what failed. A red suite is run in full once more (#301): a failed
     test is flaky (load-sensitive, recorded, not held against the change) only when the whole suite passes the second
@@ -691,6 +704,7 @@ def score_run(issue: str, out: Path) -> dict | None:
             "accept_sha256": hashlib.sha256(acc.read_bytes()).hexdigest(),          # which check scored it (#223)
             "base_green": arm_meta.get("base_green"), "base_suite": arm_meta.get("base_suite"),   # #221
             "tests_collected": arm_meta.get("tests_collected"),                                    # #331
+            "router": router_log(w),                                                               # what the prompt router did
             "contaminated": end.get("contaminated") or [],                                         # #340
             "devkb_commit": arm_meta.get("devkb_commit"), "hook_sha": arm_meta.get("hook_sha"),   # #225
             "telemetry": sum(len((d / ".devkb" / "process-api-telemetry.jsonl").read_text().splitlines())
@@ -744,6 +758,8 @@ def score(issues):
 
 def check_arms(arms: list[str]) -> None:
     """Stop a batch before any run when an arm cannot say which commit its hook comes from (#375)."""
+    if {"rmain", "router", "rmainhid", "routerhid"} & set(arms) and not os.environ.get("POLICY_ROUTER"):
+        raise SystemExit("the rmain and router arms need POLICY_ROUTER: the commit of the devkb they run (docs/specs/workflow-router.md)")
     if "teachall" in arms and not os.environ.get("POLICY_TEACHALL"):
         raise SystemExit("the teachall arm needs POLICY_TEACHALL: the commit whose hook it runs (#375)")
 
