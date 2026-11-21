@@ -211,3 +211,9 @@ def test_a_file_line_that_is_not_a_file_of_the_repository_is_not_a_location(repo
     assert router.classify(prompt, known=lambda p: router.tracked(repo, p)).name == "navigate"
     assert router.classify("fix pkg/models.py:3", known=lambda p: router.tracked(repo, p)).name == "located"
     assert router.classify("fix models.py:3", known=lambda p: router.tracked(repo, p)).name == "located"   # a bare name of a tracked file
+
+
+def test_a_spec_id_is_not_a_ticket_key():
+    # #118's withheld prompt cites `SPEC-DKB-004 §6`; the tail `DKB-004` was taken for a ticket (benchmark, 2026-11-20)
+    assert router.TICKET.search("built per SPEC-DKB-004 §6") is None
+    assert router.TICKET.search("implement DKB-123 as written").group(2) == "DKB-123"
