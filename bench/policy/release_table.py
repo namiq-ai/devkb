@@ -97,7 +97,8 @@ def per_run(r: dict) -> dict:
     nav, own, sub = c if c else (r.get("devkb_nav", 0), r.get("devkb_selftest", 0), 0)
     a = r.get("acceptance") or {}
     g = guard_rows(r.get("session", ""))
-    return {"turns": r["turns"], "grep": r["calls"].get("search", 0), "nav": nav, "own": own, "sub": sub, "ctx": r["ctx_tokens"],
+    rf = r.get("refetch")                         # devkb queries followed by a grep or read of the same target; absent in old rows
+    return {"rq": rf["queries"] if rf else None, "rf": rf["refetched"] if rf else None, "turns": r["turns"], "grep": r["calls"].get("search", 0), "nav": nav, "own": own, "sub": sub, "ctx": r["ctx_tokens"],
             "out": r.get("out_tokens", 0),
             "cost": r["cost"], "cut_off": bool(r.get("cut_off")), "wall": r["seconds"] / 60, "ok": bool(a.get("pass")), "suite": bool(r["suite_pass"]),
             "flaky": bool(r.get("suite_flaky")),
@@ -107,8 +108,8 @@ def per_run(r: dict) -> dict:
 def summary(xs: list[dict]) -> dict:
     out = {"n": len(xs), "ok": sum(x["ok"] for x in xs), "suite": sum(x["suite"] for x in xs),
            "flaky": sum(x.get("flaky", False) for x in xs), "cut_off": sum(x.get("cut_off", False) for x in xs)}
-    for k in ("turns", "grep", "nav", "own", "sub", "ctx", "out", "cost", "wall", "answers", "answer_chars"):
-        vals = [x[k] for x in xs if x[k] is not None] or [0]     # a cut-off run's cost is unknown: not a zero (#303)
+    for k in ("turns", "grep", "nav", "own", "sub", "ctx", "out", "cost", "wall", "answers", "answer_chars", "rq", "rf"):
+        vals = [x.get(k) for x in xs if x.get(k) is not None] or [0]     # a cut-off run's cost is unknown: not a zero (#303)
         out[k] = st.mean(vals)
         out[k + "_lo"], out[k + "_hi"] = min(vals), max(vals)
     return out
@@ -134,6 +135,15 @@ def check_hashes(ticket: str, rows: list[dict]) -> str | None:
     if len(seen) > 1:
         return f"#{ticket}: runs scored by {len(seen)} versions of the hidden check ({', '.join(sorted(str(h)[:8] for h in seen))})"
     return None
+
+
+def refetched(xs: list[dict]) -> str:
+    """Per run: devkb queries that were followed by a grep or read of the same target / all devkb queries with a target.
+    "n/a" for an arm whose rows predate the measure (run `remeasure.py` to fill them)."""
+    known = [x for x in xs if x.get("rq") is not None]
+    if not known:
+        return "n/a"
+    return f"{st.mean(x['rf'] for x in known):.1f}/{st.mean(x['rq'] for x in known):.1f}"
 
 
 def fmt_range(m: dict, k: str, scale: float = 1.0, unit: str = "", digits: int = 1) -> str:
@@ -171,15 +181,16 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
         raise SystemExit("refused, re-score first:\n  " + "\n  ".join(problems))
     dirty = [(t, [r["run"] for r in rows if r.get("contaminated")]) for t, rows in pairs]
     pairs = [(t, [r for r in rows if not r.get("contaminated")]) for t, rows in pairs]      # left out of every mean (#340)
-    lines = ["| Ticket | Arm | Location given | Runs | Wall min | Turns | Context k | Output k | Cost $ | Grep | devkb nav | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
-             "|" + "---|" * 17]
+    lines = ["| Ticket | Arm | Location given | Runs | Wall min | Turns | Context k | Output k | Cost $ | Grep | devkb nav | Re-fetched | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
+             "|" + "---|" * 18]
     per_arm: dict[str, list[dict]] = {}
     diffs: dict[str, dict[str, list[float]]] = {}
     for t, rows in pairs:
         arms = sorted({r["arm"] for r in rows}, key=lambda a: ORDER.index(a) if a in ORDER else 99)
-        sums = {a: summary([per_run(r) for r in rows if r["arm"] == a]) for a in arms}
+        runs = {a: [per_run(r) for r in rows if r["arm"] == a] for a in arms}
+        sums = {a: summary(runs[a]) for a in arms}
         for i, a in enumerate(arms):
-            m = sums[a]
+            m, xs_rows = sums[a], runs[a]
             per_arm.setdefault(a, []).append(m)
             # the no-devkb arm given the ticket the same way: hidden against hidden, as filed against as filed (#337)
             base = base_for(a, arms, sums)
@@ -194,7 +205,7 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
             flaky = f" ({m['flaky']} flaky)" if m.get("flaky") else ""       # green only on the re-run (#260)
             cut = f" ({m['cut_off']} cut off, cost left out)" if m.get("cut_off") else ""      # #303
             lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {'yes' if location_given(a) else 'no'} | {m['n']}{cut} | {fmt_range(m, 'wall')} | {m['turns']:.1f} | "
-                         f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {m['out'] / 1e3:.1f} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | {m['own']:.1f} | "
+                         f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {m['out'] / 1e3:.1f} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | {refetched(xs_rows)} | {m['own']:.1f} | "
                          f"{m['sub']:.1f} | {m['answers']:.1f} ({m['answer_chars']:.0f}) | {m['ok']}/{m['n']} | {m['suite']}/{m['n']}{flaky} | {vs} |")
     lines += ["", "| Release, arm | Runs | Cost per run | Context per run | Cost difference vs no devkb (90% interval) | Context difference (90% interval) |",
               "|---|---|---|---|---|---|"]

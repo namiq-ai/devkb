@@ -183,6 +183,100 @@ def devkb_commands(command: str, edited: bool = False) -> tuple[int, int]:
             nav += 1
     return nav, own
 
+_FETCH_SEG = re.compile(r"(^|\s)(grep|rg|egrep|sed\s+-n|head|tail|cat|nl|awk)\b")
+_QUERY = re.compile(r"devkb\s+(symbol|uses|outline|pack|docs|misses|tests|config|flows|review)\b(.*)")
+REFETCH_WINDOW = 2
+_FILE_EXT = "py|h|hh|hpp|c|cc|cpp|cxx|ts|tsx|js|jsx|json|md|yml|yaml|toml|rs|go|java|sh|txt|cfg|ini"
+
+
+def devkb_targets(name: str, inp: dict) -> list[str]:
+    """What one devkb query asked about: the names and files it was given . A path counts by its
+    base name, `Class::method` and `a.b` by the last part; a regex, a free-text docs query and a name under 3 chars
+    carry no target."""
+    raw: list[str] = []
+    if name.startswith("mcp__devkb"):
+        raw = [str(inp.get(k, "")) for k in ("query", "subject", "path", "name") if inp.get(k)]
+    elif name == "Bash":
+        c = re.sub(r"<<-?\s*'?(\w+)'?.*?\n\1\b", "", inp.get("command", "") or "", flags=re.S)
+        for seg in re.split(r"&&|\|\||;|\||\n", c):
+            m = _QUERY.search(seg)
+            if not m or m.group(1) in ("docs", "misses"):
+                continue
+            rest = re.sub(r"--project(?:=|\s+)\S+", "", m.group(2))
+            args = [a.strip("'\"") for a in rest.split() if not a.startswith("-")]
+            if m.group(1) == "pack":
+                args = args[1:]                                      # the pack's kind (file, refactor, change, error)
+            raw += args[:1]
+    out = []
+    for r in raw:
+        for part in r.split(","):
+            part = part.strip()
+            if not part or part.startswith("re:") or " " in part:
+                continue
+            if re.search(rf"\.(?:{_FILE_EXT})$", part):
+                t = part.split("/")[-1]                                  # a file: its base name
+            else:
+                t = re.split(r"::|\.|/", part)[-1]                       # Class::method, a.b, a path without extension
+            if len(t) >= 3 and t not in out:
+                out.append(t)
+    return out
+
+
+def fetch_kind(name: str, inp: dict, targets: list[str]) -> str | None:
+    """'grep' / 'read' when this call searches or reads text that names one of the targets; else None. A devkb command
+    is never a re-fetch."""
+    if name in ("Grep", "Glob"):
+        text, kind = f"{inp.get('pattern', '')} {inp.get('path', '')}", "grep"
+    elif name == "Read":
+        text, kind = str(inp.get("file_path", "")), "read"
+    elif name == "Bash":
+        text, kind = "", None
+        for seg in re.split(r"&&|\|\||;|\n", inp.get("command", "") or ""):
+            if _QUERY.search(seg) or not _FETCH_SEG.search(seg):
+                continue
+            k = "grep" if re.search(r"(^|\s)(grep|rg|egrep)\b", seg) else "read"
+            if any(re.search(rf"(?<![\w]){re.escape(t)}(?![\w])", seg) for t in targets):
+                return k
+        return None
+    else:
+        return None
+    return kind if any(re.search(rf"(?<![\w]){re.escape(t)}(?![\w])", text) for t in targets) else None
+
+
+def refetch(calls: list[tuple[str, dict]], window: int = REFETCH_WINDOW) -> dict:
+    """How often an agent fetches again what devkb just answered. For each devkb navigation query with a target, did a
+    grep, rg, Grep, Read, sed, cat or head naming that target follow, in the same shell command or within `window`
+    calls? {queries: with a target, refetched, grep, read}. The count is of queries, each at most once.
+    A re-fetch is not always waste (`outline` is followed by a ranged Read by design), so it is a measure of what
+    devkb did not replace, reported beside the calls themselves."""
+    q = rf = g = r = 0
+    for i, (name, inp) in enumerate(calls):
+        if not (name.startswith("mcp__devkb") or (name == "Bash" and _QUERY.search(inp.get("command", "") or ""))):
+            continue
+        targets = devkb_targets(name, inp)
+        if not targets:
+            continue
+        q += 1
+        kinds = []
+        if name == "Bash":                                   # a later segment of the same command
+            segs = re.split(r"&&|\|\||;|\n", inp.get("command", "") or "")
+            seen = False
+            for seg in segs:
+                if _QUERY.search(seg):
+                    seen = True
+                elif seen:
+                    k = fetch_kind("Bash", {"command": seg}, targets)
+                    kinds += [k] if k else []
+        for nm, ip in calls[i + 1:i + 1 + window]:
+            k = fetch_kind(nm, ip, targets)
+            kinds += [k] if k else []
+        if kinds:
+            rf += 1
+            g += "grep" in kinds
+            r += "read" in kinds
+    return {"queries": q, "refetched": rf, "grep": g, "read": r}
+
+
 
 def redact(text: str, root: str | None = None) -> str:
     """Recorded hook text names the repository it served, which is a run's checkout under the owner's home directory: a row
@@ -198,6 +292,7 @@ def transcript(path: Path) -> dict:
     kinds, calls, chars, msgs = {}, Counter(), Counter(), set()
     res, session, dq, nav, own, outs, edited, root, seen_ctx, first_ctx = {}, None, 0, 0, 0, {}, False, None, 0, None
     backgrounded = 0
+    seq: list[tuple[str, dict]] = []                       # every tool call in order, for refetch()
     hook_outputs = []                                      # what each hook run said (hook_response events, #330)
     for line in open(path):
         try:
@@ -233,6 +328,7 @@ def transcript(path: Path) -> dict:
             if x.get("type") == "tool_use":
                 k = "devkb" if x["name"].startswith("mcp__devkb") else classify(x["name"], x.get("input", {}))
                 kinds[x["id"]] = k
+                seq.append((x["name"], x.get("input") or {}))
                 calls[k] += 1
                 dq += 1 if x["name"].startswith("mcp__devkb") else devkb_queries(x.get("input", {}).get("command", ""))
                 if x["name"].startswith("mcp__devkb"):
@@ -260,7 +356,7 @@ def transcript(path: Path) -> dict:
             "hook_outputs": len(hook_outputs), "hook_first_output": hook_outputs[0][:400] if hook_outputs else None,
             "model_calls": len(msgs), "ctx_tokens": ctx, "out_tokens": out,
             "devkb_queries": dq, "devkb_nav": nav, "devkb_selftest": own, "calls": dict(calls), "chars": dict(chars), "guardrail_fired": fired,
-            "guardrail_actions": actions}
+            "guardrail_actions": actions, "refetch": refetch(seq)}
 
 
 def guardrail_actions(session: str, log: Path | None = None) -> tuple[int, dict]:
