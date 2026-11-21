@@ -1,0 +1,107 @@
+[
+ {
+  "id": "P1",
+  "sev": "should-fix",
+  "file": "session_context\\.py",
+  "what": "load() raises on valid JSON that is not an object (a list), so `symbol` fails",
+  "kw": "non-?dict|not a dict|isinstance|attributeerror|list|not an object|\\.get\\("
+ },
+ {
+  "id": "P2",
+  "sev": "should-fix",
+  "file": "read_tools\\.py",
+  "what": "the task hint is cached once per ReadTools: a long-lived MCP reader never sees a new prompt or the 12 h age-out",
+  "kw": "frozen|cached|never refresh|long-?lived|mcp|age|max_age|stale|only checked once|_task is none"
+ },
+ {
+  "id": "P3",
+  "sev": "should-fix",
+  "file": "packs\\.py",
+  "what": "the test-mention scan matches common names (resolve: 118 test files) and so flips the Coverage verdict to Incomplete for tests, which makes the guardrail pass through",
+  "kw": "common|generic|noise|noisy|shared|resolve|false positive|incomplete|guardrail|verdict"
+ },
+ {
+  "id": "P4",
+  "sev": "should-fix",
+  "file": "router\\.py",
+  "what": "log_decision creates .devkb (mkdir parents) in a project that has no graph",
+  "kw": "mkdir|creates .{0,12}\\.devkb|no graph|non-?devkb|leaves|directory"
+ },
+ {
+  "id": "P5",
+  "sev": "nit",
+  "file": "devkb_guardrail\\.py",
+  "what": "the new `## Test files that mention it` heading shares the `## Test files` prefix the guardrail's filter_pack counts sections by",
+  "kw": "filter_pack|guardrail"
+ },
+ {
+  "id": "P6",
+  "sev": "nit",
+  "file": "router\\.py",
+  "what": "the navigate line says no test calls it directly while the pack now lists tests that mention it",
+  "kw": "no test calls|directly|mention|misleading|inconsisten"
+ },
+ {
+  "id": "P7",
+  "sev": "nit",
+  "file": "init\\.py",
+  "what": "running init --claude-hook without --prompt-hook silently removes an installed prompt hook; --prompt-hook alone is ignored",
+  "kw": "without `?--prompt-hook|--prompt-hook`? is silently|prompt-hook.{0,40}ignored|removes a previously|removes an existing|silently removes|re-running.{0,40}removes"
+ },
+ {
+  "id": "H1",
+  "sev": "blocker",
+  "file": "accept|policybench\\.py",
+  "what": "bench/policy/accept/*.py stub template_for/checkout with the old signature, which the signature change breaks (305 307 330 334 335 336 340 fail)",
+  "kw": "accept|stub|lambda a|fake_checkout|signature|template_for|checkout\\(.*issue|existing (check|script)"
+ },
+ {
+  "id": "H2",
+  "sev": "should-fix",
+  "file": "replay_queries\\.py",
+  "what": "replayed agent commands go through shell=True and are cut at '&', so `2>&1` turns --project into a redirect target",
+  "kw": "shell=true|2>&1|redirect|truncat|\\[\\^;&|shlex|inject|execut"
+ },
+ {
+  "id": "H3",
+  "sev": "should-fix",
+  "file": "replay_queries\\.py",
+  "what": "a query's own call is in its own ground-truth set (calls[i:]), so uses/pack answers judge themselves as hits",
+  "kw": "calls\\[i:\\]|own call|itself|self|inflat|leak|its own|includes the query"
+ },
+ {
+  "id": "H4",
+  "sev": "should-fix",
+  "file": "searches\\.py",
+  "what": "grep_patterns misreads git grep, xargs/timeout wrappers, option values (-j 4, --exclude-dir X), repeated -e, heredoc bodies",
+  "kw": "git grep|xargs|timeout|--exclude-dir|-j|-e |heredoc|option|-t\\b|miss|undercount|regexp|--exclude-dir|_with_value"
+ },
+ {
+  "id": "H5",
+  "sev": "should-fix",
+  "file": "searches\\.py",
+  "what": "writes_code has false positives (echo > /tmp/x, awk '$1 > 3', any .write()) and counts too few extensions",
+  "kw": "false positive|echo|awk|\\.write\\(|/tmp|extension|\\.go|\\.rs|redirect"
+ },
+ {
+  "id": "H6",
+  "sev": "should-fix",
+  "file": "release_table\\.py",
+  "what": "--compare counts a cut-off run's unknown cost as $0.00",
+  "kw": "none|0\\.0|cut-?off|unknown cost|zero|#303"
+ },
+ {
+  "id": "H8",
+  "sev": "should-fix",
+  "file": "stale_replay|inline_replay|nav_habits",
+  "what": "the replay scripts call json.loads on a truncated stream line without try/except",
+  "kw": "json\\.loads|truncat|valueerror|cut-?off|crash|mid-?line"
+ },
+ {
+  "id": "H9",
+  "sev": "should-fix",
+  "file": "replay_queries|stale_replay|inline_replay|nav_habits",
+  "what": "the work directory is hard-coded (policybench honours POLICY_WORK_DIR) and base_graph raises StopIteration when no rmain/main checkout exists",
+  "kw": "policy_work_dir|hard-?coded|stopiteration|work_dir|next\\(|rmain-r|only hidden"
+ }
+]
