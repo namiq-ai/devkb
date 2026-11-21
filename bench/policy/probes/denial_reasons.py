@@ -3,7 +3,8 @@
 
 Every refused call has the session's reason in its `tool_result` (is_error) in `stream.jsonl`; the run's `result`
 event counts the refusals (`permission_denials`). This groups the refusals by that reason, per arm, and counts the
-devkb calls the no-devkb arms refuse by design (#335) apart: no prompt wording removes those.
+devkb calls the no-devkb arms refuse by design (#335), and the guardrail's substitutes (a hook deny that carries
+devkb's answer, #131), apart: no prompt wording removes those, and neither is a refused command form.
 
   python bench/policy/probes/denial_reasons.py RUN_DIR_OR_STREAM ...      # a table, then one JSON line per group
 """
@@ -19,6 +20,7 @@ from pathlib import Path
 # approval: ...", the parts it names
 GROUPS = [
     ("devkb denied in a no-devkb arm", None),
+    ("the guardrail answered instead (a hook deny, by design)", None),
     ("code with braces and quotes in the command", r"(?i)brace"),
     ("cd, then git", r"(?i)changes directory before running a version-control"),
     ("cd, then a redirect or a write", r"(?i)change directories and write|cannot automatically determine the final working directory"),
@@ -61,11 +63,13 @@ def refusals(stream: Path) -> tuple[str, list[tuple[str, str]]]:
 
 
 def group(arm: str, cmd: str, reason: str) -> str:
+    if re.search(r"(?i)PreToolUse:\w+ hook error: devkb answered", reason):   # the guardrail's substitute (#131)
+        return GROUPS[1][0]
     parts = re.search(r"(?is)following parts? requires? approval:\s*(.*)", reason)
     text = parts.group(1) if parts else (reason or cmd)
     if arm in NO_DEVKB and re.search(r"(^|[;&|(]\s*)(\S*/)?(\.venv/bin/)?devkb\s", text if parts else cmd):
         return GROUPS[0][0]
-    return next(name for name, pat in GROUPS[1:] if re.search(pat, text))
+    return next(name for name, pat in GROUPS[2:] if re.search(pat, text))
 
 
 def main(paths: list[str]) -> int:
@@ -80,8 +84,9 @@ def main(paths: list[str]) -> int:
             by_arm[(arm, g)] += 1
             examples.setdefault(g, (cmd[:100].replace("\n", " "), reason[:140].replace("\n", " ")))
     total, n = sum(groups.values()), sum(runs.values())
-    design = groups[GROUPS[0][0]]
-    print(f"{n} runs, {total} refusals ({total / max(n, 1):.2f} per run); without the devkb denials of the no-devkb arms: "
+    design = groups[GROUPS[0][0]] + groups[GROUPS[1][0]]
+    print(f"{n} runs, {total} refusals ({total / max(n, 1):.2f} per run); without those by design (devkb in a no-devkb arm, "
+          f"the guardrail's substitutes): "
           f"{total - design} ({(total - design) / max(n, 1):.2f} per run)")
     for g, c in groups.most_common():
         print(f"{c:4}  {g}")

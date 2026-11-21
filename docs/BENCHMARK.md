@@ -117,6 +117,13 @@ prefixes, loops, `$(...)` or subshells; call the venv as `.venv/bin/python`; cre
 and Edit tools, not `sed -i`, heredocs or Python one-offs. It says pipes and `;` are fine, since they were not refused.
 No allow rule was added: apart from the absolute venv path (which `Bash(.venv/bin/python:*)` does not match, and
 which the prompt now names), the refusals come from the session's command checks, which an allow rule does not lift.
+**Re-run with the paragraph** (the 8 tickets of the 0.2.14 re-run, #301-#307 and #331, one run per arm, each at its own
+base; rows in `bench/results/2026-11-20-denials-369/rerun-rows.jsonl`): 6 refusals in 16 runs. Two are the guardrail
+answering a Grep in the devkb arm, which Claude Code records as a denial (a hook deny that carries devkb's answer, by
+design); the other 4 are **0.25 per run**, 2 in each arm (0.2.14 re-run on the same tickets: 1.6 per run): two heredocs
+with braces and quotes, a redirect the checker could not read, and one other. Hidden checks 8/8 (`none`) and 7/8
+(`main`), suites 16/16.
+
 `claude_cmd()` in `policybench.py` builds every run's command; `tests/test_bench_same_permissions_369.py` builds it for
 every arm and checks that only the no-devkb arms' devkb deny differs. Known limits: the story bench
 (`storybench.run_one`, #117) builds its own command and has no `--setting-sources`; devkb's own `AGENTS.md` (kept in
