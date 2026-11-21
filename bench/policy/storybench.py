@@ -37,10 +37,20 @@ Python as .venv/bin/python; libclang is installed in it). The pinned C/C++ corpu
 checkout). Implement the story below completely: code, fixture tests, and any measurement or document it asks for.
 Keep the whole test suite passing (.venv/bin/python -m pytest -q). Commit your work with git when done. Do not push
 and do not use gh.
-
+{commands}
 # {title}
 
 {body}
+"""
+# The same for every arm, appended to both prompts (#369). Each clause answers a refusal reason the session gave in the
+# runs (the tool_result of every refused call; docs/BENCHMARK.md, "Permission denials").
+COMMANDS = """
+How to run commands here (the session refuses other forms): run shell commands from the checkout root and do not `cd`
+first (a `cd` followed by git, a redirect or a write is refused); stay inside the checkout, for scratch files too (no
+`..`, `/tmp` or other directories); no shell variables or `NAME=value` prefixes, loops, `$(...)` or subshells;
+call the venv as .venv/bin/python.
+Create and change files with the Write and Edit tools, not with `sed -i`, heredocs or Python one-offs that write files:
+code with braces and quotes in a shell command is refused. Pipes (`| tail -20`) and `;` between commands are fine.
 """
 ALLOW = ["Read", "Edit", "Write", "Glob", "Grep", "TodoWrite", "mcp__devkb",
          "Bash(git:*)", "Bash(.venv/bin/python:*)", "Bash(.venv/bin/pytest:*)", "Bash(python3:*)", "Bash(devkb:*)", "Bash(.venv/bin/devkb:*)",
@@ -48,6 +58,11 @@ ALLOW = ["Read", "Edit", "Write", "Glob", "Grep", "TodoWrite", "mcp__devkb",
          "Bash(rg:*)", "Bash(diff:*)", "Bash(sed -n:*)", "Bash(awk:*)", "Bash(sort:*)", "Bash(uniq:*)", "Bash(mkdir:*)",
          "Bash(make:*)", "Bash(cd:*)", "Bash(echo:*)", "Bash(jq:*)"]
 DENY = ["Bash(git push:*)", "Bash(gh:*)", "Task", "WebFetch", "WebSearch"]
+
+
+def story_prompt(t: dict) -> str:
+    """The story bench's prompt for a ticket ({title, body}), with the command rules every arm gets (#369)."""
+    return PROMPT.format(title=t["title"], body=t["body"], commands=COMMANDS)
 
 
 def sh(cmd, **kw):
@@ -107,7 +122,7 @@ def run_one(issue: str, arm: str, rep: int) -> str:
     w = B / "work" / tag
     checkout(w)
     t = json.loads(sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
-    cmd = ["claude", "-p", PROMPT.format(title=t["title"], body=t["body"]), "--model", MODEL, "--output-format",
+    cmd = ["claude", "-p", story_prompt(t), "--model", MODEL, "--output-format",
            "stream-json", "--verbose", "--max-turns", "250", "--permission-mode", "acceptEdits", "--strict-mcp-config",
            "--mcp-config", str(w / ".mcp.json"), "--allowedTools", *ALLOW, "--disallowedTools", *DENY]
     env = dict(os.environ, DEVKB_GUARDRAIL="1" if arm == "guardrail" else "0",

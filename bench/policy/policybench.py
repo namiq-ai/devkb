@@ -66,7 +66,7 @@ Python as .venv/bin/python). The pinned C/C++ corpus repositories are in ./corpu
 git repository. Fix the issue below: change the code, add a regression test that fails before your fix and passes
 after it, keep the whole test suite passing (.venv/bin/python -m pytest -q), and commit your work with git. Do not
 push and do not use gh.
-
+{commands}
 # {title}
 
 {body}
@@ -242,7 +242,8 @@ def prompt_for(issue: str, title: str, body: str, w: Path, hide: bool = False) -
     """The prompt an agent is given for a ticket: as filed, or with its location withheld (#337)."""
     if hide:
         title, body = without_location(title, body, w)
-    return (sb.PROMPT if issue == "117" else PROMPT).format(title=title, body=without_missing_data(body, w))
+    return (sb.PROMPT if issue == "117" else PROMPT).format(title=title, body=without_missing_data(body, w),
+                                                           commands=sb.COMMANDS)
 
 
 def checkout(w: Path, arm: str):
@@ -342,6 +343,25 @@ def remove_dependents(tests: Path) -> None:
             return
         for p in gone:
             p.unlink()
+
+
+def permissions(arm: str) -> tuple[list[str], list[str]]:
+    """(--allowedTools, --disallowedTools) of a run: the same rules in every arm (#369); an arm without devkb also
+    denies devkb in both forms (#335)."""
+    base = split_arm(arm)[0]                          # a hidden arm (#337) is denied what its base arm is
+    return list(sb.ALLOW), sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if base in ("none", "nonekeep") else [])
+
+
+def claude_cmd(issue: str, arm: str, prompt: str, mcp: str) -> list[str]:
+    """The `claude` command of a run. Only `arm` decides the deny list's devkb entries (permissions); everything else is
+    the same in every arm (#369)."""
+    if sb.COMMANDS.strip() not in prompt:            # every arm's prompt says how to run commands, whatever came before
+        raise ValueError(f"the {arm} prompt lacks the command rules (storybench.COMMANDS, #369)")
+    allow, deny = permissions(arm)
+    return ["claude", "-p", prompt, "--model", sb.MODEL, *SOURCES, "--output-format",
+            "stream-json", "--verbose", "--max-turns", "250" if issue in ("117", "131") else "150", "--permission-mode",
+            "acceptEdits", "--strict-mcp-config", "--mcp-config", mcp, "--allowedTools", *allow, "--disallowedTools", *deny,
+            "--include-hook-events"]                  # the stream then records what the hook said to the agent (#330)
 
 
 def tool_of(arm: str, env: dict | None) -> str:
@@ -468,19 +488,17 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     prompt = run_prompt(issue, tag.split("-")[1], w)
     if os.environ.get("POLICY_PREREGISTER_POST") == "1":
         prompt += SETTINGS_NOTE
-    deny = sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if arm in ("none", "nonekeep") else [])   # both forms (#335)
     meta = json.loads((w / ".bench-arm.json").read_text())
     env_bin = tool_of(arm, toolenv.build(ENV_REF[arm]()) if arm in ENV_REF else None)
-    cmd = ["claude", "-p", prompt, "--model", sb.MODEL, *SOURCES, "--output-format",
-           "stream-json", "--verbose", "--max-turns", "250" if issue in ("117", "131") else "150", "--permission-mode", "acceptEdits", "--strict-mcp-config",
-           "--mcp-config", mcp, "--allowedTools", *sb.ALLOW, "--disallowedTools", *deny,
-           "--include-hook-events"]                  # the stream then records what the hook said to the agent (#330)
+    cmd = claude_cmd(issue, arm, prompt, mcp)
     # The Bash tool backgrounds a command after 120 s by default; a full suite that runs about that long then costs the agent
     # extra turns to wait for it, in one arm and not the other (#334). Every arm gets the same, longer limit.
     limit = os.environ.get("POLICY_BASH_TIMEOUT_MS", "600000")
     env = dict(os.environ, BASH_DEFAULT_TIMEOUT_MS=limit, BASH_MAX_TIMEOUT_MS=limit,
                DEVKB_GUARDRAIL={"before": "0", "none": "0", "nonekeep": "0", "cli130": "enforce"}.get(arm, "1"),
                PATH=f"{Path(env_bin).parent}:{w / '.venv' / 'bin'}:{os.environ['PATH']}", **ARM_ENV.get(arm, {}))
+    meta["prompt_sha256"] = hashlib.sha256(cmd[2].encode()).hexdigest()       # what the agent was told, checkable later
+    meta["commands_sha256"] = hashlib.sha256(sb.COMMANDS.encode()).hexdigest()
     (out / "arm.json").write_text(json.dumps(meta) + "\n")
     t0 = time.time()
     before = harness_state()
