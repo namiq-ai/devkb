@@ -50,10 +50,10 @@ the parent from the issue's own words): bm25 **0.78**, structural 0.59, hybrid 0
 Per the loop's rule ("park if the hybrid does not beat text by 10 points"): **park `ErrorSignature` and the issue-graph schema.**
 Text over the existing ticket and issue text is enough for related-issue retrieval here, and the structural arm is worse on the
 slice that tests it. A popularity prior combined with text may add a few points (+0.07, not distinguishable from zero); it is a
-ranking choice for a triage tool, not a graph feature. Revisit only with a different truth (real duplicates; there are 3).
+ranking choice for a triage tool, not a graph feature. Revisit only with a different truth (real duplicates; 3 are marked, by label or loose phrasing, none as "duplicate of #N").
 
 ## What the graph already has
-The schema has `ErrorSignature` (84 nodes in this graph, with `RAISES` and `LOGS` edges), `SIMILAR_TO` and `DUPLICATE_OF` between tickets, and
+The schema has `ErrorSignature` (84 nodes in this graph, with 113 `RAISES` edges; there are no `LOGS` edges here), `SIMILAR_TO` and `DUPLICATE_OF` between tickets, and
 `Spec`. The GitHub layer does not populate `SIMILAR_TO` or `DUPLICATE_OF` (0 edges here; 21 ticket nodes against 222 issues), so the
 benchmark's graph arm could not use them. Filling them from issue text would at best equal text retrieval (bm25: 0.78 on the slice
 that tests it), which is why the decision above stands. An earlier note in the plan said the graph lacked `ErrorSignature`; that was wrong.

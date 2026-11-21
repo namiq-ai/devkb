@@ -7,8 +7,9 @@ Status: design, nothing built. Evidence: probes and replays dated 2026-11-21, li
 Today a search whose names are not all answered Complete is either left alone (`pass-through`) or given a hint beside it. A
 graph answer that *replaces* the search (`substitute`, a denial that carries the answer) is allowed only when every name is
 Complete, because an incomplete replacement makes the agent ask again: the denied call, the second call and the tokens of
-both are a loss. That rule is why 9% of searches are answered (24 of 256 live; 54 of 381 replayed), and why the replay of
-the obvious fix, answer what resolves and drop the rest, only added hints beside grep (+21 answers, none replacing a call).
+both are a loss. That rule is why 9% of searches are answered live (24 of 256; replayed on the base trees 42 of 301, 14.0%, and 18 of 209 before the
+run's first edit, 8.6%), and why the replay of the obvious fix, answer what resolves and drop the rest, only added hints beside grep
+(+14 answers, none replacing a call).
 
 The way out is not a better rule for when to replace. It is to **never replace**: let the agent's own search run, which is
 complete by construction, and combine the graph's part with that result in the same tool call.
@@ -56,7 +57,7 @@ and the addition says which they are. No second search, no denial, no re-ask.
 
 Safeguards. (a) Skip when the call failed, was cut, or its output is empty. (b) A name whose defining file changed since the
 graph was built is left out of the addition and listed as "changed since the build: read it" (the name-scoped staleness rule;
-under 4% of searches in the replay were affected). (c) Do not repeat an addition for a name already answered in the session
+under 1% of searches (6 of 690) in the replay were affected). (c) Do not repeat an addition for a name already answered in the session
 (56 of 256 decisions were repeats). (d) The addition is capped at 600 characters, T2 at 60 lines. (e) Fail open on any
 exception and on a hook time of over 5 s (the replay's slowest decision was 2.2 s against the live limit of 20 s).
 (f) The rewrite variant (`updatedInput` shrinking the grep to the names the graph does not answer) is phase 2 and needs the

@@ -28,7 +28,7 @@ Rules: a fuzzy match is never a lead; an unknown error or ticket adds nothing; a
 says so in one line; no graph means no answer and no failure; `DEVKB_ROUTER=0` turns it off (a benchmark's control arm).
 The router never replaces `git diff`, the test runner or `gh pr checks`.
 
-Install: the plugin (`plugins/devkb/hooks/prompt.sh`, needs the release that ships it) or `devkb init --claude-hook`.
+Install (opt-in; nothing installs a prompt hook by default): `devkb init --claude-hook --prompt-hook router` (or `context`). `--prompt-hook` takes effect only together with `--claude-hook`. The plugin ships `plugins/devkb/hooks/prompt.sh` but does not register it in `hooks.json`; it would need a release newer than 0.2.14 (it pins `devkb[mcp]>=0.2.15`).
 Freshness: `devkb init --hooks` installs the post-commit rebuild.
 
 ## Not built (and why)
@@ -60,7 +60,7 @@ Each prompt was run through `devkb hook prompt` and every claim in the bundle ch
 | 4 CR -> PR | review feedback on this branch | blast radius correct (`init.py:277` calls `cli.main`; tests right); 1.4 KB footer per pack overflowed the budget | footer and title dropped |
 | 5 Release | "prepare the release" | "SemVer suggests patch" for 11 commits that use `area:` not `feat/fix`: a guess | no verdict when no commit is typed; shows the range by area |
 | 5 Release | "release the lock ..." | would have routed to release | trigger needs a release phrase |
-| End to end | `claude -p`, no tools, hook on vs `DEVKB_ROUTER=0` | on: `devkb/hook.py:73` + `tests/test_devkb_hook.py` (both correct); off: NO CONTEXT | none |
+| End to end | `claude -p`, no tools, hook on vs `DEVKB_ROUTER=0` | on: it named `devkb/read_tools.py` (the router is `devkb/router.py`; `hook.py:73` is the pre-edit hook, a different one) and its tests (both correct); off: NO CONTEXT | none |
 
 Defects in the graph itself, found on the way and not fixed here (AGENTS.md rule 5: one issue each): `pack error` lists
 raisers whose files do not contain the message, without a Coverage warning; `tests_for` shows 2 of 6+ test files for

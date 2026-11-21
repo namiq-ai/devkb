@@ -1,6 +1,6 @@
 # Quality benchmarks for the questions grep cannot answer
 
-Status: design, nothing built. The turn and cost benchmarks cannot see what the reference architecture is for: which tests a
+Status: **built and run (2026-11-21)**: `bench/quality/qb1_tests.py`, `qb2_related.py`, `qb3_release.py`, `qb4_epic.py`; results in `docs/analysis/qb1-baseline.md` to `qb4-baseline.md`. The designs below are as first written; where the built benchmark differs, the baseline documents say how (QB2: 73 items from 27 parents, truth the "Follow-up of #N" link, no explicit duplicates in the bodies; QB3: an oracle from the CLI docstring and COMMANDS table, `add_argument` flags, the MCP tool lists and `model.py`, not `--help` recursion or input schemas; QB4: 26 items from 4 specs). The turn and cost benchmarks cannot see what the reference architecture is for: which tests a
 change endangers, which earlier issue a new one repeats, whether a release breaks users, what an epic will touch. These four
 measure quality, from ground truth built mechanically from this repository's history, offline, with no model runs. Counts
 below were checked on 2026-11-21.
@@ -38,7 +38,7 @@ Question: for a change, does `pack file`, `tests_to_run` or `review_pack` name t
 
 Question: given a new issue, does the graph find the issue it repeats or follows, and the code that owns it?
 
-- **Items.** 222 issues, 162 closed. 73 carry "Follow-up of #N", 3 are explicit duplicates (label or "duplicate of"). Too few
+- **Items.** 222 issues, 162 closed. 73 carry "Follow-up of #N", 3 are marked duplicates (by label or the phrases "same as" / "already filed"; none uses "duplicate of #N"). Too few
   true duplicates to score alone, so the task is *related-issue retrieval* with the link as truth, and the 3 duplicates reported
   separately. 76 items.
 - **Truth.** The linked parent issue; for owners, the files the parent's fix commits changed (commits that cite `(#N)`: 151).

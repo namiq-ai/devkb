@@ -15,15 +15,15 @@ Verdict: **confirmed** (matches the data), **corrected** (right direction, wrong
 |---|---|---|
 | hook fires, `DEVKB_ROUTER=0` falls back | confirmed | headless run: router on answered, off said NO CONTEXT. The router is `devkb/router.py`; `hook.py:73` is `pre_edit`, a different hook |
 | false `located`/ticket-key bypasses fixed; 27 usage-limit runs archived; self-inflicted flags isolated | confirmed | commits `3e37948`, `5932278`; `runs-archive/` |
-| refetch 39-40% | **corrected** | the first metric counted generic words and the by-design outline-then-read. Corrected (`storybench.refetch`): 14 of 76 queries (18%); `router` 33%, `rmain` 25%, `ctx` 7%; plus 19 outline-then-read, counted apart |
-| `ctx` "significantly improved" symbol top-1, 51% -> 81% | **withdrawn (errata 2)**: one query counted 11 times; the live `ctx` arm never ran it | 14/27 -> 22/27 on the same queries the fix was designed from; no significance test; no held-out set. Live batch: -2.8 turns, interval (-6.6, +1.0), not significant |
+| refetch 39-40% | **corrected** | the first metric counted generic words and the by-design outline-then-read. Corrected (`storybench.refetch`): 14 of 76 queries (18%; an independent recount gives 73); `router` 33%, `rmain` 25%, `ctx` 7%; plus 19 outline-then-read, counted apart |
+| `ctx` "significantly improved" symbol top-1, 51% -> 81% | **withdrawn (errata 2)** | one query counted 11 times; at function level 1 of 8 before and after; the live `ctx` arm never ran the ranking, so its -2.8 turns (within-ticket interval -4.9 to -0.8; unpaired -6.6 to +1.0) is an A/A noise floor, not an effect |
 | 90 valid runs in a "30-row" snapshot | **corrected** | the table has 32 rows, 96 runs (6 tickets x 2 forms x up to 4 arms, 3 reps), none invalid |
-| turns/cost: none 18.6, rmain 17.8, router 20.3 | confirmed | 24 matched runs per arm; SD within a cell is 3.8 turns |
+| turns/cost: none 18.6, rmain 17.8, router 20.3 | **corrected (errata 3)** | the 17.8 mixed in a wave that was later discarded. On the runs on disk, 24 per arm: none 18.6 turns / $0.41, rmain 19.5 / $0.40, router 20.3 / $0.45; the router is +0.8 turns and +13% cost against rmain, in a different wave from it; SD within a cell is 3.8 (4.6 in the later batch) |
 | ~1.1-1.5 devkb calls vs 6-7.5 greps | confirmed | rmain 1.5, router 1.1; grep 6.0-6.8 |
 | 47% of greps answerable, 51% not | **corrected: 29% distinctive symbols** (`nav_habits.py`) | 394 greps: 47% name a graph symbol (23% `def X`, 24% identifier), 51% a field, keyword, common word or text |
 | 256 decisions: 24 answered, 101 not-complete, 46 stale, 56 duplicate | confirmed | but the replay on base trees answered 54 of 381 (14%) |
 | "29 of the 101 had a complete name; 20 of the 46 stale had all names complete" as recoverable | **corrected** | replayed: partial answers add 21 answers that sit *beside* grep (replace nothing); a name-scoped staleness rule frees 15 of 394 searches |
-| outline -> ranged Read -> grep "adds overhead", refetch "due to uninformative outline" | **corrected** | 17 of 18 Reads after an outline were ranged: the outline did its job. Devkb arms pulled 10k fewer characters per run (-18%, all four tickets) |
+| outline -> ranged Read -> grep "adds overhead", refetch "due to uninformative outline" | **corrected** | 17 of 18 Reads after an outline were ranged: the outline did its job. Devkb arms pulled fewer characters of locating output per run: -15% (-9.0k) for rmain against none, -7% to -26% on every ticket (first figure -18%, from the discarded wave) |
 | 70% of steps are reading, editing, tests | confirmed (about 78% of calls) | edit/write/test 13-17 of 27-32 calls per run |
 | #205 withheld pass 3/3 (none) vs 5/9 devkb arms | confirmed, unexplained | devkb calls on #205 are 0.0-0.3 per run, so devkb navigation does not explain it; n = 3 |
 
@@ -65,11 +65,11 @@ graph holds; devkb replaced about 1.1 net.
 | item | expected effect on turns | on tokens | basis | status |
 |---|---|---|---|---|
 | ship the ranking (`ctx`) | not shown | none | replay: 8 distinct queries, function level 1 of 8 before and after; held-out unchanged; the live `ctx` arm never ran it (errata 2) | **unproven; not installed by default** |
-| silent context hook as the `init` default, router off | 0 | -2.5k first call if the router text is dropped | router showed +2.6 turns (n.s.); the context hook pushes nothing | **do** |
+| silent context hook as the `init` default, router off | 0 | -2.5k first call if the router text is dropped | the router showed +0.8 turns and +13% cost against rmain (n.s., different waves); the context hook pushes nothing and its ranking is unproven | **superseded: no prompt hook is installed by default** |
 | partial-answer guardrail | 0 | +20 tokens per run | replayed: +14 answers (14.0% to 18.6%), beside grep, none replaces a call | **killed** |
 | refresh a stale graph | 0 | 0 | 12-13 s per rebuild; name-scoped rule frees under 4% | **killed** |
-| inline pack on Read/Edit | at most 1.5% | **+2.3k tokens per run**, re-read each later turn (~4% of context) | `inline_replay.py`: 1.2 of 7.6 navigation calls per run are covered by an opened file's pack (39 reads of a file the pack merely names, which the agent still reads, and 44 greps). A pack is 3.6k characters | **killed at the gate** |
-| ambiguous `symbol --source`: do not print the body of a wrong first match | under 1% | -1 to -2k tokens on ambiguous names only | replay: `symbol resolve --source` printed `project_context.resolve` | small, cheap, do with 1 |
+| inline pack on Read/Edit | at most 1.5% | **+2.4k tokens per run**, re-read each later turn (~4% of context) | `inline_replay.py`: 1.2 of 7.6 navigation calls per run are covered by an opened file's pack (39 reads of a file the pack merely names, which the agent still reads, and 44 greps). A pack is about 3.8k characters | **killed at the gate** |
+| ambiguous `symbol --source`: do not print the body of a wrong first match | under 1% | -1 to -2k tokens on ambiguous names only | replay: `symbol resolve --source` printed `project_context.resolve` | **dropped** (5 of 8 distinct ambiguous queries would save a body, 3 would cost a call) |
 | one call for outline plus the range | 1-2% | -0.5k | 0.25 outline-then-ranged-Read pairs per run | low value, skip unless a gate shows more |
 | tests-to-run recall / quality | unknown | unknown | no ground truth yet: the fixes add tests, they do not change existing ones | needs a benchmark |
 | triage, epic and release graph | not measurable on these tickets | | the tickets are fixes and features | needs its own benchmarks (4) |
@@ -96,9 +96,11 @@ Each backlog item runs the same loop. A step that fails its gate ends the loop f
 
 ## 5. Backlog, in order
 
+*The plan as first written, before the audits. Its status is the table at the end of this document ("Status after the audit and the fixes"): rows 1 and 3 were superseded (no prompt hook by default; the ranking is judged by replay), 2 was dropped, 4 to 7 were built as QB1 to QB4, and 8 was filed as #399 and #400.*
+
 | # | item | gate (offline) | owner action | result so far |
 |---|---|---|---|---|
-| 0 | hygiene: full suite green; the `.mcp.json` test checks what git tracks; refuse or archive on a run-name collision; `policybench.py score` per ticket | suite passes | done: 1216 tests, `.mcp.json` test fixed | `score` and the collision check open |
+| 0 | hygiene: full suite green (**1231 passed, 2 skipped on 2026-11-21**; first written as "1216"); the `.mcp.json` test checks what git tracks; refuse or archive on a run-name collision; `policybench.py score` per ticket | suite passes | done: 1216 tests, `.mcp.json` test fixed | `score` and the collision check open |
 | 1 | `init` installs the silent context hook by default; the router becomes `--router` | `test_devkb_init`; the hook pushes nothing | do | pending |
 | 2 | ambiguous `symbol`: no wrong body | replay `symbol --source` on 118: no wrong body printed, the right file listed | do | pending |
 | 3 | held-out replay set: run `none` and `rmain` on 10 new navigation tickets, keep their queries | at least 100 `symbol`/`uses` queries from tickets the ranking never saw | do, then re-run `replay_queries.py` | **this is what tests the 51% -> 81% claim** |
@@ -115,8 +117,8 @@ show a quality gain that turn counts cannot.
 
 - Prompt-time router push: no effect on cost, turns or quality in 72 runs (keep off).
 - Partial-answer guardrail: `hook_replay.py`, +14 answers beside grep, 0 replaced.
-- Fast refresh on stale graph: 12-13 s per build; `stale_replay.py` 6 of 689.
-- Inline pack on Read: `inline_replay.py`, +2.3k tokens per run for at most 0.5 greps saved.
+- Fast refresh on stale graph: 12-13 s per build; `stale_replay.py` 6 of 690.
+- Inline pack on Read: `inline_replay.py`, +2.4k tokens per run for at most 0.5 greps saved.
 
 ---
 
@@ -129,12 +131,12 @@ overstated or irreproducible figures; all are corrected in `workflow-router-benc
 |---|---|---|
 | ranking by the task's words | replay: one distinct query flips at file level, none at function level, held-out unchanged; the live `ctx` arm never ran it (an A/A: -2.8 turns between identical treatments is the design's noise floor) | **unproven; no prompt hook is installed by default** (`--prompt-hook context` is opt-in) |
 | prompt-time router | no effect on cost, turns or quality in 72 runs | off by default (opt-in `--prompt-hook router`) |
-| guardrail partial answers, refresh on stale graph, inline pack on Read | +14 hints beside grep; 6 of 689 searches; 1.2 covered calls per run against 2.3k tokens | killed at the offline gates |
+| guardrail partial answers, refresh on stale graph, inline pack on Read | +14 hints beside grep; 6 of 690 searches; 1.2 covered calls per run against 2.3k tokens | killed at the offline gates |
 | QB1 tests to run | **`pack` changes: 0.83 recall pooled over 23 items (10 held-out), import 0.64, grep 0.69, at precision 0.63** | **shipped on the branch**: `pack refactor` names tests that mention the function with no resolved call and says Incomplete; `pack file` marks direct tests |
 | QB2 related issues | hybrid - text = +0.00; text 0.78 on first-time parents, structural 0.59 | issue-graph schema parked |
 | QB3 release audit | 0 breaking changes in 16 releases; the heuristics produce false alarms (6 and 10 of 16) | no PublicAPI/DBSchema schema; a mechanical surface diff is the tool if one is wanted |
 | QB4 epic impact | baseline 0.95 recall@20 (saturated), graph 0.84 | closed; no GOVERNS work |
-| graph-defect tickets | drafted (`ticket-drafts-graph-defects.md`), reproduced | **not posted: needs the owner's approval** |
+| graph-defect tickets | reproduced and **filed as #399 and #400** (`ticket-drafts-graph-defects.md`) | open |
 | harness | refuse-not-skip on collisions, `POLICY_BASES` for interleaved batches, archive is not contamination, refetch metric fixed, `--compare` with within-ticket intervals | done |
 
 Dropped, with the reason: the ambiguous `symbol --source` change (5 of 8 distinct ambiguous queries would save a wrong body and 3 of 8
@@ -146,5 +148,5 @@ Still open, in order of value:
 1. **A live benchmark whose agent runs the arm's devkb.** In the current harness the agent's `devkb` is the checkout's own, which on these
    tickets is the code under edit, so no devkb change can be tested live. Tickets in another repository (the C/C++ corpora, whose bug
    fixes can be built from their own history) would separate the two.
-2. Post the two graph-defect tickets, after review.
+2. Fix the two graph defects filed as #399 and #400.
 3. Re-run QB1 when new snapshots accumulate: 23 items from 6 snapshots; some items share changed functions.
