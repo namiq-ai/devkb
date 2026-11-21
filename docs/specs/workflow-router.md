@@ -1,6 +1,6 @@
 # Workflow router: push the graph's answer at the SDLC stage, do not wait to be asked
 
-Status: implemented on `feat/workflow-router` (`devkb/router.py`, `devkb hook prompt`). **Measured, and off by default**: in 72 runs on four tickets it showed no effect on cost, turns or quality (docs/analysis/workflow-router-benchmark.md). `devkb init --claude-hook` and the plugin install `devkb hook context` instead, which only records the task's words for `symbol`'s ranking and pushes nothing; `--router` installs this router.
+Status: implemented on `feat/workflow-router` (`devkb/router.py`, `devkb hook prompt`). **Measured, and off by default**: in 72 runs on four tickets it showed no effect on cost, turns or quality (docs/analysis/workflow-router-benchmark.md). `devkb init --claude-hook` and the plugin install no prompt hook; `--prompt-hook router` installs this router and `--prompt-hook context` the silent recording hook for `symbol`'s ranking, whose own benchmark did not show a gain either (docs/analysis/workflow-router-benchmark.md, errata 2).
 
 ## Problem
 

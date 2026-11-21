@@ -18,6 +18,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
 import replay_queries as rq  # noqa: E402
+import searches  # noqa: E402
 from devkb import misses  # noqa: E402
 from devkb.process_api import ProcessAPI  # noqa: E402
 from devkb.read_tools import ReadTools  # noqa: E402
@@ -74,14 +75,12 @@ def main(tickets: list[str]) -> None:
                 targets, kind = [fp], "read"
             elif name == "Bash":
                 c = inp.get("command", "")
-                if re.search(r"\bdevkb\s", c) and not GREP.search(c.split("devkb")[0]):
+                if re.search(r"\bdevkb\s", c) and not searches.grep_patterns(c):
                     continue
                 targets = [rq.rel(x, run) for x in READ.findall(c)]
                 kind = "read" if targets else None
-                for g in GREP.finditer(c):
-                    q = re.findall(r"""(?:"([^"]+)"|'([^']+)')""", g[1])
-                    if q:
-                        kind, targets = "grep", misses.navigation_names(q[0][0] or q[0][1], "both")[:3]
+                for pat in searches.grep_patterns(c):
+                    kind, targets = "grep", misses.navigation_names(pat, "both")[:3]
             elif name == "Grep":
                 kind, targets = "grep", misses.navigation_names(inp.get("pattern", ""), "both")[:3]
             if kind and targets and (kind == "grep" or any(t.endswith(CODE) for t in targets)):
@@ -89,7 +88,9 @@ def main(tickets: list[str]) -> None:
                 tot[f"  {kind} calls"] += 1
                 cover = [pack_of(m[1], o) for o in opened if o.endswith(CODE)]
                 if kind == "read":
-                    hit = any(t in fl or t in opened for t in targets for fl, _n, _s in cover)
+                    # a file the pack names that the agent has not opened: a re-read of an opened file is not something a pack replaces,
+                    # and a pack that names a file does not replace reading it (an audit: 91 of the first 144 were re-reads)
+                    hit = any(t in fl and t not in opened for t in targets for fl, _n, _s in cover)
                 else:
                     hit = bool(targets) and all(any(n in ns for _f, ns, _s in cover) for n in targets)
                 if opened and hit:

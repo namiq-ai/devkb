@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# devkb plugin, UserPromptSubmit: record the task's words so `symbol` breaks a tie by the task (devkb/session_context.py). Pushes
+# devkb plugin, opt-in (not registered in hooks.json: no measured gain), UserPromptSubmit: record the task's words so `symbol` breaks a tie by the task (devkb/session_context.py). Pushes
 # nothing. The prompt router (devkb/router.py, `hook prompt`) is opt-in: it showed no effect on cost or turns in 72 benchmark runs.
 # Never blocks and never fails the prompt. DEVKB_CMD overrides the released package (for testing a checkout);
 # DEVKB_CONTEXT=0 turns the recording off.

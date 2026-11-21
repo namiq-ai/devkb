@@ -88,9 +88,40 @@ def base_graph(ticket: str, keep: Path, devkb: str) -> Path:
 
 
 FIRST = re.compile(r"^\s*1\.\s+(\S+)", re.M)
+LISTED = re.compile(r"^\s*\d+\.\s+(\S+)\s+\S+\s+L(\d+)", re.M)
+_CHANGED: dict[str, set] = {}
 
 
-def judge(r: dict, out: str) -> dict:
+def changed_symbols(run: str, ticket: str, keep: Path, devkb: str) -> set[tuple[str, int]]:
+    """(file, first line) of every definition at the ticket's base that the run changed: the old-side line ranges of the run's diff
+    (committed or not) against its first commit, mapped onto the base graph's definitions. This is the function-level truth: the
+    file-level judge credits a first match that sits in a file the agent edited even when the agent never touched that function."""
+    if run not in _CHANGED:
+        w = WORK / run
+        first = subprocess.run(["git", "-C", str(w), "rev-list", "--max-parents=0", "HEAD"], capture_output=True, text=True).stdout.split()
+        out: set = set()
+        if first:
+            from devkb.process_api import ProcessAPI  # noqa: PLC0415
+            from devkb.read_tools import ReadTools  # noqa: PLC0415
+            tools = ReadTools(ProcessAPI(str(base_graph(ticket, keep, devkb))))
+            diff = subprocess.run(["git", "-C", str(w), "diff", "--unified=0", first[0]], capture_output=True, text=True).stdout
+            f = None
+            for line in diff.splitlines():
+                if line.startswith("--- "):
+                    f = line[6:] if line.startswith("--- a/") else None
+                m = re.match(r"@@ -(\d+)(?:,(\d+))? ", line)
+                if f and m:
+                    a, n = int(m[1]), int(m[2]) if m[2] is not None else 1
+                    for i in tools.ids:
+                        ps = tools.idx.props[i]
+                        ls, le = ps.get("line_start"), ps.get("line_end")
+                        if tools.file[i] == f and ls and le and (a <= le and a + max(n, 1) - 1 >= ls):
+                            out.add((f, int(ls)))
+        _CHANGED[run] = out
+    return _CHANGED[run]
+
+
+def judge(r: dict, out: str, fn: set | None = None) -> dict:
     """symbol: the first-listed file is one the agent worked in. uses/pack: a listed file is. outline: ok when it answered."""
     files = set(re.findall(r"[\w./-]+\.(?:py|h|cc|cpp|ts|md)", out))
     work = set(r["after"])
@@ -101,8 +132,10 @@ def judge(r: dict, out: str) -> dict:
         n = re.search(r"(\d+) match", out)
         listed = re.findall(r"^\s*\d+\.\s+(\S+)", out, re.M)
         rank = next((k + 1 for k, x in enumerate(listed) if x in work), 0)
+        defs = [(m[1], int(m[2])) for m in LISTED.finditer(out)]
+        frank = next((k + 1 for k, d in enumerate(defs) if d in fn), 0)         # function level: a definition the run changed
         j.update(top=top, matches=int(n[1]) if n else 0, hit=bool(top and top in work), answered=bool(top), rank=rank,
-                 listed=bool(rank))
+                 listed=bool(rank), fn_hit=frank == 1, fn_rank=frank)
     elif r["kind"] in ("uses", "pack"):
         j.update(hit=bool(files & work), answered=not j["empty"] and bool(files))
     else:
@@ -124,21 +157,37 @@ def run(inp: Path, devkb: str, keep: Path, use_context: bool = False) -> list[di
         cmd = re.sub(r"--project\s+\S+", "", cmd) + f" --project {d}"
         cmd = re.sub(r"^\S*devkb", devkb, cmd.replace(".venv/bin/devkb", devkb))
         p = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=d, timeout=120)
-        res.append({**r, **judge(r, p.stdout + p.stderr), "cmd": cmd.replace(str(d), "<t>")[:140]})
+        res.append({**r, **judge(r, p.stdout + p.stderr, changed_symbols(r["run"], r["ticket"], keep, devkb)), "cmd": cmd.replace(str(d), "<t>")[:140]})
     return res
 
 
 def table(res: list[dict]) -> str:
+    """Per recorded query and per DISTINCT query (the same ticket, kind and arguments counted once: one popular query run by many
+    agents is one query), file-level and function-level."""
+    def norm(r):
+        return (r["ticket"], r["kind"], re.sub(r"--\S+(?:\s+\S+)?|[|].*", "", r["args"].replace("--project .", "")).strip().strip("\"'"))
     g = defaultdict(list)
     for r in res:
         g[r["kind"]].append(r)
-        g["ALL"].append(r)
-        g[("hidden " if r["arm"].endswith("hid") else "as filed ") + r["kind"]].append(r)
-    lines = ["| queries | n | answered | top-1 on target | listed anywhere | median chars |", "|---|---|---|---|---|---|"]
-    for k in sorted(g, key=str):
+    lines = ["| queries | recorded | distinct | answered | top-1 file on target | top-1 definition changed | listed anywhere (file) | median chars |", "|---|---|---|---|---|---|---|---|"]
+    for k in sorted(g):
         v = g[k]
+        dist = {}
+        for r in v:
+            dist.setdefault(norm(r), []).append(r)
         ch = sorted(x["chars"] for x in v)[len(v) // 2]
-        lines.append(f"| {k} | {len(v)} | {sum(x['answered'] for x in v)} | {sum(x['hit'] for x in v)} ({100 * sum(x['hit'] for x in v) // len(v)}%) | {sum(x.get('listed', x['hit']) for x in v)} | {ch} |")
+        fnn = [x for x in v if "fn_hit" in x]
+        lines.append(f"| {k} | {len(v)} | {len(dist)} | {sum(x['answered'] for x in v)} | {sum(x['hit'] for x in v)} "
+                     f"({100 * sum(x['hit'] for x in v) // len(v)}%) | {(str(sum(x['fn_hit'] for x in fnn)) + f' of {len(fnn)}') if fnn else '-'} | "
+                     f"{sum(x.get('listed', x['hit']) for x in v)} | {ch} |")
+    sym = [r for r in res if r["kind"] == "symbol"]
+    by_dist: dict = {}
+    for r in sym:
+        by_dist.setdefault(norm(r), []).append(r)
+    lines += ["", f"symbol queries: {len(sym)} recorded, {len(by_dist)} distinct; the largest group is {max(len(x) for x in by_dist.values())} runs of one query "
+              f"({max(by_dist, key=lambda k: len(by_dist[k]))[2]!r} on #{max(by_dist, key=lambda k: len(by_dist[k]))[0]}).",
+              f"per distinct query, top-1 file on target {sum(any(x['hit'] for x in v) for v in by_dist.values())} of {len(by_dist)}; "
+              f"top-1 definition changed {sum(any(x.get('fn_hit') for x in v) for v in by_dist.values())} of {len(by_dist)}"]
     return "\n".join(lines)
 
 

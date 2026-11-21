@@ -23,6 +23,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
 import replay_queries as rq  # noqa: E402
+import searches  # noqa: E402
 from devkb import misses  # noqa: E402
 from devkb.process_api import ProcessAPI  # noqa: E402
 from devkb.read_tools import ReadTools  # noqa: E402
@@ -75,18 +76,14 @@ def main(tickets: list[str]) -> None:
             continue
         run, edited = f.parent.name, set()
         for name, inp in run_calls(f):
-            if name in ("Edit", "Write", "MultiEdit") and str(inp.get("file_path", "")).endswith(CODE):
-                edited.add(rq.rel(str(inp["file_path"]), run))
+            if searches.writes_code(name, inp):                       # an Edit, or a Bash write: sed -i, a heredoc, a redirect
+                if "file_path" in inp:
+                    edited.add(rq.rel(str(inp["file_path"]), run))
+                else:                                                  # a shell write names its files in the command, usually
+                    named = {rq.rel(x, run) for x in re.findall(r"[\w./-]+\.(?:py|h|hh|hpp|c|cc|cpp|cxx|ts|tsx|js|sh)\b", inp.get("command", ""))}
+                    edited |= named or {f"<bash write {len(edited)}>"}
                 continue
-            pats = []
-            if name == "Grep":
-                pats = [inp.get("pattern", "")]
-            elif name == "Bash":
-                for g in GREP.finditer(inp.get("command", "")):
-                    q = re.findall(r"""(?:"([^"]+)"|'([^']+)')""", g[1])
-                    if q:
-                        pats.append(q[0][0] or q[0][1])
-            for p in pats:
+            for p in searches.searches_in(name, inp):
                 tot["searches"] += 1
                 names = misses.navigation_names(p, "both")[:3]
                 known = [(n, *files_of(m[1], n)) for n in names]
@@ -102,6 +99,8 @@ def main(tickets: list[str]) -> None:
                 tot["after, with a graph symbol (live rule withholds)"] += 1
                 dep = set().union(*[k[1] | k[2] for k in known])
                 hit = {e for e in edited if e in dep}
+                if any(e.startswith("<bash write") for e in edited):      # the files a shell write touched are unknown: do not claim a name is safe
+                    hit |= {"<bash write>"}
                 if hit:
                     tot["  still withheld: a file the names depend on was edited"] += 1
                 else:
