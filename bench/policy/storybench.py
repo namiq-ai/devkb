@@ -60,6 +60,11 @@ ALLOW = ["Read", "Edit", "Write", "Glob", "Grep", "TodoWrite", "mcp__devkb",
 DENY = ["Bash(git push:*)", "Bash(gh:*)", "Task", "WebFetch", "WebSearch"]
 
 
+def story_prompt(t: dict) -> str:
+    """The story bench's prompt for a ticket ({title, body}), with the command rules every arm gets (#369)."""
+    return PROMPT.format(title=t["title"], body=t["body"], commands=COMMANDS)
+
+
 def sh(cmd, **kw):
     return subprocess.run(cmd, check=True, capture_output=True, text=True, **kw)
 
@@ -117,7 +122,7 @@ def run_one(issue: str, arm: str, rep: int) -> str:
     w = B / "work" / tag
     checkout(w)
     t = json.loads(sh(["gh", "issue", "view", issue, "-R", "namiq-ai/devkb", "--json", "title,body"]).stdout)
-    cmd = ["claude", "-p", PROMPT.format(title=t["title"], body=t["body"], commands=COMMANDS), "--model", MODEL, "--output-format",
+    cmd = ["claude", "-p", story_prompt(t), "--model", MODEL, "--output-format",
            "stream-json", "--verbose", "--max-turns", "250", "--permission-mode", "acceptEdits", "--strict-mcp-config",
            "--mcp-config", str(w / ".mcp.json"), "--allowedTools", *ALLOW, "--disallowedTools", *DENY]
     env = dict(os.environ, DEVKB_GUARDRAIL="1" if arm == "guardrail" else "0",

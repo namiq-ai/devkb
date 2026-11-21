@@ -53,3 +53,37 @@ def test_a_prompt_without_the_command_rules_is_refused():
     with pytest.raises(ValueError):
         pb.claude_cmd("1", "none", "a prompt someone stripped", "mcp.json")
     assert sb.COMMANDS.strip() in pb.claude_cmd("1", "none", pb.prompt_for("1", "T", "B", None), "mcp.json")[2]
+
+
+def test_the_story_bench_prompt_carries_the_rules_too():
+    src = (ROOT / "bench" / "policy" / "storybench.py").read_text()
+    run = src[src.index("def run_one"):src.index("\ndef ", src.index("def run_one") + 5)]
+    assert '"-p", story_prompt(t)' in run
+    assert sb.COMMANDS.strip() in sb.story_prompt({"title": "T", "body": "B"})
+
+
+def test_denial_reasons_groups_by_the_sessions_own_reason(tmp_path):
+    import json
+    sys.path.insert(0, str(ROOT / "bench" / "policy" / "probes"))
+    import denial_reasons as dr
+    cases = [("none", "cat > t.py <<'E'\nd = {\"a\": 1}\nE", "Contains brace with quote character (expansion obfuscation)",
+              "code with braces and quotes in the command"),
+             ("main", "ls ..", "This Bash command contains multiple operations. The following part requires approval: ls ..",
+              "a path outside the checkout"),
+             ("main", "sed -i 's/f(x)/g(\"y\")/' a.py", "sed command requires approval (contains potentially dangerous operations)", "sed -i"),
+             ("main", "cd w; git status", "This command changes directory before running a version-control command", "cd, then git"),
+             ("main", "R=$PWD; ls $R", "A variable in this command can't be checked before it runs", "a variable or an env-var prefix"),
+             ("none", ".venv/bin/devkb build --project .", "Permission to use Bash with command .venv/bin/devkb build has been denied.",
+              "devkb denied in a no-devkb arm"),
+             ("main", "", "PreToolUse:Grep hook error: devkb answered this search from the graph (Complete)",
+              "the guardrail answered instead (a hook deny, by design)")]
+    for i, (arm, cmd, reason, want) in enumerate(cases):
+        d = tmp_path / f"p1-{arm}-r{i}"
+        d.mkdir()
+        tool = "Grep" if not cmd else "Bash"
+        ev = [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": tool, "input": {"command": cmd}}]}},
+              {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "is_error": True, "content": reason}]}},
+              {"type": "result", "permission_denials": [{"tool_name": tool, "tool_use_id": "t1", "tool_input": {"command": cmd}}]}]
+        (d / "stream.jsonl").write_text("\n".join(json.dumps(e) for e in ev) + "\n")
+        a, refused = dr.refusals(d / "stream.jsonl")
+        assert [dr.group(a, c, r) for c, r in refused] == [want], want
