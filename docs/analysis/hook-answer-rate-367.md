@@ -83,7 +83,7 @@ grep in 2, a new test file and a test run; none was a devkb query. In the live #
 #367 proposed "at least half of the code-name searches get an answer or a replacement". On these runs that is about
 the upper bound above (55%), which the edits and repository-wide names make out of reach.
 **Proposed instead (owner to confirm):** at least 30% of the recent code-name searches answered on this replay (from
-8%), with no answer the source contradicts, and the median answer under `MAX_ANSWER`; measured again after #393, #390
+7%), with no answer the source contradicts, and the median answer under `MAX_ANSWER`; measured again after #393, #390
 and #391, in that order (#393 alone gives 18 of 163, 11%).
 
 ## Data
