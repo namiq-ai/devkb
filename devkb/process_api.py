@@ -51,6 +51,11 @@ _OWN_CAPS = frozenset({"symbol", "outline", "uses", "search_docs"})
 STOP = frozenset("the and for add with that this from into how new use when why not are can has have was but its any all".split())
 
 
+def message_run(text: str) -> list[str]:
+    """The words of an error message in order, lower case: letters, digits and apostrophes, so punctuation and `{}` placeholders do not break a run."""
+    return re.findall(r"[a-z0-9']+", (text or "").lower())
+
+
 def query_words(text: str) -> list[str]:
     return [w for w in words(text) if w not in STOP]
 
@@ -1017,10 +1022,21 @@ class ProcessAPI:
         sigs = [e for e in sorted(score, key=lambda e: (-score[e], self._key(e)))[:3] if score[e] > 0]
         # ODSF-313: a message quoted exactly names its raiser; the fuzzy runners-up are then noise, not candidates
         said = " ".join(symptom.lower().split())
-        exact = [e for e in score if len(m := " ".join((self.idx.props[e].get("message_template") or "").lower().split())) >= 12
-                 and m.replace("{}", "") and all(part.strip() in said for part in m.split("{}") if part.strip())]
+        run = message_run(symptom)                      # the message as typed, as words: a pasted message is often a prefix of the template (`bad regular expression` for `bad regular expression: {}`)
+        exact = [e for e in score if (len(m := " ".join((self.idx.props[e].get("message_template") or "").lower().split())) >= 12
+                                      and m.replace("{}", "") and all(part.strip() in said for part in m.split("{}") if part.strip()))
+                 or (len(run) >= 3 and " ".join(run) in " ".join(message_run((self.idx.props[e].get("message_template") or "").replace("{}", " "))))]
         if exact:
             sigs = sorted(exact, key=self._key)[:3]
+        elif len(run) >= 3:
+            # #399: a pasted message (three words or more) names no signature, so the best-scoring ones share only words with it: keep a
+            # signature when the text explains most of the literal words of its message (the template's own words, not the placeholders)
+            # and drop the rest. One or two words are a symptom to search for, not a message, and keep the fuzzy match.
+            said_words = set(query_words(symptom))
+            def explained(e: int) -> float:
+                t = set(query_words((self.idx.props[e].get("message_template") or self.idx.props[e].get("label") or "").replace("{}", " ")))
+                return len(t & said_words) / len(t) if t else 0.0
+            sigs = [e for e in sigs if explained(e) >= 0.6]
         raisers = sorted({s for e in sigs for verb in ("RAISES", "LOGS") for s in self.idx.sources(verb, e)}, key=self._key)
         how = "error message"
         if not raisers:
