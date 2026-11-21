@@ -22,7 +22,8 @@ def test_the_hidden_checks_are_never_in_a_checkout():
 
 
 def test_tri_mode_arms_take_devkb_from_a_tool_environment():
-    assert set(pb.ENV_REF) == {"release", "main", "noteach", "outline", "hookmain", "teachall"}   # #218 arms; #375's pair
+    assert set(pb.ENV_REF) == {"release", "main", "noteach", "outline", "hookmain", "teachall",   # #218 arms; #375's pair
+                               "userpolicy", "short", "inject", "userinit"}                  # #366
     assert pb.ARM_ENV["noteach"]["DEVKB_GUARDRAIL_TEACH"] == "0" and pb.ARM_ENV["outline"]["DEVKB_GUARDRAIL_OUTLINE"] == "1"
     assert "DEVKB_GUARDRAIL_TEACH" not in pb.ARM_ENV["main"]          # main is the hook as shipped: D1 on (#267)
     env = {"hook": "/e/src/scripts/devkb_guardrail.py", "post": "/nonexistent/post.py", "bin": "/e/.venv/bin/devkb"}
