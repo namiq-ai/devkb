@@ -49,3 +49,44 @@ withheld (#337's `POLICY_HIDE_START`). 3 reps per cell, Sonnet, `bench/policy/ru
 A shuffled batch of all arms together; at least 5 reps; tickets whose text names no file but does name code or an error; the v3
 router (precision fix). Until then the router is unproven: it costs nothing when it has nothing to say, and has not been shown to
 help when it does.
+
+---
+
+# Update (2026-11-21): root causes, fixes, and the batch after them
+
+The first version of this note listed four suspected causes of low devkb use. Each was checked against the recorded runs
+(`bench/policy/replay_queries.py` replays every recorded devkb query on the ticket's base graph, with no model runs).
+
+| suspected cause | finding | action | measured |
+|---|---|---|---|
+| a wrong first match for an ambiguous name | **Confirmed.** 8 of the 13 off-target `symbol` answers were one query, `symbol resolve`: six exact matches, ordered by caller count, so the busiest file led whatever the ticket was about. The CLI is stateless, so "the file the agent just opened" does not exist; the ticket text is the usable signal. | `session_context`: the prompt hook records the task's words; `symbol` breaks ties by them (`devkb hook context` records only, pushes nothing). | replay: `symbol` top-1 on target 14/27 -> 22/27, no query worse. Both files the agent worked in now rank 1-2 (were 4+). The new top-1 is the `#include` resolver, not the macro one: the word "graph" in the ticket's boilerplate tipped it. Not tuned further (BENCHMARK.md). |
+| guessed names return unrelated symbols | **Confirmed, not fixed.** `merge`, `overload` are real names the ticket never needed; no ranking can fix a name that does not exist. | none | 5 of 27 `symbol` queries |
+| `pack` gives the worst answers | **Refuted.** The pack said "Incomplete: 17 calls could not be attributed". The agents' own `sed -n 5,14p` cut it. A verdict line at the top did not help `sed` ranges and moved the section out of one range. | change reverted | 6 of 7 `head`-style pipes kept the verdict even before |
+| `outline` is net neutral | **Refuted.** Devkb arms pull ~10k fewer characters of locating output per run (-18%, all four tickets, -11% to -31%; 90% interval [-21k, +0.1k]). | none | |
+
+Also found: agents pipe devkb output through `head`/`sed`/`tail`/`grep` in 57 of 85 navigation calls.
+
+## Live batch: `rmain` against `ctx` (the same devkb commit f3f9a49; the only difference is the silent hook), location withheld, 3 reps
+
+36 runs, none invalid or cut off. 3 are flagged "contaminated", and every flag lists only my own archive moves. The task record
+was present in all 18 `ctx` checkouts and in none of the `rmain` ones. 118, 120, 203, 205 are the tickets the ranking was
+derived from; 286 and 287 were not seen before.
+
+| | rmain | ctx | difference (90% interval) |
+|---|---|---|---|
+| turns (all 6 tickets, n = 18 each) | 20.6 | 17.7 | -2.8 (-6.6, +1.0) |
+| cost $ | 0.38 | 0.34 | -0.04 (-0.13, +0.06) |
+| context, k tokens | 909 | 764 | -145 (-400, +117) |
+| devkb navigation calls | 1.06 | 1.11 | +0.06 (-0.33, +0.50) |
+| grep / Read | 6.6 / 4.3 | 5.9 / 4.1 | -0.7 / -0.2 (both span zero) |
+| hidden check and suite | 16/18 | 15/18 | #205: 2/3 against 1/3; #120 2/3 each |
+| held out (286, 287; n = 6 each) | turns 19.5, $0.28 | 17.3, $0.26 | -2.2 (-7.2, +2.2); 6/6 and 6/6 |
+
+**Reading.** Every cost measure moves the right way and none is distinguishable from noise; the hook adds no turns (it pushes
+nothing). Live `symbol` answers are rare, 9 per arm over 18 runs (top-1 on target 3 of 9 against 2 of 9), so even a perfect
+ranking can touch few calls: agents make about one devkb navigation call per run. The per-cell swings (#118: 25.0 against 17.3
+turns) are larger than 9 queries can explain and are run-to-run noise. This batch's `rmain` (20.6 turns) is also well above
+the earlier waves' (17.8), so the comparison holds only within the batch.
+
+**What it supports.** The ranking is correct on the recorded queries and costs nothing at run time, so it is safe to ship. It
+does not by itself change what agents do; the bound is how seldom they ask.
