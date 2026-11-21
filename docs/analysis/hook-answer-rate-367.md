@@ -85,6 +85,6 @@ and #391, in that order (#393 alone gives 17 of 160, 11%).
 ## Data
 
 - Replay output, one JSON file per ticket (`base-*`, `rerun-*`, `recent-*`), the streams and the scripts that made
-  them: `devkb-benchmark-367-hook-replay-archive.tar.gz`, beside the checkout.
+  them: `devkb-benchmark-367-hook-replay-archive-v2.tar.gz`, beside the checkout.
 - Inputs: `devkb-benchmark-0.2.14-archive.tar.gz`, `devkb-benchmark-0.2.14-rerun-archive.tar.gz`,
   `devkb-benchmark-337-hide-start-archive.tar.gz`, and the #382/#383/#367 runs.
