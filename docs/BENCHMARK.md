@@ -83,6 +83,56 @@ Runs recorded before these fields existed (the paper's) show input and cache wri
   or a new repository, and say which runs came before and after a fix.
 - **Report everything**: arms that cost more, tasks the graph got wrong, runs that failed.
 
+## Permission denials (#369)
+
+A refused command costs the agent a turn and a retry in whichever arm it falls, so it is noise in the cost columns.
+The 0.2.14 re-run had 1.6 refusals per run; the 72 runs of #337's experiment and #382, #383, #367 had 3.9 (280).
+
+**Why they were refused.** Every refused call carries the session's reason in its `tool_result`, so the causes come
+from the runs themselves: `bench/policy/probes/denial_reasons.py RUN_DIRS` groups them (for "contains multiple
+operations ... the following part requires approval: X", by the parts it names):
+
+| Refusals | Reason (the session's) | Example |
+|---|---|---|
+| 76 | code with braces and quotes in the command ("brace with quote character") | `cat > t.py <<'E'` with a dict literal; `python3 - <<'E'` that rewrites a file |
+| 67 | a path outside the checkout ("may only list files in the allowed working directories", a part with `..`, `/tmp`, `~/`) | `ls ..`, `ls ~/.cache/devkb/policy-work`, `cat > /tmp/x.py` |
+| 44 | `sed -i` with a script the checker will not pass ("sed command requires approval", a `sed -i` part) | `sed -i 's/f(x)/f(x) if g(\"y\") else None/' a.py` |
+| 30 | `cd`, then git (11) or a redirect or a write (19) ("cannot automatically determine the final working directory") | `cd <checkout>; git status`, `cd <checkout>; cat >> tests/t.py <<'E'` |
+| 24 | a variable or a `NAME=value` prefix ("a variable in this command can't be checked before it runs") | `R=$PWD; $R/.venv/bin/python ...`, `PYTHONPATH=. .venv/bin/python ...` |
+| 13 | devkb in a no-devkb arm (the deny list, #335): by design, not a form problem | `.venv/bin/devkb build --project corpus/fmt` in `none` |
+| 9 | `$(...)`, a subshell or a loop | `(cd corpus/fmt && ...)`, `for f in ...; do` |
+| 17 | other ("backslash-escaped whitespace", "can't be checked before it runs", "parser skipped input") | |
+
+Without the 13 by design: 267, 3.7 per run. A headless probe (`bench/policy/probes/permission_probe.py`: one
+`claude -p` per command form, with the benchmark's own `--allowedTools`, `--disallowedTools`, `--permission-mode` and
+setting sources, in a scratch checkout) confirmed the larger groups on minimal forms (`ls ..`, `echo {a,b}`, a heredoc
+with `{"a": 1}`, `R=...`, `$(...)`, a subshell, a loop and the venv by its absolute path were refused; `cd sub && ls`,
+pipes, `;`, a heredoc without braces and a simple `sed -i 's/x/y/'` were not). Five forms were run three times with the
+same answer (`ls ..`, `echo {a,b}`, the heredoc with `{"a": 1}`, a loop, a plain heredoc); the others once. Simple forms understate the checks: a `sed -i` or a `cd` the probe passed is
+refused in the runs once its script holds quotes and parentheses, or once a git command or a write follows it.
+
+**The fix**, the same for every arm: a paragraph in both prompts (`COMMANDS` in `bench/policy/storybench.py`), one
+clause per group above: do not `cd` first; stay inside the checkout, scratch files too; no variables or `NAME=value`
+prefixes, loops, `$(...)` or subshells; call the venv as `.venv/bin/python`; create and change files with the Write
+and Edit tools, not `sed -i`, heredocs or Python one-offs. It says pipes and `;` are fine, since they were not refused.
+No allow rule was added: apart from the absolute venv path (which `Bash(.venv/bin/python:*)` does not match, and
+which the prompt now names), the refusals come from the session's command checks, which an allow rule does not lift.
+**Re-run with the paragraph** (the 8 tickets of the 0.2.14 re-run, #301-#307 and #331, one run per arm, each at its own
+base; rows in `bench/results/2026-11-20-denials-369/rerun-rows.jsonl`): 6 refusals in 16 runs. Two are the guardrail
+answering a Grep in the devkb arm, which Claude Code records as a denial (a hook deny that carries devkb's answer, by
+design); the other 4 are **0.25 per run**, 2 in each arm (0.2.14 re-run on the same tickets, counted the same way:
+1.56 per run): two heredocs with braces and quotes, a redirect the checker could not read, and one other. Counted as
+the issue counts them (every recorded denial), the re-run has 0.375 per run, 0.5 in `main`: the 0.3 target holds only
+when the guardrail's substitutes are left out. The owner's decision (2026-11-20): the target counts refused command
+forms, so the guardrail's substitutes and the no-devkb arms' devkb denials are left out; on that count it is met. Each run's `arm.json` records the prompt's
+and the paragraph's SHA-256 (`prompt_sha256`, `commands_sha256`). Hidden checks 8/8 (`none`) and 7/8
+(`main`), suites 16/16.
+
+`claude_cmd()` in `policybench.py` builds every run's command; `tests/test_bench_same_permissions_369.py` builds it for
+every arm and checks that only the no-devkb arms' devkb deny differs. Known limits: the story bench
+(`storybench.run_one`, #117) builds its own command and has no `--setting-sources`; devkb's own `AGENTS.md` (kept in
+the devkb arms) points at `~/.cache/devkb/cpp-corpus`, outside the checkout.
+
 ## The registry today
 
 Every pack in the registry scores 1.0 against the truth at the pinned commits (55 tasks, 2026-11-14).

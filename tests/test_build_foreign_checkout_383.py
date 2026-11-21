@@ -14,12 +14,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _second_checkout(tmp_path: Path) -> Path:
-    """A clone that shares this checkout's root commit, with one file checked out so the build stays quick."""
+    """A clone that shares this checkout's root commit, with one file every checkout has checked out, so the build stays quick."""
     if not (ROOT / ".git").exists() or shutil.which("git") is None:
         pytest.skip("needs a git checkout of devkb")
     d = tmp_path / "other"
     subprocess.run(["git", "clone", "-q", "--no-hardlinks", "--no-checkout", str(ROOT), str(d)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(d), "checkout", "-q", "HEAD", "--", "AGENTS.md"], check=True, capture_output=True)
+    # pyproject.toml: every checkout has it, the benchmark's `none` arm too, which removes AGENTS.md (#369 batch)
+    subprocess.run(["git", "-C", str(d), "checkout", "-q", "HEAD", "--", "pyproject.toml"], check=True, capture_output=True)
     return d
 
 
