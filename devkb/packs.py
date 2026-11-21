@@ -21,6 +21,7 @@ loaded, and it carries what makes checking unnecessary:
 from __future__ import annotations
 
 import argparse
+import collections
 import re
 import subprocess
 import sys
@@ -252,13 +253,21 @@ class Packer:
                                                sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and self.api._is_test(r))]
         return [(rel, text) for rel, text in texts if any(n in text for n in needles)]
 
+    def _defs_named(self, name: str) -> int:
+        """How many definitions in the graph carry this short name."""
+        counts = self.__dict__.get("_short_counts")
+        if counts is None:
+            counts = self.__dict__["_short_counts"] = collections.Counter(
+                self.idx.keys[i].split("::", 1)[-1].rsplit(".", 1)[-1] for i, t in enumerate(self.idx.types) if t == "Symbol")
+        return counts[name]
+
     def _mentioned_in_tests(self, name: str, listed) -> dict[str, int]:
         """{test file: first line} for Python test files outside `listed` that call `name` or hold it as a quoted string (not in a comment) with no call
         the graph resolved to it: a call through a receiver the graph cannot type, or the name in a string. The list of tests the
         graph names is then not the whole story (QB1: `pack refactor` named no covering test for 7 of 13 changes). Names under four
         letters are not looked for: too many unrelated mentions."""
-        if len(name) < 4:
-            return {}
+        if len(name) < 4 or self._defs_named(name) > MENTION_MAX_DEFS:
+            return {}                                   # too short, or a name so many definitions share (`resolve`, `call`) that a mention says nothing
         n = re.escape(name)
         rx = re.compile(rf"(?:\.{n}\s*\(|(?<![\w.]){n}\s*\(|[\"']{n}[\"'])")       # a call, a method call, or the name as a string key
         out: dict[str, int] = {}
@@ -587,7 +596,7 @@ class Packer:
             shown = sorted(mentioned.items())[:8]
             out += ["", f"## Test files that mention it with no call the graph resolved ({len(mentioned)})"] \
                 + [f"- `{f}:{ln}`" for f, ln in shown] + ([f"- … {len(mentioned) - len(shown)} more"] if len(mentioned) > len(shown) else []) \
-                + ["(A call through a receiver the graph cannot type, or the name in a string. Read these before trusting the test list above.)"]
+                + ["(A call through a receiver the graph cannot type, or the name in a string; Python test files only. Read these before trusting the test list above.)"]
         if role:
             out += ["", f"## Files role {role} must not edit ({len(blocked)})"] + ([f"- `{f}`" for f in blocked] or ["- none"])
         if own not in by_file:
@@ -751,6 +760,7 @@ def star_coverage(cov: str, star: list[str]) -> str:
             f"those reads. Search only these files for them: {files}.**")
 
 
+MENTION_MAX_DEFS = 3     # a name defined in more than this many places is not looked for in the tests (`resolve`: six definitions, 118 test files)
 HOW_TO_USE = ("---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. "
               "Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the "
               "answer is incomplete.")

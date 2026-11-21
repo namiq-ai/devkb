@@ -42,3 +42,34 @@ def test_no_section_and_the_old_verdict_when_nothing_mentions_it(tmp_path, capsy
     (tmp_path / "tests" / "test_indirect.py").write_text("def test_total():\n    assert True\n")
     out = pack(tmp_path, capsys, "compute_total")
     assert "mention it with no call" not in out and "Incomplete for tests" not in out
+
+
+def test_a_name_many_definitions_share_is_not_looked_for_in_the_tests(tmp_path, capsys):
+    """`resolve` is defined in many places and `Path.resolve()` is in every test suite: a mention of it says nothing."""
+    (tmp_path / "pkg").mkdir()
+    for i in range(5):
+        (tmp_path / "pkg" / f"m{i}.py").write_text("def resolve(x):\n    return x\n")
+    (tmp_path / "pkg" / "one.py").write_text("def unique_thing(x):\n    return x\n")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_a.py").write_text("from pathlib import Path\n\n\ndef test_a():\n    assert Path('.').resolve()\n    assert helper.unique_thing(1)\n")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@e.x", "commit", "-qm", "x"], cwd=tmp_path, check=True)
+    assert main(["build", "--project", str(tmp_path)]) == 0
+    assert "mention it with no call" not in pack(tmp_path, capsys, "pkg/m0.py::resolve")                 # five other `resolve`
+    assert "tests/test_a.py:6" in pack(tmp_path, capsys, "unique_thing")                                 # a unique name is
+
+
+def test_the_guardrails_scope_filter_keeps_the_mention_section_apart_from_the_test_list():
+    """`filter_pack` counts the files of a section by its heading; the mention section also starts with `## Test files`."""
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("g", Path(__file__).resolve().parents[1] / "scripts" / "devkb_guardrail.py")
+    g = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(g)
+    pack = ("## Files with a direct caller (2, tests included)\n- `pkg/use.py` — `x`\n- `tests/test_b.py` — `y`\n\n"
+            "## Test files among them (1)\n- `tests/test_b.py`\n\n"
+            "## Test files that mention it with no call the graph resolved (2)\n- `tests/test_a.py:3`\n- `tests/test_b.py:9`\n")
+    out, _kept = g.filter_pack(pack, ["tests"])
+    assert "## Test files among them (1)" in out                       # the count follows the listed files only, not the mention lines
+    assert "- `tests/test_a.py:3`" in out and "- `pkg/use.py`" not in out

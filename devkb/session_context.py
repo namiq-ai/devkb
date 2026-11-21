@@ -42,11 +42,21 @@ def record(project: Path | str, prompt: str) -> None:
         pass
 
 
+def stamp(project: Path | str) -> float:
+    """The record's modification time, 0 when there is none: a reader that keeps the words checks this to know they changed."""
+    try:
+        return (Path(project) / ".devkb" / NAME).stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def load(project: Path | str) -> frozenset[str]:
+    """The words of the last recorded task; empty when there is no record, it has aged out, or it is not what `record` writes (any
+    JSON can be in the file: a list, a string, a number)."""
     try:
         r = json.loads((Path(project) / ".devkb" / NAME).read_text())
-        if time.time() - float(r.get("at", 0)) <= MAX_AGE:
-            return frozenset(w for w in r.get("words", []) if isinstance(w, str))
-    except (OSError, ValueError, TypeError):
+        if isinstance(r, dict) and time.time() - float(r.get("at", 0)) <= MAX_AGE and isinstance(r.get("words"), list):
+            return frozenset(w for w in r["words"] if isinstance(w, str))
+    except (OSError, ValueError, TypeError, RecursionError):
         pass
     return frozenset()

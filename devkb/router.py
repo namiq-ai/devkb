@@ -267,7 +267,7 @@ def _symbol_line(r: dict, tests: dict | None) -> str:
         extra = f" (+{tests['n_files'] - 2} more files)" if tests.get("n_files", 0) > 2 else ""
         line += f"; tests: {shown}{extra}{gap}"
     elif tests is not None and not tests.get("error"):
-        line += "; no test calls it directly (check its callers' tests)"
+        line += "; no test calls it directly in the graph (check its callers' tests, and tests that mention it: `devkb pack refactor`)"
     return line
 
 
@@ -324,7 +324,8 @@ def bundle(route: Route, project: Path, backend: Backend | None = None) -> tuple
 def log_decision(project: Path, event: dict, route: Route, text: str, detail: dict, ms: float) -> None:
     try:
         path = project / ".devkb" / "router.jsonl"
-        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.parent.is_dir():                  # a prompt in a project with no graph leaves nothing behind
+            return
         row = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "session": event.get("session_id", ""), "route": route.name,
                "why": route.why, "subjects": route.subjects[:4], "chars": len(text), "ms": round(ms, 1), **detail}
         with path.open("a") as fh:

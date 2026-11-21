@@ -22,6 +22,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 import tokenize
 from collections import defaultdict
 from pathlib import Path
@@ -100,11 +101,15 @@ class ReadTools:
         self._names: list[str] | None = None
         self._by_name: dict[str, list[int]] | None = None
         self._task: frozenset[str] | None = None
+        self._task_seen: tuple[float, float] = (0.0, 0.0)          # (the record's mtime, when it was read)
 
     def _task_words(self) -> frozenset[str]:
-        """The words of the task the prompt hook recorded (session_context); empty when it did not run or has aged out."""
-        if self._task is None:
-            self._task = session_context.load(self.root)
+        """The words of the task the prompt hook recorded (session_context); empty when it did not run or has aged out. A reader can
+        live as long as an MCP server does, so the record is read again when its file changes and at least once a minute (that is
+        what lets a 12-hour-old record age out and a new prompt replace the last)."""
+        stamp, now = session_context.stamp(self.root), time.time()
+        if self._task is None or stamp != self._task_seen[0] or now - self._task_seen[1] > 60:
+            self._task, self._task_seen = session_context.load(self.root), (stamp, now)
         return self._task
 
     def _task_overlap(self, i: int) -> int:

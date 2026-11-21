@@ -83,3 +83,29 @@ def test_hook_dispatch_knows_context(monkeypatch, capsys):
     monkeypatch.setattr(router, "main_context", lambda event=None: 0)
     assert hook.main(["context"]) == 0
     assert hook.main(["nonsense"]) == 2 and "pre-edit|prompt|context" in capsys.readouterr().err
+
+
+def test_a_record_that_is_not_what_record_writes_is_ignored_not_a_crash(tmp_path):
+    import json
+    (tmp_path / ".devkb").mkdir()
+    for junk in ("[1]", '"words"', "7", "null", '{"at": 1e30, "words": "cpp"}', '{"at": "x"}', "[" * 5000):
+        (tmp_path / ".devkb" / session_context.NAME).write_text(junk)
+        assert session_context.load(tmp_path) == frozenset(), junk
+    (tmp_path / ".devkb" / session_context.NAME).write_text(json.dumps({"at": time.time(), "words": ["cpp", 3, None, "macro"]}))
+    assert session_context.load(tmp_path) == {"cpp", "macro"}
+
+
+def test_a_long_lived_reader_follows_the_record(tmp_path, monkeypatch):
+    """An MCP server keeps one ReadTools for its whole life: the words must follow a new prompt and age out, not freeze at first use."""
+    from devkb.read_tools import ReadTools
+    p = project(tmp_path)
+    rt = ReadTools(ProcessAPI(str(p)))
+    assert rt._task_words() == frozenset()                                   # no record yet: not cached forever as empty
+    session_context.record(p, "fix cpp resolve macros")
+    assert "cpp" in rt._task_words()
+    time.sleep(0.02)
+    session_context.record(p, "totally different boundaries work")
+    assert "boundaries" in rt._task_words() and "cpp" not in rt._task_words()
+    (p / ".devkb" / session_context.NAME).write_text(json.dumps({"at": time.time() - 13 * 3600, "words": ["old"]}))
+    rt._task_seen = (rt._task_seen[0], 0.0)                                  # a minute has passed: the aged record is read again and ignored
+    assert rt._task_words() == frozenset()

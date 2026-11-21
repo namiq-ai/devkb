@@ -266,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--toolset", default="lean-pack", help="the MCP toolset agents get (lean-pack, lean, dev, core, workflow, all)")
     ap.add_argument("--hooks", action="store_true", help="rebuild the graph after commits, merges and checkouts")
     ap.add_argument("--claude-hook", action="store_true", help="give Claude Code the file's pack at its first Edit or Write (.claude/settings.json)")
-    ap.add_argument("--prompt-hook", choices=("context", "router"), help="with --claude-hook: also a UserPromptSubmit hook; context records the task's words (pushes nothing), router routes the prompt to the graph's answer. Off by default: no measured gain")
+    ap.add_argument("--prompt-hook", choices=("context", "router"), help="with --claude-hook: also a UserPromptSubmit hook; context records the task's words (pushes nothing), router routes the prompt to the graph's answer. Off by default: no measured gain. Running init --claude-hook again without it removes a prompt hook installed earlier")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--remove", action="store_true", help="take devkb out of the repository again")
     ap.add_argument("--dry-run", action="store_true")

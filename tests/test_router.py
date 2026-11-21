@@ -225,3 +225,9 @@ def test_navigate_skips_generic_words_and_names_that_resolve_only_into_tests(rep
     out = router.on_prompt(_event(repo, "why does `test_add` fail while `parse_json_string` works?"))
     text = out["hookSpecificOutput"]["additionalContext"]
     assert "parse_json_string" in text and "test_add" not in text
+
+
+def test_a_prompt_in_a_project_with_no_graph_leaves_no_devkb_directory(tmp_path):
+    from devkb import router
+    router.on_prompt({"prompt": "the function `compute_total` returns the wrong value in `pkg/calc.py`", "cwd": str(tmp_path)})
+    assert not (tmp_path / ".devkb").exists()

@@ -463,8 +463,8 @@ def filter_pack(text: str, scope: list[str]) -> tuple[str, int]:
         if line.startswith("## "):
             section = line
         m = re.match(r"- `([^`]+)`", line)
-        if m and (section.startswith("## Files with a direct caller") or section.startswith("## Test files")):
-            if not inside(m.group(1)):
+        if m and (section.startswith("## Files with a direct caller") or section.startswith("## Test files among them")):
+            if not inside(m.group(1).split(":")[0]):
                 continue
             counts[section[:12]] = counts.get(section[:12], 0) + 1
             kept += section.startswith("## Files with") and 1 or 0
