@@ -88,7 +88,7 @@ def test_only_delivered_text_counts_streams_are_isolated_and_edits_are_marked(tm
                   _tool(1, "Bash", {"command": f"grep -rn 'compute_total(' {ORIG}/pkg | head"}),   # a bare head (#393)
                   _tool(2, "Edit", {"file_path": f"{ORIG}/pkg/core.py", "old_string": "a", "new_string": "b"}),
                   _tool(3, "Grep", {"pattern": "compute_total", "path": ORIG, "output_mode": "content"}),
-                  {"type": "system", "subtype": "hook_response", "hook_event": "PreToolUse",
+                  {"type": "system", "subtype": "hook_response", "hook_event": "PreToolUse", "hook_name": "PreToolUse:Grep",
                    "stdout": json.dumps({"hookSpecificOutput": {"additionalContext": "devkb, from the graph: x"}})}]
         (d / "stream.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n")
     hook_replay.main(["--repo", str(repo), str(tmp_path / "runs")])
@@ -99,6 +99,7 @@ def test_only_delivered_text_counts_streams_are_isolated_and_edits_are_marked(tm
     assert all(r["action"] != "remind" for r in firsts)               # the call's decision, not the reminder after it
     for r in rows:                                                    # an answer is only text that reached the agent
         assert r["delivered"] == (r["chars"] > 0)
+        assert not (r["delivered"] and r["printed_reminder"])          # the reminder printed after a lost answer is not one
         if r["delivered"]:
             assert r["printed"] and r["action"] in hook_replay.ANSWERS
     assert summary["answers"] == sum(r["delivered"] for r in rows)
@@ -112,4 +113,21 @@ def test_a_cd_is_kept_for_the_next_calls_and_home_paths_are_rewritten():
     assert hook_replay.rewrite({"command": "cd ~/w/run && ls"}, f"{home}/w/run", "/x") == {"command": "cd /x && ls"}
     assert hook_replay.CD.match("cd corpus/fmt && grep -n x src").group(1) == "corpus/fmt"
     assert hook_replay.edits({"name": "Bash", "input": {"command": "sed -i 's/a/b/' f.py"}})
-    assert not hook_replay.edits({"name": "Bash", "input": {"command": "grep -n x f.py 2>&1 | head"}})
+    assert hook_replay.edits({"name": "Bash", "input": {"command": "echo x > pkg/new.py"}})
+    for cmd in ("grep -n x f.py 2>&1 | head", "devkb build --project . >/dev/null 2>&1", 'grep -n "x > y" a.py',
+                "cat > /tmp/t.py <<'E'\nprint(1)\nE", "git diff > /tmp/d.txt"):
+        assert not hook_replay.edits({"name": "Bash", "input": {"command": cmd}}), cmd
+
+
+def test_live_output_goes_to_the_call_of_its_tool_and_refusals_are_read(tmp_path):
+    s = tmp_path / "stream.jsonl"
+    ev = [_tool(1, "Read", {"file_path": "a.py"}), _tool(2, "Grep", {"pattern": "x"}),
+          {"type": "system", "subtype": "hook_response", "hook_event": "PreToolUse", "hook_name": "PreToolUse:Read", "stdout": ""},
+          {"type": "system", "subtype": "hook_response", "hook_event": "PreToolUse", "hook_name": "PreToolUse:Grep",
+           "stdout": json.dumps({"hookSpecificOutput": {"permissionDecisionReason": "devkb answered"}})},
+          _tool(3, "Bash", {"command": "cd sub && ls"}),
+          {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t3", "is_error": True,
+                                                      "content": "This command requires approval"}]}}]
+    s.write_text("\n".join(json.dumps(e) for e in ev) + "\n")
+    live, refused = hook_replay.live_outputs(s)
+    assert live == {"t1": "", "t2": "devkb answered"} and refused == {"t3"}

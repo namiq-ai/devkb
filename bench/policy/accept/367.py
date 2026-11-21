@@ -58,7 +58,7 @@ decisions = [l for l in lines if "compute_total" in l]
 res["one_decision_per_search"] = len(lines) == 2 and len(decisions) == 2
 # besides the action: a number that is not the call's position (characters added), and a reason word or field
 res["reason_and_chars_given"] = bool(decisions) and all(
-    len(re.findall(r"\d+", l)) >= 2 and re.search(r"(?i)reason|same-question|not-complete|complete|duplicate|cannot", l)
+    len(re.findall(r"\d+", l)) >= 2 and re.search(r"(?i)same-question|not-complete|complete|duplicate|cannot|no-match|intent:", l)
     for l in decisions)
 res["next_call_given"] = len(decisions) == 2 and "pkg/core.py" in decisions[0] and "Read" in decisions[0] \
     and ("ls pkg" in decisions[1] or "Edit" in decisions[1])

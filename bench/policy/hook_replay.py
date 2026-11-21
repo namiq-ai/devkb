@@ -80,23 +80,33 @@ def hook_text(stdout: str) -> str:
     return h.get("permissionDecisionReason") or h.get("additionalContext") or ""
 
 
-def live_outputs(stream: Path) -> dict[str, str]:
-    """{tool call id: the text the run's own PreToolUse hook gave for it}, from a stream recorded with
-    `--include-hook-events` (each hook response follows the call it answers); empty for an older stream."""
-    out, last = {}, None
+def live_outputs(stream: Path) -> tuple[dict[str, str], set[str]]:
+    """({tool call id: the text the run's own PreToolUse hook gave for it}, {ids of calls the session refused}), from a
+    stream recorded with `--include-hook-events`. A hook response names its tool (`PreToolUse:Grep`), and calls can
+    overlap (a Read and a Grep sent together), so each response goes to the oldest call of that tool still waiting for
+    one. Both are empty for an older stream, apart from the refusals."""
+    out, refused, pending = {}, set(), []
     for line in stream.read_text(errors="replace").splitlines():
         try:
             e = json.loads(line)
         except ValueError:
             continue
         if e.get("type") == "assistant":
-            for b in e.get("message", {}).get("content", []) or []:
-                if b.get("type") == "tool_use":
-                    last = b.get("id")
-        elif e.get("type") == "system" and e.get("subtype") == "hook_response" and e.get("hook_event") == "PreToolUse" \
-                and last and last not in out:
-            out[last] = hook_text(e.get("stdout") or e.get("output") or "")
-    return out
+            pending += [(b.get("id"), b.get("name")) for b in e.get("message", {}).get("content", []) or []
+                        if b.get("type") == "tool_use"]
+        elif e.get("type") == "user":
+            for b in (e.get("message", {}).get("content") or []) if isinstance(e.get("message", {}).get("content"), list) else []:
+                if b.get("type") == "tool_result" and b.get("is_error"):
+                    text = b.get("content") if isinstance(b.get("content"), str) else json.dumps(b.get("content"))
+                    if re.search(r"(?i)require[sd]? approval|approve only if|permission|was denied", text or ""):
+                        refused.add(b.get("tool_use_id"))
+        elif e.get("type") == "system" and e.get("subtype") == "hook_response" and e.get("hook_event") == "PreToolUse":
+            tool = (e.get("hook_name") or "").partition(":")[2]
+            k = next((j for j, (_, n) in enumerate(pending) if n == tool or not tool), None)
+            if k is not None:
+                cid, _ = pending.pop(k)
+                out[cid] = hook_text(e.get("stdout") or e.get("output") or "")
+    return out, refused
 
 
 def rewrite(value, old: str, new: str):
@@ -116,16 +126,24 @@ def search_text(call: dict) -> str:
     return inp.get("pattern", "") if call["name"] == "Grep" else inp.get("command", "")
 
 
-EDITS = re.compile(r"(^|[;&|]\s*)(sed\s+-i|cat\s+>|tee\s|cp\s|mv\s|rm\s)|(?<![<>&\d])>(?!&)\s*[\w./]|"
-                   r"open\([^)]*,\s*['\"][wa]|\.write_text\(")
+EDITS = re.compile(r"(^|[;&|]\s*)(sed\s+-i|tee\s|cp\s|mv\s|rm\s)|open\([^)]*,\s*['\"][wa]|\.write_text\(")
+REDIRECT = re.compile(r"(?<![<>&\d])>>?(?!&)\s*(\S+)")
 
 
 def edits(call: dict) -> bool:
-    """Whether a call changes the checkout: Edit/Write, or a shell command that writes a file. From then on the run's
-    files differ from the base the replay searches, so its later decisions are a different situation (`after_edit`)."""
+    """Whether a call changes the checkout: Edit/Write, or a shell command that writes a file of it (`sed -i`, a write
+    from Python, a redirect into a checkout file). A redirect to /dev/null or a scratch file outside, or a `>` inside a
+    quoted pattern, is not one. From then on the run's files differ from the base the replay searches, so its later
+    decisions are a different situation (`after_edit`)."""
     if call["name"] in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
         return True
-    return call["name"] == "Bash" and bool(EDITS.search(call["input"].get("command", "")))
+    if call["name"] != "Bash":
+        return False
+    cmd = call["input"].get("command", "")
+    head = re.sub(r"<<-?\s*'?(\w+)'?.*?\n\1\b", "<<H", cmd, flags=re.S)      # a heredoc's text is not the command
+    unquoted = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", head)
+    targets = [t for t in REDIRECT.findall(unquoted) if not t.startswith(("/dev/", "/tmp/"))]
+    return bool(targets) or bool(EDITS.search(cmd))
 
 
 CD = re.compile(r"^\s*cd\s+(\S+)\s*(?:$|&&|;)")
@@ -141,7 +159,7 @@ def short(call: dict | None) -> str:
 
 def replay_stream(stream: Path, repo: Path, guard: Path, code: Path) -> list[dict]:
     orig, session, calls = tool_calls(stream)
-    live = live_outputs(stream)
+    live, refused = live_outputs(stream)
     run = stream.parent.name
     out = []
     with tempfile.TemporaryDirectory() as home:
@@ -149,16 +167,16 @@ def replay_stream(stream: Path, repo: Path, guard: Path, code: Path) -> list[dic
         env = dict(os.environ, HOME=home, CLAUDE_PROJECT_DIR=str(repo), DEVKB_MISSLOG="0", DEVKB_TELEMETRY="0",
                    PYTHONPATH=os.pathsep.join(filter(None, [str(code), os.environ.get("PYTHONPATH", "")])))
         env.pop("DEVKB_GUARDRAIL", None)
-        edited, cwd = False, repo
+        edited, cwd, decided = False, repo, set()
         for i, call in enumerate(calls):
             after_edit = edited
-            edited = edited or edits(call)
+            edited = edited or (call["id"] not in refused and edits(call))     # a refused command changed nothing
             if call["name"] not in ("Grep", "Bash", "Read"):    # the hook's matcher (.claude/settings.json)
                 continue
             inp = rewrite(call["input"], orig, str(repo))
             ev = {"session_id": session or run, "hook_event_name": "PreToolUse", "tool_name": call["name"],
                   "tool_input": inp, "tool_use_id": call["id"], "cwd": str(cwd)}
-            m = CD.match(inp.get("command", "")) if call["name"] == "Bash" else None
+            m = CD.match(inp.get("command", "")) if call["name"] == "Bash" and call["id"] not in refused else None
             if m:                                         # the Bash tool keeps a `cd` for the session's next calls
                 d = (cwd / m.group(1)).resolve() if not m.group(1).startswith("/") else Path(m.group(1)).resolve()
                 cwd = d if d.is_dir() and d.is_relative_to(repo) else cwd
@@ -183,25 +201,37 @@ def replay_stream(stream: Path, repo: Path, guard: Path, code: Path) -> list[dic
             delivered = last.get("action") != "remind" and "answer_sha1" in last and not timed_out
             text = hook_text(stdout)
             lv = live.get(call["id"]) if live else None
+            decided.add(call["id"])
             out.append({"run": run, "i": i, "tool": call["name"], "search": search_text(call)[:200],
                         "action": last.get("action", ""), "reason": last.get("reason", ""), "intent": last.get("intent", ""),
                         "names": last.get("names", []), "verdicts": last.get("verdicts", []), "reminded": reminded,
                         "delivered": delivered, "chars": last.get("answer_chars", len(text)) if delivered else 0,
-                        "printed": len(text), "ms": ms, "timed_out": timed_out, "after_edit": after_edit,
+                        "printed": len(text), "printed_reminder": text.startswith(REMINDER),
+                        "ms": ms, "timed_out": timed_out, "after_edit": after_edit, "refused": call["id"] in refused,
                         "live_chars": None if lv is None else (0 if lv.startswith(REMINDER) else len(lv)),
                         "next": short(calls[i + 1] if i + 1 < len(calls) else None)})
+    for cid, text in live.items():                        # the live hook answered a call the replay did not decide on
+        if text and not text.startswith(REMINDER) and cid not in decided:
+            out.append({"run": run, "i": next(i for i, c in enumerate(calls) if c["id"] == cid), "tool": "", "search": "",
+                        "action": "(no decision)", "reason": "", "intent": "", "names": [], "verdicts": [],
+                        "reminded": False, "delivered": False, "chars": 0, "printed": 0, "printed_reminder": False,
+                        "ms": 0, "timed_out": False, "after_edit": False, "refused": cid in refused,
+                        "live_chars": len(text), "next": "", "undecided": True})
     return out
 
 
 def summary(rows: list[dict]) -> dict:
     """Counts over the decisions. An answer is a decision whose text reached the agent (`delivered`), whatever its
     action; `live_answers` counts the same from the run's own hook output, where the stream recorded it."""
+    undecided = [r for r in rows if r.get("undecided")]
+    rows = [r for r in rows if not r.get("undecided")]
     answers = [r for r in rows if r["delivered"]]
     chars = [r["chars"] for r in answers]
     live = [r for r in rows if r["live_chars"] is not None]
     return {"decisions": len(rows), "answers": len(answers),
             "live_recorded": len(live), "live_answers": sum(1 for r in live if r["live_chars"]),
             "agree_with_live": sum(1 for r in live if bool(r["live_chars"]) == r["delivered"]),
+            "live_answers_without_a_decision": len(undecided),          # disagreements too
             "timed_out": sum(r["timed_out"] for r in rows), "ms_max": max((r["ms"] for r in rows), default=0),
             "before_first_edit": sum(not r["after_edit"] for r in rows),
             "answers_before_first_edit": sum(r["delivered"] and not r["after_edit"] for r in rows),
