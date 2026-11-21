@@ -85,7 +85,11 @@ def test_userinit_holds_everything_a_default_devkb_init_writes_and_no_guardrail(
     (w / ".claude").mkdir(parents=True)
     (w / ".claude" / "settings.json").write_text('{"hooks": {"PreToolUse": []}}')
     (w / "AGENTS.md").write_text("## Developing devkb\n")
-    pb.arm_files(w, "userinit", {"src": str(ROOT), "bin": str(Path(sys.executable).parent / "devkb")})
+    fake = tmp_path / "env" / "bin"                    # a tool environment whose python already has `mcp`: nothing installed
+    fake.mkdir(parents=True)
+    (fake / "python").write_text("#!/bin/sh\nexit 0\n")
+    (fake / "python").chmod(0o755)
+    pb.arm_files(w, "userinit", {"src": str(ROOT), "bin": str(fake / "devkb")})
     assert (w / "AGENTS.md").read_text() == pb.user_policy({"src": str(ROOT)}, "full")[0]
     server = json.loads((w / ".mcp.json").read_text())["mcpServers"]["devkb"]
     assert server["args"][-2:] == ["--toolset", pb.USER_INIT] and pb.USER_INIT == "lean-pack"
