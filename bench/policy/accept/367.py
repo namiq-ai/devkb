@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory() as td:
     for c in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "x"]):
         subprocess.run(["git", *c], cwd=repo, check=True, capture_output=True)
     subprocess.run([py, "-P", "-m", "devkb.cli", "build", "--project", str(repo)], cwd=repo, env=env, capture_output=True, timeout=600)
-    orig = "/home/someone/work/p999-main-r1"          # the run's own checkout, as the stream records it
+    orig = "/srv/agents/work/p999-main-r1"          # the run's own checkout, as the stream records it
     tool = lambda i, name, inp: {"type": "assistant", "message": {"id": f"m{i}", "role": "assistant", "content": [
         {"type": "tool_use", "id": f"t{i}", "name": name, "input": inp}], "usage": {"input_tokens": 1, "output_tokens": 1}}}
     events = [{"type": "system", "subtype": "init", "cwd": orig, "session_id": "s-367"},

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bench" / "policy"))
 import hook_replay  # noqa: E402
 
-ORIG = "/home/someone/work/p999-main-r1"
+ORIG = "/srv/agents/work/p999-main-r1"
 FILES = {"pkg/core.py": "def compute_total(rows):\n    return sum(rows)\n\n\ndef other_thing():\n    return compute_total([1])\n",
          "pkg/use.py": "from pkg.core import compute_total\n\n\ndef report():\n    return compute_total([2, 3])\n"}
 
