@@ -202,3 +202,12 @@ def test_a_bare_ticket_number_is_tried_as_a_github_issue():
     f = _Fake()
     text, _ = router.bundle(router.Route("ticket", "t", ["150"]), Path("."), f)
     assert f.asked == ["150", "GH-150"] and "c1" in text and "# Graph pack" not in text
+
+
+def test_a_file_line_that_is_not_a_file_of_the_repository_is_not_a_location(repo):
+    # #203's reproduction prints `src/a.cpp L8-10` from a fixture: the agent still has to find the code (benchmark, 2026-11-20)
+    prompt = "symbol gives a merged range. Reproduce: `devkb uses area` prints src/a.cpp L8-10 and src/a.cpp L12-14; fix `parse_json_string`"
+    assert router.classify(prompt).name == "located"                                 # pure: every path counts
+    assert router.classify(prompt, known=lambda p: router.tracked(repo, p)).name == "navigate"
+    assert router.classify("fix pkg/models.py:3", known=lambda p: router.tracked(repo, p)).name == "located"
+    assert router.classify("fix models.py:3", known=lambda p: router.tracked(repo, p)).name == "located"   # a bare name of a tracked file

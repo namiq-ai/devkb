@@ -59,13 +59,21 @@ class Route:
     subjects: list[str] = field(default_factory=list)
 
 
-def classify(prompt: str, branch_has_diff: bool = False) -> Route:
+def tracked(project: Path, path: str) -> bool:
+    """Whether `path` (as a ticket writes it, maybe only a file name) is a file of this repository. A fixture path in a
+    reproduction (`src/a.cpp L8-10`) or a corpus file is not where the agent has to work, so it is not a location."""
+    if (project / path).is_file():
+        return True
+    return bool(_git(project, "ls-files", "--", f"*/{path}", path))
+
+
+def classify(prompt: str, branch_has_diff: bool = False, known=None) -> Route:
     """Which stage a prompt belongs to. Pure: no graph, no git. The order is the order of cost: a located ticket is free,
     an error or ticket id is exact, a change request needs the branch's diff, and a bare name is the weakest signal."""
     text = (prompt or "").strip()
     if len(text) < MIN_PROMPT:
         return Route("none", "too short to route")
-    located = LOCATED.search(text)
+    located = next((m for m in LOCATED.finditer(text) if known is None or known(m.group(1))), None)   # a tracked file only
     if located:
         return Route("located", f"names {located.group(1)}:{located.group(2)}", [located.group(1)])
     if TRACE.search(text) or ERROR_LINE.search(text):
@@ -325,7 +333,8 @@ def on_prompt(event: dict, backend: Backend | None = None) -> dict | None:
     has_graph = (project / ".devkb" / "nodes.jsonl").exists()
     t0 = time.perf_counter()
     prompt = event.get("prompt") or ""
-    route = classify(prompt, branch_has_diff=bool(branch_files(project)) if CHANGE.search(prompt) else False)
+    route = classify(prompt, branch_has_diff=bool(branch_files(project)) if CHANGE.search(prompt) else False,
+                     known=lambda p: tracked(project, p))
     needs_graph = route.name not in ("none", "located", "release")
     if needs_graph and not has_graph:
         log_decision(project, event, Route("none", f"{route.name}: no graph built"), "", {}, 0.0)
