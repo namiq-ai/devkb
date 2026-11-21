@@ -82,7 +82,7 @@ def _build(ref: str) -> dict:
     tar = subprocess.run(["git", "-C", str(sb.REPO), "archive", sha], check=True, capture_output=True).stdout
     subprocess.run(["tar", "-x", "-C", str(src)], input=tar, check=True)
     sb.sh(["uv", "venv", "-q", str(d / ".venv")])
-    sb.sh(["uv", "pip", "install", "-q", "--python", str(d / ".venv" / "bin" / "python"), str(src), "libclang"])
+    sb.sh(["uv", "pip", "install", "-q", "--python", str(d / ".venv" / "bin" / "python"), f"{src}[mcp]", "libclang"])
     out = {"ref": ref, "commit": sha, "src": str(src), "bin": str(d / ".venv" / "bin" / "devkb"),
            "hook": str(src / "scripts" / "devkb_guardrail.py"), "post": str(src / "scripts" / "devkb_guardrail_post.py"),
            "hook_sha": hook_sha(src)}
