@@ -18,7 +18,7 @@ def _key(tmp_path, monkeypatch, **env):
     monkeypatch.setattr(sb, "REPO", HERE)
     monkeypatch.setitem(pb.BASES, "climain", "HEAD")
     built = []
-    monkeypatch.setattr(pb, "checkout", lambda t, arm: (built.append(Path(t).name), Path(t).mkdir(parents=True, exist_ok=True))[0])
+    monkeypatch.setattr(pb, "checkout", lambda t, arm, issue=None: (built.append(Path(t).name), Path(t).mkdir(parents=True, exist_ok=True))[0])
     return pb.template_for("climain"), built
 
 

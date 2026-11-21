@@ -1,6 +1,6 @@
 """`devkb init`: integrate devkb into a repository, idempotently, and take it out again.
 
-  devkb init [--project .] [--toolset lean] [--hooks] [--claude-hook] [--no-build] [--dry-run]
+  devkb init [--project .] [--toolset lean] [--hooks] [--claude-hook [--prompt-hook context|router]] [--no-build] [--dry-run]
   devkb init --remove [--project .]
 
 Writes managed blocks, never whole files, so the repository's own content is untouched and re-running only refreshes
@@ -10,7 +10,10 @@ the block:
   CLAUDE.md     `@AGENTS.md`, so Claude Code reads the same instructions (one place to maintain)
   .mcp.json     the devkb MCP server, merged into any servers already declared
   .gitignore    .devkb/ (the graph is built locally, never committed)
-  .claude/settings.json  with --claude-hook: a PreToolUse hook that gives Claude Code the file's pack at its first edit
+  .claude/settings.json  with --claude-hook: a PreToolUse hook that gives Claude Code the file's pack at its first edit.
+                No prompt hook unless asked: --prompt-hook context records the task's words so `symbol` breaks a tie by the task
+                (pushes nothing), --prompt-hook router routes the prompt to the graph's answer. Neither showed a measurable gain
+                in the benchmarks (docs/analysis/workflow-router-benchmark.md), so neither is on by default
   git hooks     with --hooks: rebuild the graph in the background after a commit, merge, rebase or checkout
 
 Why instructions and not only a server: in the study, agents left to choose used the graph in 88% of runs that
@@ -163,25 +166,30 @@ def _mcp(root: Path, toolset: str | None) -> str | None:
 
 
 HOOK_COMMAND = "devkb hook pre-edit"
+PROMPT_COMMAND = "devkb hook prompt"         # the router: pushes the graph's answer for the prompt's SDLC stage (devkb/router.py)
+CONTEXT_COMMAND = "devkb hook context"       # records the task's words only; pushes nothing (devkb/session_context.py)
 
 
-def _settings(root: Path, install: bool) -> str | None:
-    """`.claude/settings.json` with a PreToolUse hook that gives the agent the file's pack at its first edit; other
-    settings and hooks are kept, and removing devkb removes only this entry."""
+def _settings(root: Path, install: bool, prompt_hook: str | None = None) -> str | None:
+    """`.claude/settings.json` with devkb's hooks: PreToolUse gives the agent the file's pack at its first edit; UserPromptSubmit
+    only when asked (`prompt_hook` "context": record the task's words; "router": route the prompt to the graph's answer). Other
+    settings and hooks are kept, and removing devkb removes only these entries; installing one prompt hook replaces the other."""
     path = root / ".claude" / "settings.json"
     try:
         cfg = json.loads(path.read_text()) if path.exists() else {}
     except ValueError:
         raise SystemExit(f"{path} is not valid JSON; fix it or add the devkb hook by hand")
-    groups = cfg.setdefault("hooks", {}).setdefault("PreToolUse", [])
-    for g in groups:
-        g["hooks"] = [h for h in g.get("hooks", []) if HOOK_COMMAND not in h.get("command", "")]
-    groups[:] = [g for g in groups if g.get("hooks")]
-    if install:
-        groups.append({"matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
-                       "hooks": [{"type": "command", "command": HOOK_COMMAND, "timeout": 30}]})
-    if not groups:
-        cfg["hooks"].pop("PreToolUse")
+    mine = {"PreToolUse": (HOOK_COMMAND, {"matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash"}, 30, (HOOK_COMMAND,)),
+            "UserPromptSubmit": (PROMPT_COMMAND if prompt_hook == "router" else CONTEXT_COMMAND, {}, 20, (PROMPT_COMMAND, CONTEXT_COMMAND))}
+    for event, (command, extra, timeout, owned) in mine.items():
+        groups = cfg.setdefault("hooks", {}).setdefault(event, [])
+        for g in groups:
+            g["hooks"] = [h for h in g.get("hooks", []) if not any(o in h.get("command", "") for o in owned)]
+        groups[:] = [g for g in groups if g.get("hooks")]
+        if install and (event != "UserPromptSubmit" or prompt_hook):
+            groups.append({**extra, "hooks": [{"type": "command", "command": command, "timeout": timeout}]})
+        if not groups:
+            cfg["hooks"].pop(event)
     if not cfg["hooks"]:
         cfg.pop("hooks")
     return json.dumps(cfg, indent=2) + "\n" if cfg else None
@@ -207,7 +215,7 @@ def _hook(text: str, install: bool) -> str | None:
     return None if out.strip() in ("", "#!/bin/sh") else out
 
 
-def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool, claude_hook: bool = False) -> list[str]:
+def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool, claude_hook: bool = False, prompt_hook: str | None = None) -> list[str]:
     """toolset None removes devkb. Returns the changes made (or planned, with dry_run)."""
     p = Plan(root, dry_run)
     install = toolset is not None
@@ -222,7 +230,7 @@ def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool, claude_hook
     p.write(".gitignore", _set_block(ignore, ".devkb/", HASH_BEGIN, HASH_END) if install else _drop_block(ignore, HASH_BEGIN, HASH_END))
     p.write(".mcp.json", _mcp(root, toolset))
     if claude_hook or not install:
-        p.write(".claude/settings.json", _settings(root, install))
+        p.write(".claude/settings.json", _settings(root, install, prompt_hook))
     for name in HOOKS:
         path = hdir / name
         if not install or hooks:
@@ -258,12 +266,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--toolset", default="lean-pack", help="the MCP toolset agents get (lean-pack, lean, dev, core, workflow, all)")
     ap.add_argument("--hooks", action="store_true", help="rebuild the graph after commits, merges and checkouts")
     ap.add_argument("--claude-hook", action="store_true", help="give Claude Code the file's pack at its first Edit or Write (.claude/settings.json)")
+    ap.add_argument("--prompt-hook", choices=("context", "router"), help="with --claude-hook: also a UserPromptSubmit hook; context records the task's words (pushes nothing), router routes the prompt to the graph's answer. Off by default: no measured gain. Running init --claude-hook again without it removes a prompt hook installed earlier")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--remove", action="store_true", help="take devkb out of the repository again")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     root = Path(a.project).resolve()
-    changes = run(root, None if a.remove else a.toolset, a.hooks, a.dry_run, a.claude_hook)
+    changes = run(root, None if a.remove else a.toolset, a.hooks, a.dry_run, a.claude_hook, a.prompt_hook)
     print(("would " if a.dry_run else "") + ("\n".join(changes) if changes else "nothing to change"))
     problem = None if a.remove else server_command_problem()
     if problem:

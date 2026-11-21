@@ -17,7 +17,7 @@ with tempfile.TemporaryDirectory() as td:
     pb.TEMPLATES = Path(td)
     built = []
 
-    def fake_checkout(t, arm):
+    def fake_checkout(t, arm, issue=None):
         built.append(Path(t).name)
         Path(t).mkdir(parents=True)
 

@@ -11,7 +11,7 @@ td = tempfile.mkdtemp()
 pb.B = Path(td)
 def fake_from_template(t, w):
     Path(w).mkdir(parents=True, exist_ok=True); (Path(w) / ".bench-arm.json").write_text("{}")
-pb.template_for = lambda a: Path(td) / "t"; pb.from_template = fake_from_template
+pb.template_for = lambda a, issue=None: Path(td) / "t"; pb.from_template = fake_from_template
 pb.toolenv.build = lambda ref: {"bin": str(Path(td) / "bin" / "devkb"), "commit": "x", "hook_sha": "x"}
 pb.score_run = lambda *a, **k: None
 real_run, real_sh = subprocess.run, sb.sh

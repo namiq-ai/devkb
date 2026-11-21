@@ -11,7 +11,7 @@
   devkb misses  --project .                 graph misses grep found, as ticket drafts to review and file (#133)
   devkb stats   --project .                 calls by tool and outcome: complete, incomplete, ambiguous, ... (#151)
   devkb guardrail-stats                     the guardrail's substitutions, pass-throughs and repeats (#149)
-  devkb hook    pre-edit                   Claude Code hook: the file's pack, given to the agent at its first edit
+  devkb hook    pre-edit|prompt            Claude Code hooks: the file's pack at its first edit; the graph's answer for a prompt's SDLC stage
 
 `--project` takes a repository path (or a code listed in DEVKB_REGISTRY). See devkb/project_context.py.
 """

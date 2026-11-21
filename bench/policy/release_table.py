@@ -22,9 +22,9 @@ from pathlib import Path
 B = Path(__file__).resolve().parent
 sys.path.insert(0, str(B))
 import storybench as sb  # noqa: E402  (the one rule for devkb commands, #258)
-NONE = ("none", "nonekeep", "nonehid")
-ORDER = ("nonekeep", "none", "release", "climain", "cli130", "userpolicy", "userinit", "short", "inject", "main", "nonehid", "mainhid")
-HIDDEN_LOCATION = ("nonehid", "mainhid")          # the ticket's location withheld (#337); compared with each other
+NONE = ("none", "nonekeep", "nonehid")        # the no-devkb arms; rmain and router are compared with them
+ORDER = ("nonekeep", "none", "release", "climain", "cli130", "userpolicy", "userinit", "short", "inject", "main", "rmain", "router", "ctx", "nonehid", "mainhid", "rmainhid", "routerhid", "ctxhid")
+HIDDEN_LOCATION = ("nonehid", "mainhid", "rmainhid", "routerhid", "ctxhid")          # the ticket's location withheld (#337); compared with each other
 
 
 def location_given(arm: str) -> bool:
@@ -92,12 +92,20 @@ def guard_rows(session: str) -> list[dict]:
     return [r for r in _LOG if session and r.get("session") == session and r.get("action") not in (None, "remind", "pass-through")]
 
 
+def contaminated(r: dict) -> list[str]:
+    """What an agent or the harness wrote in the harness repository during the run, apart from moving a run to
+    `runs-archive/`: the benchmark's own housekeeping, which no agent can reach (#340). Rows scored before the harness learned
+    that carry such paths."""
+    return [x for x in r.get("contaminated") or [] if "runs-archive/" not in x]
+
+
 def per_run(r: dict) -> dict:
     c = counts(r["run"])
     nav, own, sub = c if c else (r.get("devkb_nav", 0), r.get("devkb_selftest", 0), 0)
     a = r.get("acceptance") or {}
     g = guard_rows(r.get("session", ""))
-    return {"turns": r["turns"], "grep": r["calls"].get("search", 0), "nav": nav, "own": own, "sub": sub, "ctx": r["ctx_tokens"],
+    rf = r.get("refetch")                         # devkb queries followed by a grep or read of the same target; absent in old rows
+    return {"rq": rf["queries"] if rf else None, "rf": rf["refetched"] if rf else None, "turns": r["turns"], "grep": r["calls"].get("search", 0), "nav": nav, "own": own, "sub": sub, "ctx": r["ctx_tokens"],
             "out": r.get("out_tokens", 0),
             "cost": r["cost"], "cut_off": bool(r.get("cut_off")), "wall": r["seconds"] / 60, "ok": bool(a.get("pass")), "suite": bool(r["suite_pass"]),
             "flaky": bool(r.get("suite_flaky")),
@@ -107,8 +115,8 @@ def per_run(r: dict) -> dict:
 def summary(xs: list[dict]) -> dict:
     out = {"n": len(xs), "ok": sum(x["ok"] for x in xs), "suite": sum(x["suite"] for x in xs),
            "flaky": sum(x.get("flaky", False) for x in xs), "cut_off": sum(x.get("cut_off", False) for x in xs)}
-    for k in ("turns", "grep", "nav", "own", "sub", "ctx", "out", "cost", "wall", "answers", "answer_chars"):
-        vals = [x[k] for x in xs if x[k] is not None] or [0]     # a cut-off run's cost is unknown: not a zero (#303)
+    for k in ("turns", "grep", "nav", "own", "sub", "ctx", "out", "cost", "wall", "answers", "answer_chars", "rq", "rf"):
+        vals = [x.get(k) for x in xs if x.get(k) is not None] or [0]     # a cut-off run's cost is unknown: not a zero (#303)
         out[k] = st.mean(vals)
         out[k + "_lo"], out[k + "_hi"] = min(vals), max(vals)
     return out
@@ -134,6 +142,15 @@ def check_hashes(ticket: str, rows: list[dict]) -> str | None:
     if len(seen) > 1:
         return f"#{ticket}: runs scored by {len(seen)} versions of the hidden check ({', '.join(sorted(str(h)[:8] for h in seen))})"
     return None
+
+
+def refetched(xs: list[dict]) -> str:
+    """Per run: devkb queries that were followed by a grep or read of the same target / all devkb queries with a target.
+    "n/a" for an arm whose rows predate the measure (run `remeasure.py` to fill them)."""
+    known = [x for x in xs if x.get("rq") is not None]
+    if not known:
+        return "n/a"
+    return f"{st.mean(x['rf'] for x in known):.1f}/{st.mean(x['rq'] for x in known):.1f}"
 
 
 def fmt_range(m: dict, k: str, scale: float = 1.0, unit: str = "", digits: int = 1) -> str:
@@ -165,21 +182,62 @@ def start_section(pairs: list[tuple[str, list[dict]]]) -> list[str]:
     return out + [f"WARNING {w}" for w in warn]
 
 
-def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str:
+def strat_boot(cells: list[tuple[list[float], list[float]]], n: int = 3000, seed: int = 222) -> tuple[float, float, float]:
+    """(mean, low, high) of the mean difference between two arms, 90%: for each ticket, resample the runs of each arm with
+    replacement, take the difference of the arm means, then average the tickets, which weigh the same. Runs vary within a ticket
+    by more than the tickets' means differ, so resampling the six per-ticket means alone understates the spread, and treating
+    all runs as one sample ignores which ticket they belong to."""
+    rnd = random.Random(seed)
+    def once(resample: bool) -> float:
+        return st.mean(st.mean(rnd.choices(a, k=len(a)) if resample else a) - st.mean(rnd.choices(b, k=len(b)) if resample else b)
+                       for a, b in cells)
+    ds = sorted(once(True) for _ in range(n))
+    return once(False), ds[int(.05 * n)], ds[int(.95 * n) - 1]
+
+
+def compare_arms(pairs: list[tuple[str, list[dict]]], a: str, b: str) -> list[str]:
+    """Arm `a` against arm `b` run for run, whichever they are: the table above compares with the no-devkb arm only. Only the
+    tickets that have both arms count; the rows are runs of one batch only if the caller has checked that they are."""
+    keys = {"turns": lambda x: x["turns"], "cost $": lambda x: x["cost"], "context k": lambda x: x["ctx"] / 1e3,                  # a cut-off run's cost is None: left out (#303)
+            "search calls": lambda x: x["grep"], "devkb nav": lambda x: x["nav"], "hidden check passed": lambda x: 1.0 if x["ok"] and x["suite"] else 0.0}
+    cells = []
+    for t, rows in pairs:
+        ra, rb = ([per_run(r) for r in rows if r["arm"] == arm and not contaminated(r)] for arm in (a, b))
+        if ra and rb:
+            cells.append((t, ra, rb))
+    if not cells:
+        return [f"No ticket has both {a} and {b}."]
+    out = ["", f"{a} against {b}, {len(cells)} tickets ({', '.join('#' + c[0] + f' {len(c[1])}/{len(c[2])}' for c in cells)} runs), "
+           "90% interval from resampling runs within each ticket, tickets weighted equally:", "",
+           f"| | {b} | {a} | difference (90% interval) |", "|---|---|---|---|"]
+    for k, f in keys.items():
+        data = [([f(x) for x in ra if f(x) is not None], [f(x) for x in rb if f(x) is not None]) for _t, ra, rb in cells]
+        data = [d for d in data if d[0] and d[1]]
+        if not data:
+            out.append(f"| {k} | - | - | no run of both arms has it |")
+            continue
+        mean, lo, hi = strat_boot([(x, y) for x, y in data])
+        ma, mb = st.mean(st.mean(x) for x, _ in data), st.mean(st.mean(y) for _, y in data)
+        out.append(f"| {k} | {mb:.2f} | {ma:.2f} | {mean:+.2f} ({lo:+.2f} to {hi:+.2f}) |")
+    return out
+
+
+def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False, compare: tuple[str, str] | None = None) -> str:
     problems = [p for t, rows in pairs if (p := check_hashes(t, rows))]
     if problems and not allow_mixed:
         raise SystemExit("refused, re-score first:\n  " + "\n  ".join(problems))
-    dirty = [(t, [r["run"] for r in rows if r.get("contaminated")]) for t, rows in pairs]
-    pairs = [(t, [r for r in rows if not r.get("contaminated")]) for t, rows in pairs]      # left out of every mean (#340)
-    lines = ["| Ticket | Arm | Location given | Runs | Wall min | Turns | Context k | Output k | Cost $ | Grep | devkb nav | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
-             "|" + "---|" * 17]
+    dirty = [(t, [r["run"] for r in rows if contaminated(r)]) for t, rows in pairs]
+    pairs = [(t, [r for r in rows if not contaminated(r)]) for t, rows in pairs]      # left out of every mean (#340)
+    lines = ["| Ticket | Arm | Location given | Runs | Wall min | Turns | Context k | Output k | Cost $ | Search | devkb nav | Re-fetched | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
+             "|" + "---|" * 18]
     per_arm: dict[str, list[dict]] = {}
     diffs: dict[str, dict[str, list[float]]] = {}
     for t, rows in pairs:
         arms = sorted({r["arm"] for r in rows}, key=lambda a: ORDER.index(a) if a in ORDER else 99)
-        sums = {a: summary([per_run(r) for r in rows if r["arm"] == a]) for a in arms}
+        runs = {a: [per_run(r) for r in rows if r["arm"] == a] for a in arms}
+        sums = {a: summary(runs[a]) for a in arms}
         for i, a in enumerate(arms):
-            m = sums[a]
+            m, xs_rows = sums[a], runs[a]
             per_arm.setdefault(a, []).append(m)
             # the no-devkb arm given the ticket the same way: hidden against hidden, as filed against as filed (#337)
             base = base_for(a, arms, sums)
@@ -194,7 +252,7 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
             flaky = f" ({m['flaky']} flaky)" if m.get("flaky") else ""       # green only on the re-run (#260)
             cut = f" ({m['cut_off']} cut off, cost left out)" if m.get("cut_off") else ""      # #303
             lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {'yes' if location_given(a) else 'no'} | {m['n']}{cut} | {fmt_range(m, 'wall')} | {m['turns']:.1f} | "
-                         f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {m['out'] / 1e3:.1f} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | {m['own']:.1f} | "
+                         f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {m['out'] / 1e3:.1f} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | {refetched(xs_rows)} | {m['own']:.1f} | "
                          f"{m['sub']:.1f} | {m['answers']:.1f} ({m['answer_chars']:.0f}) | {m['ok']}/{m['n']} | {m['suite']}/{m['n']}{flaky} | {vs} |")
     lines += ["", "| Release, arm | Runs | Cost per run | Context per run | Cost difference vs no devkb (90% interval) | Context difference (90% interval) |",
               "|---|---|---|---|---|---|"]
@@ -214,18 +272,21 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
     lines += [f"WARNING #{t}: {len(rs)} run(s) changed the harness repository while they ran and are left out of the means: {', '.join(rs)} (#340)" for t, rs in dirty if rs]
     if problems:
         lines += ["", "Mixed hidden-check versions (allowed by flag): " + "; ".join(problems)]
+    if compare:
+        lines += compare_arms(pairs, *compare)
     return "\n".join(lines)
 
 
 def main(argv: list[str]) -> int:
     allow = "--allow-mixed-checks" in argv
+    compare = next((tuple(a.split("=", 1)[1].split(":")) for a in argv if a.startswith("--compare=")), None)    # --compare=ctxhid:rmainhid
     pairs = []
     for a in argv:
         if a.startswith("--"):
             continue
         t, f = a.split("=", 1)
         pairs.append((t, [json.loads(l) for l in open(B / f if not Path(f).is_absolute() else f) if l.strip()]))
-    print(table(pairs, allow))
+    print(table(pairs, allow, compare))
     return 0
 
 

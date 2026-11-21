@@ -22,9 +22,12 @@ import json
 import re
 import subprocess
 import sys
+import time
 import tokenize
 from collections import defaultdict
 from pathlib import Path
+
+from devkb import session_context
 
 SIMILAR_MIN = 55          # on a 0-60 scale (edit-similarity ratio >= 0.917): below it a fuzzy hit is a suggestion, not a match
 MAX_SOURCE = 80           # lines of source a symbol call returns unless asked for more
@@ -97,6 +100,22 @@ class ReadTools:
         self._tri: dict[str, set[int]] | None = None
         self._names: list[str] | None = None
         self._by_name: dict[str, list[int]] | None = None
+        self._task: frozenset[str] | None = None
+        self._task_seen: tuple[float, float] = (0.0, 0.0)          # (the record's mtime, when it was read)
+
+    def _task_words(self) -> frozenset[str]:
+        """The words of the task the prompt hook recorded (session_context); empty when it did not run or has aged out. A reader can
+        live as long as an MCP server does, so the record is read again when its file changes and at least once a minute (that is
+        what lets a 12-hour-old record age out and a new prompt replace the last)."""
+        stamp, now = session_context.stamp(self.root), time.time()
+        if self._task is None or stamp != self._task_seen[0] or now - self._task_seen[1] > 60:
+            self._task, self._task_seen = session_context.load(self.root), (stamp, now)
+        return self._task
+
+    def _task_overlap(self, i: int) -> int:
+        """How many of the task's words the definition's path and qualified name contain: breaks a tie, never decides one."""
+        task = self._task_words()
+        return len(task.intersection(words_of(self.file[i] + " " + self.qual[i]))) if task else 0
 
     # ── files ─────────────────────────────────────────────────────────────
     def lines(self, rel: str) -> list[str]:
@@ -133,9 +152,12 @@ class ReadTools:
 
     def _rank_key(self, i: int, score: float, exact_case: bool = True):
         """Best tier score first; among equals production before tests, then the spelling the query used (#372), shallower
-        qualified name, more callers, then path and line. Case alone never lifts test code above production code."""
+        qualified name, more callers, then path and line. Case alone never lifts test code above production code.
+        Between those, the words of the task (session_context) lift the definition whose path and name they match:
+        `resolve` is defined in six files, and a ticket about C++ macros means `cpp_resolve.py`, not the busiest one."""
         path = self.file[i]
-        return (-score, self.api._is_test(path), 0 if exact_case else 1, self.qual[i].count("."), -self.api._caller_count(i), path,
+        return (-score, self.api._is_test(path), 0 if exact_case else 1, -self._task_overlap(i), self.qual[i].count("."),
+                -self.api._caller_count(i), path,
                 self.idx.props[i].get("line_start") or 0)
 
     def resolve(self, query: str, kind: str = "", under: str = "", limit: int = 8, tests: bool = True) -> dict:

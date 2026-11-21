@@ -93,13 +93,20 @@ def _build(ref: str) -> dict:
     return out
 
 
-def hooks_settings(env: dict) -> dict:
-    """`.claude/settings.json` hooks that run the environment's own guardrail, not the checkout's copy."""
+def hooks_settings(env: dict, router: bool = False, context: bool = False) -> dict:
+    """`.claude/settings.json` hooks that run the environment's own guardrail, not the checkout's copy. With `router`, also
+    the environment's own prompt router (`devkb hook prompt`, docs/specs/workflow-router.md): the one difference between
+    the rmain and router arms. With `context`, the silent `devkb hook context` that only records the task for `symbol`'s
+    ranking (the ctx arm): the same hook slot as the router, nothing pushed."""
     def cmd(script: str) -> str:
         return f'python3 "{script}" 2>/dev/null || true'
     out = {"PreToolUse": [{"matcher": "Read|Grep|Bash", "hooks": [{"type": "command", "timeout": 20, "command": cmd(env["hook"])}]}]}
     if Path(env["post"]).exists():
         out["PostToolUse"] = [{"matcher": "Grep|Bash", "hooks": [{"type": "command", "timeout": 20, "command": cmd(env["post"])}]}]
+    if router:
+        out["UserPromptSubmit"] = [{"hooks": [{"type": "command", "timeout": 20, "command": f'"{env["bin"]}" hook prompt 2>/dev/null || true'}]}]
+    if context and not router:
+        out["UserPromptSubmit"] = [{"hooks": [{"type": "command", "timeout": 20, "command": f'"{env["bin"]}" hook context 2>/dev/null || true'}]}]
     return out
 
 

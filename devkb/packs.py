@@ -21,6 +21,7 @@ loaded, and it carries what makes checking unnecessary:
 from __future__ import annotations
 
 import argparse
+import collections
 import re
 import subprocess
 import sys
@@ -218,12 +219,19 @@ class Packer:
                     out.setdefault(rel, []).append((c, s))
         return out
 
-    def _tests_section(self, tests: dict[str, list[tuple[int, int]]]) -> list[str]:
+    def _tests_section(self, tests: dict[str, list[tuple[int, int]]], own: set[int] | None = None) -> list[str]:
+        """The test files, one line each. With `own` (the file's own symbols), a test that calls one of them is marked `direct` and
+        listed first; one that reaches the file only through a caller says through which function. Direct tests are the ones a
+        change to the file endangers most, and a long list that mixes both costs the reader the difference."""
         lines = []
-        for rel in sorted(tests):
-            c, s = tests[rel][0]
+        def direct(rel):
+            return own is not None and any(s in own for _c, s in tests[rel])
+        for rel in sorted(tests, key=lambda r: (not direct(r), r)):
+            pick = next((e for e in tests[rel] if own is not None and e[1] in own), tests[rel][0])
+            c, s = pick
             more = f" (+{len(tests[rel]) - 1} more tests)" if len(tests[rel]) > 1 else ""
-            lines.append(f"- `{rel}`{more} — `{self.call_site(c, self._name(s))}`")
+            tag = "" if own is None else " direct —" if direct(rel) else f" through `{self._name(s)}` —"
+            lines.append(f"- `{rel}`{more}{tag if tag else ' —'} `{self.call_site(c, self._name(s))}`")
         return lines or ["- none in the graph"]
 
     def _test_tree(self, rel: str, text: str):
@@ -244,6 +252,33 @@ class Packer:
             texts = self.__dict__["_texts"] = [(rel, "\n".join(self._file(rel))) for rel in
                                                sorted(r for r in self.idx.sym_by_file if r.endswith(".py") and self.api._is_test(r))]
         return [(rel, text) for rel, text in texts if any(n in text for n in needles)]
+
+    def _defs_named(self, name: str) -> int:
+        """How many definitions in the graph carry this short name."""
+        counts = self.__dict__.get("_short_counts")
+        if counts is None:
+            counts = self.__dict__["_short_counts"] = collections.Counter(
+                self.idx.keys[i].split("::", 1)[-1].rsplit(".", 1)[-1] for i, t in enumerate(self.idx.types) if t == "Symbol")
+        return counts[name]
+
+    def _mentioned_in_tests(self, name: str, listed) -> dict[str, int]:
+        """{test file: first line} for Python test files outside `listed` that call `name` or hold it as a quoted string (not in a comment) with no call
+        the graph resolved to it: a call through a receiver the graph cannot type, or the name in a string. The list of tests the
+        graph names is then not the whole story (QB1: `pack refactor` named no covering test for 7 of 13 changes). Names under four
+        letters are not looked for: too many unrelated mentions."""
+        if len(name) < 4 or self._defs_named(name) > MENTION_MAX_DEFS:
+            return {}                                   # too short, or a name so many definitions share (`resolve`, `call`) that a mention says nothing
+        n = re.escape(name)
+        rx = re.compile(rf"(?:\.{n}\s*\(|(?<![\w.]){n}\s*\(|[\"']{n}[\"'])")       # a call, a method call, or the name as a string key
+        out: dict[str, int] = {}
+        for rel, text in self._test_texts((name,)):
+            if rel in listed:
+                continue
+            for ln, line in enumerate(text.splitlines(), 1):
+                if rx.search(line) and not line.lstrip().startswith("#"):
+                    out[rel] = ln
+                    break
+        return out
 
     def _unfollowed_note(self, path: str, listed: dict) -> list[str]:
         """A line saying the test list may be incomplete when a test file outside it loads modules from `path`'s
@@ -494,7 +529,7 @@ class Packer:
         out += ["", f"## Files that depend on it ({len(dependants)})"] + [f"- `{f}`" for f in dependants[:40]]
         named = self._named_by_path(path, tests)
         out += ["", f"## Tests that exercise it, directly or through callers ({len(tests) + len(named)})"] \
-            + (self._tests_section(tests) if tests or not named else []) + self._path_lines(named) \
+            + (self._tests_section(tests, set(syms)) if tests or not named else []) + self._path_lines(named) \
             + self._unfollowed_note(path, {**tests, **named})
         if tests or named:
             out += ["", f"Run: `{self._run(list(tests) + list(named))}`"]
@@ -556,13 +591,22 @@ class Packer:
             site = next((s for s in self.idx.props[i].get("ref_sites") or [] if str(s).startswith(f + ":")), None) if c in readers else None
             out.append(f"- `{f}`{more} — " + (f"reads it at `{site}`" if site else f"`{self.call_site(c, self._name(i))}`{self._via(c, i)}"))
         out += ["", f"## Test files among them ({len(tests)})"] + ([f"- `{f}`" for f in tests] or ["- none"])
+        mentioned = self._mentioned_in_tests(self._name(i), set(tests))
+        if mentioned:
+            shown = sorted(mentioned.items())[:8]
+            out += ["", f"## Test files that mention it with no call the graph resolved ({len(mentioned)})"] \
+                + [f"- `{f}:{ln}`" for f, ln in shown] + ([f"- … {len(mentioned) - len(shown)} more"] if len(mentioned) > len(shown) else []) \
+                + ["(A call through a receiver the graph cannot type, or the name in a string; Python test files only. Read these before trusting the test list above.)"]
         if role:
             out += ["", f"## Files role {role} must not edit ({len(blocked)})"] + ([f"- `{f}`" for f in blocked] or ["- none"])
         if own not in by_file:
             out += ["", f"(The defining file `{own}` is not counted as a caller.)"]
         if self.api._calls_itself(i):
             out += ["", f"(It calls itself at `{self.call_site(i, self._name(i))}`; that call is not counted as a caller.)"]
-        out += ["", "## Coverage", star_coverage(self.coverage([i], set(files)), star)]
+        cov = star_coverage(self.coverage([i], set(files)), star)
+        if mentioned:                                    # the verdict must not say Complete over a list the section above contradicts
+            cov = f"**Incomplete for tests: {len(mentioned)} test file(s) mention `{self._name(i)}` and the graph attributes no call from them.** " + cov
+        out += ["", "## Coverage", cov]
         return "\n".join(out + ["", HOW_TO_USE])
 
 
@@ -716,6 +760,7 @@ def star_coverage(cov: str, star: list[str]) -> str:
             f"those reads. Search only these files for them: {files}.**")
 
 
+MENTION_MAX_DEFS = 3     # a name defined in more than this many places is not looked for in the tests (`resolve`: six definitions, 118 test files)
 HOW_TO_USE = ("---\nThis pack was extracted from the source by the dev-process graph; each item carries the line that proves it. "
               "Treat it as the answer: re-read a file only if it is listed as changed, and search only where Coverage says the "
               "answer is incomplete.")

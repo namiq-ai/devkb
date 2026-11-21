@@ -249,12 +249,16 @@ def summary(rows: list[dict]) -> dict:
 
 
 def streams(paths: list[str]) -> list[Path]:
-    out = []
+    """Every stream once: a run named twice (a directory and a glob that both match it) would count its decisions twice, as 80 of
+    the first 381 decisions in the router benchmark were (301 were distinct)."""
+    out, seen = [], set()
     for p in map(Path, paths):
-        if p.is_dir():
-            out += sorted(p.glob("stream.jsonl")) + sorted(p.glob("*/stream.jsonl"))
-        else:
-            out.append(p)
+        found = sorted(p.glob("stream.jsonl")) + sorted(p.glob("*/stream.jsonl")) if p.is_dir() else [p]
+        for f in found:
+            key = f.resolve()
+            if key not in seen:
+                seen.add(key)
+                out.append(f)
     return out
 
 

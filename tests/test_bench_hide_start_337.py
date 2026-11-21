@@ -48,7 +48,7 @@ def test_the_prompt_as_filed_is_unchanged(tmp_path):
 
 
 def test_hidden_arms_map_to_their_base_arms():
-    assert pb.HIDE_LOCATION == {"nonehid": "none", "mainhid": "main"}
+    assert pb.HIDE_LOCATION == {"nonehid": "none", "mainhid": "main", "rmainhid": "rmain", "routerhid": "router", "ctxhid": "ctx"}
 
 
 def test_the_release_table_compares_like_with_like():

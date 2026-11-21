@@ -1,0 +1,20 @@
+[
+ {"id": "y1", "fix": "156e6e2", "tests": ["test/integration/emitter_test.cpp"],
+  "title": "Emitter rejects anchor and alias names that contain '~'",
+  "body": "Emitting an anchor whose name contains `~`, and an alias to it, puts the emitter in an error state (INVALID_ANCHOR), although `~` is a valid character in a YAML anchor name and the parser accepts such names.\n\nRepro:\n```cpp\nYAML::Emitter out;\nout << YAML::BeginSeq;\nout << YAML::Anchor(\"foo~bar\") << \"value\";\nout << YAML::Alias(\"foo~bar\");\nout << YAML::EndSeq;\n```\nExpected output: `- &foo~bar value\\n- *foo~bar`."},
+ {"id": "y2", "fix": "c3f8112", "tests": ["test/integration/emitter_test.cpp"],
+  "title": "Emitter stops writing after the first of several documents that each start with a tag",
+  "body": "When two documents are emitted and each starts with a local tag, the second document is missing from the output and the emitter reports an error.\n\nRepro:\n```cpp\nYAML::Emitter out;\nfor (int i = 0; i < 2; i++) {\n  out << YAML::BeginDoc << YAML::LocalTag(\"The_Tag\")\n      << YAML::BeginSeq << \"Some Value\" << YAML::EndSeq << YAML::EndDoc;\n}\n```\nExpected output:\n```\n---\n!The_Tag\n- Some Value\n...\n---\n!The_Tag\n- Some Value\n...\n```"},
+ {"id": "y3", "fix": "c7a86c0", "tests": ["test/integration/handler_test.cpp"],
+  "title": "Parsing a tagged literal block scalar goes wrong in some indentations",
+  "body": "Some inputs with a tag in front of a literal block scalar (`|`) are parsed wrongly or make the parser fail.\n\nExamples (each should parse without error):\n1. `key:\\n- !!str |\\n   multiple\\n   words` is a map `key` whose value is a block sequence holding the string `multiple\\nwords` with tag `tag:yaml.org,2002:str`.\n2. `key: !t |\\n multiple\\n words` is a map `key` whose value is the string `multiple\\nwords` with tag `!t`.\n3. `key:\\n- !t |\\n multiple\\n words` is a map `key` whose value is a block sequence holding the string `multiple\\nwords` with tag `!t`."},
+ {"id": "y4", "fix": "356643b", "tests": ["test/integration/load_node_test.cpp"],
+  "title": "Node::SetTag with a verbatim tag or a named tag handle emits the wrong tag",
+  "body": "Tags set programmatically on a node are emitted wrongly in two cases.\n\n```cpp\nYAML::Node node, root;\nnode = 42;\nnode.SetTag(\"hello\");\nroot[\"num\"] = node;\nYAML::Emitter e; e << root;\n```\nExpected `num: !<hello> 42`.\n\nWith `node.SetTag(\"!a!foo\")` the expected output is `num: !a!foo 42`."},
+ {"id": "y5", "fix": "8eb618e", "tests": ["test/binary_test.cpp"],
+  "title": "DecodeBase64 mishandles whitespace between the padding characters",
+  "body": "`YAML::DecodeBase64(\"TQ= =\")` should give the single byte `'M'`, the same as `\"TQ==\"`, because whitespace in Base64 input is ignored. It returns something else."},
+ {"id": "y6", "fix": "3caebe2", "tests": ["test/integration/emitter_test.cpp"],
+  "title": "Emitting a std::uint8_t writes a character, not the number",
+  "body": "```cpp\nYAML::Emitter out;\nout << YAML::BeginSeq;\nout << std::uint8_t{16};\nout << YAML::EndSeq;\n```\nproduces a control character instead of `- 16`. Eight-bit unsigned integers should be emitted as numbers like the other integer types."}
+]

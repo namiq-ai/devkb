@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import storybench as sb  # noqa: E402
 
-FIELDS = ("turns", "model_calls", "out_tokens", "ctx_tokens", "devkb_queries", "devkb_nav", "devkb_selftest")
+FIELDS = ("turns", "model_calls", "out_tokens", "ctx_tokens", "devkb_queries", "devkb_nav", "devkb_selftest", "refetch")
 
 args, dirs = sys.argv[1:], []
 while "--runs" in args:

@@ -23,7 +23,8 @@ def test_the_hidden_checks_are_never_in_a_checkout():
 
 def test_tri_mode_arms_take_devkb_from_a_tool_environment():
     assert set(pb.ENV_REF) == {"release", "main", "noteach", "outline", "hookmain", "teachall",   # #218 arms; #375's pair
-                               "userpolicy", "short", "inject", "userinit"}                  # #366
+                               "userpolicy", "short", "inject", "userinit",                  # #366
+                               "rmain", "router", "ctx"}                                    # the workflow router pair and the context arm
     assert pb.ARM_ENV["noteach"]["DEVKB_GUARDRAIL_TEACH"] == "0" and pb.ARM_ENV["outline"]["DEVKB_GUARDRAIL_OUTLINE"] == "1"
     assert "DEVKB_GUARDRAIL_TEACH" not in pb.ARM_ENV["main"]          # main is the hook as shipped: D1 on (#267)
     env = {"hook": "/e/src/scripts/devkb_guardrail.py", "post": "/nonexistent/post.py", "bin": "/e/.venv/bin/devkb"}
@@ -32,6 +33,14 @@ def test_tri_mode_arms_take_devkb_from_a_tool_environment():
     assert "/e/src/scripts/devkb_guardrail.py" in cmd and "CLAUDE_PROJECT_DIR" not in cmd
     assert hooks["PreToolUse"][0]["matcher"] == "Read|Grep|Bash"
     assert pb.tool_of("main", env) == "/e/.venv/bin/devkb"
+    assert "UserPromptSubmit" not in hooks, "the router hook is the router arm's alone"
+    routed = toolenv.hooks_settings(env, router=True)
+    assert routed["UserPromptSubmit"][0]["hooks"][0]["command"].startswith('"/e/.venv/bin/devkb" hook prompt')
+    assert routed["PreToolUse"] == hooks["PreToolUse"], "rmain and router differ in the prompt hook only"
+    quiet = toolenv.hooks_settings(env, context=True)
+    assert quiet["UserPromptSubmit"][0]["hooks"][0]["command"].startswith('"/e/.venv/bin/devkb" hook context')
+    assert quiet["PreToolUse"] == hooks["PreToolUse"], "ctx and rmain differ in the prompt hook only"
+    assert toolenv.hooks_settings(env, router=True, context=True)["UserPromptSubmit"] == routed["UserPromptSubmit"]
 
 
 def test_runs_never_load_the_users_own_settings():

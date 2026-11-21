@@ -42,7 +42,7 @@ def test_every_devkb_command_in_the_policy_file_is_allowed():
 
 def _lists(tmp_path, monkeypatch, arm):
     monkeypatch.setattr(pb, "B", tmp_path)
-    monkeypatch.setattr(pb, "template_for", lambda a: tmp_path / "t")
+    monkeypatch.setattr(pb, "template_for", lambda a, issue=None: tmp_path / "t")
     monkeypatch.setattr(pb, "from_template", lambda t, w: (Path(w).mkdir(parents=True), (Path(w) / ".bench-arm.json").write_text("{}")))
     monkeypatch.setattr(pb.toolenv, "build", lambda ref: {"bin": str(tmp_path / "devkb"), "commit": "x", "hook_sha": "x"})
     monkeypatch.setattr(pb, "score_run", lambda *a, **k: None)

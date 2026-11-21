@@ -116,7 +116,7 @@ def test_the_template_key_includes_the_suite_setting_so_an_old_or_other_template
     monkeypatch.setattr(sb, "REPO", HERE)
     monkeypatch.setitem(pb.BASES, "climain", "HEAD")
     built = []
-    monkeypatch.setattr(pb, "checkout", lambda t, arm: (built.append(Path(t).name), Path(t).mkdir(parents=True))[0])
+    monkeypatch.setattr(pb, "checkout", lambda t, arm, issue=None: (built.append(Path(t).name), Path(t).mkdir(parents=True))[0])
     (tmp_path / "climain-oldtemplate-without-the-suite-in-its-name").mkdir()
     monkeypatch.delenv("POLICY_EQUAL_SUITE", raising=False)
     eq = pb.template_for("climain")
