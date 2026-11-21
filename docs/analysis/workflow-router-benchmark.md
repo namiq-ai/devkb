@@ -140,3 +140,44 @@ The headline numbers reproduce from `score.json`. What was wrong or missing:
    counted apart): **14 of 76 devkb queries (18%) were re-fetched**, not 33 of 83 (40%). By arm: `router` 7 of 21 (33%), `rmain`
    4 of 16 (25%), `routerhid` 2 of 11, `ctxhid` 1 of 14, `rmainhid` 0 of 14; 19 further queries were an outline followed by the read it
    points to. The 64% for the router arm quoted in earlier notes was the old metric.
+
+
+---
+
+# Errata 2 (2026-11-21), from an independent audit of the replay tools, and what I checked myself
+
+This supersedes numbers above. Each correction names the script that now produces the figure.
+
+1. **The live `ctx` arm never ran the ranking.** I checked that the task record existed in the `ctx` checkouts, never that anything
+   read it. The agent's own `devkb` is the checkout's `.venv/bin/devkb`, which is the ticket's base-commit code: the checkout has no
+   `_task_overlap` and no `session_context.py`, and in all three #118 `ctx` runs the agent's `symbol resolve` printed
+   `project_context.py` first, the old order. So the batch compared `rmain` with `rmain` plus a hook whose output nothing used: an
+   **A/A comparison**. The -2.8 turns (-$0.04, -145k context) between two identical treatments, "significant" under the
+   within-ticket resampling, is the noise floor of this design (a wave effect and run-to-run spread the resampling does not see),
+   about 3 turns or 15% in either direction. Every statement above that the live batch favoured the ranking, and the "hook adds no
+   turns" check, is withdrawn: the live data say nothing about the ranking. A live test needs the agent's `devkb` to be the arm's code;
+   that conflicts with tickets that edit devkb itself (the agent self-tests its own build), so the ranking is judged by replay only.
+2. **The ranking replay is one query.** The "14/27 to 22/27" (and the recount 14/32 to 25/32) counted `symbol resolve` on #118 eleven
+   times. Per distinct query the four tickets give 8 queries: top-1 file on target 3 to 4 of 8; at function level (a definition the run
+   actually changed) 1 of 8 before and after. The new top-1, `_Includers.resolve` in `cpp_graph.py` L35-45, was not touched by any
+   agent; the function they needed, `cpp_resolve.py resolve`, is rank 2. On the held-out tickets 286 and 287 (4 distinct queries) nothing
+   changes at either level (`replay_queries.py`, `--context`). **The ranking is unproven and no longer installed by default.**
+3. **Inline pack coverage is 1.2 calls per run, not 2.5** (`inline_replay.py`): 91 of the first 144 "covered reads" were re-reads of a
+   file already opened. Now 546 navigation calls in 72 runs (7.6 per run), 83 covered: 39 reads of a file a pack names but the agent
+   had not opened, 44 greps. The inline idea fails its gate by a wider margin.
+4. **Guardrail replay: 42 of 301 decisions answered (14.0%), not 54 of 381.** A glob and a directory had both matched the `ctx` runs, so
+   80 decisions were counted twice (`hook_replay.py` now lists each stream once). 31 span hints and 11 `alongside`. Before the run's first
+   edit, the figure comparable with the live guardrail (which withholds a stale graph): 18 of 209 (8.6%), against the live 9%. The replay
+   and the live hook agree. 24 of the 42 answers come after the first edit, where the live rule would withhold them.
+5. **Partial answers: +14 answers (42 to 56; 14.0% to 18.6%), not +21,** at about 20 tokens per run (re-run on the de-duplicated runs).
+6. **Staleness: 689 searches, 512 (74%) before the first edit, 59 after it that name a graph symbol, and 6 answerable under a name-scoped
+   rule** (under 1%; not 15 of 394). The first count skipped unquoted patterns (355 of 734 shell greps) and saw only Edit and Write as edits;
+   `searches.py` parses every grep and counts a shell write (`sed -i`, a heredoc, a redirect) as an edit (`stale_replay.py`).
+7. **Which greps the graph could answer: 29%, not 47%** (`nav_habits.py`, 745 patterns, one classification, shares sum to 100%):
+   distinctive graph symbols 28.9%; plain words that are also a symbol (`macro`, `names`, `variant`) 34.6%; names the graph does not define
+   23.0%; text and regex 13.6%. The earlier 47% included the plain words, which are symbols by accident.
+8. **`| head -N` on devkb output:** 68 piped navigation commands; **41 (60%) provably cut nothing** (the whole result was shorter than N);
+   25 may have been cut and cannot be attributed in a chain. The earlier "44 of 54, 81%" did not reproduce (`nav_habits.py`).
+9. **Not wrong, checked:** replay fidelity (the replay's old-order `symbol` output equals the live tool results exactly), the
+   reconstruction of the hidden-location prompts (the same 174, 147 and 181 words the live runs recorded), `rel()` paths, and the guardrail
+   replay against the live hook (point 4).

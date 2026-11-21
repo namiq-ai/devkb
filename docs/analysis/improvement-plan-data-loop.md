@@ -16,11 +16,11 @@ Verdict: **confirmed** (matches the data), **corrected** (right direction, wrong
 | hook fires, `DEVKB_ROUTER=0` falls back | confirmed | headless run: router on answered, off said NO CONTEXT. The router is `devkb/router.py`; `hook.py:73` is `pre_edit`, a different hook |
 | false `located`/ticket-key bypasses fixed; 27 usage-limit runs archived; self-inflicted flags isolated | confirmed | commits `3e37948`, `5932278`; `runs-archive/` |
 | refetch 39-40% | **corrected** | the first metric counted generic words and the by-design outline-then-read. Corrected (`storybench.refetch`): 14 of 76 queries (18%); `router` 33%, `rmain` 25%, `ctx` 7%; plus 19 outline-then-read, counted apart |
-| `ctx` "significantly improved" symbol top-1, 51% -> 81% | **corrected** | 14/27 -> 22/27 on the same queries the fix was designed from; no significance test; no held-out set. Live batch: -2.8 turns, interval (-6.6, +1.0), not significant |
+| `ctx` "significantly improved" symbol top-1, 51% -> 81% | **withdrawn (errata 2)**: one query counted 11 times; the live `ctx` arm never ran it | 14/27 -> 22/27 on the same queries the fix was designed from; no significance test; no held-out set. Live batch: -2.8 turns, interval (-6.6, +1.0), not significant |
 | 90 valid runs in a "30-row" snapshot | **corrected** | the table has 32 rows, 96 runs (6 tickets x 2 forms x up to 4 arms, 3 reps), none invalid |
 | turns/cost: none 18.6, rmain 17.8, router 20.3 | confirmed | 24 matched runs per arm; SD within a cell is 3.8 turns |
 | ~1.1-1.5 devkb calls vs 6-7.5 greps | confirmed | rmain 1.5, router 1.1; grep 6.0-6.8 |
-| 47% of greps answerable, 51% not | confirmed | 394 greps: 47% name a graph symbol (23% `def X`, 24% identifier), 51% a field, keyword, common word or text |
+| 47% of greps answerable, 51% not | **corrected: 29% distinctive symbols** (`nav_habits.py`) | 394 greps: 47% name a graph symbol (23% `def X`, 24% identifier), 51% a field, keyword, common word or text |
 | 256 decisions: 24 answered, 101 not-complete, 46 stale, 56 duplicate | confirmed | but the replay on base trees answered 54 of 381 (14%) |
 | "29 of the 101 had a complete name; 20 of the 46 stale had all names complete" as recoverable | **corrected** | replayed: partial answers add 21 answers that sit *beside* grep (replace nothing); a name-scoped staleness rule frees 15 of 394 searches |
 | outline -> ranged Read -> grep "adds overhead", refetch "due to uninformative outline" | **corrected** | 17 of 18 Reads after an outline were ranged: the outline did its job. Devkb arms pulled 10k fewer characters per run (-18%, all four tickets) |
@@ -59,16 +59,16 @@ batch cannot decide them. **Offline replays decide; live batches confirm only a 
 
 ## 3. Estimated improvement per item (my judgement, with the data behind it)
 
-Headroom: about 14 of 27 calls per run are navigation (grep, read, sed, devkb). About 47% of greps (2.6 per run) ask what the
+Headroom: about 14 of 27 calls per run are navigation (grep, read, sed, devkb). About 29% of greps (3.0 patterns per run; distinctive symbols only) ask what the
 graph holds; devkb replaced about 1.1 net.
 
 | item | expected effect on turns | on tokens | basis | status |
 |---|---|---|---|---|
-| ship the ranking (`ctx`) | under 1% | none | 0.5 `symbol` queries per run; top-1 error 49% -> 19% on the replay set | built, committed |
+| ship the ranking (`ctx`) | not shown | none | replay: 8 distinct queries, function level 1 of 8 before and after; held-out unchanged; the live `ctx` arm never ran it (errata 2) | **unproven; not installed by default** |
 | silent context hook as the `init` default, router off | 0 | -2.5k first call if the router text is dropped | router showed +2.6 turns (n.s.); the context hook pushes nothing | **do** |
-| partial-answer guardrail | 0 | +32 tokens per run | replayed: +21 answers, beside grep, none replaces a call | **killed** |
+| partial-answer guardrail | 0 | +20 tokens per run | replayed: +14 answers (14.0% to 18.6%), beside grep, none replaces a call | **killed** |
 | refresh a stale graph | 0 | 0 | 12-13 s per rebuild; name-scoped rule frees under 4% | **killed** |
-| inline pack on Read/Edit | at most 2.5% | **+2.3k tokens per run**, re-read each later turn (~4% of context) | `inline_replay.py`: 2.5 of 7.1 navigation calls per run are covered by an opened file's pack, but 144 of the 179 covered are reads of a file the pack merely names (the agent still reads it); only 35 are greps. A pack is 3.6k characters | **killed at the gate** |
+| inline pack on Read/Edit | at most 1.5% | **+2.3k tokens per run**, re-read each later turn (~4% of context) | `inline_replay.py`: 1.2 of 7.6 navigation calls per run are covered by an opened file's pack (39 reads of a file the pack merely names, which the agent still reads, and 44 greps). A pack is 3.6k characters | **killed at the gate** |
 | ambiguous `symbol --source`: do not print the body of a wrong first match | under 1% | -1 to -2k tokens on ambiguous names only | replay: `symbol resolve --source` printed `project_context.resolve` | small, cheap, do with 1 |
 | one call for outline plus the range | 1-2% | -0.5k | 0.25 outline-then-ranged-Read pairs per run | low value, skip unless a gate shows more |
 | tests-to-run recall / quality | unknown | unknown | no ground truth yet: the fixes add tests, they do not change existing ones | needs a benchmark |
@@ -114,6 +114,6 @@ show a quality gain that turn counts cannot.
 ## 6. Killed or parked, with the data
 
 - Prompt-time router push: no effect on cost, turns or quality in 72 runs (keep off).
-- Partial-answer guardrail: `hook_replay.py`, +21 answers beside grep, 0 replaced.
-- Fast refresh on stale graph: 12-13 s per build; `stale_replay.py` 15 of 394.
+- Partial-answer guardrail: `hook_replay.py`, +14 answers beside grep, 0 replaced.
+- Fast refresh on stale graph: 12-13 s per build; `stale_replay.py` 6 of 689.
 - Inline pack on Read: `inline_replay.py`, +2.3k tokens per run for at most 0.5 greps saved.
