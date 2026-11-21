@@ -74,7 +74,7 @@ class BM25:
             ln = len(self.docs[k])
             s = sum(self.idf.get(t, 0) * tf[t] * (self.k1 + 1) / (tf[t] + self.k1 * (1 - self.b + self.b * ln / self.avg)) for t in q if t in tf)
             sc[k] = s
-        return sorted(sc, key=lambda k: (-sc[k], -k))
+        return sorted(sc, key=lambda k: (-sc[k], k if isinstance(k, str) else -k))     # ties: newest issue first; files by path
 
 
 def commits() -> list[tuple[float, set[int], set[str]]]:

@@ -52,6 +52,12 @@ Text over the existing ticket and issue text is enough for related-issue retriev
 slice that tests it. A popularity prior combined with text may add a few points (+0.07, not distinguishable from zero); it is a
 ranking choice for a triage tool, not a graph feature. Revisit only with a different truth (real duplicates; there are 3).
 
+## What the graph already has
+The schema has `ErrorSignature` (84 nodes in this graph, with `RAISES` and `LOGS` edges), `SIMILAR_TO` and `DUPLICATE_OF` between tickets, and
+`Spec`. The GitHub layer does not populate `SIMILAR_TO` or `DUPLICATE_OF` (0 edges here; 21 ticket nodes against 222 issues), so the
+benchmark's graph arm could not use them. Filling them from issue text would at best equal text retrieval (bm25: 0.78 on the slice
+that tests it), which is why the decision above stands. An earlier note in the plan said the graph lacked `ErrorSignature`; that was wrong.
+
 ## Limits
 73 items from 27 parents; intervals are wide even after resampling parents. Names are resolved in today's graph; candidate and
 query text are today's GitHub bodies (an edit after filing would not show). Issues are this repository's own and many follow-ups

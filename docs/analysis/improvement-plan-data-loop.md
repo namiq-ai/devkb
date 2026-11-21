@@ -34,11 +34,11 @@ Verdict: **confirmed** (matches the data), **corrected** (right direction, wrong
 | 1 token budget | minor | **outline: moderate**; router: closed | router cap 3000 chars is inside 800 tokens; outline median 3.0-3.4k chars (~850 tokens), 5.9k (~1.5k tokens) on large files |
 | 2 staleness | major | **minor by measured effect** | 70% of searches precede the first edit; recovering the rest is 15 of 394 (4%); a full rebuild is 12-13 s against the hook's 20 s |
 | 3 gating | closed | confirmed closed | |
-| 4 issue triage | major | **unsupported**, no benchmark exists | tickets are in the graph; no duplicate detection or `ErrorSignature`; never measured on a triage task |
-| 5 epic -> features | major | **unsupported** | nothing measured |
+| 4 issue triage | major | **not supported by QB2** | the schema already has `ErrorSignature` (84 nodes), `SIMILAR_TO`, `DUPLICATE_OF`; the GitHub layer does not fill the last two. Text retrieval alone reaches 0.78 recall@5 on the hardest slice and the graph arm is worse (`qb2-baseline.md`) |
+| 5 epic -> features | major | **closed by QB4** | the baseline already reaches 0.95 recall@20 on this repository; the graph arm is not better (`qb4-baseline.md`) |
 | 6 issue -> PR | moderate: "lacks fuzzy matching" | **corrected** | `symbol` has prefix, word and edit-similarity tiers; the failures were generic words that exist as unrelated symbols (`merge`, `overload`) and ambiguity, now ranked by the task |
 | 7 CR -> PR | moderate: "no blast radius" | **overstated** | `pack change`/`refactor` return callers at any depth and the tests; the real gap is that `tests_for` under-lists |
-| 8 PR -> release | major | confirmed | git-only bundle, no PublicAPI / DBSchema / runbook diff |
+| 8 PR -> release | major | **not supported by QB3** | no breaking change exists in 16 releases; the cheap `ast` surface diff separates the additive ones, and the heuristics' problem is false alarms (`qb3-baseline.md`) |
 | 9 delivery | major: "must inject inline" | **overstated** | `pre_edit` already pushes the pack of a file about to be edited. Inline delivery for Read, replayed: fails its gate (section 3) |
 
 ## 2. The measurement problem comes first
