@@ -182,13 +182,49 @@ def start_section(pairs: list[tuple[str, list[dict]]]) -> list[str]:
     return out + [f"WARNING {w}" for w in warn]
 
 
-def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str:
+def strat_boot(cells: list[tuple[list[float], list[float]]], n: int = 3000, seed: int = 222) -> tuple[float, float, float]:
+    """(mean, low, high) of the mean difference between two arms, 90%: for each ticket, resample the runs of each arm with
+    replacement, take the difference of the arm means, then average the tickets, which weigh the same. Runs vary within a ticket
+    by more than the tickets' means differ, so resampling the six per-ticket means alone understates the spread, and treating
+    all runs as one sample ignores which ticket they belong to."""
+    rnd = random.Random(seed)
+    def once(resample: bool) -> float:
+        return st.mean(st.mean(rnd.choices(a, k=len(a)) if resample else a) - st.mean(rnd.choices(b, k=len(b)) if resample else b)
+                       for a, b in cells)
+    ds = sorted(once(True) for _ in range(n))
+    return once(False), ds[int(.05 * n)], ds[int(.95 * n) - 1]
+
+
+def compare_arms(pairs: list[tuple[str, list[dict]]], a: str, b: str) -> list[str]:
+    """Arm `a` against arm `b` run for run, whichever they are: the table above compares with the no-devkb arm only. Only the
+    tickets that have both arms count; the rows are runs of one batch only if the caller has checked that they are."""
+    keys = {"turns": lambda x: x["turns"], "cost $": lambda x: x["cost"] if x["cost"] is not None else 0.0, "context k": lambda x: x["ctx"] / 1e3,
+            "search calls": lambda x: x["grep"], "devkb nav": lambda x: x["nav"], "hidden check passed": lambda x: 1.0 if x["ok"] and x["suite"] else 0.0}
+    cells = []
+    for t, rows in pairs:
+        ra, rb = ([per_run(r) for r in rows if r["arm"] == arm and not contaminated(r)] for arm in (a, b))
+        if ra and rb:
+            cells.append((t, ra, rb))
+    if not cells:
+        return [f"No ticket has both {a} and {b}."]
+    out = ["", f"{a} against {b}, {len(cells)} tickets ({', '.join('#' + c[0] + f' {len(c[1])}/{len(c[2])}' for c in cells)} runs), "
+           "90% interval from resampling runs within each ticket, tickets weighted equally:", "",
+           f"| | {b} | {a} | difference (90% interval) |", "|---|---|---|---|"]
+    for k, f in keys.items():
+        data = [([f(x) for x in ra], [f(x) for x in rb]) for _t, ra, rb in cells]
+        mean, lo, hi = strat_boot([(x, y) for x, y in data])
+        ma, mb = st.mean(st.mean(x) for x, _ in data), st.mean(st.mean(y) for _, y in data)
+        out.append(f"| {k} | {mb:.2f} | {ma:.2f} | {mean:+.2f} ({lo:+.2f} to {hi:+.2f}) |")
+    return out
+
+
+def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False, compare: tuple[str, str] | None = None) -> str:
     problems = [p for t, rows in pairs if (p := check_hashes(t, rows))]
     if problems and not allow_mixed:
         raise SystemExit("refused, re-score first:\n  " + "\n  ".join(problems))
     dirty = [(t, [r["run"] for r in rows if contaminated(r)]) for t, rows in pairs]
     pairs = [(t, [r for r in rows if not contaminated(r)]) for t, rows in pairs]      # left out of every mean (#340)
-    lines = ["| Ticket | Arm | Location given | Runs | Wall min | Turns | Context k | Output k | Cost $ | Grep | devkb nav | Re-fetched | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
+    lines = ["| Ticket | Arm | Location given | Runs | Wall min | Turns | Context k | Output k | Cost $ | Search | devkb nav | Re-fetched | devkb self-tests | Replaced | Hook answers (chars) | Hidden check | Suite | vs no devkb |",
              "|" + "---|" * 18]
     per_arm: dict[str, list[dict]] = {}
     diffs: dict[str, dict[str, list[float]]] = {}
@@ -232,18 +268,21 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False) -> str
     lines += [f"WARNING #{t}: {len(rs)} run(s) changed the harness repository while they ran and are left out of the means: {', '.join(rs)} (#340)" for t, rs in dirty if rs]
     if problems:
         lines += ["", "Mixed hidden-check versions (allowed by flag): " + "; ".join(problems)]
+    if compare:
+        lines += compare_arms(pairs, *compare)
     return "\n".join(lines)
 
 
 def main(argv: list[str]) -> int:
     allow = "--allow-mixed-checks" in argv
+    compare = next((tuple(a.split("=", 1)[1].split(":")) for a in argv if a.startswith("--compare=")), None)    # --compare=ctxhid:rmainhid
     pairs = []
     for a in argv:
         if a.startswith("--"):
             continue
         t, f = a.split("=", 1)
         pairs.append((t, [json.loads(l) for l in open(B / f if not Path(f).is_absolute() else f) if l.strip()]))
-    print(table(pairs, allow))
+    print(table(pairs, allow, compare))
     return 0
 
 

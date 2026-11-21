@@ -57,3 +57,17 @@ def test_the_harness_state_ignores_the_archive(tmp_path):
     assert pb.harness_state(tmp_path) == before
     (tmp_path / "bench" / "policy" / "stray.txt").write_text("x")
     assert pb.harness_state(tmp_path) != before
+
+
+def test_two_arms_are_compared_run_for_run_within_tickets():
+    def row(t, arm, turns, cost, i):
+        return {"run": f"p{t}-{arm}-r{i}", "arm": arm, "issue": t, "turns": turns, "cost": cost, "ctx_tokens": turns * 1000, "out_tokens": 1,
+                "devkb_nav": 1, "calls": {"search": 2}, "seconds": 60, "suite_pass": True, "acceptance": {"pass": True}, "session": "", "accept_sha256": "h"}
+    rows = {t: [row(t, "rmainhid", 21, 0.4, i) for i in range(3)] + [row(t, "ctxhid", 18, 0.3, i) for i in range(3)] for t in ("1", "2")}
+    text = "\n".join(rt.compare_arms(list(rows.items()), "ctxhid", "rmainhid"))
+    assert "2 tickets" in text and "| turns | 21.00 | 18.00 | -3.00 (-3.00 to -3.00) |" in text     # identical runs in each arm: no spread
+    assert "hidden check passed | 1.00 | 1.00 | +0.00" in text
+    assert "No ticket has both" in rt.compare_arms(list(rows.items()), "ctxhid", "nonehid")[0]
+    wide = {"1": [row("1", "a", t, 0.4, i) for i, t in enumerate((10, 30, 20))] + [row("1", "b", t, 0.4, i) for i, t in enumerate((10, 30, 20))]}
+    m, lo, hi = rt.strat_boot([([r["turns"] for r in wide["1"] if r["arm"] == "a"], [r["turns"] for r in wide["1"] if r["arm"] == "b"])])
+    assert m == 0 and lo < 0 < hi                                       # noise within a ticket is in the interval
