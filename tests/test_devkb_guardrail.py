@@ -98,7 +98,9 @@ def test_the_repository_registers_it():
     assert any("scripts/devkb_guardrail.py" in c for c in cmds)
     assert "Developing devkb: devkb first, logged" in (ROOT / "AGENTS.md").read_text()
     assert "@AGENTS.md" in (ROOT / "CLAUDE.md").read_text()
-    assert not (ROOT / ".mcp.json").exists(), "devkb's own repository uses devkb from the shell (CLI-only, #126)"
+    import subprocess  # a developer's own, git-excluded .mcp.json is theirs; what the repository ships is what counts
+    tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", ".mcp.json"], capture_output=True, text=True).stdout.strip()
+    assert not tracked, "devkb's own repository uses devkb from the shell (CLI-only, #126)"
 
 
 @pytest.mark.parametrize("command", ['grep -n "^REPO\\|^B =" mod.py', "grep -n x mod.py", 'grep -rn "^A$\\|^B$" .', "rg '^[A-Z_]+ =' ."])
