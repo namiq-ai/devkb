@@ -43,17 +43,18 @@ Verdict: **confirmed** (matches the data), **corrected** (right direction, wrong
 
 ## 2. The measurement problem comes first
 
-Within one ticket the standard deviation is 3.8 turns (mean 19.1) and $0.06 (mean $0.40). Runs needed per arm at alpha 0.05,
-power 0.8:
+Within one ticket the standard deviation is 3.8 turns in the first four-ticket waves and **4.6 in the latest 36-run batch** (mean
+19.1 turns; $0.065 on a $0.36 mean). Runs needed per arm at alpha 0.05, power 0.8, from the latest batch (corrected 2026-11-21;
+the first version used 3.8 and 0.06):
 
 | effect to detect | turns | cost |
 |---|---|---|
-| 15% | 28 | 18 |
-| 10% | 63 | 41 |
-| 5% | 252 | 162 |
-| 2% | 1575 | 1014 |
+| 15% | 41 | 23 |
+| 10% | 91 | 52 |
+| 5% | 365 | 206 |
+| 2% | 2283 | 1288 |
 
-Three arms at 63 runs and $0.40 each is about $75 for one 10% question. The levers on the table are each worth 1-5%, so a live
+Three arms at 91 runs and $0.40 each is about $110 for one 10% question; two arms about $73. The levers on the table are each worth 1-5%, so a live
 batch cannot decide them. **Offline replays decide; live batches confirm only a claim of 10% or more.**
 
 ## 3. Estimated improvement per item (my judgement, with the data behind it)

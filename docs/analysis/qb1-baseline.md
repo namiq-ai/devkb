@@ -29,20 +29,24 @@ Missed-guard = an item where the arm named none of the covering tests.
   above the import search, inside each other's intervals. On this measure the graph does not yet beat a one-line grep.
 - **There is headroom.** The three methods together reach 0.90, so 0.73 is not a ceiling, and 40% of what `pack file` lists
   does not cover the change (precision 0.60).
-- **Why `pack file` misses.** 73 of the 266 covering tests are not named. Of those, **36 name the changed function in their own
-  text**. For 35 of them I classified the call: 22 are a call on a variable or module alias (`packer.refactor(...)`,
-  `S.build(...)`, `test_inventory.extract(...)`), 5 pass the name as a string (`refactor("name")`, `api.call("symbol", ...)`),
-  1 is a call on a constructed object, 7 are other mentions. A further 25 are reached indirectly and 10 through the CLI or a subprocess.
-  So about 22 of 73 (30%) are one gap: Python calls through a receiver variable or an import alias are not attributed. It is
-  the Python counterpart of what #120 did for C++ (typed receivers).
+- **Why `pack file` misses (corrected after an independent audit).** 73 of the 266 covering tests are not named. 36 of those
+  mention the changed function's name in their text, but that count is inflated: it counts the same few test files once per item
+  (`test_boundaries`, `test_language_profiles`, `test_devkb_cpp_calls_dkb003` recur across the `Packer.refactor` and
+  `Packer.change` items) and it includes name collisions (`S.build(...)`, `P.build(...)` call a test helper's own `build`;
+  `test_inventory.extract(...)` is another module's `extract`; `Path(__file__).resolve()` matches `ReadTools.resolve`). The
+  genuine "call through a receiver variable" cases come to about **8 distinct (test file, function) pairs** (`packer.refactor`,
+  `packer.change`, `api._coverage`, `p.change`), mostly from tuple-unpacking a helper's result (`api, packer = P.api(...)`),
+  not 22 of 73. Earlier text claimed 30% of the misses were one gap and that 10 were "through the CLI or a subprocess"; the
+  second claim is unsupported (the coverage run does not measure child processes) and both are withdrawn.
 - **`pack refactor` is not the tool for this question**: it lists the files with a direct caller, which for a function called
   by its own tests is few, and it silently names none in 7 of 13 items.
 
 ## Decision (the loop in `docs/analysis/improvement-plan-data-loop.md`)
-Iterate once. Change: resolve a Python call `x.name(...)` when `x` is bound in the same scope to a constructor call or an
-import of a module in the repository (the C++ typed-receiver approach, applied to Python). Gate: re-run this benchmark on the
-same 13 items and, to avoid tuning on them, on a fourth snapshot never scored; pass when recall is at least 0.84 (the import
-baseline plus 15 points) with precision not below 0.55. Fail again: park the Python receiver work and report the ceiling.
+The one change this suggests is small: attribute a Python call `x.name(...)` when `x` came from tuple-unpacking a helper that
+returns constructed objects. With about 8 distinct pairs behind it the expected gain is about 2 points of recall, so it is no
+longer a route to the 0.84 gate (the import baseline plus 15 points). It is kept as a correctness item, not a QB1 lever. The open
+questions are the benchmark's own: the precision correction below, a cluster bootstrap, and whether every test file missing from
+the coverage truth really runs no `devkb/` code (42 of 113 at the last snapshot; 13 import the harness, 27 unexplained).
 
 ## Limits
 13 items from 3 snapshots is a baseline, not a verdict; the interval is wide (grep: 0.56-0.86). File-level truth; coverage

@@ -74,19 +74,21 @@ derived from; 286 and 287 were not seen before.
 
 | | rmain | ctx | difference (90% interval) |
 |---|---|---|---|
-| turns (all 6 tickets, n = 18 each) | 20.6 | 17.7 | -2.8 (-6.6, +1.0) |
-| cost $ | 0.38 | 0.34 | -0.04 (-0.13, +0.06) |
-| context, k tokens | 909 | 764 | -145 (-400, +117) |
+| turns (all 6 tickets, n = 18 each) | 20.6 | 17.7 | -2.8 (-4.9, -0.8) |
+| cost $ | 0.38 | 0.34 | -0.04 (-0.07, -0.01) |
+| context, k tokens | 909 | 764 | -145 (-249, -43) |
 | devkb navigation calls | 1.06 | 1.11 | +0.06 (-0.33, +0.50) |
-| grep / Read | 6.6 / 4.3 | 5.9 / 4.1 | -0.7 / -0.2 (both span zero) |
+| search / read-type calls (Bash grep, rg, find, ls and the Grep tool / the Read tool plus Bash sed, cat, head) | 6.6 / 4.3 | 5.9 / 4.1 | -0.7 / -0.2 (both span zero); the Read tool alone is 1.2 / 1.8 per run |
 | hidden check and suite | 16/18 | 15/18 | #205: 2/3 against 1/3; #120 2/3 each |
 | held out (286, 287; n = 6 each) | turns 19.5, $0.28 | 17.3, $0.26 | -2.2 (-7.2, +2.2); 6/6 and 6/6 |
 
-**Reading.** Every cost measure moves the right way and none is distinguishable from noise; the hook adds no turns (it pushes
-nothing). Live `symbol` answers are rare, 9 per arm over 18 runs (top-1 on target 3 of 9 against 2 of 9), so even a perfect
-ranking can touch few calls: agents make about one devkb navigation call per run. The per-cell swings (#118: 25.0 against 17.3
-turns) are larger than 9 queries can explain and are run-to-run noise. This batch's `rmain` (20.6 turns) is also well above
-the earlier waves' (17.8), so the comparison holds only within the batch.
+Intervals: 90%, a bootstrap that resamples runs within each ticket and arm and weights the six tickets equally (corrected on
+2026-11-21; this note first gave unpaired intervals without naming the method, which put zero inside them). **Reading.** Within
+this batch, `ctx` is lower on turns, cost and context under that test. The result is not robust, for two reasons stated in the
+errata: the same arm differed by 3.4 turns between two waves, and the 118 and 120 arms were run 35-45 minutes apart. The hook
+adds no turns (it pushes nothing). Live `symbol` calls are rare: 9 for `rmain` and 11 for `ctx` over 18 runs each (9 of the
+`ctx` calls returned a match; top-1 on target 3 of 9 against 2 of 9), so even a perfect ranking can touch few calls. The per-cell
+swings (#118: 25.0 against 17.3 turns) are larger than those few queries can explain.
 
 **What it supports.** The ranking is correct on the recorded queries and costs nothing at run time, so it is safe to ship. It
 does not by itself change what agents do; the bound is how seldom they ask.
@@ -111,3 +113,27 @@ guardrail's decisions on each run's calls, on the ticket's base tree) and `bench
 grep, not replacements. The searches agents run are mostly one-file reads (`in-file`, `read-body`), where grep prints the lines
 the answer would. The guardrail's ceiling on tickets of this kind is therefore low, and the answered share is not the number
 that would move turns or tokens.
+
+
+---
+
+# Errata (2026-11-21), from an independent audit of this note
+
+The headline numbers reproduce from `score.json`. What was wrong or missing:
+
+1. **The interval method was not named, and the one used was too wide.** Unpaired, the turns interval was (-6.6, +1.0). Resampling
+   runs within each ticket cell gives (-4.8, -0.8), cost (-0.067, -0.010), context (-249k, -43k). A paired bootstrap over the six
+   per-ticket differences (`release_table.bootstrap`) gives about (-4.8, -0.9). The earlier sentence "none is distinguishable
+   from noise" is withdrawn; it depended on the choice.
+2. **The result is not robust to a wave effect.** I discarded 12 earlier `rmainhid` runs (devkb commits 436587e and 5932278, so they
+   could not be compared). On tickets 118, 120, 203 and 205 they averaged 17.7 turns against 21.1 for the replacements: the same
+   arm moved +3.4 turns between waves, as much as the effect claimed. Pooling them gives -1.7 turns (-3.7, +0.25). The
+   118 and 120 `rmain` runs finished 35-45 minutes after the matching `ctx` runs, so those two tickets were not interleaved.
+3. **Column labels.** "grep" is `grep`, `rg`, `find`, `ls` and the Grep and Glob tools; "read" is the Read tool plus Bash `sed`,
+   `cat`, `head`, `tail`, `wc` and `git diff`/`log`. The Read tool alone is 1.2 (`rmain`) and 1.8 (`ctx`) per run.
+4. **Symbol queries:** 9 for `rmain`, 11 for `ctx` (9 returned a match), not "9 per arm".
+5. **Contaminated runs.** `release_table.py` drops runs flagged `contaminated` from every mean; this note kept three `p120-ctxhid`
+   runs whose flags list only my own moves of `runs-archive/` files. The harness now ignores `runs-archive/` (see the harness
+   fixes), so the tool and this note agree.
+6. **Refetch.** The metric counted generic words (`cpp`, `resolve`, `constant`) as targets and counted an `outline` followed by a
+   ranged Read, which is by design. It is reported with the generic words removed and the outline case separated (harness fix).
