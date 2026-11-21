@@ -51,7 +51,7 @@ def test_one_decision_per_search_with_reason_chars_and_next_call(tmp_path, capsy
     lines = [json.loads(x) for x in capsys.readouterr().out.splitlines()]
     rows, summary = lines[:-1], lines[-1]["summary"]
     assert [(r["i"], r["tool"]) for r in rows] == [(0, "Grep"), (2, "Bash")]          # not the Read, not `ls`
-    assert all(r["action"] in hook_replay.ANSWERS + ("remind", "pass-through", "repeat", "span-hint") for r in rows)
+    assert all(r["action"] in hook_replay.ANSWERS + ("remind", "pass-through", "repeat") for r in rows)
     assert rows[0]["next"].startswith("Read: ") and rows[1]["next"].startswith("Bash: ls pkg")
     assert all(r["names"] == ["compute_total"] and r["verdicts"] == ["complete"] for r in rows)   # the path was rewritten
     answered = [r for r in rows if r["action"] in hook_replay.ANSWERS]
@@ -72,3 +72,44 @@ def test_a_search_outside_any_graph_passes_through_and_is_counted(tmp_path, caps
     hook_replay.main(["--repo", str(repo), str(tmp_path / "runs" / "p999-main-r1" / "stream.jsonl")])
     summary = json.loads(capsys.readouterr().out.splitlines()[-1])["summary"]
     assert summary["answers"] == 0 and summary["answer_rate"] == 0.0
+
+
+def _tool(i, name, inp):
+    return {"type": "assistant", "message": {"id": f"m{i}", "content": [{"type": "tool_use", "id": f"t{i}", "name": name, "input": inp}]}}
+
+
+def test_only_delivered_text_counts_streams_are_isolated_and_edits_are_marked(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    repo = _repo(tmp_path / "repo")
+    for run in ("p1-main-r1", "p2-main-r1"):                  # the same session id in both: state must not carry over
+        d = tmp_path / "runs" / run
+        d.mkdir(parents=True)
+        events = [{"type": "system", "subtype": "init", "cwd": ORIG, "session_id": "same"},
+                  _tool(1, "Bash", {"command": f"grep -rn 'compute_total(' {ORIG}/pkg | head"}),   # a bare head (#393)
+                  _tool(2, "Edit", {"file_path": f"{ORIG}/pkg/core.py", "old_string": "a", "new_string": "b"}),
+                  _tool(3, "Grep", {"pattern": "compute_total", "path": ORIG, "output_mode": "content"}),
+                  {"type": "system", "subtype": "hook_response", "hook_event": "PreToolUse",
+                   "stdout": json.dumps({"hookSpecificOutput": {"additionalContext": "devkb, from the graph: x"}})}]
+        (d / "stream.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n")
+    hook_replay.main(["--repo", str(repo), str(tmp_path / "runs")])
+    lines = [json.loads(x) for x in capsys.readouterr().out.splitlines()]
+    rows, summary = lines[:-1], lines[-1]["summary"]
+    firsts = [r for r in rows if r["i"] == 0]
+    assert len(firsts) == 2 and all(r["reminded"] for r in firsts)      # each stream is its own session
+    assert all(r["action"] != "remind" for r in firsts)               # the call's decision, not the reminder after it
+    for r in rows:                                                    # an answer is only text that reached the agent
+        assert r["delivered"] == (r["chars"] > 0)
+        if r["delivered"]:
+            assert r["printed"] and r["action"] in hook_replay.ANSWERS
+    assert summary["answers"] == sum(r["delivered"] for r in rows)
+    assert [r["after_edit"] for r in rows if r["i"] == 2] == [True, True]
+    assert all(r["live_chars"] == len("devkb, from the graph: x") for r in rows if r["i"] == 2)
+    assert summary["live_recorded"] == 2
+
+
+def test_a_cd_is_kept_for_the_next_calls_and_home_paths_are_rewritten():
+    home = str(Path.home())
+    assert hook_replay.rewrite({"command": "cd ~/w/run && ls"}, f"{home}/w/run", "/x") == {"command": "cd /x && ls"}
+    assert hook_replay.CD.match("cd corpus/fmt && grep -n x src").group(1) == "corpus/fmt"
+    assert hook_replay.edits({"name": "Bash", "input": {"command": "sed -i 's/a/b/' f.py"}})
+    assert not hook_replay.edits({"name": "Bash", "input": {"command": "grep -n x f.py 2>&1 | head"}})

@@ -56,7 +56,11 @@ lines = [l for l in out.splitlines() if any(a in l for a in ACTIONS) and not re.
 # named as a decision's next call)
 decisions = [l for l in lines if "compute_total" in l]
 res["one_decision_per_search"] = len(lines) == 2 and len(decisions) == 2
-res["reason_and_chars_given"] = all(re.search(r"\d", l) for l in decisions) and bool(decisions)
-res["next_call_given"] = len(decisions) == 2 and "Read" in decisions[0] and ("ls" in decisions[1] or "Edit" in decisions[1])
+# besides the action: a number that is not the call's position (characters added), and a reason word or field
+res["reason_and_chars_given"] = bool(decisions) and all(
+    len(re.findall(r"\d+", l)) >= 2 and re.search(r"(?i)reason|same-question|not-complete|complete|duplicate|cannot", l)
+    for l in decisions)
+res["next_call_given"] = len(decisions) == 2 and "pkg/core.py" in decisions[0] and "Read" in decisions[0] \
+    and ("ls pkg" in decisions[1] or "Edit" in decisions[1])
 res["summary_given"] = bool(re.search(SUMMARY, out))
 print(json.dumps({"results": res, "pass": all(res.values())}))
