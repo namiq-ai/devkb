@@ -117,3 +117,34 @@ show a quality gain that turn counts cannot.
 - Partial-answer guardrail: `hook_replay.py`, +14 answers beside grep, 0 replaced.
 - Fast refresh on stale graph: 12-13 s per build; `stale_replay.py` 6 of 689.
 - Inline pack on Read: `inline_replay.py`, +2.3k tokens per run for at most 0.5 greps saved.
+
+---
+
+# Status after the audit and the fixes (2026-11-21)
+
+Three independent audits (live batch, replay tools, quality benchmarks) found no wrong headline in the live table but several
+overstated or irreproducible figures; all are corrected in `workflow-router-benchmark.md` (errata and errata 2). What the loop decided:
+
+| item | result | status |
+|---|---|---|
+| ranking by the task's words | replay: one distinct query flips at file level, none at function level, held-out unchanged; the live `ctx` arm never ran it (an A/A: -2.8 turns between identical treatments is the design's noise floor) | **unproven; no prompt hook is installed by default** (`--prompt-hook context` is opt-in) |
+| prompt-time router | no effect on cost, turns or quality in 72 runs | off by default (opt-in `--prompt-hook router`) |
+| guardrail partial answers, refresh on stale graph, inline pack on Read | +14 hints beside grep; 6 of 689 searches; 1.2 covered calls per run against 2.3k tokens | killed at the offline gates |
+| QB1 tests to run | **`pack` changes: 0.83 recall pooled over 23 items (10 held-out), import 0.64, grep 0.69, at precision 0.63** | **shipped on the branch**: `pack refactor` names tests that mention the function with no resolved call and says Incomplete; `pack file` marks direct tests |
+| QB2 related issues | hybrid - text = +0.00; text 0.78 on first-time parents, structural 0.59 | issue-graph schema parked |
+| QB3 release audit | 0 breaking changes in 16 releases; the heuristics produce false alarms (6 and 10 of 16) | no PublicAPI/DBSchema schema; a mechanical surface diff is the tool if one is wanted |
+| QB4 epic impact | baseline 0.95 recall@20 (saturated), graph 0.84 | closed; no GOVERNS work |
+| graph-defect tickets | drafted (`ticket-drafts-graph-defects.md`), reproduced | **not posted: needs the owner's approval** |
+| harness | refuse-not-skip on collisions, `POLICY_BASES` for interleaved batches, archive is not contamination, refetch metric fixed, `--compare` with within-ticket intervals | done |
+
+Dropped, with the reason: the ambiguous `symbol --source` change (5 of 8 distinct ambiguous queries would save a wrong body and 3 of 8
+would cost a call; no net evidence); the Python tuple-unpack attribution (about 8 distinct pairs, about 2 points of recall; the mention
+section covers it at the pack level); the interleaved 90-run live batch (nothing in the live data needs it, and the ranking it would test
+is not what the agent runs).
+
+Still open, in order of value:
+1. **A live benchmark whose agent runs the arm's devkb.** In the current harness the agent's `devkb` is the checkout's own, which on these
+   tickets is the code under edit, so no devkb change can be tested live. Tickets in another repository (the C/C++ corpora, whose bug
+   fixes can be built from their own history) would separate the two.
+2. Post the two graph-defect tickets, after review.
+3. Re-run QB1 when new snapshots accumulate: 23 items from 6 snapshots; some items share changed functions.
