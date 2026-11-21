@@ -6,85 +6,95 @@ devkb itself ("Developing devkb: devkb first, logged"). No user repository has t
 
 ## Arms
 
-All arms run main's devkb (pinned to the ticket's base), the same prompt, the same suite and the same permissions;
-they differ only in the policy files and in what devkb gives up front.
+The same prompt, suite and permissions in every arm; the devkb arms run main's devkb (pinned to the ticket's base),
+`none` none at all. They differ in the policy files, the MCP server, the guardrail hook and what devkb gives up front.
 
-| Arm | AGENTS.md / CLAUDE.md | Up front |
-|---|---|---|
-| `none` | removed, with the guardrail; devkb denied | nothing |
-| `userpolicy` | exactly what `devkb init` writes: the `AGENTS_BLOCK` of the arm's devkb (3,986 characters), `CLAUDE.md` = `@AGENTS.md` | the guardrail |
-| `short` | the same, with the block cut to the commands agents act on (`SHORT_BLOCK`, 787 characters) | the guardrail |
-| `outline` | this repository's own files | the guardrail, plus a file's outline on its first Read |
-| `inject` | as `userpolicy` | the guardrail, plus `devkb pack file` of the ticket's code file in front of the prompt |
-| `main` | this repository's own files (the user block plus the developer section) | the guardrail |
+| Arm | AGENTS.md / CLAUDE.md | MCP server | Guardrail hook | Up front |
+|---|---|---|---|---|
+| `none` | removed; devkb denied | no | no | nothing |
+| `userinit` | exactly what a default `devkb init` writes (`AGENTS_BLOCK`, 3,986 characters; `CLAUDE.md` = `@AGENTS.md`) | devkb's, as init registers it (`--toolset lean-pack`, 12 tools) | no (init installs none) | nothing |
+| `userpolicy` | the same files | no | this repository's guardrail | nothing |
+| `short` | the same, with the block cut to the commands agents act on (`SHORT_BLOCK`, 787 characters) | no | the guardrail | nothing |
+| `inject` | as `userpolicy` | no | the guardrail | `devkb pack file` of the first code file "Where to start" names, in front of the prompt |
+| `outline` | this repository's own files | no | the guardrail, plus a file's outline on its first Read | nothing |
+| `main` | this repository's own files (the user block plus the developer section) | no | the guardrail | nothing |
 
-First-call context is the first model call's input, cache-read and cache-creation tokens. Two tickets that need no
-navigation (#383 at 2e216fc, a one-line fix; #303 at 4b656e1), 3 runs per arm and ticket, one shuffled batch per
-ticket: 36 runs.
+`userinit` is what a user's repository gets from `devkb init` today. `userpolicy` and `short` isolate the policy text
+(the ticket's item 1 and the `short` candidate), with the hook the benchmark uses. First-call context is the first model
+call's input, cache-read and cache-creation tokens. Two tickets that need no navigation (#383 at 2e216fc; #303 at
+4b656e1), 3 runs per arm and ticket, one shuffled batch per ticket: 42 runs.
 
-## Results
+## Results (batch 2)
 
 
 #383
-| Arm | n | First-call context k (min-max) | Turns (med) | Context k (med) | Cost (mean) | Cost vs none | Suite | Hidden check | devkb log entries |
-|---|---|---|---|---|---|---|---|---|---|
-| none | 3 | 17.8-17.8 | 9 | 216 | $0.132 | +0% | 3/3 | 0/3 | 0 |
-| userpolicy | 3 | 19.4-19.4 | 9 | 229 | $0.147 | +12% | 3/3 | 0/3 | 0 |
-| short | 3 | 18.3-18.3 | 7 | 154 | $0.100 | -24% | 3/3 | 0/3 | 0 |
-| outline | 3 | 21.9-21.9 | 9 | 238 | $0.124 | -5% | 3/3 | 0/3 | 0 |
-| inject | 3 | 24.3-24.3 | 12 | 370 | $0.194 | +47% | 3/3 | 0/3 | 3 |
-| main | 3 | 21.9-21.9 | 8 | 201 | $0.116 | -12% | 3/3 | 0/3 | 0 |
+| Arm | n | First-call context k | over none | Turns (med) | Context k (med) | Cost (mean) | Cost vs none | Suite | Hidden check | devkb queries |
+|---|---|---|---|---|---|---|---|---|---|---|
+| none | 3 | 17.8 | +0.0k | 13 | 214 | $0.097 | +0% | 3/3 | 0/3 | 0 |
+| userpolicy | 3 | 19.4 | +1.6k | 12 | 218 | $0.109 | +12% | 3/3 | 0/3 | 0 |
+| userinit | 3 | 20.3 | +2.5k | 10 | 199 | $0.148 | +52% | 3/3 | 0/3 | 0 |
+| short | 3 | 18.3 | +0.4k | 13 | 272 | $0.117 | +21% | 3/3 | 0/3 | 0 |
+| outline | 3 | 21.9 | +4.1k | 11 | 269 | $0.107 | +10% | 3/3 | 0/3 | 0 |
+| inject | 3 | 19.9 | +2.1k | 12 | 254 | $0.124 | +28% | 3/3 | 0/3 | 0 |
+| main | 3 | 21.9 | +4.1k | 11 | 229 | $0.112 | +16% | 3/3 | 0/3 | 0 |
 
 #303
-| Arm | n | First-call context k (min-max) | Turns (med) | Context k (med) | Cost (mean) | Cost vs none | Suite | Hidden check | devkb log entries |
-|---|---|---|---|---|---|---|---|---|---|
-| none | 3 | 17.7-17.7 | 8 | 205 | $0.153 | +0% | 3/3 | 3/3 | 0 |
-| userpolicy | 3 | 19.3-19.3 | 11 | 317 | $0.167 | +9% | 3/3 | 3/3 | 0 |
-| short | 3 | 18.1-18.1 | 9 | 221 | $0.134 | -12% | 3/3 | 3/3 | 0 |
-| outline | 3 | 21.0-21.0 | 13 | 372 | $0.182 | +19% | 3/3 | 3/3 | 0 |
-| inject | 3 | 20.1-20.1 | 9 | 236 | $0.144 | -6% | 3/3 | 3/3 | 3 |
-| main | 3 | 21.0-21.0 | 9 | 263 | $0.157 | +3% | 3/3 | 3/3 | 0 |
+| Arm | n | First-call context k | over none | Turns (med) | Context k (med) | Cost (mean) | Cost vs none | Suite | Hidden check | devkb queries |
+|---|---|---|---|---|---|---|---|---|---|---|
+| none | 3 | 17.7 | +0.0k | 9 | 200 | $0.124 | +0% | 3/3 | 3/3 | 0 |
+| userpolicy | 3 | 19.3 | +1.6k | 17 | 275 | $0.138 | +12% | 3/3 | 3/3 | 0 |
+| userinit | 3 | 20.2 | +2.5k | 16 | 286 | $0.166 | +34% | 3/3 | 3/3 | 0 |
+| short | 3 | 18.1 | +0.5k | 15 | 264 | $0.136 | +10% | 3/3 | 3/3 | 0 |
+| outline | 3 | 21.0 | +3.3k | 15 | 259 | $0.141 | +14% | 3/3 | 3/3 | 0 |
+| inject | 3 | 20.1 | +2.4k | 17 | 275 | $0.132 | +6% | 3/3 | 3/3 | 0 |
+| main | 3 | 21.0 | +3.3k | 18 | 320 | $0.169 | +36% | 3/3 | 3/3 | 0 |
 
-Pooled (cost vs none = mean of the two tickets' ratios)
-| Arm | n | First-call context k (min-max) | Turns (med) | Context k (med) | Cost (mean) | Cost vs none (mean ratio) | Suite | Hidden check | devkb log entries |
-|---|---|---|---|---|---|---|---|---|---|
-| none | 6 | 17.7-17.8 | 8 | 211 | $0.142 | +0% | 6/6 | 3/6 | 0 |
-| userpolicy | 6 | 19.3-19.4 | 10 | 280 | $0.157 | +10% | 6/6 | 3/6 | 0 |
-| short | 6 | 18.1-18.3 | 8 | 187 | $0.117 | -18% | 6/6 | 3/6 | 0 |
-| outline | 6 | 21.0-21.9 | 10 | 266 | $0.153 | +7% | 6/6 | 3/6 | 0 |
-| inject | 6 | 20.1-24.3 | 10 | 285 | $0.169 | +21% | 6/6 | 3/6 | 6 |
-| main | 6 | 21.0-21.9 | 9 | 256 | $0.136 | -5% | 6/6 | 3/6 | 0 |
+Pooled
+| Arm | n | First-call context k | over none | Turns (med) | Context k (med) | Cost (mean) | Cost vs none (mean of ratios) | Suite | Hidden check | devkb queries |
+|---|---|---|---|---|---|---|---|---|---|---|
+| none | 6 | 17.7-17.8 | +0.0 to +0.0k | 11 | 207 | $0.110 | +0% | 6/6 | 3/6 | 0 |
+| userpolicy | 6 | 19.3-19.4 | +1.6 to +1.6k | 14 | 275 | $0.124 | +12% | 6/6 | 3/6 | 0 |
+| userinit | 6 | 20.2-20.3 | +2.5 to +2.5k | 13 | 251 | $0.157 | +43% | 6/6 | 3/6 | 0 |
+| short | 6 | 18.1-18.3 | +0.4 to +0.5k | 14 | 265 | $0.127 | +15% | 6/6 | 3/6 | 0 |
+| outline | 6 | 21.0-21.9 | +3.3 to +4.1k | 12 | 264 | $0.124 | +12% | 6/6 | 3/6 | 0 |
+| inject | 6 | 19.9-20.1 | +2.1 to +2.4k | 14 | 264 | $0.128 | +17% | 6/6 | 3/6 | 0 |
+| main | 6 | 21.0-21.9 | +3.3 to +4.1k | 12 | 244 | $0.141 | +26% | 6/6 | 3/6 | 0 |
 
-**First call** (constant per arm and base; the measured overhead of offering devkb):
-- what a user's repository pays with `devkb init` today (`userpolicy`): **+1.6k tokens** over `none` (19.3-19.4k
-  against 17.7-17.8k); the block's text accounts for about 1.15k of it (the difference to `short`, whose files are the
-  same apart from the block), and the other 0.45k is paid by `short` too (not broken down here);
-- with the short block: **+0.4-0.5k**;
-- this repository's own files (`main`, the earlier "+3.3k"): +3.3k to +4.1k, of which about 1.7-2.5k is the developer
-  section no user carries;
-- `inject`: +2.4k on #303 and +6.6k on #383 (the pack of `devkb/build_symbols.py` is 12k characters).
+MCP servers in userinit runs: ["['devkb']"] others: ['[]']
 
-**Per run:** with 3 runs per cell, cost moves ±25% between arms on the same ticket (`short` -24% and `main` -12% on
-#383, `outline` +19% on #303), in both directions and unrelated to the first-call order, so these runs cannot rank the
-arms by cost (#368: 3 runs show only effects above about 40%). `inject` was the most expensive on #383 (+47%, 12 turns
-against 9), where the injected pack was largest. The hidden check gave the same result in every arm (#383: 0/3
-everywhere, its stricter check; #303: 3/3 everywhere); no agent ran a devkb query.
+**First call** (constant per arm and base):
+- **what `devkb init` gives a user today (`userinit`): +2.5k tokens** over `none` (20.2-20.3k against 17.7-17.8k):
+  the block and devkb's 12 MCP tools;
+- the block alone (`userpolicy`): +1.6k; with the short block (`short`): +0.4-0.5k;
+- this repository's own files (`main`, `outline`, the earlier "+3.3k"): +3.3k to +4.1k;
+- `inject`: +2.1-2.4k (the pack of `devkb/cli.py` on #383, of `bench/policy/storybench.py` on #303).
+
+**Per run:** 3 runs per cell show only effects above about 40% (#368), and costs moved ±25% between the two batches for
+the same arm and ticket. Only `userinit` stands out on both tickets in this batch (+52% and +34% against `none`, +43%
+pooled), consistent with its MCP tool definitions being paid on every call; the other arms' differences (+10% to +36%)
+are within the noise. Correctness was the same in every arm (#383: 0/3 everywhere, its strict hidden check; #303: 3/3
+everywhere), and no agent ran a devkb query or called an MCP tool.
+
+**Batch 1** (36 runs, six arms, no `userinit`) is superseded: its `inject` arm packed the longest file path in the
+ticket, not the file "Where to start" names (`devkb/build_symbols.py` instead of `devkb/cli.py` on #383; found in
+review). Its first-call figures for the other arms are the same as here.
 
 ## Against the proposed target
 
 #366 proposed: the shipped configuration adds at most 1.0k tokens to the first call and costs at most +5% per run
 against `none` on tickets that need no navigation (owner to confirm).
 
-- **First call:** `userpolicy` (what ships) does not meet it (+1.6k); `short` does (+0.4-0.5k).
-- **Per run:** not decidable from these runs; a check of +5% needs far more than 3 runs per cell (#368).
+- **First call:** what ships (`userinit`) adds 2.5k, more than twice the target; without the MCP server it is 1.6k;
+  only the short block, without the MCP server, meets it (0.4-0.5k).
+- **Per run:** `userinit` is +43% here; whether any arm is within +5% cannot be told from 3 runs per cell.
 
-**Recommendation (owner's decision):** ship the short block as `devkb init`'s `AGENTS_BLOCK` (it keeps the four
-commands and the "Complete is the whole answer" rule; it drops the table and the MCP names), and measure the per-run
-cost under the repetition rule before calling the target met. `inject` is not a candidate on this evidence: it costs
-the most context and changed nothing the agents did.
+**What follows (owner's decision):** the largest part of what a user pays is the MCP server's tool definitions, not the
+policy text; and the short block saves 1.1-1.2k of the rest. Neither change is measured on tickets where navigation
+matters: whether agents still use devkb with the short block, or without MCP, needs a navigation ticket under the
+repetition rule before `devkb init`'s defaults change. `devkb/init.py` is not changed here.
 
 ## Data
 
-`bench/results/2026-11-20-user-policy-366/results-383.jsonl` and `results-303.jsonl` (one row per run; `first_ctx`,
-`cost`, `turns`, `ctx_tokens`, the hidden check and the suite). Streams: `devkb-benchmark-366-user-policy-archive.tar.gz`,
-beside the checkout.
+`bench/results/2026-11-20-user-policy-366/batch2-rows.jsonl` (one row per run of batch 2: arm, ticket, first-call
+context, cost, turns, context, suite, hidden check, MCP servers, devkb queries) and `batch1-results-*.jsonl` (batch 1).
+Streams of both batches: `devkb-benchmark-366-user-policy-archive.tar.gz` and `-batch2.tar.gz`, beside the checkout.
