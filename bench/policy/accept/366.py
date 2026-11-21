@@ -11,11 +11,16 @@ res = {}
 pb = (W / "bench" / "policy" / "policybench.py").read_text(errors="replace")
 res["userpolicy_arm_defined"] = bool(re.search(r"[\"']userpolicy[\"']\s*:", pb))
 # the arm's AGENTS.md is what `devkb init` writes: the bench takes it from devkb's own init, not a copy of the text
-res["policy_from_devkb_init"] = bool(re.search(r"AGENTS_BLOCK|devkb\.init|\binit\b.*--agents|\[\"init\"", pb))
+# and it is the checkout's code that writes it, not a helper nothing calls
+co = pb[pb.find("def checkout("):pb.find("\ndef ", pb.find("def checkout(") + 5)] if "def checkout(" in pb else ""
+res["policy_from_devkb_init"] = bool(re.search(r"AGENTS_BLOCK|devkb\.init|\binit\b.*--agents|\[\"init\"", pb)) and \
+    bool(re.search(r"userpolicy|USER_POLICY|user_policy|arm_files", co))
 notes = [p for p in (W / "docs" / "analysis").glob("*.md")
          if "userpolicy" in (t := p.read_text(errors="replace")) and re.search(r"(?i)first[- ]call", t)]
 text = "\n".join(p.read_text(errors="replace") for p in notes)
-res["note_gives_first_call_per_arm"] = bool(notes) and all(re.search(rf"\b{a}\b[^\n]*\d[\d.,]*\s*k", text) for a in ("none", "userpolicy", "main"))
+arms_in_bench = [a for a in re.findall(r"^\s*[\"'](\w+)[\"']:\s*[\"']origin/main[\"']", pb, re.M) if a in ("short", "outline", "inject")]
+res["note_gives_first_call_per_arm"] = bool(notes) and all(re.search(rf"\b{a}\b[^\n]*\d[\d.,]*\s*k", text)
+                                                            for a in ("none", "userpolicy", "main", *arms_in_bench))
 tracked = subprocess.run(["git", "-C", str(W), "ls-files"], capture_output=True, text=True).stdout.splitlines()
 rows = [f for f in tracked if f.endswith(".jsonl") and ("results" in f or "rows" in f)]
 has = False
