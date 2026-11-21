@@ -114,6 +114,7 @@ def test_a_cd_is_kept_for_the_next_calls_and_home_paths_are_rewritten():
     assert hook_replay.CD.match("cd corpus/fmt && grep -n x src").group(1) == "corpus/fmt"
     assert hook_replay.edits({"name": "Bash", "input": {"command": "sed -i 's/a/b/' f.py"}})
     assert hook_replay.edits({"name": "Bash", "input": {"command": "echo x > pkg/new.py"}})
+    assert hook_replay.edits({"name": "Bash", "input": {"command": "cd pkg && sed -i 's/a/b/' core.py"}})   # after &&
     for cmd in ("grep -n x f.py 2>&1 | head", "devkb build --project . >/dev/null 2>&1", 'grep -n "x > y" a.py',
                 "cat > /tmp/t.py <<'E'\nprint(1)\nE", "git diff > /tmp/d.txt"):
         assert not hook_replay.edits({"name": "Bash", "input": {"command": cmd}}), cmd
@@ -131,3 +132,29 @@ def test_live_output_goes_to_the_call_of_its_tool_and_refusals_are_read(tmp_path
     s.write_text("\n".join(json.dumps(e) for e in ev) + "\n")
     live, refused = hook_replay.live_outputs(s)
     assert live == {"t1": "", "t2": "devkb answered"} and refused == {"t3"}
+
+
+def test_a_refused_call_moves_no_directory_edits_nothing_and_live_answers_without_a_decision_count(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    repo = _repo(tmp_path / "repo")
+    d = tmp_path / "runs" / "p3-main-r1"
+    d.mkdir(parents=True)
+    refusal = lambda i: {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": f"t{i}", "is_error": True,
+                                                                   "content": "This command requires approval"}]}}
+    hook = lambda name, text: {"type": "system", "subtype": "hook_response", "hook_event": "PreToolUse", "hook_name": f"PreToolUse:{name}",
+                               "stdout": json.dumps({"hookSpecificOutput": {"additionalContext": text}}) if text else ""}
+    events = [{"type": "system", "subtype": "init", "cwd": ORIG, "session_id": "s3"},
+              _tool(1, "Bash", {"command": "cd pkg && sed -i 's/a/b/' core.py"}), hook("Bash", ""), refusal(1),
+              _tool(2, "Grep", {"pattern": "compute_total", "path": ORIG, "output_mode": "content"}), hook("Grep", ""),
+              _tool(3, "Bash", {"command": "cd pkg && ls"}), hook("Bash", ""),
+              _tool(4, "Grep", {"pattern": "compute_total", "path": ".", "output_mode": "content"}), hook("Grep", ""),
+              _tool(5, "Bash", {"command": "ls"}), hook("Bash", "devkb, from the graph: an answer the replay never decided on")]
+    (d / "stream.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n")
+    hook_replay.main(["--repo", str(repo), str(d)])
+    lines = [json.loads(x) for x in capsys.readouterr().out.splitlines()]
+    rows, summary = lines[:-1], lines[-1]["summary"]
+    by_i = {r["i"]: r for r in rows}
+    assert by_i[1]["cwd"] == "." and not by_i[1]["after_edit"]        # the refused cd and sed -i did nothing
+    assert by_i[3]["cwd"] == "pkg"                                      # the cd that ran moved the session
+    undecided = [r for r in rows if r.get("undecided")]
+    assert [r["i"] for r in undecided] == [4] and summary["live_answers_without_a_decision"] == 1

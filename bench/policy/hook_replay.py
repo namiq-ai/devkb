@@ -98,7 +98,7 @@ def live_outputs(stream: Path) -> tuple[dict[str, str], set[str]]:
             for b in (e.get("message", {}).get("content") or []) if isinstance(e.get("message", {}).get("content"), list) else []:
                 if b.get("type") == "tool_result" and b.get("is_error"):
                     text = b.get("content") if isinstance(b.get("content"), str) else json.dumps(b.get("content"))
-                    if re.search(r"(?i)require[sd]? approval|approve only if|permission|was denied", text or ""):
+                    if re.search(r"(?i)require[sd]? approval|approve only if|permission|was denied|was blocked", text or ""):
                         refused.add(b.get("tool_use_id"))
         elif e.get("type") == "system" and e.get("subtype") == "hook_response" and e.get("hook_event") == "PreToolUse":
             tool = (e.get("hook_name") or "").partition(":")[2]
@@ -143,7 +143,11 @@ def edits(call: dict) -> bool:
     head = re.sub(r"<<-?\s*'?(\w+)'?.*?\n\1\b", "<<H", cmd, flags=re.S)      # a heredoc's text is not the command
     unquoted = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", head)
     targets = [t for t in REDIRECT.findall(unquoted) if not t.startswith(("/dev/", "/tmp/"))]
-    return bool(targets) or bool(EDITS.search(cmd))
+    for seg in (x.strip() for x in re.split(r"&&|\|\||;|\||\n", unquoted)):   # rm, cp, mv, tee, sed -i into the checkout
+        m = EDITS.search(seg)
+        if m and not all(a.startswith(("/tmp/", "/dev/")) for a in seg.split()[1:] if not a.startswith("-")):
+            return True
+    return bool(targets) or bool(re.search(r"open\([^)]*,\s*['\"][wa]|\.write_text\(", cmd))
 
 
 CD = re.compile(r"^\s*cd\s+(\S+)\s*(?:$|&&|;)")
@@ -208,6 +212,7 @@ def replay_stream(stream: Path, repo: Path, guard: Path, code: Path) -> list[dic
                         "delivered": delivered, "chars": last.get("answer_chars", len(text)) if delivered else 0,
                         "printed": len(text), "printed_reminder": text.startswith(REMINDER),
                         "ms": ms, "timed_out": timed_out, "after_edit": after_edit, "refused": call["id"] in refused,
+                        "cwd": os.path.relpath(ev["cwd"], repo),
                         "live_chars": None if lv is None else (0 if lv.startswith(REMINDER) else len(lv)),
                         "next": short(calls[i + 1] if i + 1 < len(calls) else None)})
     for cid, text in live.items():                        # the live hook answered a call the replay did not decide on
@@ -215,7 +220,7 @@ def replay_stream(stream: Path, repo: Path, guard: Path, code: Path) -> list[dic
             out.append({"run": run, "i": next(i for i, c in enumerate(calls) if c["id"] == cid), "tool": "", "search": "",
                         "action": "(no decision)", "reason": "", "intent": "", "names": [], "verdicts": [],
                         "reminded": False, "delivered": False, "chars": 0, "printed": 0, "printed_reminder": False,
-                        "ms": 0, "timed_out": False, "after_edit": False, "refused": cid in refused,
+                        "ms": 0, "timed_out": False, "after_edit": False, "refused": cid in refused, "cwd": "",
                         "live_chars": len(text), "next": "", "undecided": True})
     return out
 

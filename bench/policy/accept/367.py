@@ -43,6 +43,25 @@ with tempfile.TemporaryDirectory() as td:
     stream = td / "runs" / "p999-main-r1" / "stream.jsonl"
     stream.parent.mkdir(parents=True)
     stream.write_text("\n".join(json.dumps(e) for e in events) + "\n")
+    # what the checkout's own guardrail decides on the first search, run directly: its reason and its answer's length
+    # must be what the replay reports (black box: compared as values, whatever the replay names its fields)
+    expect = {}
+    guard = W / "scripts" / "devkb_guardrail.py"
+    if guard.exists():
+        gh = td / "guardhome"
+        gh.mkdir()
+        ev = {"session_id": "s-direct", "hook_event_name": "PreToolUse", "tool_name": "Grep", "tool_use_id": "d1",
+              "tool_input": {"pattern": "compute_total", "path": str(repo), "output_mode": "content"}, "cwd": str(repo)}
+        g = subprocess.run([py, "-P", str(guard)], input=json.dumps(ev), cwd=repo, capture_output=True, text=True,
+                           env=dict(env, HOME=str(gh), CLAUDE_PROJECT_DIR=str(repo)), timeout=300)
+        log = gh / ".claude" / "hooks" / "devkb-guardrail.log"
+        rows = [json.loads(x) for x in log.read_text().splitlines() if x.strip()] if log.exists() else []
+        dec = next((r for r in rows if r.get("action") != "remind"), {})
+        try:
+            h = json.loads(g.stdout).get("hookSpecificOutput", {}) if g.stdout.strip() else {}
+        except ValueError:
+            h = {}
+        expect = {"reason": dec.get("reason", ""), "chars": len(h.get("permissionDecisionReason") or h.get("additionalContext") or "")}
     if replay.exists():
         for args in (["--repo", str(repo), str(stream)], [str(stream), "--repo", str(repo)],
                      ["--repo", str(repo), str(stream.parent)], ["--checkout", str(repo), str(stream)]):
@@ -56,10 +75,8 @@ lines = [l for l in out.splitlines() if any(a in l for a in ACTIONS) and not re.
 # named as a decision's next call)
 decisions = [l for l in lines if "compute_total" in l]
 res["one_decision_per_search"] = len(lines) == 2 and len(decisions) == 2
-# besides the action: a number that is not the call's position (characters added), and a reason word or field
-res["reason_and_chars_given"] = bool(decisions) and all(
-    len(re.findall(r"\d+", l)) >= 2 and re.search(r"(?i)same-question|not-complete|complete|duplicate|cannot|no-match|intent:", l)
-    for l in decisions)
+res["reason_and_chars_given"] = bool(decisions) and bool(expect.get("reason")) and expect["reason"] in decisions[0] \
+    and bool(re.search(rf"(?<!\d){expect.get('chars', -1)}(?!\d)", decisions[0]))
 res["next_call_given"] = len(decisions) == 2 and "pkg/core.py" in decisions[0] and "Read" in decisions[0] \
     and ("ls pkg" in decisions[1] or "Edit" in decisions[1])
 res["summary_given"] = bool(re.search(SUMMARY, out))
