@@ -52,9 +52,12 @@ def devkb(sha: str, *args: str) -> str:
     return sh(PY, "-c", code, *args, cwd=t, timeout=300)
 
 
-def snapshot(sha: str) -> None:
+def snapshot(sha: str, force: bool = False) -> None:
     d = CACHE / sha
     d.mkdir(parents=True, exist_ok=True)
+    if force:
+        for n in ("cov.json", "health.json", "junit.xml", ".coverage"):
+            (d / n).unlink(missing_ok=True)
     if not tree(sha).exists():
         sh("git", "-C", str(ROOT), "worktree", "add", "--detach", str(tree(sha)), sha, check=True)
     if not (tree(sha) / ".devkb" / "nodes.jsonl").exists():
@@ -62,10 +65,44 @@ def snapshot(sha: str) -> None:
            "build", "--project", str(tree(sha)), "--allow-foreign-checkout", cwd=tree(sha), timeout=600)
     if not (d / "cov.json").exists():
         env = {"COVERAGE_FILE": str(d / ".coverage"), "PYTHONPATH": str(tree(sha))}
-        sh(PY, "-m", "pytest", "-q", "-n", "8", "-p", "no:cacheprovider", "--cov=devkb", "--cov-context=test", "--cov-report=",
-           "--ignore=tests/test_bench_user_policy_366.py", cwd=tree(sha), env=env, timeout=3600)
+        p = subprocess.run([PY, "-m", "pytest", "-q", "-n", "8", "-p", "no:cacheprovider", "--cov=devkb", "--cov-context=test", "--cov-report=",
+                            f"--junitxml={d / 'junit.xml'}", "--ignore=tests/test_bench_user_policy_366.py"], cwd=tree(sha),
+                           env={**os.environ, **env}, capture_output=True, text=True, timeout=3600)
+        (d / "pytest-tail.txt").write_text(p.stdout[-3000:])
         sh(PY, "-m", "coverage", "json", "--show-contexts", "-o", str(d / "cov.json"), cwd=tree(sha), env=env, check=True)
+        health(sha, p.returncode)
     print("snapshot", sha, "ready")
+
+
+def health(sha: str, rc: int | None = None) -> dict:
+    """Did the coverage run run the suite? The exit status, the outcomes per test file from the JUnit file, and the test files that
+    left no coverage of devkb/ with what happened to them: a file that passed and covered nothing runs other code (bench/, scripts/);
+    a file that errored, failed to collect or was skipped is a hole in the truth."""
+    import xml.etree.ElementTree as ET
+    d = CACHE / sha
+    out = {"pytest_exit": rc, "files": {}}
+    try:
+        for tc in ET.parse(d / "junit.xml").getroot().iter("testcase"):
+            parts = (tc.get("classname") or "").split(".")
+            k = next((i for i, x in enumerate(parts) if x.startswith("test_")), None)
+            if k is None:
+                continue
+            f = "/".join(parts[:k + 1]) + ".py"                  # `tests.test_x.TestY` -> tests/test_x.py
+            o = out["files"].setdefault(f, {"passed": 0, "failed": 0, "error": 0, "skipped": 0})
+            kind = "failed" if tc.find("failure") is not None else "error" if tc.find("error") is not None else "skipped" if tc.find("skipped") is not None else "passed"
+            o[kind] += 1
+    except (OSError, ET.ParseError):
+        out["junit"] = "missing"
+    seen: set[str] = set()
+    cov = json.loads((d / "cov.json").read_text()) if (d / "cov.json").exists() else {"files": {}}
+    for f, info in cov["files"].items():
+        for ctxs in (info.get("contexts") or {}).values():
+            seen |= {c.split("::")[0] for c in ctxs if c.startswith("tests/")}
+    allf = set(test_texts(sha))
+    out["no_coverage"] = {f: out["files"].get(f, "not in the JUnit file (not collected)") for f in sorted(allf - seen)}
+    out["holes"] = {f: v for f, v in out["no_coverage"].items() if not isinstance(v, dict) or v["failed"] or v["error"] or (v["skipped"] and not v["passed"])}
+    (d / "health.json").write_text(json.dumps(out, indent=1))
+    return out
 
 
 def functions(src: str) -> dict[str, tuple[int, int, int, str]]:
@@ -168,7 +205,8 @@ def predict(sha: str, item: dict, texts: dict[str, str]) -> dict[str, set]:
         n = c["qual"].split(".")[-1]
         if len(n) >= MIN_NAME:
             grp |= {t for t, x in texts.items() if re.search(rf"\b{re.escape(n)}\b", x)}
-    return {"devkb-file": pf, "devkb-fn": pn, "devkb": pf | pn, "import": imp, "name": nam, "grep": grp}
+    real = set(texts)                                   # `tests/conftest.py` and helper modules can never be in the truth
+    return {"devkb-file": pf & real, "devkb-fn": pn & real, "devkb": (pf | pn) & real, "import": imp, "name": nam, "grep": grp}
 
 
 def truth(item: dict, by_line, wide) -> tuple[set, set]:
@@ -221,10 +259,17 @@ def report(rows: list[dict]) -> None:
 
 if __name__ == "__main__":
     a = sys.argv[1:]
-    if not a or a[0] not in ("snapshot", "items", "score"):
+    if not a or a[0] not in ("snapshot", "items", "score", "health"):
         raise SystemExit(__doc__)
     if a[0] == "snapshot":
-        [snapshot(s) for s in a[1:]]
+        [snapshot(s, "--force" in a) for s in a[1:] if not s.startswith("--")]
+    elif a[0] == "health":
+        for sha in a[1:]:
+            h = health(sha)
+            print(sha, "pytest exit", h["pytest_exit"], "|", len(h["files"]), "test files in the JUnit file |", len(h["no_coverage"]), "left no coverage of devkb/ |",
+                  len(h["holes"]), "of those are holes (failed, errored, skipped or not collected)")
+            for f, v in h["holes"].items():
+                print("   ", f, v)
     elif a[0] == "items":
         for it in items(a[1]):
             print(it["commit"], it["subject"], len(it["changed"]), "functions")

@@ -5,7 +5,10 @@ will touch? Offline, no model runs.
 Items: issues that say "Follow-up of #N" or "duplicate of #N" (N an older issue). Truth: that N. The query is the issue's title
 and body with every `#number` removed (the link and any other reference). Candidates: the issues numbered below the item.
 Arms: bm25 (text), structural (the code names and paths the issue mentions, resolved in the graph to files, matched against the
-files each candidate issue's commits changed before the item was filed), hybrid (reciprocal-rank fusion of the two).
+files each candidate issue's commits changed before the item was filed), hybrid (reciprocal-rank fusion of the two), and two
+popularity priors with no text at all: causal (issues earlier items followed) and leave-one-out (every other item, so not causal),
+and bm25+prior. 27 parents carry the 73 items, so intervals resample parents, and a slice scores the items whose parent no earlier
+item followed, where a prior has nothing to count.
 Owner recall: the files changed by the commits of the issue's own fix (after it was filed) against the files of the arm's top 5.
 
   python bench/quality/qb2_related.py [--refresh]      (needs `gh`; caches the issues under ~/.cache/devkb/qb2)
@@ -75,18 +78,28 @@ class BM25:
 
 
 def commits() -> list[tuple[float, set[int], set[str]]]:
-    """(time, issue numbers it cites, files it changed) for every first-parent commit of origin/main."""
-    raw = subprocess.run(["git", "-C", str(ROOT), "log", "--first-parent", "-m", "--pretty=format:@@%at|%s|%b", "--name-only", "origin/main"],
+    """(committer time, issue numbers it cites, files it changed) for every first-parent commit of origin/main. The message and the
+    file list come from two calls joined on the hash, with record separators: a message of several lines cannot leak into the files."""
+    msgs = subprocess.run(["git", "-C", str(ROOT), "log", "--first-parent", "--pretty=format:%H%x00%ct%x00%s%x00%b%x01", "origin/main"],
+                          capture_output=True, text=True).stdout
+    meta: dict[str, tuple[float, set[int]]] = {}
+    for rec in msgs.split("\x01"):
+        rec = rec.strip("\n")
+        if not rec:
+            continue
+        h, t, subj, body = (rec.split("\x00") + ["", "", "", ""])[:4]
+        text = subj + "\n" + body
+        nums = {int(x) for x in re.findall(r"#(\d+)", text)}
+        for br in re.findall(r"(?:fix|feat|docs|bench|chore|refactor|test|release)/(\d+(?:-\d+)*)", text):
+            nums |= {int(x) for x in br.split("-") if len(x) >= 2}
+        meta[h] = (float(t), nums)
+    raw = subprocess.run(["git", "-C", str(ROOT), "log", "--first-parent", "-m", "--pretty=format:@@%H", "--name-only", "origin/main"],
                          capture_output=True, text=True).stdout
     out = []
     for blk in raw.split("@@")[1:]:
-        head, _, files = blk.partition("\n")
-        t, _, rest = head.partition("|")
-        nums = {int(x) for x in re.findall(r"#(\d+)", rest)}
-        for br in re.findall(r"(?:fix|feat|docs|bench|chore|refactor|test|release)/(\d+(?:-\d+)*)", rest):
-            nums |= {int(x) for x in br.split("-") if len(x) >= 2}
-        fl = {f for f in files.split("\n") if f.strip() and not f.startswith("@@")}
-        out.append((float(t), nums, fl))
+        h, _, files = blk.partition("\n")
+        if h in meta:
+            out.append((meta[h][0], meta[h][1], {f for f in files.split("\n") if f.strip()}))
     return out
 
 
@@ -136,6 +149,20 @@ def boot(xs, n=3000, seed=5):
     return m[int(.05 * n)], m[int(.95 * n) - 1]
 
 
+def cluster_boot(vals: dict[int, float], parent_of: dict[int, int], n=3000, seed=5) -> tuple[float, float]:
+    """90% interval of a mean over items when items cluster in parents (27 parents carry 73 items): resample the parents with
+    replacement, take all their items. Treating the 73 items as independent understates the spread."""
+    groups = collections.defaultdict(list)
+    for i, v in vals.items():
+        groups[parent_of[i]].append(v)
+    keys, rnd = list(groups), random.Random(seed)
+    ms = sorted(st.mean([v for k in rnd.choices(keys, k=len(keys)) for v in groups[k]]) for _ in range(n))
+    return ms[int(.05 * n)], ms[int(.95 * n) - 1]
+
+
+ARMS = ["bm25", "structural", "hybrid", "prior (causal)", "bm25+prior", "prior (leave-one-out)"]
+
+
 def main() -> None:
     iss = issues()
     items = []
@@ -144,11 +171,14 @@ def main() -> None:
         refs = {r for r in refs if r in iss and r < i["number"]}
         if refs:
             items.append((i["number"], refs))
+    items.sort()
     cm, g = commits(), Graph()
-    arms = ["bm25", "structural", "hybrid"]
-    res = {a: [] for a in arms}
-    own = {a: [] for a in arms}
-    for num, truth in sorted(items):
+    parent_of = {num: min(t) for num, t in items}
+    all_follow = collections.Counter(p for _, t in items for p in t)
+    ranks: dict[str, dict[int, int]] = {a: {} for a in ARMS}
+    own = {a: [] for a in ARMS}
+    first_time = []                                                      # items whose parent no earlier item followed
+    for num, truth in items:
         it = iss[num]
         pool = [k for k in iss if k < num]
         docs = {k: toks(clean((iss[k]["title"] or "") + " " + (iss[k]["body"] or ""))) for k in pool}
@@ -156,33 +186,46 @@ def main() -> None:
         bm = BM25(docs).rank(toks(q))
         qf = g.names_to_files(q)
         cf = {k: files_of(k, when(it), cm) | set(g.names_to_files((iss[k]["title"] or "") + " " + (iss[k]["body"] or ""))) for k in pool}
-        df = collections.Counter(f for s in cf.values() for f in s)
+        df = collections.Counter(f for s_ in cf.values() for f in s_)
         idf = {f: math.log(1 + len(pool) / c) for f, c in df.items()}
         sc = {k: sum(w * idf.get(f, 0) for f, w in qf.items() if f in cf[k]) for k in pool}
-        st_rank = sorted(pool, key=lambda k: (-sc[k], -k))
-        if not any(sc.values()):
-            st_rank = []                                                  # nothing in the text maps to a file: no answer, not a guess
-        hy = rrf(bm, st_rank) if st_rank else bm
+        st_rank = sorted(pool, key=lambda k: (-sc[k], -k)) if any(sc.values()) else []   # nothing maps to a file: no answer, not a guess
+        earlier = collections.Counter(p for n2, t in items if n2 < num for p in t)
+        loo = collections.Counter({p: c - (1 if p in truth else 0) for p, c in all_follow.items()})
+        prior_c = sorted(pool, key=lambda k: (-earlier[k], -k))
+        prior_l = sorted(pool, key=lambda k: (-loo[k], -k))
+        if not any(earlier[k] for k in pool):
+            first_time.append(num)
+        elif not (set(truth) & set(earlier)):
+            first_time.append(num)
+        r = {"bm25": bm, "structural": st_rank, "hybrid": rrf(bm, st_rank) if st_rank else bm, "prior (causal)": prior_c,
+             "bm25+prior": rrf(bm, prior_c), "prior (leave-one-out)": prior_l}
         own_files = {f for t, nums, fl in cm if num in nums and t >= when(it) for f in fl}
-        for a, r in (("bm25", bm), ("structural", st_rank), ("hybrid", hy)):
-            pos = next((p for p, c in enumerate(r, 1) if c in truth), 10 ** 6)
-            res[a].append({"item": num, "rank": pos, "answered": bool(r)})
-            top = {f for c in r[:5] for f in cf[c]}
+        for a in ARMS:
+            ranks[a][num] = next((p for p, c in enumerate(r[a], 1) if c in truth), 10 ** 6)
+            top = {f for c in r[a][:5] for f in cf[c]}
             own[a].append(len(top & own_files) / len(own_files) if own_files else None)
     n = len(items)
-    print(f"{n} items; {len({p for _, t in items for p in t})} distinct parents; candidates per item: all older issues (median {st.median(len([k for k in iss if k < i]) for i, _ in items)})\n")
-    print("| arm | answered | R@1 | R@5 | R@10 | MRR | owner-file recall at 5 |\n|---|---|---|---|---|---|---|")
-    for a in arms:
-        rk = [r["rank"] for r in res[a]]
-        r5 = [1.0 if x <= 5 else 0.0 for x in rk]
-        lo, hi = boot(r5)
+    hit5 = {a: {i: 1.0 if ranks[a][i] <= 5 else 0.0 for i in ranks[a]} for a in ARMS}
+    print(f"{n} items; {len(all_follow)} distinct parents; candidates per item: all older issues (median {st.median(len([k for k in iss if k < i]) for i, _ in items)})\n")
+    print("| arm | R@1 | R@5 (90%, resampling parents) | R@10 | MRR | owner-file recall at 5 |\n|---|---|---|---|---|---|")
+    for a in ARMS:
+        rk = ranks[a]
+        lo, hi = cluster_boot(hit5[a], parent_of)
         ow = [x for x in own[a] if x is not None]
-        print(f"| {a} | {sum(r['answered'] for r in res[a])}/{n} | {st.mean(1.0 if x <= 1 else 0.0 for x in rk):.2f} | {st.mean(r5):.2f} ({lo:.2f}-{hi:.2f}) | "
-              f"{st.mean(1.0 if x <= 10 else 0.0 for x in rk):.2f} | {st.mean(1 / x if x < 10 ** 6 else 0 for x in rk):.2f} | {st.mean(ow):.2f} (n={len(ow)}) |")
-    pri = collections.Counter(p for _, t in items for p in t)
-    top1 = pri.most_common(1)[0]
-    print(f"\nprior: the most-followed parent (#{top1[0]}) is the truth of {top1[1]} of {n} items ({100 * top1[1] // n}%)")
-    (CACHE / "qb2-results.json").write_text(json.dumps({"res": res, "own": own}, indent=1))
+        print(f"| {a} | {st.mean(1.0 if x <= 1 else 0.0 for x in rk.values()):.2f} | {st.mean(hit5[a].values()):.2f} ({lo:.2f}-{hi:.2f}) | "
+              f"{st.mean(1.0 if x <= 10 else 0.0 for x in rk.values()):.2f} | {st.mean(1 / x if x < 10 ** 6 else 0 for x in rk.values()):.2f} | {st.mean(ow):.2f} |")
+    print("\nPaired differences in R@5, resampling parents (90%):")
+    for x, y in (("hybrid", "bm25"), ("bm25", "prior (causal)"), ("bm25+prior", "bm25"), ("bm25", "prior (leave-one-out)")):
+        d = {i: hit5[x][i] - hit5[y][i] for i in hit5[x]}
+        lo, hi = cluster_boot(d, parent_of)
+        print(f"  {x} - {y}: {st.mean(d.values()):+.2f} ({lo:+.2f} to {hi:+.2f})")
+    ft = set(first_time)
+    print(f"\nItems whose parent no earlier item followed ({len(ft)}): a popularity prior has nothing to count there")
+    for a in ARMS:
+        v = [hit5[a][i] for i in ft]
+        print(f"  {a}: R@5 {st.mean(v):.2f}")
+    (CACHE / "qb2-results.json").write_text(json.dumps({"ranks": {a: {str(k): v for k, v in r.items()} for a, r in ranks.items()}}, indent=1))
 
 
 if __name__ == "__main__":
