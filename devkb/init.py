@@ -1,6 +1,6 @@
 """`devkb init`: integrate devkb into a repository, idempotently, and take it out again.
 
-  devkb init [--project .] [--toolset lean] [--hooks] [--claude-hook] [--no-build] [--dry-run]
+  devkb init [--project .] [--toolset lean] [--hooks] [--claude-hook [--router]] [--no-build] [--dry-run]
   devkb init --remove [--project .]
 
 Writes managed blocks, never whole files, so the repository's own content is untouched and re-running only refreshes
@@ -10,7 +10,10 @@ the block:
   CLAUDE.md     `@AGENTS.md`, so Claude Code reads the same instructions (one place to maintain)
   .mcp.json     the devkb MCP server, merged into any servers already declared
   .gitignore    .devkb/ (the graph is built locally, never committed)
-  .claude/settings.json  with --claude-hook: a PreToolUse hook that gives Claude Code the file's pack at its first edit
+  .claude/settings.json  with --claude-hook: a PreToolUse hook that gives Claude Code the file's pack at its first edit, and a
+                UserPromptSubmit hook that only records the task's words, so `symbol` breaks a tie by the task (nothing is
+                pushed to the agent). --router makes that hook the prompt router, which does push context (off by default:
+                it did not reduce cost or turns in 72 benchmark runs)
   git hooks     with --hooks: rebuild the graph in the background after a commit, merge, rebase or checkout
 
 Why instructions and not only a server: in the study, agents left to choose used the graph in 88% of runs that
@@ -163,24 +166,25 @@ def _mcp(root: Path, toolset: str | None) -> str | None:
 
 
 HOOK_COMMAND = "devkb hook pre-edit"
-PROMPT_COMMAND = "devkb hook prompt"
+PROMPT_COMMAND = "devkb hook prompt"         # the router: pushes the graph's answer for the prompt's SDLC stage (devkb/router.py)
+CONTEXT_COMMAND = "devkb hook context"       # records the task's words only; pushes nothing (devkb/session_context.py)
 
 
-def _settings(root: Path, install: bool) -> str | None:
+def _settings(root: Path, install: bool, router: bool = False) -> str | None:
     """`.claude/settings.json` with devkb's two hooks: PreToolUse gives the agent the file's pack at its first edit, and
-    UserPromptSubmit routes a prompt to the graph's answer for its SDLC stage (devkb/router.py). Other settings and hooks
-    are kept, and removing devkb removes only these entries."""
+    UserPromptSubmit records the task's words (`router=True`: routes the prompt to the graph's answer instead). Other settings
+    and hooks are kept, and removing devkb removes only these entries; installing one prompt hook replaces the other."""
     path = root / ".claude" / "settings.json"
     try:
         cfg = json.loads(path.read_text()) if path.exists() else {}
     except ValueError:
         raise SystemExit(f"{path} is not valid JSON; fix it or add the devkb hook by hand")
-    mine = {"PreToolUse": (HOOK_COMMAND, {"matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash"}, 30),
-            "UserPromptSubmit": (PROMPT_COMMAND, {}, 20)}
-    for event, (command, extra, timeout) in mine.items():
+    mine = {"PreToolUse": (HOOK_COMMAND, {"matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash"}, 30, (HOOK_COMMAND,)),
+            "UserPromptSubmit": (PROMPT_COMMAND if router else CONTEXT_COMMAND, {}, 20, (PROMPT_COMMAND, CONTEXT_COMMAND))}
+    for event, (command, extra, timeout, owned) in mine.items():
         groups = cfg.setdefault("hooks", {}).setdefault(event, [])
         for g in groups:
-            g["hooks"] = [h for h in g.get("hooks", []) if command not in h.get("command", "")]
+            g["hooks"] = [h for h in g.get("hooks", []) if not any(o in h.get("command", "") for o in owned)]
         groups[:] = [g for g in groups if g.get("hooks")]
         if install:
             groups.append({**extra, "hooks": [{"type": "command", "command": command, "timeout": timeout}]})
@@ -211,7 +215,7 @@ def _hook(text: str, install: bool) -> str | None:
     return None if out.strip() in ("", "#!/bin/sh") else out
 
 
-def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool, claude_hook: bool = False) -> list[str]:
+def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool, claude_hook: bool = False, router: bool = False) -> list[str]:
     """toolset None removes devkb. Returns the changes made (or planned, with dry_run)."""
     p = Plan(root, dry_run)
     install = toolset is not None
@@ -226,7 +230,7 @@ def run(root: Path, toolset: str | None, hooks: bool, dry_run: bool, claude_hook
     p.write(".gitignore", _set_block(ignore, ".devkb/", HASH_BEGIN, HASH_END) if install else _drop_block(ignore, HASH_BEGIN, HASH_END))
     p.write(".mcp.json", _mcp(root, toolset))
     if claude_hook or not install:
-        p.write(".claude/settings.json", _settings(root, install))
+        p.write(".claude/settings.json", _settings(root, install, router))
     for name in HOOKS:
         path = hdir / name
         if not install or hooks:
@@ -262,12 +266,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--toolset", default="lean-pack", help="the MCP toolset agents get (lean-pack, lean, dev, core, workflow, all)")
     ap.add_argument("--hooks", action="store_true", help="rebuild the graph after commits, merges and checkouts")
     ap.add_argument("--claude-hook", action="store_true", help="give Claude Code the file's pack at its first Edit or Write (.claude/settings.json)")
+    ap.add_argument("--router", action="store_true", help="with --claude-hook: the prompt hook routes the prompt to the graph's answer (pushes context); default records the task's words only")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--remove", action="store_true", help="take devkb out of the repository again")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     root = Path(a.project).resolve()
-    changes = run(root, None if a.remove else a.toolset, a.hooks, a.dry_run, a.claude_hook)
+    changes = run(root, None if a.remove else a.toolset, a.hooks, a.dry_run, a.claude_hook, a.router)
     print(("would " if a.dry_run else "") + ("\n".join(changes) if changes else "nothing to change"))
     problem = None if a.remove else server_command_problem()
     if problem:

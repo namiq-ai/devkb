@@ -110,7 +110,14 @@ def test_claude_hook_is_optional_merged_idempotent_and_removed_with_devkb(tmp_pa
     groups = cfg["hooks"]["PreToolUse"]
     assert cfg["model"] == "x" and groups[0]["hooks"][0]["command"] == "mine"
     assert groups[1]["matcher"] == "Edit|Write|MultiEdit|NotebookEdit|Bash" and groups[1]["hooks"][0]["command"] == "devkb hook pre-edit"
+    assert cfg["hooks"]["UserPromptSubmit"] == [{"hooks": [{"type": "command", "command": "devkb hook context", "timeout": 20}]}], \
+        "the default prompt hook records the task and pushes nothing"
+    assert init.run(root, "lean-pack", hooks=False, dry_run=False, claude_hook=True) == [], "a second run changes nothing"
+    init.run(root, "lean-pack", hooks=False, dry_run=False, claude_hook=True, router=True)       # --router replaces it, never doubles it
+    cfg = json.loads((root / ".claude" / "settings.json").read_text())
     assert cfg["hooks"]["UserPromptSubmit"] == [{"hooks": [{"type": "command", "command": "devkb hook prompt", "timeout": 20}]}]
+    init.run(root, "lean-pack", hooks=False, dry_run=False, claude_hook=True)                    # and back
+    assert json.loads((root / ".claude" / "settings.json").read_text())["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"] == "devkb hook context"
     assert init.run(root, "lean-pack", hooks=False, dry_run=False, claude_hook=True) == [], "a second run changes nothing"
     init.run(root, None, hooks=False, dry_run=False)
     cfg = json.loads((root / ".claude" / "settings.json").read_text())
