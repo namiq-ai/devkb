@@ -217,3 +217,11 @@ def test_a_spec_id_is_not_a_ticket_key():
     # #118's withheld prompt cites `SPEC-DKB-004 §6`; the tail `DKB-004` was taken for a ticket (benchmark, 2026-11-20)
     assert router.TICKET.search("built per SPEC-DKB-004 §6") is None
     assert router.TICKET.search("implement DKB-123 as written").group(2) == "DKB-123"
+
+
+def test_navigate_skips_generic_words_and_names_that_resolve_only_into_tests(repo):
+    # #120's bundle led with a test function and `add` in a TypeScript fixture; one of three leads was the file the fix changed
+    assert "add" not in router.classify("the `add` call and `parse_json_string` misbehave").subjects
+    out = router.on_prompt(_event(repo, "why does `test_add` fail while `parse_json_string` works?"))
+    text = out["hookSpecificOutput"]["additionalContext"]
+    assert "parse_json_string" in text and "test_add" not in text

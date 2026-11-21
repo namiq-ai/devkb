@@ -103,7 +103,9 @@ def _first_error_text(text: str) -> str:
 def _names(text: str) -> list[str]:
     seen: dict[str, None] = {}
     for m in BACKTICKED.finditer(text):
-        seen.setdefault(m.group(1).strip(".:"), None)
+        w = m.group(1).strip(".:")
+        if len(w) >= 5 or re.search(r"[_A-Z]", w[1:]):       # `add` and `run` are words before they are names
+            seen.setdefault(w, None)
     for m in CODEISH.finditer(text):
         w = m.group(1)
         if w.lower() not in STOP and len(w) > 4:
@@ -243,6 +245,10 @@ def _symbol_row(reply: dict) -> dict | None:
     """The best exact row for a name the graph defines. A fuzzy match is not one: a wrong lead costs more than none."""
     rows = reply.get("matches") or []
     if reply.get("error") or not rows or reply.get("how") in (None, "similar") or not rows[0].get("ls") or "::" not in (rows[0].get("k") or ""):
+        return None
+    # a name that resolves only into tests or fixtures is not the code the prompt is about (#120: `add` led to a TS fixture)
+    rows = [r for r in rows if not re.search(r"(^|/)(tests?|fixtures?|corpus)/", (r.get("k") or "").split("::")[0])]
+    if not rows:
         return None
     return {**rows[0], "n": reply.get("n", 1)}
 
