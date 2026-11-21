@@ -1,9 +1,9 @@
-# Draft tickets: two graph defects (not posted; filing needs the owner's approval)
+# Two graph defects: filed as #399 and #400 on 2026-11-21 (with the owner's approval)
 
 Written to the ticket standard (outcome title, who is affected, a reproduction command, expected, scope, where to start, done when).
 Reproduced on `ccbf847` on 2026-11-21.
 
-## 1. `pack error "MESSAGE"` names the files that raise the message, not files that merely contain a function by that name
+## 1. (#399) `pack error "MESSAGE"` names the files that raise the message, not files that merely contain a function by that name
 
 **Who is affected and why it matters.** An agent that starts from an error text and runs `devkb pack error "..."` is told which
 functions raise it. When the list is wrong the agent reads the wrong files and, because the pack carries a Coverage line, takes the
@@ -33,7 +33,7 @@ check belongs in the pack.
 **Done when.** The reproduction lists `devkb/read_tools.py::ReadTools.resolve` and no function from a file without the text; a
 message that appears nowhere gets an explicit "no function raises this text" answer; a test covers a message that is a prefix of another.
 
-## 2. The tests a change endangers are under-listed when a test reaches the function through a variable the graph cannot type
+## 2. (#400) The tests a change endangers are under-listed when a test reaches the function through a variable the graph cannot type
 
 **Who is affected and why it matters.** `pack refactor` and `pack file` are the tools for "which tests to run". On 13 recent
 changes, `pack file` named 0.73 of the test files that actually execute the changed functions and `pack refactor` 0.12 (a plain search
