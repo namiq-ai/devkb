@@ -47,6 +47,32 @@ floor on the spread.
 - **`pack refactor` is not the tool for this question**: it lists the files with a direct caller, which for a function called
   by its own tests is few, and it silently names none in 7 of 13 items.
 
+## Update: two product changes, measured on snapshots never used for design (2026-11-21)
+The misses above led to two changes in `pack` (commits `ccbf847`, `0a9ca24`): `pack refactor` now lists the test files that call or quote
+the function with no call the graph resolved and says "Incomplete for tests" over them; `pack file` marks each test `direct` or
+`through X` and lists direct ones first. Both were designed after seeing the first 13 items, so they were scored again on **10 items
+from three snapshots never used for design** (`2ffb8a0`, `c14aaa2`, `d2c7b85`, chosen from disjoint stretches of history).
+The combined arm is `pack file` plus `pack refactor` with the mention section.
+
+| | tuning, 13 items | held-out, 10 items | pooled, 23 items |
+|---|---|---|---|
+| `pack file` (before the changes) | 0.73 | 0.75 | 0.74 (0.69-0.80) |
+| `pack file` + `pack refactor` with mentions | 0.85 | **0.80** (0.71-0.90) | **0.83** (0.77-0.88), precision 0.63 |
+| tests that import the module | 0.69 | 0.58 | 0.64 (0.55-0.72), precision 0.61 |
+| tests that mention a changed function's name | 0.72 | 0.66 | 0.69 (0.58-0.79), precision 0.48 |
+
+Paired, pooled, 90% over items: combined - import **+0.19 (+0.11 to +0.27)**; combined - grep **+0.13 (+0.06 to +0.22)**; combined -
+`pack file` +0.09 (+0.04 to +0.14); `pack file` alone - import +0.10 (+0.03 to +0.19), - grep +0.05 (-0.06 to +0.16). On the held-out
+items alone: combined - import +0.23 (+0.08 to +0.41), - grep +0.15 (+0.07 to +0.24), - `pack file` +0.05 (+0.01 to +0.12); the
+mention section's gain on the tuning items (+0.12) was partly overfit. Direct-only lists have recall 0.58-0.64 and precision 0.70-0.77, so
+the marking is for ordering, not for cutting the list.
+
+**Reading.** This is a real, replicated gain on a quality measure: the combined pack names about 0.83 of the tests that execute a
+changed function where a search for the module's imports names 0.64 and a search for the function's name 0.69, at the precision of the
+import search and far above grep's. The design's gate (15 points over the best baseline) is met on the held-out items against grep and
+narrowly missed pooled (13 points), with the interval above zero throughout. Limits: 23 items from 6 snapshots, some sharing changed
+functions; file-level truth from coverage; the three held-out snapshots had one failing test run among them (see `health`).
+
 ## Decision (the loop in `docs/analysis/improvement-plan-data-loop.md`)
 The one change this suggests is small: attribute a Python call `x.name(...)` when `x` came from tuple-unpacking a helper that
 returns constructed objects. With about 8 distinct pairs behind it the expected gain is about 2 points of recall, so it is no
