@@ -42,15 +42,15 @@ and do not use gh.
 
 {body}
 """
-# The same for every arm, appended to both prompts (#369). Each sentence answers a command form the benchmark's
-# permission settings refused in a headless probe (docs/BENCHMARK.md, "Permission denials"): a path outside the
-# checkout, a shell loop, a variable, `$(...)`, a subshell, a brace group with quoted strings in a heredoc, and the
-# venv called by its absolute path.
+# The same for every arm, appended to both prompts (#369). Each clause answers a refusal reason the session gave in the
+# runs (the tool_result of every refused call; docs/BENCHMARK.md, "Permission denials").
 COMMANDS = """
-How to run commands here (the session refuses other forms): run each shell command from the checkout root, one simple
-command or a short `&&` chain at a time, without shell loops, variables, `$(...)` or subshells; call the venv as
-.venv/bin/python, never by its absolute path; stay inside the checkout (no `..`, no other directories). Create and
-change files with the Write and Edit tools, not with shell heredocs, `cat >` or Python scripts that rewrite files.
+How to run commands here (the session refuses other forms): run shell commands from the checkout root and do not `cd`
+first (a `cd` followed by git, a redirect or a write is refused); stay inside the checkout, for scratch files too (no
+`..`, `/tmp` or other directories); no shell variables or `NAME=value` prefixes, loops, `$(...)` or subshells;
+call the venv as .venv/bin/python.
+Create and change files with the Write and Edit tools, not with `sed -i`, heredocs or Python one-offs that write files:
+code with braces and quotes in a shell command is refused. Pipes (`| tail -20`) and `;` between commands are fine.
 """
 ALLOW = ["Read", "Edit", "Write", "Glob", "Grep", "TodoWrite", "mcp__devkb",
          "Bash(git:*)", "Bash(.venv/bin/python:*)", "Bash(.venv/bin/pytest:*)", "Bash(python3:*)", "Bash(devkb:*)", "Bash(.venv/bin/devkb:*)",

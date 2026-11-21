@@ -17,11 +17,14 @@ tests = [p for p in (W / "tests").glob("test_*.py") if re.search(r"ALLOW", p.rea
          and re.search(r"(?i)every arm|all arms|for a(rm)? in|arms", p.read_text(errors="replace"))]
 res["same_rules_tested"] = bool(tests)
 # the prompt the bench gives, for an arm without and an arm with devkb: identical, and it says how to run commands
+# the policy prompt and the story prompt (issue 117): both must carry it
 code = ("import sys; sys.path.insert(0, 'bench/policy'); import policybench as pb\n"
-        "a = pb.prompt_for('1', 'T', 'Body.', None); b = pb.prompt_for('2', 'T', 'Body.', None)\n"
-        "print(a == b.replace('', '') and a)")
+        "a = pb.prompt_for('1', 'T', 'Body.', None); b = pb.prompt_for('117', 'T', 'Body.', None)\n"
+        "print(a + '\\n=====\\n' + b)")
 p = subprocess.run([sys.executable, "-c", code], cwd=W, capture_output=True, text=True)
 prompt = p.stdout
-res["prompt_says_how_to_run_commands"] = bool(re.search(r"(?i)(Edit|Write) tool", prompt)) and bool(
-    re.search(r"(?i)checkout|repository root|working directory", prompt))
+halves = prompt.split("\n=====\n")
+res["prompt_says_how_to_run_commands"] = len(halves) == 2 and all(
+    re.search(r"(?i)(Edit|Write) tool", h) and re.search(r"(?i)checkout|repository root|working directory", h)
+    for h in halves)
 print(json.dumps({"results": res, "pass": all(res.values())}))

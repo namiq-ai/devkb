@@ -13,13 +13,23 @@ import storybench as sb  # noqa: E402
 DEVKB_DENY = ["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"]
 
 
-def test_every_arm_gets_the_same_allow_rules_and_only_the_devkb_deny_differs():
-    arms = sorted(pb.BASES)
-    allows = {a: pb.permissions(a)[0] for a in arms}
-    assert all(v == sb.ALLOW for v in allows.values())
-    for a in arms:
-        deny = pb.permissions(a)[1]
-        assert deny == sb.DENY + (DEVKB_DENY if a in ("none", "nonekeep") else [])
+def test_every_arm_gets_the_same_command_and_only_the_devkb_deny_differs():
+    def flags(cmd, name):
+        i = cmd.index(name)
+        out = []
+        for a in cmd[i + 1:]:
+            if a.startswith("--"):
+                break
+            out.append(a)
+        return out
+    cmds = {a: pb.claude_cmd("1", a, "PROMPT", "mcp.json") for a in sorted(pb.BASES) + sorted(pb.HIDE_LOCATION)}
+    base = cmds["main"]
+    for a, cmd in cmds.items():                               # the command a run starts, built for every arm
+        assert flags(cmd, "--allowedTools") == sb.ALLOW, a
+        deny = flags(cmd, "--disallowedTools")
+        assert deny == sb.DENY + (DEVKB_DENY if pb.split_arm(a)[0] in ("none", "nonekeep") else []), a
+        strip = lambda c: [x for x in c if x not in DEVKB_DENY]
+        assert strip(cmd) == strip(base), a                   # nothing else differs
 
 
 def test_the_prompt_is_the_same_for_every_arm_and_carries_the_command_rules():
@@ -31,7 +41,7 @@ def test_the_prompt_is_the_same_for_every_arm_and_carries_the_command_rules():
         assert words in sb.COMMANDS
 
 
-def test_the_run_uses_the_permissions_helper():
+def test_the_run_starts_the_command_claude_cmd_builds():
     src = (ROOT / "bench" / "policy" / "policybench.py").read_text()
-    run = src[src.index("def _run_one"):src.index("def ", src.index("def _run_one") + 10)]
-    assert "permissions(arm)" in run and "*sb.ALLOW" not in run
+    run = src[src.index("def _run_one"):src.index("\ndef ", src.index("def _run_one") + 10)]
+    assert "claude_cmd(issue, arm, prompt, mcp)" in run and "--allowedTools" not in run

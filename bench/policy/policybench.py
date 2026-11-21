@@ -348,7 +348,18 @@ def remove_dependents(tests: Path) -> None:
 def permissions(arm: str) -> tuple[list[str], list[str]]:
     """(--allowedTools, --disallowedTools) of a run: the same rules in every arm (#369); an arm without devkb also
     denies devkb in both forms (#335)."""
-    return list(sb.ALLOW), sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if arm in ("none", "nonekeep") else [])
+    base = split_arm(arm)[0]                          # a hidden arm (#337) is denied what its base arm is
+    return list(sb.ALLOW), sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if base in ("none", "nonekeep") else [])
+
+
+def claude_cmd(issue: str, arm: str, prompt: str, mcp: str) -> list[str]:
+    """The `claude` command of a run. Only `arm` decides the deny list's devkb entries (permissions); everything else is
+    the same in every arm (#369)."""
+    allow, deny = permissions(arm)
+    return ["claude", "-p", prompt, "--model", sb.MODEL, *SOURCES, "--output-format",
+            "stream-json", "--verbose", "--max-turns", "250" if issue in ("117", "131") else "150", "--permission-mode",
+            "acceptEdits", "--strict-mcp-config", "--mcp-config", mcp, "--allowedTools", *allow, "--disallowedTools", *deny,
+            "--include-hook-events"]                  # the stream then records what the hook said to the agent (#330)
 
 
 def tool_of(arm: str, env: dict | None) -> str:
@@ -475,13 +486,9 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     prompt = run_prompt(issue, tag.split("-")[1], w)
     if os.environ.get("POLICY_PREREGISTER_POST") == "1":
         prompt += SETTINGS_NOTE
-    allow, deny = permissions(arm)
     meta = json.loads((w / ".bench-arm.json").read_text())
     env_bin = tool_of(arm, toolenv.build(ENV_REF[arm]()) if arm in ENV_REF else None)
-    cmd = ["claude", "-p", prompt, "--model", sb.MODEL, *SOURCES, "--output-format",
-           "stream-json", "--verbose", "--max-turns", "250" if issue in ("117", "131") else "150", "--permission-mode", "acceptEdits", "--strict-mcp-config",
-           "--mcp-config", mcp, "--allowedTools", *allow, "--disallowedTools", *deny,
-           "--include-hook-events"]                  # the stream then records what the hook said to the agent (#330)
+    cmd = claude_cmd(issue, arm, prompt, mcp)
     # The Bash tool backgrounds a command after 120 s by default; a full suite that runs about that long then costs the agent
     # extra turns to wait for it, in one arm and not the other (#334). Every arm gets the same, longer limit.
     limit = os.environ.get("POLICY_BASH_TIMEOUT_MS", "600000")
