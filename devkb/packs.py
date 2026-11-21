@@ -218,12 +218,19 @@ class Packer:
                     out.setdefault(rel, []).append((c, s))
         return out
 
-    def _tests_section(self, tests: dict[str, list[tuple[int, int]]]) -> list[str]:
+    def _tests_section(self, tests: dict[str, list[tuple[int, int]]], own: set[int] | None = None) -> list[str]:
+        """The test files, one line each. With `own` (the file's own symbols), a test that calls one of them is marked `direct` and
+        listed first; one that reaches the file only through a caller says through which function. Direct tests are the ones a
+        change to the file endangers most, and a long list that mixes both costs the reader the difference."""
         lines = []
-        for rel in sorted(tests):
-            c, s = tests[rel][0]
+        def direct(rel):
+            return own is not None and any(s in own for _c, s in tests[rel])
+        for rel in sorted(tests, key=lambda r: (not direct(r), r)):
+            pick = next((e for e in tests[rel] if own is not None and e[1] in own), tests[rel][0])
+            c, s = pick
             more = f" (+{len(tests[rel]) - 1} more tests)" if len(tests[rel]) > 1 else ""
-            lines.append(f"- `{rel}`{more} — `{self.call_site(c, self._name(s))}`")
+            tag = "" if own is None else " direct —" if direct(rel) else f" through `{self._name(s)}` —"
+            lines.append(f"- `{rel}`{more}{tag if tag else ' —'} `{self.call_site(c, self._name(s))}`")
         return lines or ["- none in the graph"]
 
     def _test_tree(self, rel: str, text: str):
@@ -513,7 +520,7 @@ class Packer:
         out += ["", f"## Files that depend on it ({len(dependants)})"] + [f"- `{f}`" for f in dependants[:40]]
         named = self._named_by_path(path, tests)
         out += ["", f"## Tests that exercise it, directly or through callers ({len(tests) + len(named)})"] \
-            + (self._tests_section(tests) if tests or not named else []) + self._path_lines(named) \
+            + (self._tests_section(tests, set(syms)) if tests or not named else []) + self._path_lines(named) \
             + self._unfollowed_note(path, {**tests, **named})
         if tests or named:
             out += ["", f"Run: `{self._run(list(tests) + list(named))}`"]

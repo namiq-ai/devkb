@@ -59,6 +59,12 @@ def devkb_now(sha: str, *args: str) -> str:
     return sh(PY, "-c", code, *args, cwd=t, timeout=300)
 
 
+def section_direct(out: str) -> set[str]:
+    """The test files `pack file` marks as calling the file's own functions directly (the rest reach it through a caller)."""
+    m = re.search(r"## Tests that exercise it[^\n]*\n(.*?)(?:\n## |\n---|\Z)", out, re.S)
+    return {t for line in (m[1].splitlines() if m else []) if " direct —" in line for t in re.findall(r"tests/[\w./-]+\.py", line)[:1]}
+
+
 def section_mentions(out: str) -> set[str]:
     m = re.search(r"## Test files that mention it[^\n]*\n(.*?)(?:\n## |\n\(|\n---|\Z)", out, re.S)
     return set(re.findall(r"tests/[\w./-]+\.py", m[1])) if m else set()
@@ -219,6 +225,11 @@ def predict(sha: str, item: dict, texts: dict[str, str]) -> dict[str, set]:
         n = c["qual"].split(".")[-1]
         if len(n) >= MIN_NAME:
             grp |= {t for t, x in texts.items() if re.search(rf"\b{re.escape(n)}\b", x)}
+    pf_now, pd_now = set(), set()                       # the current `pack file`: every test it lists, and those it marks direct
+    for f in files:
+        o = devkb_now(sha, "pack", "--project", str(tree(sha)), "file", f)
+        pf_now |= section_tests(o)
+        pd_now |= section_direct(o)
     pm = set()                                          # the current `pack refactor` on this snapshot: named tests plus the ones that mention the name
     pn_now = set()
     for c in item["changed"]:
@@ -228,7 +239,8 @@ def predict(sha: str, item: dict, texts: dict[str, str]) -> dict[str, set]:
         pm |= section_mentions(o)
     real = set(texts)                                   # `tests/conftest.py` and helper modules can never be in the truth
     return {"devkb-file": pf & real, "devkb-fn": pn & real, "devkb": (pf | pn) & real, "import": imp, "name": nam, "grep": grp,
-            "devkb-fn+mentions": (pn_now | pm) & real, "devkb-file+fn+mentions": (pf | pn_now | pm) & real}
+            "devkb-fn+mentions": (pn_now | pm) & real, "devkb-file+fn+mentions": (pf | pn_now | pm) & real,
+            "devkb-file direct only": pd_now & real, "devkb-file direct+fn+mentions": (pd_now | pn_now | pm) & real}
 
 
 def truth(item: dict, by_line, wide) -> tuple[set, set]:
@@ -280,7 +292,8 @@ def report(rows: list[dict]) -> None:
     print(f"{len(rows)} items; {len(rows) - len(cov)} changed functions no test covers at the snapshot; {len(cov)} scored")
     print(f"truth per item: median {st.median(r['truth'] for r in cov)} test files; {st.median(r['specific'] for r in cov)} after dropping wide tests")
     print("\n| arm | files named | recall (all) | recall (specific) | missed-guard | precision |\n|---|---|---|---|---|---|")
-    for a in ("devkb-file", "devkb-fn", "devkb", "import", "name", "grep", "devkb-fn+mentions", "devkb-file+fn+mentions"):
+    for a in ("devkb-file", "devkb-fn", "devkb", "import", "name", "grep", "devkb-fn+mentions", "devkb-file+fn+mentions",
+              "devkb-file direct only", "devkb-file direct+fn+mentions"):
         ra = [r[a]["rec_all"] for r in cov]
         rs = [r[a]["rec_spec"] for r in cov if r[a]["rec_spec"] is not None]
         miss = sum(1 for r in cov if r[a]["rec_spec"] == 0)
