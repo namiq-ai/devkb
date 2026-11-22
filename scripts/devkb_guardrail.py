@@ -551,6 +551,13 @@ KEYWORDS = {"def", "class", "struct", "enum", "union", "interface", "fn", "func"
             "virtual", "async", "public", "private", "protected", "pub"}
 
 
+def listing_shape(pattern: str) -> bool:
+    """Does every alternative of a keyword pattern read as a definition listing (`^def `, `"    def "`, `class `), not as the word searched as text
+    (`async`, `static`, `\\bclass\\b`)? A listing is anchored at the line start or has whitespace beside the keyword (#282)."""
+    alts = [a for a in re.split(r"\\\||\|", pattern) if a.strip()]
+    return bool(alts) and all(a.lstrip().startswith("^") or a != a.strip() or re.search(r"^\\s|\\s$", a) for a in alts)
+
+
 ANCHORED_NAME = re.compile(r"\^\s*(?:\\s\*)?[A-Za-z_][\w.:]*(?:\\?\()?")           # `^name`, `^\s*name`, `^name(`
 ANCHORED_ALTERNATIVES = re.compile(r"(?:^|\\\|)\^|\$(?:$|\\\|)")                   # an alternative that starts at `^` or ends at `$`
 
@@ -581,11 +588,11 @@ def classify(tool: str, inp: dict, pattern: str, why: str | None, paths: list[Pa
         return "list-files"
     if why == "option:-v":
         return "invert"
-    if words and all(w in KEYWORDS for w in words):
-        return "list-symbols"                     # `^def `, `"    def "`, `^def \|^class `: a file's definitions
+    if words and all(w in KEYWORDS for w in words) and listing_shape(pattern):
+        return "list-symbols"                     # `^def `, `"    def "`, `^def \|^class `: a file's definitions (a bare `async` is text: #282)
     filt = [f for opts, _q, f in re.findall(r"\|\s*(?:e|f)?grep\s+((?:-\S+\s+)*)(['\"])(.*?)\2", cmd) if "v" not in opts]
     for fw in (re.findall(r"[A-Za-z_]\w*", f) for f in filt):
-        if fw and all(w in KEYWORDS for w in fw):
+        if fw and all(w in KEYWORDS for w in fw) and listing_shape(next((f for f in filt if re.findall(r"[A-Za-z_]\w*", f) == fw), "")):
             return "list-symbols"                 # `grep X file | grep "def \|class "`: the definitions that mention X
         if fw and fw[0] in KEYWORDS and len(fw) > 1:
             return "locate"                       # `grep X | grep "def X"`: where X is defined
@@ -1163,8 +1170,35 @@ def locations(repo: Path, names: list[str], scope: list[str] | None) -> str | No
     return "\n".join(rows) or None
 
 
-def outline_answer(repo: Path, paths: list[Path] | None) -> str | None:
-    """`Lstart-Lend kind name` for the one code file a definitions listing searches (§3.3 `list-symbols`)."""
+CLASS_KINDS = {"class", "interface", "struct", "enum", "union", "type"}
+FUNCTION_KINDS = {"function", "method"}
+KEYWORD_LANGUAGES = {"def": {".py", ".rb"}, "fn": {".rs"}, "func": {".go", ".swift"},
+                     "function": {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".php", ".sh", ".lua"}}      # a keyword only these languages write
+
+
+def listing_kinds(pattern: str, suffix: str) -> set[str] | None:
+    """The outline kinds a keyword listing prints in a file of this type, or None when the pattern lists nothing there (`^def ` over a JavaScript
+    file; #282). `^def ` prints top-level functions only; `^\\s*def ` and an unanchored `def ` also print methods; `^class ` prints classes."""
+    kws, top_only = [], True
+    for alt in re.split(r"\\\||\|", pattern):
+        w = [x for x in re.findall(r"[A-Za-z_]\w*", re.sub(r"\\[sbdwSBDW<>]", " ", alt)) if x in KEYWORDS]
+        kws += w
+        if w and not re.match(r"\s*\^(?!\s|\\s)", alt):
+            top_only = False                               # not anchored right at the keyword: indented definitions match too
+    if not kws:
+        return set(CLASS_KINDS | FUNCTION_KINDS)
+    here = [k for k in kws if k not in KEYWORD_LANGUAGES or suffix in KEYWORD_LANGUAGES[k]]
+    if not here:
+        return None
+    kinds: set[str] = set()
+    for k in here:
+        kinds |= CLASS_KINDS if k in ("class", "struct", "enum", "union", "interface") else ({"function"} if top_only else FUNCTION_KINDS)
+    return kinds
+
+
+def outline_answer(repo: Path, paths: list[Path] | None, pattern: str = "") -> str | None:
+    """`Lstart-Lend kind name` for the one code file a definitions listing searches (§3.3 `list-symbols`): only the kinds the pattern lists, in the
+    languages that write it, so the answer is never larger than grep's (#282)."""
     from devkb import misses
     files = [p for p in paths or [] if p.is_file()]
     if len(files) != 1:
@@ -1175,7 +1209,15 @@ def outline_answer(repo: Path, paths: list[Path] | None) -> str | None:
     r = read_tool(repo, "outline", rel)
     if not r or not r.get("symbols"):
         return None
-    return "\n".join(f"L{s['ls']}-{s['le']} {s['kind']} {s['q']}" for s in r["symbols"])
+    syms = r["symbols"]
+    if pattern:
+        kinds = listing_kinds(pattern, files[0].suffix.lower())
+        if kinds is None:
+            return None
+        syms = [s for s in syms if s["kind"] in kinds]
+        if kinds == {"function"}:
+            syms = [s for s in syms if "." not in s["q"]]          # a top-level function has no owner in its qualified name
+    return "\n".join(f"L{s['ls']}-{s['le']} {s['kind']} {s['q']}" for s in syms) or None
 
 
 TYPE_GLOBS = {"py": ["*.py"], "python": ["*.py"], "js": ["*.js", "*.jsx", "*.mjs", "*.cjs"], "ts": ["*.ts", "*.tsx"],
@@ -1300,7 +1342,7 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         if graph_stale(repo, scope_of(paths or [], repo)):       # an old graph's spans would be wrong lines (#273)
             log_decision(ev, repo, tool, "pass-through", names, [], 0, "stale-graph")
             return None
-        ans = outline_answer(repo, paths)
+        ans = outline_answer(repo, paths, pattern)
         if ans:
             log_decision(ev, repo, tool, "alongside", names, [], len(ans), "outline")
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(ans))}}
