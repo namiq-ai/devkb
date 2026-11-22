@@ -80,7 +80,7 @@ autoas's exact-name figure is under 0.95 only because 16 definitions are renamed
 
 ## #405 Zephyr build time, measured by wall clock (2026-11-22)
 
-The earlier attribution (`_uses_in_tree` +16 s, `resolve` +24.5 s, `Repo.__init__` +14.8 s) came from **cProfile, which inflates call-heavy Python by 2x or more and ranked the phases wrongly**. A second profile this session pointed at `sees` (887,386 calls, 12 s cumulative); an index that makes it a binary search changed nothing measurable (108.9 s against 109.6 s) and was dropped. The table below is plain `time.perf_counter` around each phase, one run each on an otherwise idle machine, `build_symbols.extract` on the pinned Zephyr (`/tmp`-free: `~/.cache/devkb/cpp-corpus/zephyr`), method in `bench/audit`-style script `phases.py` (not committed).
+The earlier attribution (`_uses_in_tree` +16 s, `resolve` +24.5 s, `Repo.__init__` +14.8 s) came from **cProfile, which inflates call-heavy Python by 2x or more and ranked the phases wrongly**. A second profile this session pointed at `sees` (887,386 calls, 12 s cumulative); an index that makes it a binary search changed nothing measurable (108.9 s against 109.6 s) and was dropped. The table below is plain `time.perf_counter` around each phase, one run each on an otherwise idle machine, `build_symbols.extract` on the pinned Zephyr checkout in `~/.cache/devkb/cpp-corpus/zephyr`; the timing script (wrappers around the listed functions) is not committed.
 
 | phase | v0.2.11 | 0.2.15 before | after the shared index |
 |---|---|---|---|
