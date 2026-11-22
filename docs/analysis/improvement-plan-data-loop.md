@@ -150,3 +150,11 @@ Still open, in order of value:
    fixes can be built from their own history) would separate the two.
 2. Fix the two graph defects filed as #399 and #400.
 3. Re-run QB1 when new snapshots accumulate: 23 items from 6 snapshots; some items share changed functions.
+
+## Reconciliation of figures quoted in more than one place (2026-11-21, after the specification owner's review)
+- **QB1 baselines.** Import 0.64 / grep 0.69 are the *23-item* pool (13 tuning + 10 held-out); import 0.65 / grep 0.72 are the *27-item* comparison (13 tuning + 14 held-out, `qb1_compare.py`). Both are right for their set. The shipped-over-original gain is +0.07 on all 27 and +0.04 on the 14 held-out (interval touches zero); the "+0.05" on 10 held-out items belongs to the earlier set.
+- **Searches the graph could answer after a refresh: 6 of 690** (`stale_replay.py`, re-run today). Any "689" is the older count.
+- **Inline pack on Read: +2.4k tokens** for 1.2 covered calls of 7.6 navigation calls per run (about 16%); "2.3k" was a rounding of the earlier 2.35k.
+- **"72 runs" for the router** are the 24 runs of each of three arms (`none`, `rmain`, `router`) on four tickets; the snapshot holds 96 runs, because the ranking arm `ctx` (12 runs) and the other tickets are not in that comparison.
+- **Staleness.** A full `devkb build` (12-13 s) was tested and killed. A single-file incremental refresh was not built: even at zero cost it can free at most the 6 of 690 searches, under 1% of calls.
+- **QB2 and QB3 scope.** QB2 tested related-issue retrieval only (so parking `SIMILAR_TO`/`DUPLICATE_OF` is supported); it did not test error-to-raiser triage, which is `pack error`, measured by QB5 (`bench/quality/qb5_error.py`, #399). QB3 shows the existing release heuristics raise false breaking alarms (6 and 10 of 16); that argues for a plain AST public-surface diff, not for new graph schema.

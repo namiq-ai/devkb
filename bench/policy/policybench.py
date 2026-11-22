@@ -353,7 +353,8 @@ def trim_tests(w: Path) -> None:
     turn or wall-time difference then does not include the suite's size. POLICY_EQUAL_SUITE=0 keeps the other arms' tests
     (for a ticket about the guardrail itself; use the nonekeep arm as its control)."""
     for t in (w / "tests").glob("*.py"):
-        if "devkb_guardrail" in t.read_text(errors="replace"):
+        txt = t.read_text(errors="replace")
+        if "devkb_guardrail" in txt or "hook_replay" in txt:     # hook_replay runs the guardrail script as a subprocess (#401)
             t.unlink(missing_ok=True)
     remove_dependents(w / "tests")
 

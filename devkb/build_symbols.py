@@ -1139,6 +1139,19 @@ def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> lis
                 types["()" + fn.name] = ret
         return types
 
+    # #400: `a, b = helper(...)` where a function of this file returns a tuple of constructed objects: each name gets that class
+    tuple_returns: dict[str, list[str | None]] = {}
+    for fn in tree.body:        # module-level functions only: a method or nested function of the same name must not stand in for the helper
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            built = {n.targets[0].id: _constructed(n.value) for n in _own_body(fn)
+                     if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
+            rets = [r.value for r in _own_body(fn) if isinstance(r, ast.Return) and isinstance(r.value, ast.Tuple)]
+            if len(rets) == 1:
+                kinds_ = [_constructed(e) or (built.get(e.id) if isinstance(e, ast.Name) else None) for e in rets[0].elts]
+                if returns is not None:      # for callers in other files (resolved in this file's context)
+                    returns[f"{fn.name}#tuple"] = "|".join(k or "" for k in kinds_)
+                tuple_returns[fn.name] = [_constructed(e) or (built.get(e.id) if isinstance(e, ast.Name) else None) for e in rets[0].elts]
+
     def visit_function(fn, qual: str, self_types: dict[str, str], enclosing: str = "",
                        outer: dict[str, str] | None = None) -> dict[str, str]:
         # a nested function sees the names of the function around it (dogfood D7, #40: `index: _Index` used from a
@@ -1149,6 +1162,20 @@ def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> lis
                 cls = _constructed(n.value)
                 if cls:
                     env[n.targets[0].id] = cls
+            elif (isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Tuple)
+                  and isinstance(n.value, ast.Call)):
+                f = n.value.func
+                kinds = tuple_returns.get(f.id) if isinstance(f, ast.Name) else None
+                fref = (f.id if isinstance(f, ast.Name) else f"{f.value.id}.{f.attr}"
+                        if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) else None)
+                for i, t in enumerate(n.targets[0].elts):
+                    if not isinstance(t, ast.Name):
+                        continue
+                    if kinds and len(kinds) == len(n.targets[0].elts):
+                        if kinds[i]:
+                            env[t.id] = kinds[i]
+                    elif fref:
+                        env[t.id] = f"tup:{fref}#{i}"       # a helper in another file: resolved once all files are read
             elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
                 cls = _annotation_class(n.annotation) or _constructed(n.value)
                 if cls:
@@ -1218,6 +1245,16 @@ def _resolve_class(
         path, qual = key.split("::", 1)
         ret = next((x.get("returns") for x in per_file_symbols.get(path, []) if x["qualified_name"] == f"{qual}.{method}"), None)
         return _resolve_class(ret, path, per_file_symbols, targets_of.get(path, ({}, {})), targets_of) if ret else None
+    if cls_ref.startswith("tup:"):  # `a, b = helper()`: the i-th class the helper's return tuple builds, named in the helper's file
+        ref, _, idx = cls_ref[4:].rpartition("#")
+        fkey = _resolve_class(ref, rel_path, per_file_symbols, targets, targets_of)
+        if fkey is None or targets_of is None or "::" not in fkey:
+            return None
+        path, qual = fkey.split("::", 1)
+        packed = next((x.get("tuple_returns") for x in per_file_symbols.get(path, []) if x["qualified_name"] == qual), None)
+        kinds = packed.split("|") if packed else []
+        k = kinds[int(idx)] if idx.isdigit() and int(idx) < len(kinds) else ""
+        return _resolve_class(k, path, per_file_symbols, targets_of.get(path, ({}, {})), targets_of) if k else None
     receivers, bare = targets
     found: str | None = None
     if "." not in cls_ref and any(s["qualified_name"] == cls_ref for s in per_file_symbols.get(rel_path, [])):
@@ -1593,6 +1630,8 @@ def _parse_python_file(
         for sym in v.symbols:
             if sym["qualified_name"] in returns:
                 sym["returns"] = returns[sym["qualified_name"]]
+            if f"{sym['qualified_name']}#tuple" in returns:
+                sym["tuple_returns"] = returns[f"{sym['qualified_name']}#tuple"]
         return (v.symbols, v.calls, _imports(tree), v.routes, module_docstring, v.raises, v.logs,
                 _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree, rel),
                 _py_literals(tree), typed, _safe_value_refs(tree), *_safe_uses(tree))
@@ -1951,7 +1990,7 @@ def extract(repo_root: Path) -> DevKBGraph:
                     evidence_ref=f"{rel_path}::{caller_qn} calls {method} on a {cls_ref.replace('self:', '')}",
                 )
             known = _resolve_class(cls_ref, rel_path, per_file_symbols, targets, per_file_import_targets)
-            if resolved_key or known or (not cls_ref.startswith("ret:")
+            if resolved_key or known or (not cls_ref.startswith(("ret:", "tup:"))
                                          and cls_ref.split(".")[-1] not in repo_class_names):
                 # the receiver's class is known (a class of the repository, or one outside it): a call on it is not a
                 # call to a same-named method of any other class

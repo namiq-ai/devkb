@@ -332,8 +332,12 @@ class Packer:
     # ── the three packs ───────────────────────────────────────────────────────
     def error(self, message: str) -> str:
         r = self.api.rca_trace(message)
-        if "error" in r:
-            return f"# Graph pack: error\n\nThe graph has no error matching \"{message}\". Search the code."
+        if "error" in r or r.get("matched_by") != "error message":
+            # #399: the message names no raise or log site in the graph, and listing functions whose names share a word with it would
+            # read as an answer. Say so, and point at the searches that can still find a text.
+            return (f"# Graph pack: error\n\nNo function in the graph raises or logs this text (it was matched against the message of every "
+                    f"raise and log site the graph holds): \"{message[:120]}\".\nSearch the code for it: `devkb docs \"{message[:60]}\"` for documentation, "
+                    "`devkb uses WORD` for a name in it, or grep for a literal run of the message.")
         raisers = [self.api._resolve(k)[0] for k in r["raisers"]]
         raisers = [x for x in raisers if x is not None]
         parent = self.up(set(raisers))
