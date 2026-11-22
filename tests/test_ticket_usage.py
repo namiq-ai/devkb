@@ -29,3 +29,9 @@ def test_telemetry_and_guard_decisions_count_only_inside_the_interval(tmp_path):
     u = tu.usage("2026-11-22T10:00:00", "2026-11-22T11:00:00", "abc", guard=g, telemetry=tel)
     assert u["queries"] == 2 and u["by_tool"] == {"pack": 1, "symbol": 1}
     assert (u["decisions"], u["answered"], u["stale"]) == (2, 1, 1), "another session, a reminder and a later decision do not count"
+
+
+def test_a_second_start_of_an_open_ticket_continues_the_span():          # found by the two-way review of #413
+    marks = [{"t": "2026-11-22T10:00:00", "event": "start", "ticket": "1"}, {"t": "2026-11-22T10:30:00", "event": "start", "ticket": "1"},
+             {"t": "2026-11-22T11:00:00", "event": "end", "ticket": "1"}]
+    assert tu.intervals(marks) == [("1", "2026-11-22T10:00:00", "2026-11-22T11:00:00")]

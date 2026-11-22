@@ -43,7 +43,7 @@ def intervals(marks: list[dict]) -> list[tuple[str, str, str]]:
     out = []
     for m in sorted(marks, key=lambda x: x["t"]):
         if m["event"] == "start":
-            open_[m["ticket"]] = m["t"]
+            open_.setdefault(m["ticket"], m["t"])          # a second start of an open ticket continues the span: it does not drop the first
         elif m["ticket"] in open_:
             out.append((m["ticket"], open_.pop(m["ticket"]), m["t"]))
     out += [(t, s, now()) for t, s in open_.items()]
