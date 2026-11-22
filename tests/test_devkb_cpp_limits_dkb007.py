@@ -10,9 +10,9 @@ from devkb.cpp_symbols import CXX_LIMITS_TEXT
 README = (Path(__file__).resolve().parents[1] / "README.md").read_text()
 # the limits the README row names, each with the phrase that carries it (0.2.15: what #118, #120 and #203 resolve is stated, and what is still not seen)
 LIMITS = {"macro generated definition": "a definition a macro generates is not seen", "overload": "argument count only",
-          "type inference": "no general type inference", "constructor": "constructor calls", "template": "template instantiation"}
+          "type inference": "no general type inference", "constructor": "implicit constructions", "template": "template instantiation"}
 CPP_TEXT = {"macro generated definition": "a definition a macro generates is not seen", "overload": "argument count only",
-            "type inference": "no general type inference", "constructor": "constructor call", "template": "template instantiation"}
+            "type inference": "no general type inference", "constructor": "implicit construction", "template": "template instantiation"}
 
 CPP = {
     "src/box.cc": "class Box { public: int size() const; };\nint Box::size() const { return 1; }\nint peek(Box* b) { return b->size(); }\n",
@@ -74,9 +74,9 @@ def test_limit_type_inference_a_call_through_auto_is_unresolved_not_guessed(tmp_
     assert S.symbols(g)["t.cc::W.run"].props["unresolved_calls"] == 1
 
 
-def test_limit_constructor_a_declaration_or_new_is_not_linked_to_the_constructor(tmp_path):
-    files = {"c.cc": "struct T { T(int v); };\nT::T(int v) {}\nvoid go() { T x(1); T* p = new T(2); }\n"}
-    assert not S.calls(S.build(tmp_path, files)), "no edge go -> T.T until #119"
+def test_limit_constructor_an_implicit_construction_is_not_linked(tmp_path):
+    files = {"c.cc": "struct T { T(int v); };\nT::T(int v) {}\nvoid go(const T& other) { T d; T copy(other); T moved(std::move(other)); T conv = 5; }\n"}
+    assert not S.calls(S.build(tmp_path, files)), "a default T x;, a copy and a conversion call no declared constructor the graph can name"
 
 
 def test_limit_template_a_call_on_a_parameter_type_is_not_attributed(tmp_path):
@@ -90,6 +90,6 @@ def test_every_limit_named_in_the_readme_has_a_test_in_this_file():
     assert {"test_limit_preprocessor_a_macro_generated_definition_is_not_seen",
             "test_limit_overload_resolution_callers_of_every_overload_land_on_one_node",
             "test_limit_type_inference_a_call_through_auto_is_unresolved_not_guessed",
-            "test_limit_constructor_a_declaration_or_new_is_not_linked_to_the_constructor",
+            "test_limit_constructor_an_implicit_construction_is_not_linked",
             "test_limit_template_a_call_on_a_parameter_type_is_not_attributed"} == names
     assert len(LIMITS) == len(names) and all(re.search(k, " ".join(names).replace("_", " ")) for k in LIMITS)

@@ -32,8 +32,9 @@ CXX_LIMITS_TEXT = (
     "definition a macro generates is not seen; overloads are told apart by argument count only, so two of the same count share one "
     "choice (#291); receivers are resolved through declared types, smart pointers, members, one level of chaining and TEST_F/TEST_P "
     "fixtures, but there is no general type inference (a call through `auto`, an alias or an untyped receiver is not attributed); "
-    "a constructor call written `T x(args)` or `new T(args)` is not linked to the constructor (#119); template instantiation is not "
-    "followed (a call on a template's parameter type is not attributed); vendored and generated paths are not read; "
+    "constructors are linked where written (`T x(args)`, `T x{args}`, `T(args)`, `new T(args)`, `make_unique<T>`, member and base "
+    "initialisers) and picked by argument count, but an implicit construction (a default `T x;`, a copy, a move, a conversion) is not "
+    "linked (#119); template instantiation is not followed (a call on a template's parameter type is not attributed); vendored and generated paths are not read; "
     "error-return codes (`return -EINVAL`, `return Status::Corruption(...)`) are not attributed; "
     "pybind11 class bindings (`py::class_`) are not read."
 )
@@ -887,6 +888,34 @@ class _Scanner:
         return d.locals
 
     # body extraction ----------------------------------------------------------
+    def _is_copy_or_move(self, d: Def, text: str, open_i: int, type_name: str) -> bool:
+        """The one argument at `open_i` is `std::move(x)` / `std::forward<..>(x)`, or a plain variable whose declared type is `type_name`."""
+        close = _match_close(text, open_i, text[open_i], ")" if text[open_i] == "(" else "}")
+        arg = text[open_i + 1:close].strip() if close is not None else ""
+        if re.match(r"(?:std\s*::\s*)?(?:move|forward)\b", arg):
+            return True
+        if re.fullmatch(r"[A-Za-z_]\w*", arg):
+            types = self.locals_of(d).get(arg)
+            return bool(types) and all(t is not None and t[0].split("::")[-1] == type_name for t in types)
+        return False
+
+    def constructs_in(self, d: Def, lo: int, text: str, names: set[str]) -> None:
+        """Constructor calls written without a call's `name(`: `new T(args)`, `T x(args)` / `T x{args}`, `make_unique<T>(args)` / `make_shared<T>`
+        (SPEC-DKB-004 F3, #119). Kept as a `construct` call of the type's short name; the resolver links it when `T` is the one repository class of
+        that name, and to the one constructor its argument count selects."""
+        line_of = self.m.line
+        for rx, kind in ((_CTOR_NEW, "new"), (_CTOR_MAKE, "make"), (_CTOR_LOCAL, "local")):
+            for cm in rx.finditer(text):
+                qual, name = cm.group(1), cm.group(2)
+                if name not in names or name in _NOT_FUNC or name in _NOT_TYPE or (kind == "local" and qual.strip() == "" and name in _NOT_TYPE):
+                    continue
+                open_i = cm.end() - 1
+                c_argc = _argc(text, open_i)
+                if c_argc == 1 and self._is_copy_or_move(d, text, open_i, name):
+                    continue            # `T copy(other)`, `T moved(std::move(other))`: an implicit copy or move, not a declared constructor
+                c = Call(d.index, name, "construct", re.sub(r"\s", "", qual).rstrip(":"), None, None, line_of(lo + cm.start(2)), c_argc)
+                self.calls.append(c)
+
     def scan_body(self, d: Def, lo: int, hi: int, names: set[str], init: bool = False) -> None:
         code = self.code
         text = code[lo:hi]
@@ -894,9 +923,9 @@ class _Scanner:
         members = _initialiser_names(text) if init else set()
         for cm in _CALL_RE.finditer(text):
             name = cm.group(1)
-            if name not in names or name in _NOT_FUNC:
-                continue            # a call to a name no repository symbol bears is never linked and never counted
             is_init = cm.start(1) in members      # `: m(x), n(f(x))`: m and n are initialised, not called (#145); `f` is not at depth 0, so it is read
+            if (name not in names and not is_init) or name in _NOT_FUNC:
+                continue            # a call to a name no repository symbol bears is never linked and never counted (an initialiser may name a data member: #119)
             if _MOCK_EXPECT.search(text[max(0, cm.start() - 200):cm.start()]):
                 continue            # `EXPECT_CALL(mock, allocate(1))`: the method the mock expects, not a call to a repository `allocate` (#146)
             chain, a = _qualifier_before(text, cm.start())
@@ -978,6 +1007,8 @@ class _Scanner:
             if form == "member" and field_of is not None and recv is None:
                 c.field_of = field_of
             self.calls.append(c)
+        if not init and self.cpp:
+            self.constructs_in(d, lo, text, names)
         self.errors_in(d, lo, text)
 
     def errors_in(self, d: Def, lo: int, text: str) -> None:
@@ -1038,6 +1069,14 @@ class _Scanner:
 
 
 _MOCK_EXPECT = re.compile(r"\b(?:EXPECT_CALL|ON_CALL)\s*\(\s*[^,;{}]*,\s*$")   # `EXPECT_CALL(mock, ` right before a name (#146)
+
+
+_QUAL = r"((?:[A-Za-z_]\w*\s*::\s*)*)([A-Za-z_]\w*)"                       # `ns::T`: (qualifier with `::`, short name)
+_CTOR_NEW = re.compile(r"\bnew\s+(?:\([^()]*\)\s*)?(?:::\s*)?" + _QUAL + r"\s*(?:<[^;{}()]*>)?\s*([({])")                    # `new T(args)`, `new T{args}`
+_CTOR_MAKE = re.compile(r"\b(?:std\s*::\s*)?make_(?:unique|shared)\s*<\s*(?:::\s*)?" + _QUAL + r"[^<>;{}]*(?:<[^;{}]*>)?\s*>\s*(\()")   # `make_unique<T>(args)`
+_CTOR_LOCAL = re.compile(r"(?:^|(?<=[;{}]))\s*(?:(?:const|static|constexpr|volatile)\s+)*(?:::\s*)?" + _QUAL
+                    + r"\s*(?:<[^;{}()]*>)?\s+(?:[&*]\s*)*[A-Za-z_]\w*\s*([({])")                                              # `T x(args);`, `T x{args};`
+_NOT_TYPE = frozenset("return new delete throw case else goto using typedef namespace struct class enum union sizeof co_return co_yield".split())
 
 
 def _initialiser_names(text: str) -> set[int]:

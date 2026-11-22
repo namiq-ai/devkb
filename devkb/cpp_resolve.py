@@ -80,7 +80,7 @@ class Edge:
 _SOURCES = {
     "cpp-same-class": 0.8, "cpp-same-class-base": 0.7, "cpp-same-file": 0.8, "cpp-qualified": 0.9,
     "cpp-typed-receiver": 0.7, "cpp-typed-receiver-base": 0.6, "cpp-unique-free": 0.6,
-    "cpp-macro": 0.5,
+    "cpp-macro": 0.5, "cpp-constructor": 0.7,
 }
 MACRO_DEPTH = 4
 _NOT_CALLED = frozenset("if while for switch return sizeof defined do else case typeof __typeof__ alignof _Alignof "
@@ -121,6 +121,7 @@ class Repo:
         self.macros: set[str] = set()
         self.definers: dict[str, set[str]] = {}    # macro name -> the files that `#define` it (#290)
         self.function_names: set[str] = set()
+        self.non_ctor_names: set[str] = set()
         self.language: dict[str, str] = {u.path: u.rec.language for u in units}
         self.c_linkage: dict[str, list[tuple[str, Symbolic]]] = {}     # non-static functions with C linkage, by short name
         self.ns_paths: set[str] = set()        # every named namespace a file opens, as `a::b`
@@ -147,6 +148,9 @@ class Repo:
                         self.c_linkage.setdefault(s.short, []).append((u.path, s))
                 if s.kind in ("function", "method"):
                     self.function_names.add(s.short)
+                    owner = s.qn.rsplit(".", 2)[-2] if s.qn.count(".") >= 1 else ""
+                    if not (s.kind == "method" and owner == s.short):
+                        self.non_ctor_names.add(s.short)      # a function or a method that is not a constructor bears this name (#119)
             for c in u.rec.classes:
                 self.classes.setdefault(c.qn, []).append((u.path, c))
                 bits = c.qn.split(".")
@@ -370,17 +374,51 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
             caller_qn = u.qn_of_def[call.caller]
             if caller_qn is None:
                 continue
-            if via is None and repo.sees(u.path, call.name, call.line):
+            if via is None and call.form != "construct" and repo.sees(u.path, call.name, call.line):
                 # A macro use: never an edge. But a name that is also a repository function (a `#define` stub in an
                 # `#else` branch, as Zephyr's net_if does) may be a real call under another configuration, so it is
                 # counted, never ignored: a pack must not say Complete beside it.
                 if call.name in repo.short_names:
                     unresolved.add((u.path, caller_qn, call.name))
                 continue
-            if call.init and call.name not in repo.class_suffix and call.name not in repo.classes:
-                continue                              # `: m(x)`: a member initialised, not a function called; a base class's constructor stays (#145)
             caller = u.syms.get(caller_qn)
             chain = caller.class_chain if caller is not None and caller.kind == "method" else ()
+            if call.init and call.name not in repo.class_suffix and call.name not in repo.classes:
+                # `: m(x)`: a member initialised, not a function called (#145). A member of a repository class type is built by that class's
+                # constructor (#119); anything else is dropped. A base class's constructor stays a plain call, below.
+                mt = None
+                if chain and not is_c:
+                    cls0 = repo.caller_class(u.path, chain, caller.class_ns if caller is not None else None)
+                    mt = cls0[1].members.get(call.name) if cls0 is not None else None
+                if mt is None or mt[1] != "":
+                    continue
+                call = Call(call.caller, mt[0].split("::")[-1], "construct", "::".join(mt[0].split("::")[:-1]), None, None, call.line, call.argc)
+            if call.form == "bare" and not is_c and not call.init and (call.name in repo.class_suffix or call.name in repo.classes) \
+                    and call.name not in repo.non_ctor_names and not (chain and call.name == chain[-1]):
+                call = Call(call.caller, call.name, "construct", "", None, None, call.line, call.argc)   # `T(args)`: a temporary, a construction (#119)
+            if call.form == "construct":
+                if is_c:
+                    continue
+                caller_ns0 = caller.class_ns if caller is not None else None
+                target = repo.class_by_type((call.qualifier + "::" if call.qualifier else "") + call.name, caller_ns0)
+                if target is None:
+                    if call.name in repo.class_suffix or call.name in repo.classes:
+                        unresolved.add((u.path, caller_qn, call.name))   # several repository classes bear the name: no guess, and counted
+                    continue                          # not a repository class (std::string, a typedef, ...): not ours to link, not counted
+                r = repo.method_on(target, call.name, argc=call.argc)
+                ckey0 = f"{u.path}::{caller_qn}"
+                fits = True
+                if r and r[0] == "hit" and call.argc >= 0:
+                    ar = repo.arity.get(r[1]) or []
+                    fits = not ar or any(lo <= call.argc <= hi for lo, hi in ar)      # a copy or move (`T x(other)`) fits no declared constructor
+                if r and r[0] == "hit" and not r[2] and not fits:
+                    continue                          # an implicit copy, move or conversion: no declared constructor is called (#119)
+                if r and r[0] == "hit" and not r[2]:  # a constructor is not inherited: one found only through a base is not this class's
+                    edges.append(Edge(ckey0, r[1], "cpp-constructor", _SOURCES["cpp-constructor"],
+                                      f"{u.path}:{call.line}: {caller_qn} constructs {call.name}"))
+                elif r:
+                    unresolved.add((u.path, caller_qn, call.name))   # several constructors fit the argument count: left unresolved, and counted
+                continue
             caller_ns = caller.class_ns if caller is not None else None
             ckey = f"{u.path}::{caller_qn}"
             n = call.name
@@ -541,7 +579,7 @@ def _with_expansions(calls, repo: Repo, path: str = ""):
     only in the files that see it (#290)."""
     for call in calls:
         yield call, None
-        if call.name in repo.macro_bodies and (repo.sees(path, call.name, call.line) if path else call.name in repo.macros):
+        if call.form != "construct" and call.name in repo.macro_bodies and (repo.sees(path, call.name, call.line) if path else call.name in repo.macros):
             for q, n, variant in repo.expand(call.name):
                 yield Call(call.caller, n, "qualified" if q else "bare", q, None, None, call.line), (call.name, variant)
 
