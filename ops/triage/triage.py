@@ -385,6 +385,43 @@ def failures() -> dict:
         return {}
 
 
+def pending_labels_path() -> Path:
+    return HOME / "pending-labels.json"
+
+
+def pending_labels() -> dict:
+    try:
+        d = json.loads(pending_labels_path().read_text())
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_pending_labels(d: dict) -> None:
+    pending_labels_path().parent.mkdir(parents=True, exist_ok=True)
+    pending_labels_path().write_text(json.dumps(d))
+
+
+def apply_owed_labels(number: int, owed: dict) -> bool:
+    """Put the labels an answered item is owed. All done: the record goes. A label edit that fails keeps it, and the next run retries the labels
+    alone, never the comment (#295)."""
+    entry = owed.get(str(number))
+    if not entry:
+        return True
+    try:
+        for lab in entry["add"]:
+            run(["gh", "issue", "edit", str(number), "--repo", REPO, "--add-label", lab])
+        for lab in entry["remove"]:
+            run(["gh", "issue", "edit", str(number), "--repo", REPO, "--remove-label", lab])
+    except RuntimeError as e:
+        print(f"#{number}: label edit failed ({e}); the labels are retried next run, the comment is not repeated")
+        log("triage", {"number": number, "error": f"labels: {e}"})
+        return False
+    owed.pop(str(number), None)
+    save_pending_labels(owed)
+    return True
+
+
 def now_ts() -> float:
     return dt.datetime.now().timestamp()
 
@@ -481,13 +518,17 @@ def feedback_pass(apply: bool, everything: list[dict]) -> None:
         todo = [(t, c) for t, c in todo if f"c{c['id']}" not in dj]
     waiting = failures()
     todo = [(t, c) for t, c in todo if not backed_off(f"c{c['id']}", "", waiting)]
+    pend = pending()
     for t, c in todo[:MAX_FEEDBACK]:
         if not apply:
             dry_record(f"c{c['id']}", "")
         try:
-            text, cost = claude(prompt("feedback") + "\n\n" + untrusted({"number": t["number"], "pr": False, "author": c["author"],
-                                "title": t["title"], "body": c["body"]}, [], known_titles=titles), TREE, READ_ONLY)
-            v = validate_feedback(json_object(text), known)
+            if apply and str(c["id"]) in pend:     # judged on an earlier run, answered only in part: no second model call (#296)
+                v, cost = pend[str(c["id"])]["verdict"], 0.0
+            else:
+                text, cost = claude(prompt("feedback") + "\n\n" + untrusted({"number": t["number"], "pr": False, "author": c["author"],
+                                    "title": t["title"], "body": c["body"]}, [], known_titles=titles), TREE, READ_ONLY)
+                v = validate_feedback(json_object(text), known)
         except (RuntimeError, ValueError, TypeError, KeyError, AttributeError) as e:      # a malformed answer fails its item, never the run
             print(f"comment {c['id']}: no verdict ({e})")
             log("feedback", {"thread": t["number"], "comment": c["id"], "error": str(e)})
@@ -503,25 +544,55 @@ def feedback_pass(apply: bool, everything: list[dict]) -> None:
         log("feedback", {"thread": t["number"], "comment": c["id"], "verdict": v, "cost": cost, "applied": apply})
         if not apply:
             continue
-        done.add(c["id"])                             # before posting: a failure below never files the same ticket twice
-        seen_path().write_text(json.dumps(sorted(done)))
+        entry = pend.setdefault(str(c["id"]), {"verdict": v, "url": None})
+        save_pending(pend)                            # the verdict first: a retry reuses it
+
+        def created(u, entry=entry):
+            entry["url"] = u                          # the ticket exists: a retry never files it again
+            save_pending(pend)
         try:
-            post_feedback(t, c, v)
+            post_feedback(t, c, v, entry.get("url"), created)
         except (RuntimeError, ValueError, TypeError, KeyError, AttributeError) as e:
-            print(f"comment {c['id']}: posting failed ({e})")
+            print(f"comment {c['id']}: posting failed ({e}); tried again next run")
             log("feedback", {"thread": t["number"], "comment": c["id"], "error": f"post: {e}"})
+            continue                                  # not done: a comment whose ticket was not created is retried (#296)
+        done.add(c["id"])
+        seen_path().write_text(json.dumps(sorted(done)))
+        pend.pop(str(c["id"]), None)
+        save_pending(pend)
 
 
-def post_feedback(t: dict, c: dict, v: dict) -> None:
-    url = None
+def pending_path() -> Path:
+    return HOME / "feedback-pending.json"
+
+
+def pending() -> dict:
+    """Feedback comments judged but not yet fully answered, by comment id: {"verdict": ..., "url": the ticket filed for it, or None}. A retry
+    reuses the verdict (no second model call) and never files a ticket whose url is already here (#296)."""
+    try:
+        d = json.loads(pending_path().read_text())
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_pending(d: dict) -> None:
+    pending_path().parent.mkdir(parents=True, exist_ok=True)
+    pending_path().write_text(json.dumps(d))
+
+
+def post_feedback(t: dict, c: dict, v: dict, url: str | None = None, on_created=None) -> None:
+    """File the ticket (unless `url` says it exists) and post the reply. `on_created(url)` runs the moment the ticket exists."""
     if True:
-        if v["action"] == "ticket":
+        if v["action"] == "ticket" and not url:
             labels = ["from-feedback", PRIORITY[v["priority"]]] + ([TYPE[v["type"]]] if TYPE.get(v["type"]) else [])
             if v["handling"] == "plan":
                 labels.append("handle:plan")
             args = [x for lab in labels for x in ("--label", lab)]
             url = run(["gh", "issue", "create", "--repo", REPO, "--title", clean_title(v["ticket"]["title"]), "--body-file", "-",
                        *args], input=no_secret(ticket_body(c, t["number"], v))).strip()
+            if on_created:
+                on_created(url)
         if v["action"] != "ignore":
             run(["gh", "issue", "comment", str(t["number"]), "--repo", REPO, "--body-file", "-"],
                 input=no_secret(feedback_reply(c, v, url)))
@@ -555,6 +626,12 @@ def cmd_triage(apply: bool, only: int | None) -> int:
     if not apply and not only:
         dj = dry_judged()
         todo = [(it, th) for it, th in todo if dj.get(str(it["number"])) != it.get("updated")]
+    if apply and not only:                 # answered but not labelled: the labels alone, and the item is not judged again (#295)
+        owed = pending_labels()
+        answered = set(owed)               # the item list above was fetched before the retry: these are answered whatever the retry does
+        for n in [int(k) for k in owed]:
+            apply_owed_labels(n, owed)
+        todo = [(it, th) for it, th in todo if str(it["number"]) not in answered]
     if not only:
         waiting = failures()           # items that failed are backed off, so they do not take every slot and starve the rest (#294)
         todo = [(it, th) for it, th in todo if not backed_off(str(it["number"]), it.get("updated"), waiting)]
@@ -586,10 +663,10 @@ def cmd_triage(apply: bool, only: int | None) -> int:
                 print(f"#{it['number']}: comment failed ({e}); labels not changed, tried again next run")
                 log("triage", {"number": it["number"], "error": f"comment: {e}"})
                 continue
-            for lab in add:
-                run(["gh", "issue", "edit", str(it["number"]), "--repo", REPO, "--add-label", lab], check=False)
-            for lab in remove:
-                run(["gh", "issue", "edit", str(it["number"]), "--repo", REPO, "--remove-label", lab], check=False)
+            owed = pending_labels()
+            owed[str(it["number"])] = {"add": add, "remove": remove}      # commented: from here only the labels are owed (#295)
+            save_pending_labels(owed)
+            apply_owed_labels(it["number"], owed)
     if not only:
         feedback_pass(apply, everything)
     return 0
