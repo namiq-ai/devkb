@@ -13,3 +13,18 @@ languages:
       # big, well-known projects (SPEC-DEVKB-CSHARP-2): a media server and Microsoft's ORM, 1.8M lines
       - {id: jellyfin, url: https://github.com/jellyfin/jellyfin.git, commit: 2953ed632c9277351483eff04f87a8276390691c, min_symbols: 13500, min_calls: 10840, min_tests: 1230}
       - {id: efcore, url: https://github.com/dotnet/efcore.git, commit: 8859f78f10d013a06385c5817ab318414399f66f, min_symbols: 93750, min_calls: 110650, min_tests: 16200}
+  # C and C++ (SPEC-DKB-004 F7, #122). Both read by the one C/C++ extractor, so one `source`; a repository counts toward the language its code is
+  # in. Measured 2026-11-22 on this branch's extractor; minimums are about 80% of the measured value. Zephyr (136k symbols, 3.6 minutes to build) stays
+  # in the corpus check (devkb/bench/cpp_corpus.json, bench/perf.py), not here: this check runs on every push.
+  c:
+    source: cpp-symbols
+    repos:
+      - {id: cjson, url: https://github.com/DaveGamble/cJSON.git, commit: 6d9f2443ab071f86e5d9b43025a40929ec41c46c, min_symbols: 935, min_calls: 3175, min_tests: 214}
+      - {id: autoas, url: https://github.com/autoas/as.git, commit: cc3709675ac30f7539c0710dfec6d579a5235841, min_symbols: 3600, min_calls: 5765, min_tests: 2}
+      - {id: lua, url: https://github.com/lua/lua.git, commit: c42d820bc0c3bc4f2ad536e19d2f05405af10387, min_symbols: 1095, min_calls: 3310, min_tests: 0}
+  cpp:
+    source: cpp-symbols
+    repos:
+      - {id: fmt, url: https://github.com/fmtlib/fmt.git, commit: 57f1b5930dc2906875534a15c209e1c39eda59ad, min_symbols: 2445, min_calls: 2035, min_tests: 550}
+      - {id: leveldb, url: https://github.com/google/leveldb.git, commit: 29465588d3dfdc80fba5e198037582b8fdb5dd60, min_symbols: 1465, min_calls: 2720, min_tests: 185}
+      - {id: yaml-cpp, url: https://github.com/jbeder/yaml-cpp.git, commit: f473f3bdfed25271ebd3d268caedc1b0b7f5ff50, min_symbols: 5130, min_calls: 5205, min_tests: 3050}

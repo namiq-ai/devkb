@@ -64,7 +64,7 @@ def test_a_type_that_is_not_a_repository_class_is_not_linked_or_counted(tmp_path
 
 def test_a_copy_or_move_is_not_linked_to_a_declared_constructor_it_does_not_call(tmp_path):
     files = {"a.cc": ("class Opt {\n public:\n  Opt();\n};\nOpt::Opt() {}\nOpt make() { Opt o; return o; }\n"
-                      "void user(const Opt& other) { Opt a(other); Opt b; }\n")}
+                      "void user(const Opt& other) { Opt a(other); }\n")}
     g = S.build(tmp_path, files)
     # `Opt a(other)` passes one argument and Opt declares only a default constructor: an implicit copy, not Opt::Opt()
     assert _targets(g, "a.cc::user") == set(), _targets(g, "a.cc::user")
@@ -75,3 +75,22 @@ def test_a_copy_or_move_of_the_same_type_is_not_a_call_to_a_one_argument_constru
                       "void user(const T& other, T* p) { T copy(other); T moved(std::move(other)); T real(3); }\n")}
     es = [e for e in S.build(tmp_path, files).edges("CALLS") if e.src == "a.cc::user"]
     assert len(es) == 1 and es[0].source == "cpp-constructor", [(e.dst, e.source) for e in es]      # only `T real(3)`
+
+
+def test_a_member_copied_or_moved_from_a_same_typed_argument_is_not_a_constructor_call(tmp_path):
+    files = {"a.cc": ("class Cmp {\n public:\n  Cmp(const char* name);\n};\nCmp::Cmp(const char* name) {}\n"
+                      "class A {\n public:\n  A(const Cmp& c) : cmp_(c) {}\n  A(const Cmp* p) : cmp_(*p) {}\n  A(Cmp&& m) : cmp_(std::move(m)) {}\n"
+                      "  A(const char* n) : cmp_(n) {}\n  Cmp cmp_;\n};\n")}
+    g = S.build(tmp_path, files)
+    es = {(e.src, e.dst) for e in g.edges("CALLS") if e.source == "cpp-constructor"}
+    assert es == {("a.cc::A.A", "a.cc::Cmp.Cmp")}, es      # only `cmp_(n)`; one node A.A stands for the four constructors
+    assert len([1 for e in g.edges("CALLS") if e.source == "cpp-constructor"]) == 1
+
+
+def test_a_default_initialised_local_links_to_a_declared_default_constructor_only(tmp_path):
+    files = {"a.cc": ("class D {\n public:\n  D();\n  D(int v);\n};\nD::D() {}\nD::D(int v) {}\n"
+                      "class OnlyArg {\n public:\n  OnlyArg(int v);\n};\nOnlyArg::OnlyArg(int v) {}\n"
+                      "void user() { D d; extern D shared; }\nvoid user2() { OnlyArg a(1); }\n")}
+    g = S.build(tmp_path, files)
+    assert _targets(g, "a.cc::user") == {"a.cc::D.D"}, _targets(g, "a.cc::user")
+    assert _targets(g, "a.cc::user2") == {"a.cc::OnlyArg.OnlyArg"}

@@ -392,6 +392,8 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                     mt = cls0[1].members.get(call.name) if cls0 is not None else None
                 if mt is None or mt[1] != "":
                     continue
+                if call.arg_type is not None and call.arg_type in ("", mt[0].split("::")[-1]):
+                    continue                          # `: comparator(c)`, `: icmp_(*cmp)`, `: m(std::move(x))`: an implicit copy or move, not a declared constructor
                 call = Call(call.caller, mt[0].split("::")[-1], "construct", "::".join(mt[0].split("::")[:-1]), None, None, call.line, call.argc)
             if call.form == "bare" and not is_c and not call.init and (call.name in repo.class_suffix or call.name in repo.classes) \
                     and call.name not in repo.non_ctor_names and not (chain and call.name == chain[-1]):

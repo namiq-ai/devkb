@@ -361,6 +361,7 @@ class Call:
     argc: int = -1       # arguments written at the call (#120, F5); -1 when not counted
     chained: tuple | None = None   # `r.g().f()`: (inner receiver or "" for a bare `g()`, "g", inner recv_local) (#120, F4)
     field_of: tuple | None = None  # `b.m.f()` / `b->m->f()`: (b, b's recv_local, "m") (#120, F4)
+    arg_type: str | None = None    # the declared type (short name) of the one plain argument (`x`, `*p`, `std::move(x)`), when known: a same-typed one is a copy or a move (#119)
     init: bool = False             # the name of a constructor's initialiser (`: m(x)`): a member initialisation, or a base-class constructor call (#145)
 
 
@@ -888,26 +889,40 @@ class _Scanner:
         return d.locals
 
     # body extraction ----------------------------------------------------------
-    def _is_copy_or_move(self, d: Def, text: str, open_i: int, type_name: str) -> bool:
-        """The one argument at `open_i` is `std::move(x)` / `std::forward<..>(x)`, or a plain variable whose declared type is `type_name`."""
+    def _arg_type(self, d: Def, text: str, open_i: int) -> str | None:
+        """The declared type (short name) of the one argument written at `open_i` when it is a plain variable, `*p` of a pointer, or either inside
+        `std::move(...)` / `std::forward<..>(...)`; "" for a `std::move(...)` of something untyped (a move, whatever the type); else None."""
         close = _match_close(text, open_i, text[open_i], ")" if text[open_i] == "(" else "}")
         arg = text[open_i + 1:close].strip() if close is not None else ""
-        if re.match(r"(?:std\s*::\s*)?(?:move|forward)\b", arg):
-            return True
-        if re.fullmatch(r"[A-Za-z_]\w*", arg):
-            types = self.locals_of(d).get(arg)
-            return bool(types) and all(t is not None and t[0].split("::")[-1] == type_name for t in types)
-        return False
+        moved = re.match(r"(?:std\s*::\s*)?(?:move|forward)\s*(?:<[^>]*>)?\s*\((.*)\)\s*$", arg, re.S)
+        if moved:
+            arg = moved.group(1).strip()
+        m = re.fullmatch(r"\*?\s*([A-Za-z_]\w*)", arg)
+        types = self.locals_of(d).get(m.group(1)) if m else None
+        if types and len(types) == 1 and next(iter(types)) is not None:
+            return next(iter(types))[0].split("::")[-1]
+        return "" if moved else None
+
+    def _is_copy_or_move(self, d: Def, text: str, open_i: int, type_name: str) -> bool:
+        """The one argument at `open_i` is `std::move(x)` / `std::forward<..>(x)`, or a variable (or `*p`) whose declared type is `type_name`."""
+        t = self._arg_type(d, text, open_i)
+        return t == "" or t == type_name
 
     def constructs_in(self, d: Def, lo: int, text: str, names: set[str]) -> None:
         """Constructor calls written without a call's `name(`: `new T(args)`, `T x(args)` / `T x{args}`, `make_unique<T>(args)` / `make_shared<T>`
         (SPEC-DKB-004 F3, #119). Kept as a `construct` call of the type's short name; the resolver links it when `T` is the one repository class of
         that name, and to the one constructor its argument count selects."""
         line_of = self.m.line
-        for rx, kind in ((_CTOR_NEW, "new"), (_CTOR_MAKE, "make"), (_CTOR_LOCAL, "local")):
+        for rx, kind in ((_CTOR_NEW, "new"), (_CTOR_MAKE, "make"), (_CTOR_LOCAL, "local"), (_CTOR_DEFAULT, "default")):
             for cm in rx.finditer(text):
                 qual, name = cm.group(1), cm.group(2)
                 if name not in names or name in _NOT_FUNC or name in _NOT_TYPE or (kind == "local" and qual.strip() == "" and name in _NOT_TYPE):
+                    continue
+                if kind == "default":      # `T x;`: the default constructor, written nowhere; `extern T x;` declares, it does not construct
+                    if re.search(r"\bextern\b", cm.group(0)):
+                        continue
+                    c = Call(d.index, name, "construct", re.sub(r"\s", "", qual).rstrip(":"), None, None, line_of(lo + cm.start(2)), 0)
+                    self.calls.append(c)
                     continue
                 open_i = cm.end() - 1
                 c_argc = _argc(text, open_i)
@@ -1002,6 +1017,8 @@ class _Scanner:
                     form = "qualified"      # `FMT_POSIX(close(fd))` inside a method `close`: a macro adapts the global call; not the method itself (#95)
             c = Call(d.index, name, form, qualifier, recv, rl, line_of(lo + cm.start()), _argc(text, cm.end() - 1))
             c.init = is_init
+            if is_init and c.argc == 1:
+                c.arg_type = self._arg_type(d, text, cm.end() - 1)
             if form == "member" and chained is not None and recv is None:
                 c.chained = chained
             if form == "member" and field_of is not None and recv is None:
@@ -1076,6 +1093,8 @@ _CTOR_NEW = re.compile(r"\bnew\s+(?:\([^()]*\)\s*)?(?:::\s*)?" + _QUAL + r"\s*(?
 _CTOR_MAKE = re.compile(r"\b(?:std\s*::\s*)?make_(?:unique|shared)\s*<\s*(?:::\s*)?" + _QUAL + r"[^<>;{}]*(?:<[^;{}]*>)?\s*>\s*(\()")   # `make_unique<T>(args)`
 _CTOR_LOCAL = re.compile(r"(?:^|(?<=[;{}]))\s*(?:(?:const|static|constexpr|volatile)\s+)*(?:::\s*)?" + _QUAL
                     + r"\s*(?:<[^;{}()]*>)?\s+(?:[&*]\s*)*[A-Za-z_]\w*\s*([({])")                                              # `T x(args);`, `T x{args};`
+_CTOR_DEFAULT = re.compile(r"(?:^|(?<=[;{}]))[ \t\r\n]*(?:(?:const|static|constexpr|volatile)\s+)*(?:::\s*)?" + _QUAL
+                           + r"\s*(?:<[^;{}()]*>)?\s+[A-Za-z_]\w*\s*(?:\[[^\]]*\]\s*)?(?:,\s*[A-Za-z_]\w*\s*)*;")                # `T x;`, `T x, y;`
 _NOT_TYPE = frozenset("return new delete throw case else goto using typedef namespace struct class enum union sizeof co_return co_yield".split())
 
 
