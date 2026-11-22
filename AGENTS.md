@@ -53,7 +53,7 @@ backfilled).
 1. **Hidden check.** `bench/policy/accept/<N>.py`, written from the ticket's *Expected* list as a black box (it takes the
    checkout path, prints one JSON line with `pass`). Run it on the ticket's base commit (must fail) and on the fix (must pass).
 2. **Two arms, from the base commit, before you look at your own fix.** `none` (no devkb) and `main` (devkb CLI), same model,
-   same prompt, one shuffled batch, at least 3 repetitions:
+   same prompt, one shuffled batch, at least 3 repetitions (what 3 runs can and cannot claim is in `docs/BENCHMARK.md`, "How many runs a claim needs"):
    `POLICY_ARMS=none,main POLICY_MAIN=<base sha> .venv/bin/python bench/policy/policybench.py run <N> --reps 3`, then `score <N>`.
    Every arm runs the same suite (#331): the harness removes the guardrail's tests from all arms, and the table prints each arm's
    collected-test count and first-call context, with a warning when the counts differ. For a ticket about the guardrail itself,

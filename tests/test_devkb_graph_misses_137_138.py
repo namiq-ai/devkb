@@ -39,7 +39,7 @@ def test_a_one_file_search_is_known_by_its_file(repo, cmd):
 
 
 @pytest.mark.parametrize("cmd", ["grep -c helper src/a.c", "grep -l -n helper src/a.c", "grep -n helper src/a.c src/b.c",
-                                 "grep -A helper src/a.c", "grep -n helper src/a.c | head"])
+                                 "grep -A helper src/a.c", "grep -n helper src/a.c | wc -l", "grep -n helper src/a.c > out.txt"])
 def test_a_search_whose_output_is_not_line_text_of_one_file_is_not(repo, cmd):
     assert g.single_bash_file(cmd, repo, repo) is None
 

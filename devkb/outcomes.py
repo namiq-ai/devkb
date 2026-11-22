@@ -110,7 +110,13 @@ def render_stats(repo: Path) -> str:
     return "\n".join(out)
 
 
-ACTIONS = ("substitute", "read-answer", "alongside", "span-hint", "teach", "remind", "pass-through", "repeat")   # every action (#214, #375)
+ACTIONS = ("substitute", "read-answer", "alongside", "span-hint", "outline-on-open", "teach", "remind", "pass-through", "repeat")   # every action (#214, #375, #284)
+
+
+def actions_of(rows: list[dict]) -> list[str]:
+    """The known actions, then any other the log holds: a decision the hook logged is counted somewhere (#284)."""
+    seen = {r.get("action") for r in rows if r.get("action")}
+    return list(ACTIONS) + sorted(seen - set(ACTIONS))
 
 
 def guardrail_log() -> Path:
@@ -121,7 +127,7 @@ def intents(rows: list[dict]) -> list[str]:
     """Intents by action (#214): which questions the searches asked, and what the hook did with each."""
     c = Counter((r.get("intent") or "unrecorded", r["action"]) for r in rows)
     kinds = sorted({i for i, _ in c}, key=lambda i: -sum(n for (j, _a), n in c.items() if j == i))
-    acts = [a for a in ACTIONS if any(a == b for _i, b in c)]
+    acts = [a for a in ACTIONS if any(a == b for _i, b in c)] + sorted({b for _i, b in c} - set(ACTIONS))
     lines = ["intent by action:", "| intent | " + " | ".join(acts) + " |", "|---|" + "---|" * len(acts)]
     lines += [f"| {i} | " + " | ".join(str(c[(i, a)]) for a in acts) + " |" for i in kinds]
     return lines
@@ -136,7 +142,7 @@ def render_guardrail(log: Path | None = None, repo: str = "") -> str:
     def block(rs: list[dict]) -> list[str]:
         c = Counter(r["action"] for r in rs)
         pt = Counter(v for r in rs if r["action"] == "pass-through" for v in (r.get("verdicts") or ["none"]))
-        lines = [", ".join(f"{a} {c[a]}" for a in ACTIONS)]
+        lines = [", ".join(f"{a} {c[a]}" for a in actions_of(rs) if a in ACTIONS or c[a])]
         if pt:
             lines.append("  pass-through by verdict: " + ", ".join(f"{v} {n}" for v, n in sorted(pt.items())))
         if c["repeat"]:

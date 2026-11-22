@@ -37,6 +37,14 @@ def stages(cmd: str) -> list[list[str]]:
     return out
 
 
+def inside(where: str, path: str) -> bool:
+    """Is `path` in the listed folder? A bare `ls` lists the session's working directory ("."), so a read of a file outside it (an absolute path
+    that `rel` could not make relative, or `../x`) is not a read of what was listed (#309)."""
+    if where in (".", ""):
+        return not posixpath.isabs(path) and not path.startswith("../") and path != ".."
+    return (path + "/").startswith(where.rstrip("/") + "/")
+
+
 def norm(cwd: str, p: str) -> str:
     return posixpath.normpath(posixpath.join(cwd, p))
 
@@ -110,7 +118,7 @@ def measure(runs: Path, window: int) -> dict:
                 continue
             listings += 1
             nxt = ev[i + 1:i + 1 + window]
-            hits = [(j, e) for j, e in enumerate(nxt) if e[0] == "read" and (e[1] + "/").startswith(where.rstrip("/") + "/" if where != "." else "")]
+            hits = [(j, e) for j, e in enumerate(nxt) if e[0] == "read" and inside(where, e[1])]
             per_listing[min(len(hits), 3)] += 1
             if hits:
                 with_reads += 1

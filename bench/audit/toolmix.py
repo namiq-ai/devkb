@@ -16,7 +16,38 @@ DEVKB = re.compile(r"(devkb\.cli|(^|[\s;&|/])devkb)\s+(symbol|outline|uses|docs|
 VAR = re.compile(r"\$\{?\w+\}?\s+(symbol|outline|uses|docs|pack|query|coverage|audit)\b")   # P="... devkb.cli"; $P uses X
 
 
+SHELLS = ("bash", "sh", "zsh", "eval")
+SHELL_C = re.compile(r"(^|[\s;&|/])(" + "|".join(SHELLS) + r")\s+(-\w*c\w*\s+)?$")      # `bash -c ` / `eval ` right before a quoted script
+
+
+def commands_only(c):
+    """The command text with quoted strings and `# comments` blanked, so a commit message or a comment that mentions `devkb symbol` is not a
+    devkb query (#309). The quoted script of `bash -c '...'` / `eval "..."` is a command and stays."""
+    out, i, n = [], 0, len(c)
+    while i < n:
+        ch = c[i]
+        if ch in "'\"" and not (ch == "'" and i and c[i - 1].isalnum() and "'" not in c[i + 1:]):       # `don't` is an apostrophe, not a quote
+            j = i + 1
+            while j < n and c[j] != ch:
+                j += 2 if (ch == '"' and c[j] == "\\") else 1
+            before = "".join(out).rstrip()
+            keep = bool(SHELL_C.search(before + " "))
+            assigned = bool(re.search(r"\b\w+=$", before))            # `P="python -m devkb.cli"`: a value, not prose: kept as written
+            out.append(c[i:j + 1] if assigned else " " + c[i + 1:j] + " " if keep else " " * (j + 1 - i))      # a kept script loses its quote marks
+            i = j + 1
+        elif ch == "#" and (i == 0 or c[i - 1] in " \t\n;"):
+            j = c.find("\n", i)
+            j = n if j < 0 else j
+            out.append(" " * (j - i))
+            i = j
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
 def devkb_queries(c):
+    c = commands_only(c)
     n = len(DEVKB.findall(c))
     if "devkb.cli" in c or re.search(r"=\S*devkb[\"' ]", c):
         n += len(VAR.findall(c))
@@ -33,6 +64,7 @@ def classify(name, inp):
             return "run"                    # writing a repro script
         if devkb_queries(c):
             return "devkb"
+        c = commands_only(c)
         if RUN.search(c) and not READ.search(c.split("|")[0]) and not SEARCH.search(c.split("|")[0]):
             return "run"
         if SEARCH.search(c):

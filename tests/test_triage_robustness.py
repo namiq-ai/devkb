@@ -64,7 +64,7 @@ def test_205_a_feedback_ticket_given_as_a_string_fails_that_comment_only(monkeyp
                     '{"action": "reply", "type": "question", "priority": "low", "reply": "ok"}'])
     monkeypatch.setattr(triage, "claude", lambda *a: (next(answers), 0.0))
     posted = []
-    monkeypatch.setattr(triage, "post_feedback", lambda t, c, v: posted.append(c["id"]))
+    monkeypatch.setattr(triage, "post_feedback", lambda t, c, v, *a, **k: posted.append(c["id"]))
     triage.feedback_pass(True, [thread])
     assert posted == [2]
 

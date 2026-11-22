@@ -11,6 +11,7 @@ DEVKB_GUARDRAIL (0 / 1) for the user-level pre-search hook (~/.claude/hooks/devk
 from __future__ import annotations
 
 import concurrent.futures as cf
+import hashlib
 import json
 import os
 import random
@@ -111,6 +112,21 @@ def checkout(w: Path):
     sh(["git", "add", "-A"], cwd=w)
     sh(["git", "-c", "user.name=bench", "-c", "user.email=bench@example.com", "commit", "-qm", "devkb init"], cwd=w)
     (w / ".bench-base").write_text(sh(["git", "rev-parse", "HEAD"], cwd=w).stdout.strip())
+    record_base(w)
+
+
+def record_base(w: Path) -> dict:
+    """The checkout's own suite before any agent touches it, recorded as policybench records it (#221, #308): `base_green`, `base_suite`,
+    `tests_collected`, in `.bench-arm.json`. A red base is recorded, not hidden: `score` carries the fact into every row."""
+    py = str(w / ".venv/bin/python")
+    t = subprocess.run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-x"], cwd=w, capture_output=True, text=True, timeout=1800)
+    n = subprocess.run([py, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"], cwd=w, capture_output=True, text=True, timeout=600).stdout
+    last = (n.strip().splitlines() or [""])[-1]
+    m = re.search(r"(\d+) tests? collected", last)
+    meta = {"base_green": t.returncode == 0, "base_suite": (t.stdout.strip().splitlines() or [""])[-1],
+            "tests_collected": int(m.group(1)) if m else None}
+    (w / ".bench-arm.json").write_text(json.dumps(meta) + "\n")
+    return meta
 
 
 def run_one(issue: str, arm: str, rep: int) -> str:
@@ -394,13 +410,16 @@ def score(issue: str):
         w = B / "work" / out.name
         end = json.loads((out / "end").read_text())
         base = (w / ".bench-base").read_text().strip()
-        t = subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-x"], cwd=w,
-                           capture_output=True, text=True, timeout=1800)
+        import policybench          # the shared scoring (#308); imported here because policybench imports this module
+        suite = policybench.run_suite(w)                          # the full suite, the failed ids, and the flaky rule (#301)
+        meta = json.loads((w / ".bench-arm.json").read_text()) if (w / ".bench-arm.json").exists() else {}
         acc = B / "accept" / f"{issue}.py"                       # story-specific acceptance, if written
         a = subprocess.run([str(w / ".venv/bin/python"), str(acc), str(w)], capture_output=True, text=True,
                            timeout=3600) if acc.exists() else None
-        rows.append({"run": out.name, "arm": arm, "rep": rep, "exit": end["exit"], "seconds": end["seconds"],
-                     "suite_pass": t.returncode == 0, "suite": (t.stdout.strip().splitlines() or [""])[-1],
+        rows.append({"run": out.name, "issue": issue, "arm": arm, "rep": rep, "exit": end["exit"], "seconds": end["seconds"], **suite,
+                     "accept_sha256": hashlib.sha256(acc.read_bytes()).hexdigest() if acc.exists() else "",          # which check scored it (#223)
+                     "base_green": meta.get("base_green"), "base_suite": meta.get("base_suite"),                       # #221
+                     "tests_collected": meta.get("tests_collected"),
                      "acceptance": json.loads(a.stdout.strip().splitlines()[-1]) if a and a.stdout.strip() else None,
                      "commits": int(sh(["git", "rev-list", "--count", f"{base}..HEAD"], cwd=w).stdout.strip() or 0),
                      "diff": sh(["git", "diff", "--shortstat", base], cwd=w).stdout.strip(),

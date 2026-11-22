@@ -227,6 +227,8 @@ def enclosing(repo: Path | None, rel: str, line: int, cache: dict) -> str:
         return ".".join(reversed(names))
     for i in range(line - 2, max(-1, line - 400), -1):
         t = lines[i]
+        if t.strip() == "{":                      # Allman style: the brace on its own line; the header is above it (#285)
+            continue
         if t[:1] in (" ", "\t", "}", "#", "/", "*") or not t.strip():
             continue
         m = C_HEAD.match(t)

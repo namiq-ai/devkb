@@ -154,6 +154,8 @@ def main() -> int:
     else:
         from devkb.project_context import resolve  # noqa: PLC0415
         d = resolve(ns.project).devkb_dir
+    from devkb.service import require_graph  # noqa: PLC0415
+    require_graph(d, ns.project)                  # one line saying to build first, never a traceback (#293)
     r = audit(d)
     if ns.timing:
         r["timing"] = timing(ns.project, d)
@@ -170,4 +172,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    from devkb.service import GraphNotBuilt
+
+    try:
+        sys.exit(main())
+    except GraphNotBuilt as exc:                # `python -m devkb.audit` too: one line, exit 2, never a traceback (#293)
+        print(f"devkb: {exc}", file=sys.stderr)
+        sys.exit(2)

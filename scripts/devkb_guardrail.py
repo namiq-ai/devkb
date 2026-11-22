@@ -177,6 +177,58 @@ VALUE_OPTIONS = {"--include", "--exclude", "--exclude-dir", "--type", "-t", "--g
                  "--after-context", "--before-context", "--context", "-A", "-B", "-C", "--type-not", "-T", "-f", "--file"}
 
 
+# What may follow a one-file grep and still leave its output as `N:text` lines of that file: a window onto the same lines (#285).
+KEEPS_LINES = {"head", "tail", "cat"}
+REDIRECT = re.compile(r"\d*(?:>>?|>&|&>|>\|)|<")
+
+
+def grep_segment(words: list[str], cwd: Path) -> tuple[list[str] | None, Path]:
+    """The words of the command's grep, and the directory it runs in: `cd DIR && grep ...` searches DIR; a stderr redirect (`2>&1`, `2>/dev/null`)
+    and a pipe into `head`, `tail` or `cat` leave the output as the file's own lines. Any other pipe, a redirect of stdout, a subshell or a
+    second command that changes the output: None (#285)."""
+    segs: list[list[str]] = [[]]
+    for w in words:
+        if w in ("&&", "||", ";", "|"):
+            segs.append([w])
+            segs.append([])
+        else:
+            segs[-1].append(w)
+    segs = [s for s in segs if s]
+    for i, s in enumerate(segs):
+        if s[0] in ("&&", "||", ";", "|"):
+            continue
+        if s[0] == "cd" and len(s) == 2:                     # `cd lib && grep ...`: the search runs in lib
+            cwd = (cwd / s[1]).resolve() if not Path(s[1]).is_absolute() else Path(s[1])
+            continue
+        cmd = s[1] if s[0] == "git" and len(s) > 1 else s[0]
+        if cmd not in ("grep", "egrep", "rg"):
+            if s[0] in ("echo", "true", "export", "set") or re.fullmatch(r"\w+=\S*", s[0]):
+                continue
+            return None, cwd
+        out: list[str] = []
+        j = 0
+        while j < len(s):                                    # strip redirections, keep what stdout still prints
+            w = s[j]
+            if REDIRECT.fullmatch(w):
+                target = s[j + 1] if j + 1 < len(s) else ""
+                fd = out.pop() if out and out[-1].isdigit() else ""        # `2` of `2>&1`: lexed apart from its operator
+                if fd == "2" and (w in (">", ">>") or (w == ">&" and target in ("1", "2"))):
+                    j += 2                                   # stderr only: stdout is untouched
+                    continue
+                return None, cwd                             # stdout (or stdin) is redirected: its lines are not what grep printed
+            out.append(w)
+            j += 1
+        for t in segs[i + 1:]:                               # what the output is piped into
+            if t[0] == "|":
+                continue
+            if t[0] in ("&&", "||", ";"):
+                return None, cwd                             # another command follows: its output is mixed into grep's
+            if t[0] not in KEEPS_LINES or (t[0] == "cat" and len(t) > 1):      # `cat -n` / `cat -b` number the lines again; a bare `cat` copies them
+                return None, cwd
+        return out, cwd
+    return None, cwd
+
+
 def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
     """Resolve an explicit file operand for a search that requests numbered output."""
     try:
@@ -184,6 +236,9 @@ def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
         lexer.whitespace_split = True
         words = list(lexer)
     except ValueError:
+        return None
+    words, cwd = grep_segment(words, cwd)
+    if words is None:
         return None
     if words[:2] == ["git", "grep"]:
         words = words[1:]
@@ -496,6 +551,13 @@ KEYWORDS = {"def", "class", "struct", "enum", "union", "interface", "fn", "func"
             "virtual", "async", "public", "private", "protected", "pub"}
 
 
+def listing_shape(pattern: str) -> bool:
+    """Does every alternative of a keyword pattern read as a definition listing (`^def `, `"    def "`, `class `), not as the word searched as text
+    (`async`, `static`, `\\bclass\\b`)? A listing is anchored at the line start or has whitespace beside the keyword (#282)."""
+    alts = [a for a in re.split(r"\\\||\|", pattern) if a.strip()]
+    return bool(alts) and all(a.lstrip().startswith("^") or a != a.strip() or re.search(r"^\\s|\\s$", a) for a in alts)
+
+
 ANCHORED_NAME = re.compile(r"\^\s*(?:\\s\*)?[A-Za-z_][\w.:]*(?:\\?\()?")           # `^name`, `^\s*name`, `^name(`
 ANCHORED_ALTERNATIVES = re.compile(r"(?:^|\\\|)\^|\$(?:$|\\\|)")                   # an alternative that starts at `^` or ends at `$`
 
@@ -526,11 +588,11 @@ def classify(tool: str, inp: dict, pattern: str, why: str | None, paths: list[Pa
         return "list-files"
     if why == "option:-v":
         return "invert"
-    if words and all(w in KEYWORDS for w in words):
-        return "list-symbols"                     # `^def `, `"    def "`, `^def \|^class `: a file's definitions
+    if words and all(w in KEYWORDS for w in words) and listing_shape(pattern):
+        return "list-symbols"                     # `^def `, `"    def "`, `^def \|^class `: a file's definitions (a bare `async` is text: #282)
     filt = [f for opts, _q, f in re.findall(r"\|\s*(?:e|f)?grep\s+((?:-\S+\s+)*)(['\"])(.*?)\2", cmd) if "v" not in opts]
     for fw in (re.findall(r"[A-Za-z_]\w*", f) for f in filt):
-        if fw and all(w in KEYWORDS for w in fw):
+        if fw and all(w in KEYWORDS for w in fw) and listing_shape(next((f for f in filt if re.findall(r"[A-Za-z_]\w*", f) == fw), "")):
             return "list-symbols"                 # `grep X file | grep "def \|class "`: the definitions that mention X
         if fw and fw[0] in KEYWORDS and len(fw) > 1:
             return "locate"                       # `grep X | grep "def X"`: where X is defined
@@ -726,12 +788,23 @@ def search_flags(tool: str, inp: dict) -> set[str]:
     return out
 
 
-def question_of(action: str, queries: list[dict]) -> str:
-    """The graph question the hook asked for this decision."""
-    if action == "read-answer":
+ANSWER_QUESTION = {"locate": "symbol", "call-sites": "uses", "call-sites-filtered": "uses", "in-file": "uses", "list-symbols": "outline"}
+
+
+def question_of(action: str, queries: list[dict], intent: str = "", reason: str = "") -> str:
+    """The graph question the answer came from (SPEC-DKB-007 §3.5 reads it to change the intent table, so it must be the one asked, #284): the
+    definition's `symbol --source`, a file's `outline`, the call sites' `uses`. A decision that gave no answer logs what the hook checked: the pack
+    question of the names it looked up, or `none`."""
+    if action == "read-answer" or reason.startswith("body:"):
         return "symbol --source"
-    if action == "span-hint":
+    if action in ("span-hint", "outline-on-open") or reason == "outline":
         return "outline"
+    if reason == "key":
+        return "uses"
+    if action in ("substitute", "alongside"):
+        asked = ANSWER_QUESTION.get(intent) or ANSWER_QUESTION.get(reason.split(":", 1)[-1])      # `ambiguous:call-sites` names it too
+        if asked:
+            return asked
     return f"pack {QUESTION}" if queries else "none"
 
 
@@ -764,11 +837,18 @@ def teach_all() -> bool:
     return os.environ.get("DEVKB_GUARDRAIL_TEACH_ALL") == "1"
 
 
-def teach_only(ev: dict, inp: dict) -> dict | None:
+def teach_body() -> bool:
+    """The pointer to `devkb symbol NAME --source` on a definition search with context options (-A/-B/-C), which is not replaced (#358). On by default,
+    as the ticket asks; DEVKB_GUARDRAIL_TEACH_BODY=0 turns this one off. UNMEASURED: #375 measured the teach line on duplicates at +12.6% cost
+    and turned it off by default, so the efficiency work (#339) decides whether this one stays."""
+    return os.environ.get("DEVKB_GUARDRAIL_TEACH_BODY", "1") != "0"
+
+
+def teach_only(ev: dict, inp: dict, always: bool = False) -> dict | None:
     """#375: grep prints devkb's whole answer itself, so the answer is not repeated; the agent is still told, once per
     command and session, which devkb command answers this search. Before, nothing was said, and in 149 benchmark runs
     92 complete answers went by without the agent seeing a devkb command (83 answers carried one)."""
-    if not teach_all() or os.environ.get("DEVKB_GUARDRAIL_TEACH", "1") == "0" or not ev.get("_teach"):
+    if not (always or teach_all()) or os.environ.get("DEVKB_GUARDRAIL_TEACH", "1") == "0" or not ev.get("_teach"):
         return None
     sid = "".join(c for c in str(ev.get("session_id") or "") if c.isalnum() or c in "-_")[:80]
     key = hashlib.sha1(json.dumps([sid, "teach", str(ev.get("cwd") or ""), json.dumps(inp, sort_keys=True)]).encode()).hexdigest()
@@ -869,7 +949,7 @@ def log_decision(ev: dict, repo: Path | str, tool: str, action: str, names: list
                                  "repo": str(repo), "action": action, "names": ev.get("_all_names") or names,
                                  "verdicts": [q["verdict"] for q in queries], "chars": chars, "reason": reason,
                                  "scope": scope, "intent": ev.get("_intent", "unknown"),
-                                 "question": question_of(action, queries)}) + "\n")
+                                 "question": question_of(action, queries, ev.get("_intent", ""), reason)}) + "\n")
     except OSError:
         pass
 
@@ -1002,7 +1082,9 @@ def use_lines(repo: Path, names: list[str]) -> list[tuple[str, int, str]] | None
     return sorted(set(out))
 
 
-NON_CODE = (".md", ".rst", ".txt", ".adoc", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".xml", ".html", ".csv")
+NON_CODE = (".md", ".rst", ".txt", ".adoc", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".xml", ".html", ".csv",
+            ".jsonc", ".properties", ".tf", ".tfvars", ".lock", ".mk", ".cmake", ".env", ".gradle", ".plist")      # configuration too (#317)
+CONFIG_NAMES = ("makefile", "gnumakefile", "dockerfile", "containerfile", "jenkinsfile", "vagrantfile", "procfile", "gemfile", "pipfile")
 
 
 def names_non_code(paths: list[Path] | None, repo: Path, names: list[str] | None = None,
@@ -1011,7 +1093,7 @@ def names_non_code(paths: list[Path] | None, repo: Path, names: list[str] | None
     or a non-code file in the search's scope (the whole repository for `.` or no path) that holds a name. The graph
     holds no document text, so such a search is never replaced (#276)."""
     for p in paths or []:
-        if p.suffix.lower() in NON_CODE or p.name.lower() in ("docs", "doc", "config", "conf", "etc"):
+        if is_non_code(p.name) or p.name.lower() in ("docs", "doc", "config", "conf", "etc"):
             return True
     if not names:
         return False
@@ -1028,9 +1110,12 @@ def names_non_code(paths: list[Path] | None, repo: Path, names: list[str] | None
 
 
 def is_non_code(path: str) -> bool:
-    """A documentation or configuration file: by suffix, or a bare README / LICENSE / CHANGELOG / NOTICE."""
+    """A documentation or configuration file: by suffix, or a bare README / LICENSE / CHANGELOG / NOTICE, or a build or environment file by name
+    (Makefile, Dockerfile, `.env`, `.env.local`): the graph holds none of their text (#317)."""
     p = Path(path)
-    return p.suffix.lower() in NON_CODE or p.name.lower() in ("readme", "license", "changelog", "notice")
+    name = p.name.lower()
+    return (p.suffix.lower() in NON_CODE or name in ("readme", "license", "changelog", "notice") or name in CONFIG_NAMES
+            or name == ".env" or name.startswith(".env.") or name.startswith("dockerfile.") or name.endswith(".dockerfile"))
 
 
 def longer_definitions(repo: Path, pattern: str, name: str, scope: list[str] | None) -> bool:
@@ -1092,8 +1177,35 @@ def locations(repo: Path, names: list[str], scope: list[str] | None) -> str | No
     return "\n".join(rows) or None
 
 
-def outline_answer(repo: Path, paths: list[Path] | None) -> str | None:
-    """`Lstart-Lend kind name` for the one code file a definitions listing searches (§3.3 `list-symbols`)."""
+CLASS_KINDS = {"class", "interface", "struct", "enum", "union", "type"}
+FUNCTION_KINDS = {"function", "method"}
+KEYWORD_LANGUAGES = {"def": {".py", ".rb"}, "fn": {".rs"}, "func": {".go", ".swift"},
+                     "function": {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".php", ".sh", ".lua"}}      # a keyword only these languages write
+
+
+def listing_kinds(pattern: str, suffix: str) -> set[str] | None:
+    """The outline kinds a keyword listing prints in a file of this type, or None when the pattern lists nothing there (`^def ` over a JavaScript
+    file; #282). `^def ` prints top-level functions only; `^\\s*def ` and an unanchored `def ` also print methods; `^class ` prints classes."""
+    kws, top_only = [], True
+    for alt in re.split(r"\\\||\|", pattern):
+        w = [x for x in re.findall(r"[A-Za-z_]\w*", re.sub(r"\\[sbdwSBDW<>]", " ", alt)) if x in KEYWORDS]
+        kws += w
+        if w and not re.match(r"\s*\^(?!\s|\\s)", alt):
+            top_only = False                               # not anchored right at the keyword: indented definitions match too
+    if not kws:
+        return set(CLASS_KINDS | FUNCTION_KINDS)
+    here = [k for k in kws if k not in KEYWORD_LANGUAGES or suffix in KEYWORD_LANGUAGES[k]]
+    if not here:
+        return None
+    kinds: set[str] = set()
+    for k in here:
+        kinds |= CLASS_KINDS if k in ("class", "struct", "enum", "union", "interface") else ({"function"} if top_only else FUNCTION_KINDS)
+    return kinds
+
+
+def outline_answer(repo: Path, paths: list[Path] | None, pattern: str = "") -> str | None:
+    """`Lstart-Lend kind name` for the one code file a definitions listing searches (§3.3 `list-symbols`): only the kinds the pattern lists, in the
+    languages that write it, so the answer is never larger than grep's (#282)."""
     from devkb import misses
     files = [p for p in paths or [] if p.is_file()]
     if len(files) != 1:
@@ -1104,7 +1216,15 @@ def outline_answer(repo: Path, paths: list[Path] | None) -> str | None:
     r = read_tool(repo, "outline", rel)
     if not r or not r.get("symbols"):
         return None
-    return "\n".join(f"L{s['ls']}-{s['le']} {s['kind']} {s['q']}" for s in r["symbols"])
+    syms = r["symbols"]
+    if pattern:
+        kinds = listing_kinds(pattern, files[0].suffix.lower())
+        if kinds is None:
+            return None
+        syms = [s for s in syms if s["kind"] in kinds]
+        if kinds == {"function"}:
+            syms = [s for s in syms if "." not in s["q"]]          # a top-level function has no owner in its qualified name
+    return "\n".join(f"L{s['ls']}-{s['le']} {s['kind']} {s['q']}" for s in syms) or None
 
 
 TYPE_GLOBS = {"py": ["*.py"], "python": ["*.py"], "js": ["*.js", "*.jsx", "*.mjs", "*.cjs"], "ts": ["*.ts", "*.tsx"],
@@ -1229,7 +1349,7 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         if graph_stale(repo, scope_of(paths or [], repo)):       # an old graph's spans would be wrong lines (#273)
             log_decision(ev, repo, tool, "pass-through", names, [], 0, "stale-graph")
             return None
-        ans = outline_answer(repo, paths)
+        ans = outline_answer(repo, paths, pattern)
         if ans:
             log_decision(ev, repo, tool, "alongside", names, [], len(ans), "outline")
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(ans))}}
@@ -1279,9 +1399,12 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     if lenient:                                  # the real reason, and the miss is still recorded for the post hook (#187)
         verdicts = {q["verdict"] for q in queries} - {"complete"}
         reason = real_why if not verdicts else f"verdict:{sorted(verdicts)[0]}"
-        log_decision(ev, repo, tool, "pass-through", names, queries, 0, reason)
+        # the search runs untouched, but an agent about to read a function body is told once where its body is (#358)
+        out = teach_only(ev, inp, always=True) if (intent == "read-body" and not verdicts and teach_body()) else None
+        log_decision(ev, repo, tool, "teach" if out else "pass-through", names, queries,
+                     len(TEACH_LINE.format(cmd=ev["_teach"])) if out else 0, reason)
         record_pending(ev, key, repo, tool, inp, pattern, names, queries)
-        return None
+        return out
     if queries and len(queries) == len(names) and all(q["verdict"] == "complete" for q in queries):
         scope = scope_of(paths or [], repo)
         if intent == "read-body":                # the lines around a name (or several definitions): the bodies

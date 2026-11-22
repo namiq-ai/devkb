@@ -129,14 +129,18 @@ def _table(n: int) -> str:
     return src + "void (*tab[])(void) = {\n" + "".join(f"  f{i},\n" for i in range(n)) + "};\n"
 
 
-def test_indirect_refs_on_a_4000_entry_function_table_take_under_a_second():
-    import time
-    r = cs.extract_file("t.c", _table(4000))
-    names = {f"f{i}" for i in range(4000)}
+def _indirect_work(n: int):
+    import work_counter
+    r = cs.extract_file("t.c", _table(n))
+    names = {f"f{i}" for i in range(n)}
     cs.scan_bodies(r, names, names)
-    t = time.perf_counter()
-    out = cs.indirect_refs(r, names)
-    assert time.perf_counter() - t < 1.0
+    return work_counter.lines_executed(lambda: cs.indirect_refs(r, names), cs.__file__), names
+
+
+def test_indirect_refs_work_grows_with_the_table_not_with_its_square():
+    (small, _), _n = _indirect_work(500)
+    (big, out), names = _indirect_work(2000)            # 4x the entries: linear work is 4.0x the lines, a quadratic scan 16x
+    assert big / small < 6, (small, big, big / small)
     assert sorted(n for n, _l, _o in out) == sorted(names)
 
 

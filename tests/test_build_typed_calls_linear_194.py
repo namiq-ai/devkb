@@ -1,8 +1,9 @@
 """#194: build time is linear in typed-receiver calls (0.2.12 rescanned every unresolved call per typed call), and the
 typed calls still resolve and still clear their own unresolved records."""
 import subprocess
-import time
 from pathlib import Path
+
+import work_counter
 
 from devkb import build_symbols
 
@@ -23,18 +24,15 @@ def _repo(root: Path, n: int) -> Path:
     return root
 
 
-def _secs(root: Path) -> float:
-    t = time.perf_counter()
-    build_symbols.extract(root)
-    return time.perf_counter() - t
+def _work(root: Path) -> int:
+    """Lines of build_symbols.py executed by one extract(): the same on every run, unlike seconds (#377)."""
+    return work_counter.lines_executed(lambda: build_symbols.extract(root), build_symbols.__file__)[0]
 
 
-def test_three_times_the_files_take_about_three_times_as_long(tmp_path):
-    small, large = _repo(tmp_path / "s", 60), _repo(tmp_path / "l", 180)
-    _secs(small)                                  # warm imports and caches
-    # best of three for each size, so a busy machine (the benchmark runs agents in parallel) does not flake it
-    ratio = min(_secs(large) for _ in range(3)) / min(_secs(small) for _ in range(3))
-    assert ratio < 6, ratio                       # linear is about 3; the 0.2.12 quadratic gave 8 to 9
+def test_three_times_the_files_take_about_three_times_the_work(tmp_path):
+    small, large = _work(_repo(tmp_path / "s", 6)), _work(_repo(tmp_path / "l", 18))
+    ratio = large / small
+    assert ratio < 3.4, (small, large, ratio)     # a count: linear is 2.99 exactly; with the #194 fix reverted by hand it reads 3.82
 
 
 def test_typed_calls_still_resolve_to_the_class_method(tmp_path):

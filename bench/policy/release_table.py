@@ -99,6 +99,12 @@ def contaminated(r: dict) -> list[str]:
     return [x for x in r.get("contaminated") or [] if "runs-archive/" not in x]
 
 
+# The repetition rule (#368, docs/BENCHMARK.md "How many runs a claim needs"). PROPOSED values, the bench owner's to confirm: they set what every ticket costs.
+MIN_RUNS_PER_ARM = 7          # a per-ticket claim about cost or context needs this many runs in each arm
+LARGE_EFFECT = 0.40           # the two-arm step of a ticket (3 runs) may name a direction only when the cost or context effect is larger than this
+MIN_POOLED_TICKETS = 6        # a release claim pools at least this many tickets, at 3 runs per arm
+
+
 def per_run(r: dict) -> dict:
     c = counts(r["run"])
     nav, own, sub = c if c else (r.get("devkb_nav", 0), r.get("devkb_selftest", 0), 0)
@@ -119,7 +125,18 @@ def summary(xs: list[dict]) -> dict:
         vals = [x.get(k) for x in xs if x.get(k) is not None] or [0]     # a cut-off run's cost is unknown: not a zero (#303)
         out[k] = st.mean(vals)
         out[k + "_lo"], out[k + "_hi"] = min(vals), max(vals)
+        out[k + "_cv"] = st.stdev(vals) / out[k] if len(vals) >= 2 and out[k] else None       # the run-to-run spread the rule rests on (#368)
     return out
+
+
+def direction_note(m: dict, base: dict, dc: float, dk: float) -> str:
+    """What a per-ticket difference may claim at this many runs (#368). Both arms at MIN_RUNS_PER_ARM or more: it may be read. Fewer: only an effect
+    larger than LARGE_EFFECT names a direction; a smaller one is marked `below n`, because at 3 runs the sign flips from ticket to ticket."""
+    if min(m["n"], base["n"]) >= MIN_RUNS_PER_ARM:
+        return ""
+    if max(abs(dc), abs(dk)) / 100 > LARGE_EFFECT:
+        return f" (large effect, {min(m['n'], base['n'])} runs per arm)"
+    return f" (below n: {MIN_RUNS_PER_ARM} runs per arm to read an effect under {LARGE_EFFECT:.0%}; this has {min(m['n'], base['n'])})"
 
 
 def within_noise(a: dict, b: dict, k: str) -> bool:
@@ -151,6 +168,11 @@ def refetched(xs: list[dict]) -> str:
     if not known:
         return "n/a"
     return f"{st.mean(x['rf'] for x in known):.1f}/{st.mean(x['rq'] for x in known):.1f}"
+
+
+def cv_note(m: dict) -> str:
+    """The cell's coefficient of variation of cost, printed beside its range (#368)."""
+    return f", CV {m['cost_cv']:.2f}" if m.get("cost_cv") is not None else ""
 
 
 def fmt_range(m: dict, k: str, scale: float = 1.0, unit: str = "", digits: int = 1) -> str:
@@ -245,14 +267,14 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False, compar
             if base is not None and a not in NONE:
                 dc, dk = 100 * (m["cost"] / base["cost"] - 1), 100 * (m["ctx"] / base["ctx"] - 1)
                 noise = within_noise(m, base, "cost") and within_noise(m, base, "ctx")
-                vs = f"cost {dc:+.0f}%, context {dk:+.0f}%" + (" (within noise)" if noise else "")
+                vs = f"cost {dc:+.0f}%, context {dk:+.0f}%" + (" (within noise)" if noise else "") + direction_note(m, base, dc, dk)
                 diffs.setdefault(a, {"cost": [], "ctx": []})
                 diffs[a]["cost"].append(m["cost"] - base["cost"])
                 diffs[a]["ctx"].append(m["ctx"] - base["ctx"])
             flaky = f" ({m['flaky']} flaky)" if m.get("flaky") else ""       # green only on the re-run (#260)
             cut = f" ({m['cut_off']} cut off, cost left out)" if m.get("cut_off") else ""      # #303
             lines.append(f"| {('#' + t) if i == 0 else ''} | {a} | {'yes' if location_given(a) else 'no'} | {m['n']}{cut} | {fmt_range(m, 'wall')} | {m['turns']:.1f} | "
-                         f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {m['out'] / 1e3:.1f} | {fmt_range(m, 'cost', 1, '', 2)} | {m['grep']:.1f} | {m['nav']:.1f} | {refetched(xs_rows)} | {m['own']:.1f} | "
+                         f"{fmt_range(m, 'ctx', 1e3, '', 0)} | {m['out'] / 1e3:.1f} | {fmt_range(m, 'cost', 1, '', 2)}{cv_note(m)} | {m['grep']:.1f} | {m['nav']:.1f} | {refetched(xs_rows)} | {m['own']:.1f} | "
                          f"{m['sub']:.1f} | {m['answers']:.1f} ({m['answer_chars']:.0f}) | {m['ok']}/{m['n']} | {m['suite']}/{m['n']}{flaky} | {vs} |")
     lines += ["", "| Release, arm | Runs | Cost per run | Context per run | Cost difference vs no devkb (90% interval) | Context difference (90% interval) |",
               "|---|---|---|---|---|---|"]
@@ -268,6 +290,11 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False, compar
         else:
             dc = dk = "—"
         lines.append(f"| {a} | {n} | ${cost:.2f} | {ctx / 1e3:.0f}k | {dc} | {dk} |")
+    tickets = len([1 for _t, rows in pairs if rows])
+    per_cell = sorted({sum(1 for x in rows if x["arm"] == a) for _t, rows in pairs for a in {r["arm"] for r in rows}})
+    lines += ["", f"Repetition rule (#368, proposed): {tickets} ticket(s) pooled at {', '.join(map(str, per_cell))} run(s) per arm; "
+              + (f"enough to pool ({MIN_POOLED_TICKETS} tickets needed)." if tickets >= MIN_POOLED_TICKETS else
+                 f"**below n for a release claim: {MIN_POOLED_TICKETS} tickets are needed, this has {tickets}.** Read the intervals above as a direction at most.")]
     lines += start_section(pairs)
     lines += [f"WARNING #{t}: {len(rs)} run(s) changed the harness repository while they ran and are left out of the means: {', '.join(rs)} (#340)" for t, rs in dirty if rs]
     if problems:
@@ -277,8 +304,31 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False, compar
     return "\n".join(lines)
 
 
+def review_section(rows: list[dict]) -> list[str]:
+    """The release report's review section (#316): per arm, over the reviewed pull requests, what a review with devkb's packs and one without found and
+    cost. Rows are `bench/review/results.jsonl` (one per PR and arm)."""
+    if not rows:
+        return ["", "No pull request was reviewed both ways in this release."]
+    prs = sorted({r["pr"] for r in rows})
+    out = ["", f"Pull request reviews, with and without devkb, {len(prs)} PR(s) ({', '.join('#' + str(p) for p in prs)}); findings count only when their "
+           "reproduction exited 1 twice on a clean checkout:", "",
+           "| arm | PRs | findings | reproduced (high / medium / low) | defect groups only this arm found | cost $ per review | model calls | context k | wall min | devkb queries | hook decisions |",
+           "|---|---|---|---|---|---|---|---|---|---|---|"]
+    for arm in ("nodevkb", "devkb"):
+        rs = [r for r in rows if r["arm"] == arm]
+        if not rs:
+            continue
+        sev = [sum(r["by_severity"].get(s, 0) for r in rs) for s in ("high", "medium", "low")]
+        out.append(f"| {arm} | {len(rs)} | {sum(r['findings'] for r in rs)} | {sum(r['reproduced'] for r in rs)} ({' / '.join(map(str, sev))}) | "
+                   f"{sum(r['only_this_arm'] for r in rs)} | {st.mean(r['cost'] for r in rs):.2f} | {st.mean(r['model_calls'] for r in rs):.0f} | "
+                   f"{st.mean(r['ctx_tokens'] for r in rs) / 1e3:.0f} | {st.mean(r['seconds'] for r in rs) / 60:.1f} | "
+                   f"{st.mean(r['devkb_queries'] for r in rs):.1f} | {st.mean(r['hook_decisions'] for r in rs):.1f} |")
+    return out
+
+
 def main(argv: list[str]) -> int:
     allow = "--allow-mixed-checks" in argv
+    reviews = next((a.split("=", 1)[1] for a in argv if a.startswith("--reviews=")), None)        # --reviews=bench/review/results.jsonl
     compare = next((tuple(a.split("=", 1)[1].split(":")) for a in argv if a.startswith("--compare=")), None)    # --compare=ctxhid:rmainhid
     pairs = []
     for a in argv:
@@ -287,6 +337,9 @@ def main(argv: list[str]) -> int:
         t, f = a.split("=", 1)
         pairs.append((t, [json.loads(l) for l in open(B / f if not Path(f).is_absolute() else f) if l.strip()]))
     print(table(pairs, allow, compare))
+    if reviews:
+        path = Path(reviews)
+        print("\n".join(review_section([json.loads(l) for l in path.read_text().splitlines() if l.strip()] if path.exists() else [])))
     return 0
 
 

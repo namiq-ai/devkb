@@ -443,7 +443,7 @@ def _uses_in_tree(tree: ast.Module) -> tuple[list[tuple[str, str | None, str, in
                     refs.append((where, recv, n.attr, n.lineno))
         elif isinstance(n, ast.Subscript):
             k = _str_const(n.slice)
-            if k:
+            if k and not _is_environ(n.value):             # os.environ["X"] is an environment read, like os.environ.get("X"), not a record key (#288)
                 keys.append((where, k, "read" if isinstance(n.ctx, ast.Load) else "write", n.lineno))
         elif isinstance(n, ast.Call):
             env = isinstance(n.func, ast.Attribute) and _is_environ(n.func.value)   # os.environ.get("X") is not a record key
@@ -459,9 +459,11 @@ def _uses_in_tree(tree: ast.Module) -> tuple[list[tuple[str, str | None, str, in
                         keys.append((where, kw.arg, "write", n.lineno))
         elif isinstance(n, ast.Compare):
             if isinstance(n.left, ast.Constant) and (k := _str_const(n.left)) \
-                    and any(isinstance(op, (ast.In, ast.NotIn)) for op in n.ops):
+                    and any(isinstance(op, (ast.In, ast.NotIn)) for op in n.ops) \
+                    and not any(_is_environ(c) for c in n.comparators):          # `"X" in os.environ` asks the environment, not a record (#288)
                 keys.append((where, k, "read", n.lineno))  # `"status" in rec`: a read of the key (#202)
-        elif isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Subscript) and (k := _str_const(n.target.slice)):
+        elif isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Subscript) and (k := _str_const(n.target.slice)) \
+                and not _is_environ(n.target.value):
             keys.append((where, k, "read", n.lineno))      # rec["count"] += 1 reads, then writes (#202)
         elif isinstance(n, ast.Dict):
             for kn in n.keys:
