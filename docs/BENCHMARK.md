@@ -156,6 +156,32 @@ class in the same file; route handlers that reach a function through other handl
 is the first positional string or a `detail=` / `message=` / `msg=` / `description=` keyword. Calls on any other object
 are not attributed, and a task is built only where the truth sees every caller. Migration files count as callers.
 
+## How many runs a claim needs (#368; the numbers are proposed, the bench owner confirms them)
+
+At one run per cell, the sign of devkb's effect flipped from ticket to ticket in 0.2.14 (#334 +60%, #335 -33%, #287 -35%, #331 -47%): that is run-to-run spread, and the table
+printed it without saying so. The tables now print each cell's number of runs and the coefficient of variation (CV) of its cost, and say so when a difference is read at
+too few runs.
+
+| | Proposed rule (constants in `bench/policy/release_table.py`) |
+|---|---|
+| a per-ticket claim | at least **7 runs per arm** (`MIN_RUNS_PER_ARM`) |
+| the two-arm step of a ticket (3 runs) | names a direction only when the effect is larger than **40%** (`LARGE_EFFECT`); smaller differences are printed `(below n: 7 runs per arm ...)` |
+| a release claim | pools at least **6 tickets** at 3 runs per arm (`MIN_POOLED_TICKETS`), with a paired interval; fewer is printed as `below n for a release claim` |
+
+Runs needed per arm to see an effect at alpha 0.05 and power 0.8, from the CV (normal approximation, `n = 15.7 * CV^2 / effect^2`: a rule of thumb, not a model of these data):
+
+| effect | 0.2.14 baseline, median CV 0.16 (16 cells, 3 runs each) | 0.2.15 batches, median CV 0.105 (22 cells: #399/#400 at 3 runs, yaml-cpp at 5) | the same, at the noisiest cell (CV 0.29) |
+|---|---|---|---|
+| 40% | 3 | 2 | 9 |
+| 25% | 7 | 3 | 22 |
+| 15% | 18 | 8 | 61 |
+
+Reading it: the 0.2.15 cells are quieter than 0.2.14's (the harness fixes of #301 to #307 and #331 removed some of the noise), which would allow fewer runs; the spread across cells
+(CV 0.03 to 0.29) is wide, so a rule sized to the median under-powers the noisy tickets. The proposed 7 sits between the two. The owner decides the n because it sets the cost of every ticket
+(one run is $0.10 to $0.50); change the three constants to apply a different one.
+
+Baseline command (0.2.14): `python3 -c "import json,glob,statistics as s,collections as C;g=C.defaultdict(list);[g[(r['run'][1:4],r['arm'])].append(r['cost']) for f in glob.glob('bench/policy/results-3*.jsonl') for r in map(json.loads,open(f)) if r.get('cost') is not None and r['arm'] in('main','none')];print(s.median(s.stdev(v)/s.mean(v) for v in g.values() if len(v)==3))"` prints 0.163.
+
 ## Release performance check
 
 `python bench/perf_release.py OLD_TAG NEW_TAG NAME=PATH ...` (for example `v0.2.12 v0.2.13 click=~/repos/click`) unpacks both tags, runs `bench/perf.py` as NEW, OLD, then NEW again, records the load before each pass (and waits until it is under `--max-load`, flagging a pass that starts above it), refuses a work directory on tmpfs, and writes `compare.md`: each change is marked *within noise* when it is no larger than the gap between the two NEW passes (#224).
