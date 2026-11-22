@@ -1139,6 +1139,16 @@ def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> lis
                 types["()" + fn.name] = ret
         return types
 
+    # #400: `a, b = helper(...)` where a function of this file returns a tuple of constructed objects: each name gets that class
+    tuple_returns: dict[str, list[str | None]] = {}
+    for fn in ast.walk(tree):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            built = {n.targets[0].id: _constructed(n.value) for n in _own_body(fn)
+                     if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
+            rets = [r.value for r in _own_body(fn) if isinstance(r, ast.Return) and isinstance(r.value, ast.Tuple)]
+            if len(rets) == 1:
+                tuple_returns[fn.name] = [_constructed(e) or (built.get(e.id) if isinstance(e, ast.Name) else None) for e in rets[0].elts]
+
     def visit_function(fn, qual: str, self_types: dict[str, str], enclosing: str = "",
                        outer: dict[str, str] | None = None) -> dict[str, str]:
         # a nested function sees the names of the function around it (dogfood D7, #40: `index: _Index` used from a
@@ -1149,6 +1159,14 @@ def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> lis
                 cls = _constructed(n.value)
                 if cls:
                     env[n.targets[0].id] = cls
+            elif (isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Tuple)
+                  and isinstance(n.value, ast.Call)):
+                f = n.value.func
+                kinds = tuple_returns.get(f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else "")
+                if kinds and len(kinds) == len(n.targets[0].elts):
+                    for t, k in zip(n.targets[0].elts, kinds):
+                        if k and isinstance(t, ast.Name):
+                            env[t.id] = k
             elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
                 cls = _annotation_class(n.annotation) or _constructed(n.value)
                 if cls:
