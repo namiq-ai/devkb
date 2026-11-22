@@ -34,5 +34,5 @@ Query medians are seconds for one call over five. Pins: click e38188e, prefect c
 ## How the next release uses it
 
 `perf_release.py v0.2.14 NEW <the same seven repositories>` and compare with this table: the proposed target (the release owner confirms it) is no build time, peak memory or query median beyond noise, except
-where a ticket says why. The 0.2.14 to 0.2.15 run is recorded in the section below. #289's fix is measured against this table on the same repositories and by its own count-based fixture
+where a ticket says why. The 0.2.14 to 0.2.15 run is not recorded yet: it is run on the release candidate (the step in `docs/RELEASING.md`) and added below. #289's fix is measured against this table on the same repositories and by its own count-based fixture
 (`tests/test_build_same_name_linear_289.py`: 640,000 reach tests become 800).

@@ -101,3 +101,10 @@ reason: `not-complete` (several symbols share the name, #390), `duplicate:*` (gr
 (#281). So #393's expectation "those 9 rows turn into delivered answers" does not hold on this data; what holds is that the crash is gone (`tests/test_devkb_guardrail_bare_head_393.py`) and nothing is
 built and then lost. The path to the proposed 30% target is #390 and #391, not #393.
 Data: `~/.claude/jobs/d417ed39/tmp/replay393/out/` (one JSON file per ticket).
+
+## After #390 and #391, replayed (2026-11-22)
+
+Same 36 recent streams and bases, the guardrail with #390 (a shared name searched in files that hold exactly one definition is resolved there) and #391 (the complete names of a several-name search are answered beside grep, the others named in one line): **186 decisions, 36 answered (20 before), none lost.**
+Of the 16 new answers, 15 are #391 (`partial:in-file` 8, `partial:locate` 4, `partial:call-sites-filtered` 2, `partial:read-body` 1) and 1 is #390 (`body:over-cap`, a scoped unique definition). Median 272 characters, largest 990.
+**Checked against the source:** every new answer was re-run in its checkout and each cited line compared with the file: 32 `path:line:` citations and the line-only answers of the single-file searches, all matching; no answer contradicts the source. #390's own group is smaller than the ticket's estimate (39 searches): most of those searches asked about several names or repository-wide, which #390 does not touch.
+Answered share of the 186 recent decisions: 10.8% before, 19.4% now. The share of code-name searches, which the proposed 30% target in this note is about, was not recomputed.

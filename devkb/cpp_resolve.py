@@ -408,8 +408,28 @@ class Repo:
         return out
 
 
+_SHARED: list = []        # [(units, repo, len)]: the one index of a build's units, shared by resolve, incomplete_reasons and add_to_graph (#405)
+
+
+def shared_repo(units: list[Unit]) -> "Repo":
+    """The index of `units`, built once per build instead of once per use (three builds of one index were 7 of Zephyr's 116 s). Its per-file
+    state is reset on every fetch: `cur_path` makes `class_by_type` prefer what the file being resolved includes, and a user that is not resolving a
+    file (ancestors, incomplete reasons) must see no such preference."""
+    if _SHARED and _SHARED[0][0] is units and _SHARED[0][2] == len(units):
+        repo = _SHARED[0][1]
+    else:
+        repo = Repo(units)
+        _SHARED[:] = [(units, repo, len(units))]
+    repo.cur_path = ""
+    return repo
+
+
+def drop_shared_repo() -> None:
+    _SHARED.clear()
+
+
 def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], list[Cross]]:
-    repo = Repo(units)
+    repo = shared_repo(units)
     edges: list[Edge] = []
     unresolved: set[tuple[str, str, str]] = set()
     cross: list[Cross] = []
@@ -640,7 +660,7 @@ def _with_expansions(calls, repo: Repo, path: str = ""):
 
 def incomplete_reasons(units: list[Unit]) -> dict[tuple[str, str], set[str]]:
     """`dynamic-dispatch` and `implicit-call` per (path, qualified name) (ADR §2, §4)."""
-    repo = Repo(units)
+    repo = shared_repo(units)
     out: dict[tuple[str, str], set[str]] = {}
     derived: dict[str, set[str]] = {}
     for u in units:

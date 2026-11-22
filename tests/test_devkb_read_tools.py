@@ -287,3 +287,19 @@ def test_first_lookup_tools_are_loaded_with_the_prompt():
     for name in ALWAYS_LOAD:
         assert (tools[name].meta or {}).get("anthropic/alwaysLoad") is True, name
     assert not (tools["callers"].meta or {}).get("anthropic/alwaysLoad")
+
+
+def test_uses_marks_definitions_spelled_in_another_case_as_symbol_does_396(tmp_path):
+    import subprocess
+    r = tmp_path / "r"
+    (r / "pkg").mkdir(parents=True)
+    (r / "pkg" / "settings.py").write_text("TRACE = ('a', 'b')\n")
+    (r / "pkg" / "util.py").write_text("def trace(x):\n    return x\n")
+    for c in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "x"]):
+        subprocess.run(["git", *c], cwd=r, check=True, capture_output=True)
+    env = {**__import__("os").environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    subprocess.run([sys.executable, "-P", "-m", "devkb.cli", "build", "--project", str(r)], cwd=r, env=env, check=True, capture_output=True)
+    out = subprocess.run([sys.executable, "-P", "-m", "devkb.cli", "uses", "TRACE", "--project", str(r)], cwd=r, env=env, capture_output=True, text=True).stdout
+    defined = [ln for ln in out.splitlines() if ln.startswith("defined:")]
+    assert len(defined) == 2 and "settings.py" in defined[0] and "(other case)" not in defined[0], defined
+    assert "util.py" in defined[1] and defined[1].endswith("(other case)"), defined

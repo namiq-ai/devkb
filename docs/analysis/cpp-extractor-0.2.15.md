@@ -77,3 +77,22 @@ autoas's exact-name figure is under 0.95 only because 16 definitions are renamed
 **#244, Zephyr against the real v0.2.11:** 87.0 s (v0.2.11) against 115.9 s (candidate), **+33%**, not within +10%. v0.2.14 was already +24%. The profile (cumulative, v0.2.11 to now): `cpp_graph.add_to_graph` +55.7 s (resolve +24.5, `Repo.__init__` +14.8, `scan_bodies` +16.3) and `_parse_python_file` +25.8 s (of which `_uses_in_tree` +16.0). Filed as **#405** with the attribution.
 
 **#119, constructors:** 65% of the missed constructor edges found (268 to 93), bar 80%. The remainder is implicit construction that needs expression types (a `return` that converts, `T x = expr`, a call result as the argument): filed as **#406**.
+
+## #405 Zephyr build time, measured by wall clock (2026-11-22)
+
+The earlier attribution (`_uses_in_tree` +16 s, `resolve` +24.5 s, `Repo.__init__` +14.8 s) came from **cProfile, which inflates call-heavy Python by 2x or more and ranked the phases wrongly**. A second profile this session pointed at `sees` (887,386 calls, 12 s cumulative); an index that makes it a binary search changed nothing measurable (108.9 s against 109.6 s) and was dropped. The table below is plain `time.perf_counter` around each phase, one run each on an otherwise idle machine, `build_symbols.extract` on the pinned Zephyr checkout in `~/.cache/devkb/cpp-corpus/zephyr`; the timing script (wrappers around the listed functions) is not committed.
+
+| phase | v0.2.11 | 0.2.15 before | after the shared index |
+|---|---|---|---|
+| `extract` total | 85.2 s | 116.5 s (+36.7%) | **109.6 s (+28.6%)** |
+| `add_to_graph` | 68.0 | 92.2 | 85.8 |
+| `scan_bodies` | 26.2 | 30.3 | 30.4 |
+| `_parse_python_file` | 16.3 | 22.9 | 22.3 (of which `_uses_in_tree` 3.8) |
+| `resolve` | 5.8 | 17.1 | 17.5 |
+| `Repo.__init__` | 4.3 (2 calls) | 10.6 (3 calls) | 3.6 (1 call) |
+| edges | 469,279 | 714,255 | 714,255 |
+
+- **Done:** the index of a build's units was built three times (`resolve`, `incomplete_reasons`, `add_to_graph`); it is built once now and its per-file state reset on each use (`cpp_resolve.shared_repo`). The graph is identical before and after on leveldb, fmt, autoas and cJSON (node and edge counts and hashes of the sorted nodes and edges), and Zephyr's edge count is unchanged. A test counts constructions (1 per build), not seconds.
+- **Not done:** the bar is at most 95.7 s on the ticket's method (v0.2.11 87.0 s x 1.10; on this table's method 85.2 x 1.10 = 93.7 s). 109.6 s is 14 to 16 s above it. What is left: `resolve` 17.5 s against 5.8 s (a third of the edges are new, so some of it is the new work), `scan_bodies` +4 s, Python parsing +6 s (`_uses_in_tree` 3.8 s of it is a feature added since 0.2.11). Reaching the bar needs a sampling profiler (py-spy is not installed here), or removing work that finds edges. **#405 stays open.**
+
+**Owner decision (2026-11-22): the Zephyr bar for #405 is 120 s** (the code base is large), not 95.7 s (v0.2.11 x 1.10). Against it, 109.6 s passes: **#405 and #244's Zephyr clause are met**; the other #244 clauses were met earlier (leveldb recall 0.800, method misses 88, typed-receiver precision 0.98). This is an amended bar, not a measured +10%: v0.2.11's 85.2 s (this table's method) would make 120 s about +41%. `docs/specs/SPEC-DKB-004` N3 still says "at most +10% on Zephyr against 0.2.11"; the spec is the owner's to amend (the review gate never merges `docs/specs/*`), so it is not edited here.

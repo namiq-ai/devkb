@@ -189,7 +189,7 @@ def add_to_graph(g: DevKBGraph, repo_root: Path, error_sig_key: Callable[[str, s
 
     # Where an unattributed call to a method can hide besides the files that hold one: the file it is defined in and the
     # files of classes derived from its class (an unqualified call there) (#116).
-    repo_classes = cpp_resolve.Repo(units)
+    repo_classes = cpp_resolve.shared_repo(units)
     derived_files: dict[str, set[str]] = {}
     for cls_list in repo_classes.classes.values():
         for cls in cls_list:
@@ -272,6 +272,7 @@ def add_to_graph(g: DevKBGraph, repo_root: Path, error_sig_key: Callable[[str, s
         "unresolved": [{"file": r.file, "line": r.line, "abi_name": r.abi_name, "mechanism": r.mechanism, "reason": why}
                        for r, why in result.unlinked],
     }
+    cpp_resolve.drop_shared_repo()        # the build's index is not kept past the build (#405)
     return report
 
 
