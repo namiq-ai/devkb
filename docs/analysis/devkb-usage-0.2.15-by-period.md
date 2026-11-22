@@ -67,11 +67,12 @@ Guard log, benchmark sessions only. **Caution:** a benchmark arm runs the hook c
 
 **Reading it.**
 1. **Before #369 the measurement was blind, after it the answer is "rarely".** In 0.2.13 agents tried devkb and the benchmark refused all 35 attempts; after #369 agents are allowed to run it, and in P3 to P4 they do so in 0 to 47% of runs depending on the ticket and arm. Location withheld (#337) raised nothing: the one effect that points the right way is `main` against `mainhid` (5 against 2), so giving the location did not stop agents querying, it changed which tickets they queried on. n=3 per cell: a pointer, not a result.
-2. **`stale-graph` becomes the hook's largest reason from P3 on** (233 of 590 benchmark decisions in P3, 167 of 265 in P4) because the benchmark agents edit the checkout while the graph is at the base. In the working sessions it is 16% of decisions. This is what #409 and #410 address; P5 has too little data (24 decisions) to show it; the clean live run is in progress (#409).
+2. **`stale-graph` becomes the hook's largest reason from P3 on** (233 of 590 benchmark decisions in P3, 167 of 265 in P4). Most of it is **not the agents' edits**: the yaml-cpp runs (`ext/work/y2..y4`, arms `orig` and `ship`) have 21 to 28 of 21 to 29 decisions stale, from the first search on. `bench/ext/extbench.py` builds the graph and then commits the policy files (`git commit -qm "policy and graph"`), so HEAD is a different commit from the one the graph was built at, and the rule of #273 (built commit != HEAD) refused every search. Reproduced on a yaml-cpp copy: old rule stale, #410's rule not stale (no code file changed between the two commits). In the working sessions it is 16% of decisions, and there it is the agent's own edits and commits. #410 removes both cases; the live two-arm run to show it was not done (see 6).
 3. **The hook answered 7.8% of benchmark decisions and 4.7% of working-session decisions over the whole window.** Its answered share fell from 19% (P1) to 3% (P4) in the benchmark rows; this data does not say whether that is the hook or the batches (different tickets, different hook versions, a graph that was stale more often in P3 and P4). The comparison needs the same tickets on both hook versions, which only the #409 live run does.
 
 ## 4. What this audit corrects
 
+- The first version of this report said the benchmark `stale-graph` share came from agents editing files while the graph was at the base. For the yaml-cpp runs, the largest group, it comes from the harness's own commit after the graph build (section 3, point 2).
 - `devkb-usage-audit-0.2.15.md` and #409/#411 quoted `stale-graph` as 46% of pass-throughs (427 of 928) and 35% of decisions, for a window that started 18 hours late. For the full window it is **465 of 1,516 decisions (31%) and 33% of the 1,407 pass-throughs**, still the largest single reason in the benchmark rows (34%) and third in the working sessions (16%, after `not-complete` 47% and `duplicate` 15%). The conclusion stands, the figures change.
 - The same document counted 1,207 decisions with the 223 reminders included; this one excludes them.
 
@@ -84,4 +85,4 @@ Guard log, benchmark sessions only. **Caution:** a benchmark arm runs the hook c
 
 ## 6. Follow-ups
 
-#409 (live `stale-graph` share, running from a clean worktree), #390 and #391 (the `not-complete` group, 47% of working-session decisions), #411 (incremental graph update, 0.2.16), #368 (the thresholds that decide what a batch can claim).
+#409 (closed on a reproduction; the live `stale-graph` share was not measured: a run on #158 had no stale decision in either arm and the owner declined the cost of a run on edit-heavy tickets), a harness change to build the graph after the policy commit (not filed), #390 and #391 (the `not-complete` group, 47% of working-session decisions), #411 (incremental graph update, 0.2.16), #368 (the thresholds that decide what a batch can claim).
