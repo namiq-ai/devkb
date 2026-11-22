@@ -132,9 +132,10 @@ def test_a_define_d_name_is_a_macro_use_not_a_call(tmp_path):
 
 
 def test_a_name_that_is_both_a_macro_and_a_function_is_counted_not_ignored(tmp_path):
-    files = {
-        "net.c": "#if defined(CONFIG_NET)\nvoid mon_register(int x) {}\n#else\n#define mon_register(...)\n#endif\n",
-        "drv.c": "void init(void) {\n  mon_register(1);\n}\n",
+    files = {   # the stub macro is in a header the caller includes (#290: a macro applies where it is visible)
+        "net.h": "#if defined(CONFIG_NET)\nvoid mon_register(int x);\n#else\n#define mon_register(...)\n#endif\n",
+        "net.c": '#include "net.h"\n#if defined(CONFIG_NET)\nvoid mon_register(int x) {}\n#endif\n',
+        "drv.c": '#include "net.h"\nvoid init(void) {\n  mon_register(1);\n}\n',
     }
     g = S.build(tmp_path, files)
     assert not S.calls(g), "a macro use is never an edge"

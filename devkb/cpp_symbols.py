@@ -28,15 +28,20 @@ MAX_FILE_BYTES = 2 * 1024 * 1024
 
 # The sole source of the limit statement (ADR-DEVKB-008 §4, AD-7). Read by packs.py and by the README test.
 CXX_LIMITS_TEXT = (
-    "C/C++ limits: no preprocessor expansion (macro-generated definitions and calls are not seen), "
-    "no overload resolution (overloads share one node), no type inference (a call through `auto`, an alias or an "
-    "untyped receiver is not attributed); vendored and generated paths are not read; error-return codes "
-    "(`return -EINVAL`, `return Status::Corruption(...)`) are not attributed; pybind11 class bindings (`py::class_`) are not read."
+    "C/C++ limits: a repository macro's calls are expanded at its uses in the files that define it or include its header, until an `#undef` (#290), but a "
+    "definition a macro generates is not seen; overloads are told apart by argument count only, so two of the same count share one "
+    "choice (#291); receivers are resolved through declared types, smart pointers, members, one level of chaining and TEST_F/TEST_P "
+    "fixtures, but there is no general type inference (a call through `auto`, an alias or an untyped receiver is not attributed); "
+    "constructors are linked where written (`T x(args)`, `T x{args}`, `T(args)`, `new T(args)`, `make_unique<T>`, member and base "
+    "initialisers) and picked by argument count, but an implicit construction (a default `T x;`, a copy, a move, a conversion) is not "
+    "linked (#119); template instantiation is not followed (a call on a template's parameter type is not attributed); vendored and generated paths are not read; "
+    "error-return codes (`return -EINVAL`, `return Status::Corruption(...)`) are not attributed; "
+    "pybind11 class bindings (`py::class_`) are not read."
 )
 
 # The C profile's limits (ADR-DEVKB-009 §2): what a C pack cannot see. No overloads or receivers here: C has none.
 C_LIMITS_TEXT = (
-    "C limits: no preprocessor expansion (macro-generated definitions and calls are not seen); a call through a "
+    "C limits: a repository macro's calls are expanded at its uses, but a definition a macro generates is not seen; a call through a "
     "function pointer or an ops table is not followed (the table entry is an indirect reference); a `static` function "
     "is resolved inside its own file only; vendored and generated paths are not read; error-return codes "
     "(`return -EINVAL`) are not attributed."
@@ -98,6 +103,7 @@ class Masked:
     guards: list[tuple[int, int]] = field(default_factory=list)   # spans inside `#ifdef __cplusplus` (SPEC-DKB-002 R2)
     conds: list[tuple[int, str]] = field(default_factory=list)    # (line, text) of `#if/#ifdef/#ifndef/#elif` (SPEC-DKB-002 R15)
     alts: list[tuple[int, int]] = field(default_factory=list)     # sorted spans of `#elif`/`#else` branches (not of `#if 0`); nested ones too
+    undefs: list[tuple[str, int]] = field(default_factory=list)   # (name, 1-based line) of each `#undef` (#290)
 
     def line(self, offset: int) -> int:
         return bisect_right(self.line_starts, offset)
@@ -123,6 +129,7 @@ def mask_source(text: str) -> Masked:
     # `#include "x"` keeps its literal under the quote offset; angle includes are plain text.
     includes: list[str] = []
     defines: list[tuple[str, str, int]] = []
+    undefs: list[tuple[str, int]] = []
     spans: list[tuple[int, int]] = []
     stack: list[bool] = []
     gstack: list[int | None] = []      # per open conditional: start of a positive `__cplusplus` region, else None
@@ -177,6 +184,10 @@ def mask_source(text: str) -> Masked:
             dm = _DEFINE.match(body.replace("\\\n", " \n"))
             if dm:
                 defines.append((dm.group(1), dm.group(3), bisect_right(line_starts, d.start())))
+        elif word == "undef":
+            um = re.match(r"\s*#\s*undef\s+([A-Za-z_]\w*)", body)
+            if um:
+                undefs.append((um.group(1), bisect_right(line_starts, d.start())))
         spans.append((d.start(), d.end()))
     if skipping is not None:
         spans.append((skip_from, len(code)))
@@ -195,7 +206,7 @@ def mask_source(text: str) -> Masked:
         code = "".join(out)
     code = _blank_dialect(code)
     alts.sort()
-    return Masked(code, literals, defines, includes, line_starts, guards, conds, alts)
+    return Masked(code, literals, defines, includes, line_starts, guards, conds, alts, undefs)
 
 
 # ── dialect keywords (ADR-DEVKB-009 §2, SPEC-DKB-002 R6): the one closed table, read without any compiler ─────────
@@ -350,6 +361,8 @@ class Call:
     argc: int = -1       # arguments written at the call (#120, F5); -1 when not counted
     chained: tuple | None = None   # `r.g().f()`: (inner receiver or "" for a bare `g()`, "g", inner recv_local) (#120, F4)
     field_of: tuple | None = None  # `b.m.f()` / `b->m->f()`: (b, b's recv_local, "m") (#120, F4)
+    arg_type: str | None = None    # the declared type (short name) of the one plain argument (`x`, `*p`, `std::move(x)`), when known: a same-typed one is a copy or a move (#119)
+    init: bool = False             # the name of a constructor's initialiser (`: m(x)`): a member initialisation, or a base-class constructor call (#145)
 
 
 @dataclass
@@ -430,6 +443,9 @@ def _blank_span(s: str, a: int, b: int) -> str:
     return s[:a] + _blank(s[a:b]) + s[b:]
 
 
+_LEADING_MACRO = re.compile(r"\s*([A-Z][A-Z0-9_]{2,})\b(?!\s*\()(?=\s+(?:namespace|class|struct|union|enum|template|extern|inline)\b)")
+
+
 def _strip_decor(h: str) -> str:
     """Attributes, access specifiers and a leading `template<...>` blanked, offsets preserved."""
     for m in list(_ATTR.finditer(h)):
@@ -439,7 +455,13 @@ def _strip_decor(h: str) -> str:
     while True:
         m = re.match(r"\s*template\s*<", h)
         if not m:
-            break
+            # a project's namespace or export macro written before a declaration keyword (`FMT_BEGIN_NAMESPACE namespace detail`,
+            # `FMT_EXPORT class K`): the macro is decoration, and left in it turns the head into one unknown construct (#121)
+            mm = _LEADING_MACRO.match(h)
+            if not mm:
+                break
+            h = _blank_span(h, 0, mm.end(1))
+            continue
         depth, k = 1, m.end()
         while k < len(h) and depth:
             depth += {"<": 1, ">": -1}.get(h[k], 0)
@@ -876,14 +898,65 @@ class _Scanner:
         return d.locals
 
     # body extraction ----------------------------------------------------------
-    def scan_body(self, d: Def, lo: int, hi: int, names: set[str]) -> None:
+    def _arg_type(self, d: Def, text: str, open_i: int) -> str | None:
+        """The declared type (short name) of the one argument written at `open_i` when it is a plain variable, `*p` of a pointer, or either inside
+        `std::move(...)` / `std::forward<..>(...)`; "" for a `std::move(...)` of something untyped (a move, whatever the type); else None."""
+        close = _match_close(text, open_i, text[open_i], ")" if text[open_i] == "(" else "}")
+        arg = text[open_i + 1:close].strip() if close is not None else ""
+        moved = re.match(r"(?:std\s*::\s*)?(?:move|forward)\s*(?:<[^>]*>)?\s*\((.*)\)\s*$", arg, re.S)
+        if moved:
+            arg = moved.group(1).strip()
+        m = re.fullmatch(r"\*?\s*([A-Za-z_]\w*)", arg)
+        types = self.locals_of(d).get(m.group(1)) if m else None
+        if types and len(types) == 1 and next(iter(types)) is not None:
+            return next(iter(types))[0].split("::")[-1]
+        return "" if moved else None
+
+    def _is_copy_or_move(self, d: Def, text: str, open_i: int, type_name: str) -> bool:
+        """The one argument at `open_i` is `std::move(x)` / `std::forward<..>(x)`, or a variable (or `*p`) whose declared type is `type_name`."""
+        t = self._arg_type(d, text, open_i)
+        return t == "" or t == type_name
+
+    def constructs_in(self, d: Def, lo: int, text: str, names: set[str], expressions_only: bool = False) -> None:
+        """Constructor calls written without a call's `name(`: `new T(args)`, `T x(args)` / `T x{args}`, `make_unique<T>(args)` / `make_shared<T>`
+        (SPEC-DKB-004 F3, #119). Kept as a `construct` call of the type's short name; the resolver links it when `T` is the one repository class of
+        that name, and to the one constructor its argument count selects."""
+        line_of = self.m.line
+        if getattr(self, "has_ctor_filter", False) and (not self.ctor_re or self.ctor_re.isdisjoint(_IDENT_RE.findall(text))):
+            return
+        for rx, kind in ((_CTOR_NEW, "new"), (_CTOR_MAKE, "make"), (_CTOR_LOCAL, "local"), (_CTOR_DEFAULT, "default")):
+            if expressions_only and kind in ("local", "default"):
+                continue
+            for cm in rx.finditer(text):
+                qual, name = cm.group(1), cm.group(2)
+                if name not in names or name in _NOT_FUNC or name in _NOT_TYPE or (kind == "local" and qual.strip() == "" and name in _NOT_TYPE):
+                    continue
+                if kind == "default":      # `T x;`: the default constructor, written nowhere; `extern T x;` declares, it does not construct
+                    if re.search(r"\bextern\b", cm.group(0)):
+                        continue
+                    c = Call(d.index, name, "construct", re.sub(r"\s", "", qual).rstrip(":"), None, None, line_of(lo + cm.start(2)), 0)
+                    self.calls.append(c)
+                    continue
+                open_i = cm.end() - 1
+                c_argc = _argc(text, open_i)
+                if c_argc == 1 and self._is_copy_or_move(d, text, open_i, name):
+                    continue            # `T copy(other)`, `T moved(std::move(other))`: an implicit copy or move, not a declared constructor
+                c = Call(d.index, name, "construct", re.sub(r"\s", "", qual).rstrip(":"), None, None, line_of(lo + cm.start(2)), c_argc)
+                self.calls.append(c)
+
+    def scan_body(self, d: Def, lo: int, hi: int, names: set[str], init: bool = False) -> None:
         code = self.code
         text = code[lo:hi]
         line_of = self.m.line
+        members = _initialiser_names(text) if init else set()
+        has_mock = "EXPECT_CALL" in text or "ON_CALL" in text      # one substring test per body, not a regex search per call
         for cm in _CALL_RE.finditer(text):
             name = cm.group(1)
-            if name not in names or name in _NOT_FUNC:
-                continue            # a call to a name no repository symbol bears is never linked and never counted
+            is_init = cm.start(1) in members      # `: m(x), n(f(x))`: m and n are initialised, not called (#145); `f` is not at depth 0, so it is read
+            if (name not in names and not is_init) or name in _NOT_FUNC:
+                continue            # a call to a name no repository symbol bears is never linked and never counted (an initialiser may name a data member: #119)
+            if has_mock and _in_mock_method_slot(text[max(0, cm.start() - 300):cm.start()]):
+                continue            # `EXPECT_CALL(mock, allocate(1))`: the method the mock expects, not a call to a repository `allocate` (#146)
             chain, a = _qualifier_before(text, cm.start())
             k = a - 1
             while k >= 0 and text[k] in " \t\r\n":
@@ -954,12 +1027,20 @@ class _Scanner:
                 elif prev in ">*&" and self.cpp and _DECL_PREFIX.match(text, _stmt_start(text, k), a):
                     continue      # `std::vector<int> x(3)`, `Foo *x(p)`, `const Bar& x(y)`: a declaration, not a call (#65)
                 form, qualifier, recv, rl = "bare", "", None, None
+                if name == d.short and d.kind == "method" and (mm := re.search(r"\b([A-Z][A-Z0-9]*_[A-Z0-9_]*)\s*\(\s*$", text[max(0, cm.start() - 80):cm.start()])) \
+                        and not mm.group(1).startswith(("ASSERT_", "EXPECT_", "CHECK_", "DCHECK_", "VERIFY_", "LIKELY", "UNLIKELY")):
+                    form = "qualified"      # `FMT_POSIX(close(fd))` inside a method `close`: a macro adapts the global call; not the method itself (#95)
             c = Call(d.index, name, form, qualifier, recv, rl, line_of(lo + cm.start()), _argc(text, cm.end() - 1))
+            c.init = is_init
+            if is_init and c.argc == 1:
+                c.arg_type = self._arg_type(d, text, cm.end() - 1)
             if form == "member" and chained is not None and recv is None:
                 c.chained = chained
             if form == "member" and field_of is not None and recv is None:
                 c.field_of = field_of
             self.calls.append(c)
+        if self.cpp:
+            self.constructs_in(d, lo, text, names, expressions_only=init)       # an initialiser list holds `new T(..)`, never a declaration
         self.errors_in(d, lo, text)
 
     def errors_in(self, d: Def, lo: int, text: str) -> None:
@@ -1017,6 +1098,69 @@ class _Scanner:
         for q in re.finditer(r"\"[^\"]*\"", expr):
             out.append(self.m.literals.get(base + q.start(), ""))
         return "".join(out)
+
+
+_MOCK_START = re.compile(r"\b(?:EXPECT_CALL|ON_CALL)\s*\(")
+_IDENT_RE = re.compile(r"[A-Za-z_]\w*")
+
+
+def _in_mock_method_slot(prefix: str) -> bool:
+    """Is the text right after `prefix` the second argument of `EXPECT_CALL(mock, ` / `ON_CALL(mock, `: the one top-level comma of the macro's
+    own argument list so far, however many commas the mock expression's inner calls hold (#146)."""
+    starts = list(_MOCK_START.finditer(prefix))
+    if not starts:
+        return False
+    rest = prefix[starts[-1].end():]
+    depth, commas = 0, 0
+    for ch in rest:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth < 0:
+                return False
+        elif ch == "," and depth == 0:
+            commas += 1
+    return depth == 0 and commas == 1 and rest.rstrip().endswith(",")
+
+
+_QUAL = r"((?:[A-Za-z_]\w*\s*::\s*)*)([A-Za-z_]\w*)"                       # `ns::T`: (qualifier with `::`, short name)
+_CTOR_NEW = re.compile(r"\bnew\s+(?:\([^()]*\)\s*)?(?:::\s*)?" + _QUAL + r"\s*(?:<[^;{}()]*>)?\s*([({])")                    # `new T(args)`, `new T{args}`
+_CTOR_MAKE = re.compile(r"\b(?:std\s*::\s*)?make_(?:unique|shared)\s*<\s*(?:::\s*)?" + _QUAL + r"[^<>;{}]*(?:<[^;{}]*>)?\s*>\s*(\()")   # `make_unique<T>(args)`
+_CTOR_LOCAL = re.compile(r"(?:^|(?<=[;{}]))\s*(?:(?:const|static|constexpr|volatile)\s+)*(?:::\s*)?" + _QUAL
+                    + r"\s*(?:<[^;{}()]*>)?\s+(?:[&*]\s*)*[A-Za-z_]\w*\s*([({])")                                              # `T x(args);`, `T x{args};`
+_CTOR_DEFAULT = re.compile(r"(?:^|(?<=[;{}]))[ \t\r\n]*(?:(?:const|static|constexpr|volatile)\s+)*(?:::\s*)?" + _QUAL
+                           + r"\s*(?:<[^;{}()]*>)?\s+[A-Za-z_]\w*\s*(?:\[[^\]]*\]\s*)?(?:,\s*[A-Za-z_]\w*\s*)*;")                # `T x;`, `T x, y;`
+_NOT_TYPE = frozenset("return new delete throw case else goto using typedef namespace struct class enum union sizeof co_return co_yield".split())
+
+
+def _initialiser_names(text: str) -> set[int]:
+    """Offsets of the names in a constructor's member-initialiser list (#145): the identifier at depth 0 after the list's `:` or after a `,`
+    at depth 0. `text` is what lies between the parameter list and the body (`: m(x), n(f(x))`); a head with no `:` has none. The
+    arguments of an initialiser are not names of it: `f` in `n(f(x))` is a call and stays one."""
+    out: set[int] = set()
+    depth, seen_colon, expect = 0, False, False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch in "([{<" and not (ch == "<" and depth == 0):
+            depth += 1 if ch != "<" else 0
+        elif ch in ")]}":
+            depth = max(0, depth - 1)
+        elif ch == ":" and depth == 0 and text[i + 1:i + 2] != ":" and text[i - 1:i] != ":":
+            seen_colon, expect = True, True
+        elif ch == "," and depth == 0 and seen_colon:
+            expect = True
+        elif expect and (ch.isalpha() or ch == "_"):
+            j = i
+            while j < len(text) and (text[j].isalnum() or text[j] in "_:"):
+                j += 1
+            out.add(i)
+            expect = False
+            i = j
+            continue
+        i += 1
+    return out
 
 
 def _argc(text: str, open_i: int) -> int:
@@ -1196,13 +1340,18 @@ def extract_file(path: str, text: str, includer_languages: list[str] | None = No
                        {n for n, _b, _l in m.defines}, ns_seen, m.includes, m, sc, consumed)
 
 
-def scan_bodies(rec: FileRecords, names: set[str], function_names: set[str]) -> None:
-    """Pass 2: call sites of `names`, error sites, and indirect references to `function_names`."""
+def scan_bodies(rec: FileRecords, names: set[str], function_names: set[str], ctor_re: frozenset | None = None) -> None:
+    """Pass 2: call sites of `names`, error sites, and indirect references to `function_names`. `ctor_re` is the set of names of the classes that have
+    a constructor (#119); without it, constructor calls are looked for in every body."""
     sc = rec.scanner
+    sc.ctor_re = ctor_re
+    sc.has_ctor_filter = True
     for d in rec.defs:
-        for lo, hi in d.spans:
+        for n, (lo, hi) in enumerate(d.spans):
             if hi > lo:
-                sc.scan_body(d, lo, hi, names)
+                # the first of a function's two spans lies between its `)` and `{` (an initialiser list); a macro body such as TEST(..) has one span
+                # that is all body, where a `:` is a ternary or a label (#145)
+                sc.scan_body(d, lo, hi, names, init=n == 0 and len(d.spans) == 2)
     m = rec.masked
     for im in _IND.finditer(m.code):
         ref = im.group("ref")

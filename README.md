@@ -28,7 +28,7 @@ Everything runs locally: devkb reads files and runs `git`, never your code (unle
 |---|---|---|
 | Python | ✅ Supported | functions, classes, calls (imports, typed objects, base classes), tests, FastAPI/Flask/Odoo routes, errors, environment variables |
 | C# | ✅ Supported | types, members, calls through typed receivers, generics, LINQ and overloads, tests; checked against the compiler on five open-source repositories |
-| C, C++ | 🟡 Partial | functions, classes, calls, tests, error messages, calls across languages (`extern "C"`, ctypes, pybind11); no preprocessor expansion, no overload resolution, no type inference; a function-pointer or ops table is an unresolved indirect reference; a cross-language pack is Complete only for the languages read |
+| C, C++ | 🟡 Partial | functions, classes, calls, tests, error messages, calls across languages (`extern "C"`, ctypes, pybind11); repository macros are expanded (a definition a macro generates is not seen), overloads are told apart by argument count only, receivers resolve through declared types, smart pointers, members and test fixtures but there is no general type inference, implicit constructions (default, copy, move, conversion) are not linked, template instantiation is not followed; a function-pointer or ops table is an unresolved indirect reference; a cross-language pack is Complete only for the languages read |
 | TypeScript, JavaScript | 🟡 Partial | functions, components, classes and their HTTP calls to backend routes; not calls between them |
 | Odoo XML | 🟡 Partial | templates, views, menus |
 | Java, Go, Rust, shell, others | ⬜ Not yet | files and history only |

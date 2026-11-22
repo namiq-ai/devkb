@@ -1081,6 +1081,27 @@ def _own_body(node: ast.AST, into_lambdas: bool = False):
             stack.extend(ast.iter_child_nodes(n))
 
 
+def _stmt_returns(body: list) -> tuple[list, dict]:
+    """The tuple `return`s of a function and the names its plain assignments bind to a constructed object, found by walking its statement lists
+    (if / for / while / try / with bodies), never its expressions or nested defs: the cost is the number of statements, not of nodes (#400)."""
+    rets: list = []
+    built: dict = {}
+    stack = list(body)
+    while stack:
+        n = stack.pop()
+        if isinstance(n, ast.Return):
+            if isinstance(n.value, ast.Tuple):
+                rets.append(n.value)
+        elif isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+            built.setdefault(n.targets[0].id, _constructed(n.value))
+        elif isinstance(n, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith, ast.Try)):
+            for fld in ("body", "orelse", "finalbody"):
+                stack.extend(getattr(n, fld, None) or [])
+            for h in getattr(n, "handlers", None) or []:
+                stack.extend(h.body)
+    return rets, built
+
+
 def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> list[tuple[str, str, str, str]]:
     """[(caller_qualname, class_ref, method)] for calls on a receiver whose class the code states. `returns` collects
     `Cls.method` -> the class that method hands back, for a call on its result (`ret:Cls#method`)."""
@@ -1143,9 +1164,9 @@ def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> lis
     tuple_returns: dict[str, list[str | None]] = {}
     for fn in tree.body:        # module-level functions only: a method or nested function of the same name must not stand in for the helper
         if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            built = {n.targets[0].id: _constructed(n.value) for n in _own_body(fn)
-                     if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
-            rets = [r.value for r in _own_body(fn) if isinstance(r, ast.Return) and isinstance(r.value, ast.Tuple)]
+            # a helper ends with `return a, b`: its last statement, and the names its top-level assignments bind. No walk of the body (Zephyr's
+            # Python scripts made two walks per function a fifth of the build)
+            rets, built = _stmt_returns(fn.body)
             if len(rets) == 1:
                 kinds_ = [_constructed(e) or (built.get(e.id) if isinstance(e, ast.Name) else None) for e in rets[0].elts]
                 if returns is not None:      # for callers in other files (resolved in this file's context)
@@ -2006,10 +2027,22 @@ def extract(repo_root: Path) -> DevKBGraph:
         by_target.setdefault(rec[2], []).append(rec)
         if rec[3] is None and rec[2] in per_file_import_targets.get(rec[0], ({}, {}))[1]:
             by_target.setdefault(per_file_import_targets[rec[0]][1][rec[2]][1], []).append(rec)
+    groups_of: dict[str, dict[tuple, list[tuple]]] = {}      # #289: the unattributed calls of one name, grouped by what decides reach
     for rel_path, symbols in per_file_symbols.items():
         for s in symbols:
             short = s["qualified_name"].rsplit(".", 1)[-1]
-            hits = {(r[0], r[1]) for r in by_target.get(short, ()) if _could_reach(s, rel_path, r, ctx)}
+            if short not in groups_of:
+                gs: dict[tuple, list[tuple]] = {}
+                for r in by_target.get(short, ()):
+                    gs.setdefault((r[0], r[2], r[3]), []).append(r)   # file, called name, receiver
+                groups_of[short] = gs
+            # Whether a call could reach this symbol depends on the call's file, name and receiver; only the argument shape differs between
+            # the calls of a group. Ask once per group (work grows with symbols x groups, not symbols x calls), then check each call's shape.
+            hits = set()
+            kind_checked = s.get("kind") in ("function", "method")
+            for (rf, called, receiver), recs in groups_of[short].items():
+                if _could_reach(s, rel_path, (rf, "", called, receiver, None), ctx):
+                    hits.update((r[0], r[1]) for r in recs if not kind_checked or _shape_fits(s.get("sig"), r[4]))
             if hits:
                 files: dict[str, int] = {}
                 for f, _caller in hits:

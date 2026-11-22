@@ -31,6 +31,7 @@ define (a system header's) is never expanded.
 """
 from __future__ import annotations
 
+import posixpath
 import re
 from dataclasses import dataclass
 
@@ -79,7 +80,7 @@ class Edge:
 _SOURCES = {
     "cpp-same-class": 0.8, "cpp-same-class-base": 0.7, "cpp-same-file": 0.8, "cpp-qualified": 0.9,
     "cpp-typed-receiver": 0.7, "cpp-typed-receiver-base": 0.6, "cpp-unique-free": 0.6,
-    "cpp-macro": 0.5,
+    "cpp-macro": 0.5, "cpp-constructor": 0.7,
 }
 MACRO_DEPTH = 4
 _NOT_CALLED = frozenset("if while for switch return sizeof defined do else case typeof __typeof__ alignof _Alignof "
@@ -118,7 +119,11 @@ class Repo:
         self.class_suffix: dict[str, list[tuple[str, object]]] = {}
         self.namespaces: set[str] = set()
         self.macros: set[str] = set()
+        self.definers: dict[str, set[str]] = {}    # macro name -> the files that `#define` it (#290)
+        self._reach_path, self._reach = "", set()
+        self.cur_path = ""                         # the file whose calls are being resolved: `class_by_type` prefers what it includes (#244)
         self.function_names: set[str] = set()
+        self.non_ctor_names: set[str] = set()
         self.language: dict[str, str] = {u.path: u.rec.language for u in units}
         self.c_linkage: dict[str, list[tuple[str, Symbolic]]] = {}     # non-static functions with C linkage, by short name
         self.ns_paths: set[str] = set()        # every named namespace a file opens, as `a::b`
@@ -128,6 +133,8 @@ class Repo:
             self.aliases |= getattr(u.rec.scanner, "aliases", set())
             self.namespaces |= u.rec.namespaces
             self.macros |= u.rec.define_names
+            for dn in u.rec.define_names:
+                self.definers.setdefault(dn, set()).add(u.path)
             for dname, body, _line in (u.rec.masked.defines if u.rec.masked is not None else ()):
                 self.macro_bodies.setdefault(dname, []).append(body)
             for qn, s in u.syms.items():
@@ -143,6 +150,9 @@ class Repo:
                         self.c_linkage.setdefault(s.short, []).append((u.path, s))
                 if s.kind in ("function", "method"):
                     self.function_names.add(s.short)
+                    owner = s.qn.rsplit(".", 2)[-2] if s.qn.count(".") >= 1 else ""
+                    if not (s.kind == "method" and owner == s.short):
+                        self.non_ctor_names.add(s.short)      # a function or a method that is not a constructor bears this name (#119)
             for c in u.rec.classes:
                 self.classes.setdefault(c.qn, []).append((u.path, c))
                 bits = c.qn.split(".")
@@ -203,6 +213,90 @@ class Repo:
             cache[name] = [(q, n, v) for (q, n), v in seen.items()]
         return cache[name]
 
+    # macro scope (#290) --------------------------------------------------------
+    def _include_edges(self) -> dict[str, set[str]]:
+        """path -> the paths that include it (an `#include` names a repository file next to the includer first, else the one whose path ends the
+        same way). Built once."""
+        if "_rev" not in self.__dict__:
+            paths = {u.path for u in self.units}
+            by_base: dict[str, list[str]] = {}
+            for p in paths:
+                by_base.setdefault(p.rsplit("/", 1)[-1], []).append(p)
+            rev: dict[str, set[str]] = {}
+            for u in self.units:
+                for inc in u.rec.includes:
+                    inc = inc.strip()
+                    cands = by_base.get(inc.rsplit("/", 1)[-1], []) if inc else []
+                    if not cands:
+                        continue
+                    near = posixpath.normpath(posixpath.join(posixpath.dirname(u.path), inc))
+                    norm = re.sub(r"^(?:\.{1,2}/|/)+", "", posixpath.normpath(inc))
+                    for t in ([near] if near in paths else [c for c in cands if c == norm or c.endswith("/" + norm)]):
+                        rev.setdefault(t, set()).add(u.path)
+            self.__dict__["_rev"] = rev
+        return self.__dict__["_rev"]
+
+    def included_from(self, path: str) -> set[str]:
+        """The repository files `path` includes, at any depth (the forward closure of `_include_edges`)."""
+        cache = self.__dict__.setdefault("_fwd_cache", {})
+        if path not in cache:
+            if "_fwd" not in self.__dict__:
+                fwd: dict[str, set[str]] = {}
+                for target, includers in self._include_edges().items():
+                    for f in includers:
+                        fwd.setdefault(f, set()).add(target)
+                self.__dict__["_fwd"] = fwd
+            fwd = self.__dict__["_fwd"]
+            seen: set[str] = set()
+            todo = [path]
+            while todo:
+                for t in fwd.get(todo.pop(), ()):
+                    if t in seen:
+                        continue
+                    seen.add(t)
+                    done = cache.get(t)
+                    if done is not None:        # a header whose closure is already known: take it whole instead of walking it again
+                        seen |= done
+                    else:
+                        todo.append(t)
+            cache[path] = seen
+        return cache[path]
+
+    def macro_scope(self, name: str) -> set[str]:
+        """The files that see repository macro `name`: those that define it and those that include, at any depth, one that does."""
+        cache = self.__dict__.setdefault("_scope", {})
+        if name not in cache:
+            rev = self._include_edges()
+            seen = set(self.definers.get(name, ()))
+            todo = list(seen)
+            while todo:
+                for f in rev.get(todo.pop(), ()):
+                    if f not in seen:
+                        seen.add(f)
+                        todo.append(f)
+            cache[name] = seen
+        return cache[name]
+
+    def sees(self, path: str, name: str, line: int = 0) -> bool:
+        """Is `name`, written in `path` at `line`, a repository macro there: defined in that file or a header it includes, and not `#undef`ed
+        earlier in it. A name that is also a function elsewhere stays a plain call in a file that never sees the macro (#290)."""
+        if name not in self.macros:
+            return False
+        u = self._unit.get(path)
+        if u is not None and u.rec.masked is not None:
+            undef = max((ln for n, ln in u.rec.masked.undefs if n == name and ln < line), default=0)
+            if undef and not any(n == name and undef < ln < line for n, _b, ln in u.rec.masked.defines):
+                return False                      # `#undef X` with no `#define X` after it and before this use (`#undef X` / `#define X ...` is a redefinition)
+        definers = self.definers.get(name)
+        if not definers:
+            return False
+        if path in definers:
+            return True
+        if path != self._reach_path:                # the calls of one file are resolved together: its include closure is fetched once
+            self._reach_path, self._reach = path, self.included_from(path)
+        reach = self._reach
+        return any(d in reach for d in definers) if len(definers) <= len(reach) else not reach.isdisjoint(definers)
+
     # classes -------------------------------------------------------------------
     def class_by_type(self, t: str, from_ns: str | None = None) -> tuple[str, object] | None:
         """The one repository class a written type names, else None (ambiguous or not a repository class).
@@ -222,6 +316,13 @@ class Repo:
         found = exact if exact else self.class_suffix.get(key, [])
         if len(found) == 1:
             return found[0]
+        if len(found) > 1 and self.cur_path:
+            # alternate definitions of one name (a platform's `port_stdcxx.h` and a documentation `port_example.h`): the one the caller's file
+            # includes, at any depth, is the one the compiler would see (#244)
+            seen = self.included_from(self.cur_path)
+            visible = [c for c in found if c[0] == self.cur_path or c[0] in seen]
+            if len(visible) == 1:
+                return visible[0]
         if from_ns is None or len(exact) < 2 or self.class_suffix.get(key) or parts[-1] in self.aliases:
             return None
         return self._lookup(exact, lead, "" if absolute else from_ns)
@@ -270,10 +371,16 @@ class Repo:
         seen.add(c.qn + "@" + path)
         found = [(p, s) for p, s in self.by_qn.get(c.qn + "." + name, []) if s.kind == "method"]
         if len(self.classes.get(c.qn, [])) > 1 and found:
-            # a class name several namespaces share: only a method defined in this class's namespace is its own (#93)
-            if any(s.class_ns is None for _p, s in found):
-                return ("declared",)
-            found = [(p, s) for p, s in found if s.class_ns == c.namespace]
+            # alternate definitions of one class (one per platform header): a method defined in a file that includes this class's header is
+            # this class's (#244)
+            mine = [(p, s) for p, s in found if p == path or path in self.included_from(p)]
+            if mine and len(mine) < len(found):
+                found = mine
+            else:
+                # a class name several namespaces share: only a method defined in this class's namespace is its own (#93)
+                if any(s.class_ns is None for _p, s in found):
+                    return ("declared",)
+                found = [(p, s) for p, s in found if s.class_ns == c.namespace]
         if len(found) > 1:              # F5: same-named targets narrowed by the call's argument count
             keep = set(self.by_arity([f"{p}::{s.qn}" for p, s in found], argc))
             found = [(p, s) for p, s in found if f"{p}::{s.qn}" in keep] or found
@@ -307,6 +414,7 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
     unresolved: set[tuple[str, str, str]] = set()
     cross: list[Cross] = []
     for u in units:
+        repo.cur_path = u.path
         is_c = not u.rec.cpp
         lang = u.rec.language
         by_def_free = {s.short: s for s in u.syms.values() if s.kind == "function"}
@@ -314,11 +422,11 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
         for s in u.syms.values():
             if s.kind == "function":
                 free_count[s.short] = free_count.get(s.short, 0) + 1
-        for call, via in _with_expansions(u.rec.calls, repo):
+        for call, via in _with_expansions(u.rec.calls, repo, u.path):
             caller_qn = u.qn_of_def[call.caller]
             if caller_qn is None:
                 continue
-            if via is None and call.name in repo.macros:
+            if via is None and call.form != "construct" and repo.sees(u.path, call.name, call.line):
                 # A macro use: never an edge. But a name that is also a repository function (a `#define` stub in an
                 # `#else` branch, as Zephyr's net_if does) may be a real call under another configuration, so it is
                 # counted, never ignored: a pack must not say Complete beside it.
@@ -327,6 +435,44 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                 continue
             caller = u.syms.get(caller_qn)
             chain = caller.class_chain if caller is not None and caller.kind == "method" else ()
+            if call.init and call.name not in repo.class_suffix and call.name not in repo.classes:
+                # `: m(x)`: a member initialised, not a function called (#145). A member of a repository class type is built by that class's
+                # constructor (#119); anything else is dropped. A base class's constructor stays a plain call, below.
+                mt = None
+                if chain and not is_c:
+                    cls0 = repo.caller_class(u.path, chain, caller.class_ns if caller is not None else None)
+                    mt = cls0[1].members.get(call.name) if cls0 is not None else None
+                if mt is None or mt[1] != "":
+                    continue
+                if call.arg_type is not None and call.arg_type in ("", mt[0].split("::")[-1]):
+                    continue                          # `: comparator(c)`, `: icmp_(*cmp)`, `: m(std::move(x))`: an implicit copy or move, not a declared constructor
+                call = Call(call.caller, mt[0].split("::")[-1], "construct", "::".join(mt[0].split("::")[:-1]), None, None, call.line, call.argc)
+            if call.form == "bare" and not is_c and not call.init and (call.name in repo.class_suffix or call.name in repo.classes) \
+                    and call.name not in repo.non_ctor_names and not (chain and call.name == chain[-1]):
+                call = Call(call.caller, call.name, "construct", "", None, None, call.line, call.argc)   # `T(args)`: a temporary, a construction (#119)
+            if call.form == "construct":
+                if is_c:
+                    continue
+                caller_ns0 = caller.class_ns if caller is not None else None
+                target = repo.class_by_type((call.qualifier + "::" if call.qualifier else "") + call.name, caller_ns0)
+                if target is None:
+                    if call.name in repo.class_suffix or call.name in repo.classes:
+                        unresolved.add((u.path, caller_qn, call.name))   # several repository classes bear the name: no guess, and counted
+                    continue                          # not a repository class (std::string, a typedef, ...): not ours to link, not counted
+                r = repo.method_on(target, call.name, argc=call.argc)
+                ckey0 = f"{u.path}::{caller_qn}"
+                fits = True
+                if r and r[0] == "hit" and call.argc >= 0:
+                    ar = repo.arity.get(r[1]) or []
+                    fits = not ar or any(lo <= call.argc <= hi for lo, hi in ar)      # a copy or move (`T x(other)`) fits no declared constructor
+                if r and r[0] == "hit" and not r[2] and not fits:
+                    continue                          # an implicit copy, move or conversion: no declared constructor is called (#119)
+                if r and r[0] == "hit" and not r[2]:  # a constructor is not inherited: one found only through a base is not this class's
+                    edges.append(Edge(ckey0, r[1], "cpp-constructor", _SOURCES["cpp-constructor"],
+                                      f"{u.path}:{call.line}: {caller_qn} constructs {call.name}"))
+                elif r:
+                    unresolved.add((u.path, caller_qn, call.name))   # several constructors fit the argument count: left unresolved, and counted
+                continue
             caller_ns = caller.class_ns if caller is not None else None
             ckey = f"{u.path}::{caller_qn}"
             n = call.name
@@ -482,11 +628,12 @@ def _fixture(repo: "Repo", d) -> tuple[str, object] | None:
     return repo.class_by_type(first, d.namespace) if first else None
 
 
-def _with_expansions(calls, repo: Repo):
-    """Each call, and after a call to a repository macro the calls its expansion makes there: (call, (macro, variant))."""
+def _with_expansions(calls, repo: Repo, path: str = ""):
+    """Each call, and after a call to a repository macro the calls its expansion makes there: (call, (macro, variant)). A macro is expanded
+    only in the files that see it (#290)."""
     for call in calls:
         yield call, None
-        if call.name in repo.macros and call.name in repo.macro_bodies:
+        if call.form != "construct" and call.name in repo.macro_bodies and (repo.sees(path, call.name, call.line) if path else call.name in repo.macros):
             for q, n, variant in repo.expand(call.name):
                 yield Call(call.caller, n, "qualified" if q else "bare", q, None, None, call.line), (call.name, variant)
 
