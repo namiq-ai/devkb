@@ -93,3 +93,7 @@ def test_the_release_report_has_a_review_section():
     out = "\n".join(rt.review_section(rows))
     assert "| nodevkb | 1 | 4 | 3 (1 / 1 / 1) | 1 | 0.50 | 20 | 300 | 4.0 | 2.0 | 3.0 |" in out and "#270" in out, out
     assert "No pull request was reviewed" in "\n".join(rt.review_section([]))
+
+
+def test_the_prompt_demands_a_self_contained_reproduction():
+    assert "SELF-CONTAINED" in rb.PROMPT and "/tmp/x.py" in rb.PROMPT

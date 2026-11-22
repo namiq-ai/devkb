@@ -42,7 +42,8 @@ Title: {title}
 Find real defects in the changed code: wrong results, regressions in what worked before or in code that depends on what changed, crashes on unusual input, and tests that would pass without the change.
 Reproduce each one before you report it (run the code, a test, or a short script) and drop what you cannot show. You may not edit files or use the network.
 
-Finish with a JSON array in a ```json block, at most 15 objects, each {{"file": "...", "line": N, "severity": "high|medium|low", "claim": "...", "repro": "a shell command, run from the repository root, that exits 1 when the defect is present", "evidence": "what it printed"}}."""
+Finish with a JSON array in a ```json block, at most 15 objects, each {{"file": "...", "line": N, "severity": "high|medium|low", "claim": "...", "repro": "a SELF-CONTAINED shell command, run from the repository root of a clean checkout, that exits 1 when the defect is present", "evidence": "what it printed"}}.
+The repro must create everything it needs itself (inline `python3 -c`, a heredoc, or files written inside the command); it must not refer to any file you wrote outside the repository, such as /tmp/x.py, because it is run later on a fresh checkout with no network."""
 NODEVKB = """
 
 This repository may be devkb itself. For this review do not use devkb's command line to look at the repository under review: no `devkb ...` and no `python -m devkb...`."""
