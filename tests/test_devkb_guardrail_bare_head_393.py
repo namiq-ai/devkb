@@ -24,3 +24,8 @@ def test_the_answer_to_a_search_piped_into_a_bare_head_is_delivered(repo, tmp_pa
     h = t281.hook(repo, tmp_path, "Bash", {"command": "grep -rn helper pkg | head"})
     assert t281.rows(h) >= 1, h        # before the fix the answer was built and logged, then lost to the crash
     assert t281.rows(h) <= 10
+
+
+@pytest.mark.parametrize("cmd, n", [("grep -rn x . | head -n +5", 5), ("grep -rn x . | head --lines=+3", 3), ("grep -rn x . | tail -n +5", None)])
+def test_a_plus_count_is_a_skip_for_tail_and_a_cap_for_head(cmd, n):      # found by the two-way review of #408
+    assert g.output_limit("Bash", {"command": cmd}) == n
