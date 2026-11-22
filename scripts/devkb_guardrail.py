@@ -837,11 +837,18 @@ def teach_all() -> bool:
     return os.environ.get("DEVKB_GUARDRAIL_TEACH_ALL") == "1"
 
 
-def teach_only(ev: dict, inp: dict) -> dict | None:
+def teach_body() -> bool:
+    """The pointer to `devkb symbol NAME --source` on a definition search with context options (-A/-B/-C), which is not replaced (#358). On by default,
+    as the ticket asks; DEVKB_GUARDRAIL_TEACH_BODY=0 turns this one off. UNMEASURED: #375 measured the teach line on duplicates at +12.6% cost
+    and turned it off by default, so the efficiency work (#339) decides whether this one stays."""
+    return os.environ.get("DEVKB_GUARDRAIL_TEACH_BODY", "1") != "0"
+
+
+def teach_only(ev: dict, inp: dict, always: bool = False) -> dict | None:
     """#375: grep prints devkb's whole answer itself, so the answer is not repeated; the agent is still told, once per
     command and session, which devkb command answers this search. Before, nothing was said, and in 149 benchmark runs
     92 complete answers went by without the agent seeing a devkb command (83 answers carried one)."""
-    if not teach_all() or os.environ.get("DEVKB_GUARDRAIL_TEACH", "1") == "0" or not ev.get("_teach"):
+    if not (always or teach_all()) or os.environ.get("DEVKB_GUARDRAIL_TEACH", "1") == "0" or not ev.get("_teach"):
         return None
     sid = "".join(c for c in str(ev.get("session_id") or "") if c.isalnum() or c in "-_")[:80]
     key = hashlib.sha1(json.dumps([sid, "teach", str(ev.get("cwd") or ""), json.dumps(inp, sort_keys=True)]).encode()).hexdigest()
@@ -1392,9 +1399,12 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     if lenient:                                  # the real reason, and the miss is still recorded for the post hook (#187)
         verdicts = {q["verdict"] for q in queries} - {"complete"}
         reason = real_why if not verdicts else f"verdict:{sorted(verdicts)[0]}"
-        log_decision(ev, repo, tool, "pass-through", names, queries, 0, reason)
+        # the search runs untouched, but an agent about to read a function body is told once where its body is (#358)
+        out = teach_only(ev, inp, always=True) if (intent == "read-body" and not verdicts and teach_body()) else None
+        log_decision(ev, repo, tool, "teach" if out else "pass-through", names, queries,
+                     len(TEACH_LINE.format(cmd=ev["_teach"])) if out else 0, reason)
         record_pending(ev, key, repo, tool, inp, pattern, names, queries)
-        return None
+        return out
     if queries and len(queries) == len(names) and all(q["verdict"] == "complete" for q in queries):
         scope = scope_of(paths or [], repo)
         if intent == "read-body":                # the lines around a name (or several definitions): the bodies
