@@ -726,12 +726,23 @@ def search_flags(tool: str, inp: dict) -> set[str]:
     return out
 
 
-def question_of(action: str, queries: list[dict]) -> str:
-    """The graph question the hook asked for this decision."""
-    if action == "read-answer":
+ANSWER_QUESTION = {"locate": "symbol", "call-sites": "uses", "call-sites-filtered": "uses", "in-file": "uses", "list-symbols": "outline"}
+
+
+def question_of(action: str, queries: list[dict], intent: str = "", reason: str = "") -> str:
+    """The graph question the answer came from (SPEC-DKB-007 §3.5 reads it to change the intent table, so it must be the one asked, #284): the
+    definition's `symbol --source`, a file's `outline`, the call sites' `uses`. A decision that gave no answer logs what the hook checked: the pack
+    question of the names it looked up, or `none`."""
+    if action == "read-answer" or reason.startswith("body:"):
         return "symbol --source"
-    if action == "span-hint":
+    if action in ("span-hint", "outline-on-open") or reason == "outline":
         return "outline"
+    if reason == "key":
+        return "uses"
+    if action in ("substitute", "alongside"):
+        asked = ANSWER_QUESTION.get(intent) or ANSWER_QUESTION.get(reason.split(":", 1)[-1])      # `ambiguous:call-sites` names it too
+        if asked:
+            return asked
     return f"pack {QUESTION}" if queries else "none"
 
 
@@ -869,7 +880,7 @@ def log_decision(ev: dict, repo: Path | str, tool: str, action: str, names: list
                                  "repo": str(repo), "action": action, "names": ev.get("_all_names") or names,
                                  "verdicts": [q["verdict"] for q in queries], "chars": chars, "reason": reason,
                                  "scope": scope, "intent": ev.get("_intent", "unknown"),
-                                 "question": question_of(action, queries)}) + "\n")
+                                 "question": question_of(action, queries, ev.get("_intent", ""), reason)}) + "\n")
     except OSError:
         pass
 
