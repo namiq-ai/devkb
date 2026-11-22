@@ -325,9 +325,11 @@ def update_tree() -> None:
     """The daemon runs the repository at origin/main in its own worktree, never a working copy someone switches."""
     if not TREE.exists():
         HOME.mkdir(parents=True, exist_ok=True)
-        run(["git", "-C", str(HERE.parents[1]), "worktree", "add", "--detach", str(TREE), "origin/main"])
-    run(["git", "-C", str(TREE), "fetch", "-q", "origin", "main"], check=False)
-    run(["git", "-C", str(TREE), "checkout", "-q", "--detach", "origin/main"], check=False)
+        run(["git", "-C", str(HERE.parents[1]), "fetch", "-q", REPO_URL, "main"], check=False)
+        run(["git", "-C", str(HERE.parents[1]), "worktree", "add", "--detach", str(TREE), "FETCH_HEAD"])
+    # the repository the daemon serves (TRIAGE_REPO), not whatever remote this checkout calls `origin` (#299)
+    run(["git", "-C", str(TREE), "fetch", "-q", REPO_URL, "main"], check=False)
+    run(["git", "-C", str(TREE), "checkout", "-q", "--detach", "FETCH_HEAD"], check=False)
 
 
 def prompt(name: str) -> str:
@@ -698,8 +700,11 @@ def sandboxed(cmd: list[str], work: Path) -> subprocess.CompletedProcess:
     args += interpreter_links()
     args += ["--bind", str(work), str(work), "--chdir", str(work), "--clearenv", "--setenv", "HOME", "/tmp",
              "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--setenv", "LANG", "C.UTF-8", "--"]
-    return subprocess.run(args + [sandbox_python() if c == "{python}" else c for c in cmd],
-                          capture_output=True, text=True, timeout=1800)
+    try:
+        return subprocess.run(args + [sandbox_python() if c == "{python}" else c for c in cmd],
+                              capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired as e:      # a hanging test fails its item, as any other failure does, and the run goes on (#298)
+        raise RuntimeError(f"the sandboxed command timed out after {int(e.timeout)} s") from e
 
 
 def interpreter_links() -> list[str]:
@@ -734,6 +739,14 @@ def python_dirs() -> list[Path]:
     out = {Path(x).resolve() for x in q.stdout.split() if x}
     sys_dirs = (Path("/usr"), Path("/opt"))
     return sorted(p for p in out if not any(p == d or p.is_relative_to(d) for d in sys_dirs))
+
+
+def push_auto_branch(work: Path, gitdir: Path, branch: str) -> None:
+    """Push the item's own `auto/...` branch. A retry (the first attempt pushed, then `gh pr create` failed) starts the branch afresh (#207), so its push
+    is not a fast-forward of what is already there: overwrite it. Only a branch the daemon named itself, never the trunk or anyone's (#297)."""
+    if not branch.startswith("auto/"):
+        raise RuntimeError(f"refusing to force-push {branch!r}: not one of the daemon's own auto/ branches")
+    run(git_in(work, gitdir, "push", "-q", "--force", REPO_URL, f"{branch}:refs/heads/{branch}"))
 
 
 def git_in(work: Path, gitdir: Path, *args: str) -> list[str]:
@@ -867,7 +880,7 @@ def handle_draft_pr(it: dict, thread: list[dict], apply: bool) -> bool:
          "a maintainer reviews it before merge."))
     log("handle", {"number": n, "kind": "draft-pr", "branch": branch, "cost": cost, "applied": apply})
     if apply:
-        run(git_in(work, gitdir, "push", "-q", REPO_URL, f"{branch}:refs/heads/{branch}"))
+        push_auto_branch(work, gitdir, branch)
         body = (f"Closes #{n}.\n\n{summary}\n\n**Draft, written by an AI agent from the report.** Tests pass locally. "
                 "It needs a maintainer's review before anything else; it was not written from a reproduction by a person.")
         url = run(["gh", "pr", "create", "--repo", REPO, "--draft", "--head", branch, "--title", f"fix(#{n}): {clean_title(it['title'])[:60]}",
