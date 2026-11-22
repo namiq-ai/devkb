@@ -537,7 +537,8 @@ class ReadTools:
             r = self.resolve(q, limit=4)
             if r.get("how") in ("exact", "suffix") and r["matches"]:
                 for m in r["matches"]:            # one match per definition already, each with its own range (#203)
-                    defs.append({"k": m["k"], "kind": m["kind"], "ls": m["ls"], "le": m["le"], "range": m["range"]})
+                    defs.append({"k": m["k"], "kind": m["kind"], "ls": m["ls"], "le": m["le"], "range": m["range"],
+                                 "other_case": "(other case)" in str(m.get("how"))})      # spelled otherwise than the query (#396, as `symbol` does since #372)
         ranked = sorted(by_file.items(), key=lambda kv: (self.api._is_test(kv[0]), -len(kv[1]), kv[0]))
         out_files = []; shown = 0
         for f, hs in ranked[:files]:
@@ -730,7 +731,7 @@ def render_uses(r: dict) -> str:
         return r["error"]
     out = [f'uses "{r["name"]}": text matches, not resolved references; tracked files only, not complete   mode {r["mode"]}']
     for d in r["definitions"][:5]:
-        out.append(f"defined: {d['k'].split('::', 1)[0]} {_span(d)} {d['kind']}")
+        out.append(f"defined: {d['k'].split('::', 1)[0]} {_span(d)} {d['kind']}" + (" (other case)" if d.get("other_case") else ""))
     if r.get("key_uses"):
         out.append("as a string key (written / read, by function):")
         out.append(_render_keys(r["key_uses"]))
