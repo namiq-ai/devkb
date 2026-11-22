@@ -350,6 +350,7 @@ class Call:
     argc: int = -1       # arguments written at the call (#120, F5); -1 when not counted
     chained: tuple | None = None   # `r.g().f()`: (inner receiver or "" for a bare `g()`, "g", inner recv_local) (#120, F4)
     field_of: tuple | None = None  # `b.m.f()` / `b->m->f()`: (b, b's recv_local, "m") (#120, F4)
+    init: bool = False             # the name of a constructor's initialiser (`: m(x)`): a member initialisation, or a base-class constructor call (#145)
 
 
 @dataclass
@@ -876,14 +877,18 @@ class _Scanner:
         return d.locals
 
     # body extraction ----------------------------------------------------------
-    def scan_body(self, d: Def, lo: int, hi: int, names: set[str]) -> None:
+    def scan_body(self, d: Def, lo: int, hi: int, names: set[str], init: bool = False) -> None:
         code = self.code
         text = code[lo:hi]
         line_of = self.m.line
+        members = _initialiser_names(text) if init else set()
         for cm in _CALL_RE.finditer(text):
             name = cm.group(1)
             if name not in names or name in _NOT_FUNC:
                 continue            # a call to a name no repository symbol bears is never linked and never counted
+            is_init = cm.start(1) in members      # `: m(x), n(f(x))`: m and n are initialised, not called (#145); `f` is not at depth 0, so it is read
+            if _MOCK_EXPECT.search(text[max(0, cm.start() - 200):cm.start()]):
+                continue            # `EXPECT_CALL(mock, allocate(1))`: the method the mock expects, not a call to a repository `allocate` (#146)
             chain, a = _qualifier_before(text, cm.start())
             k = a - 1
             while k >= 0 and text[k] in " \t\r\n":
@@ -954,7 +959,10 @@ class _Scanner:
                 elif prev in ">*&" and self.cpp and _DECL_PREFIX.match(text, _stmt_start(text, k), a):
                     continue      # `std::vector<int> x(3)`, `Foo *x(p)`, `const Bar& x(y)`: a declaration, not a call (#65)
                 form, qualifier, recv, rl = "bare", "", None, None
+                if name == d.short and d.kind == "method" and re.search(r"\b[A-Z][A-Z0-9_]*\s*\(\s*$", text[max(0, cm.start() - 80):cm.start()]):
+                    form = "qualified"      # `FMT_POSIX(close(fd))` inside a method `close`: a macro adapts the global call; not the method itself (#95)
             c = Call(d.index, name, form, qualifier, recv, rl, line_of(lo + cm.start()), _argc(text, cm.end() - 1))
+            c.init = is_init
             if form == "member" and chained is not None and recv is None:
                 c.chained = chained
             if form == "member" and field_of is not None and recv is None:
@@ -1017,6 +1025,38 @@ class _Scanner:
         for q in re.finditer(r"\"[^\"]*\"", expr):
             out.append(self.m.literals.get(base + q.start(), ""))
         return "".join(out)
+
+
+_MOCK_EXPECT = re.compile(r"\b(?:EXPECT_CALL|ON_CALL)\s*\(\s*[^,;{}]*,\s*$")   # `EXPECT_CALL(mock, ` right before a name (#146)
+
+
+def _initialiser_names(text: str) -> set[int]:
+    """Offsets of the names in a constructor's member-initialiser list (#145): the identifier at depth 0 after the list's `:` or after a `,`
+    at depth 0. `text` is what lies between the parameter list and the body (`: m(x), n(f(x))`); a head with no `:` has none. The
+    arguments of an initialiser are not names of it: `f` in `n(f(x))` is a call and stays one."""
+    out: set[int] = set()
+    depth, seen_colon, expect = 0, False, False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch in "([{<" and not (ch == "<" and depth == 0):
+            depth += 1 if ch != "<" else 0
+        elif ch in ")]}":
+            depth = max(0, depth - 1)
+        elif ch == ":" and depth == 0 and text[i + 1:i + 2] != ":" and text[i - 1:i] != ":":
+            seen_colon, expect = True, True
+        elif ch == "," and depth == 0 and seen_colon:
+            expect = True
+        elif expect and (ch.isalpha() or ch == "_"):
+            j = i
+            while j < len(text) and (text[j].isalnum() or text[j] in "_:"):
+                j += 1
+            out.add(i)
+            expect = False
+            i = j
+            continue
+        i += 1
+    return out
 
 
 def _argc(text: str, open_i: int) -> int:
@@ -1200,9 +1240,9 @@ def scan_bodies(rec: FileRecords, names: set[str], function_names: set[str]) -> 
     """Pass 2: call sites of `names`, error sites, and indirect references to `function_names`."""
     sc = rec.scanner
     for d in rec.defs:
-        for lo, hi in d.spans:
+        for n, (lo, hi) in enumerate(d.spans):
             if hi > lo:
-                sc.scan_body(d, lo, hi, names)
+                sc.scan_body(d, lo, hi, names, init=n == 0)
     m = rec.masked
     for im in _IND.finditer(m.code):
         ref = im.group("ref")

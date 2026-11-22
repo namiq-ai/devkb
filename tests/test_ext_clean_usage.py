@@ -25,6 +25,7 @@ def test_a_root_that_names_an_arm_is_refused(monkeypatch, tmp_path):
     monkeypatch.setenv("EXT_CLEAN_ROOT", str(tmp_path / "ship-arm"))
     eb = load("extbench")
     monkeypatch.setattr(eb, "arm_env", lambda spec: ("devkb", {"bin": "/x"}))
+    monkeypatch.setattr(eb, "RUNS", tmp_path / "runs")                     # not the cache: a real earlier run would be reported as a skip
     out = eb.run_one({"id": "y1"}, "devkb=abc", 1, clean=True)
     assert out.startswith("refused") and "ship" in out and not (tmp_path / "ship-arm").exists()
 

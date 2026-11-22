@@ -325,6 +325,8 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                 if call.name in repo.short_names:
                     unresolved.add((u.path, caller_qn, call.name))
                 continue
+            if call.init and call.name not in repo.class_suffix and call.name not in repo.classes:
+                continue                              # `: m(x)`: a member initialised, not a function called; a base class's constructor stays (#145)
             caller = u.syms.get(caller_qn)
             chain = caller.class_chain if caller is not None and caller.kind == "method" else ()
             caller_ns = caller.class_ns if caller is not None else None
