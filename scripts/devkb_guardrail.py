@@ -1068,7 +1068,9 @@ def use_lines(repo: Path, names: list[str]) -> list[tuple[str, int, str]] | None
     return sorted(set(out))
 
 
-NON_CODE = (".md", ".rst", ".txt", ".adoc", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".xml", ".html", ".csv")
+NON_CODE = (".md", ".rst", ".txt", ".adoc", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".xml", ".html", ".csv",
+            ".jsonc", ".properties", ".tf", ".tfvars", ".lock", ".mk", ".cmake", ".env", ".gradle", ".plist")      # configuration too (#317)
+CONFIG_NAMES = ("makefile", "gnumakefile", "dockerfile", "containerfile", "jenkinsfile", "vagrantfile", "procfile", "gemfile", "pipfile")
 
 
 def names_non_code(paths: list[Path] | None, repo: Path, names: list[str] | None = None,
@@ -1077,7 +1079,7 @@ def names_non_code(paths: list[Path] | None, repo: Path, names: list[str] | None
     or a non-code file in the search's scope (the whole repository for `.` or no path) that holds a name. The graph
     holds no document text, so such a search is never replaced (#276)."""
     for p in paths or []:
-        if p.suffix.lower() in NON_CODE or p.name.lower() in ("docs", "doc", "config", "conf", "etc"):
+        if is_non_code(p.name) or p.name.lower() in ("docs", "doc", "config", "conf", "etc"):
             return True
     if not names:
         return False
@@ -1094,9 +1096,12 @@ def names_non_code(paths: list[Path] | None, repo: Path, names: list[str] | None
 
 
 def is_non_code(path: str) -> bool:
-    """A documentation or configuration file: by suffix, or a bare README / LICENSE / CHANGELOG / NOTICE."""
+    """A documentation or configuration file: by suffix, or a bare README / LICENSE / CHANGELOG / NOTICE, or a build or environment file by name
+    (Makefile, Dockerfile, `.env`, `.env.local`): the graph holds none of their text (#317)."""
     p = Path(path)
-    return p.suffix.lower() in NON_CODE or p.name.lower() in ("readme", "license", "changelog", "notice")
+    name = p.name.lower()
+    return (p.suffix.lower() in NON_CODE or name in ("readme", "license", "changelog", "notice") or name in CONFIG_NAMES
+            or name == ".env" or name.startswith(".env.") or name.startswith("dockerfile.") or name.endswith(".dockerfile"))
 
 
 def longer_definitions(repo: Path, pattern: str, name: str, scope: list[str] | None) -> bool:
