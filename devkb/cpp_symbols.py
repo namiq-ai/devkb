@@ -28,15 +28,19 @@ MAX_FILE_BYTES = 2 * 1024 * 1024
 
 # The sole source of the limit statement (ADR-DEVKB-008 §4, AD-7). Read by packs.py and by the README test.
 CXX_LIMITS_TEXT = (
-    "C/C++ limits: no preprocessor expansion (macro-generated definitions and calls are not seen), "
-    "no overload resolution (overloads share one node), no type inference (a call through `auto`, an alias or an "
-    "untyped receiver is not attributed); vendored and generated paths are not read; error-return codes "
-    "(`return -EINVAL`, `return Status::Corruption(...)`) are not attributed; pybind11 class bindings (`py::class_`) are not read."
+    "C/C++ limits: a repository macro's calls are expanded at its uses (in any file, also where its header is not included, #290), but a "
+    "definition a macro generates is not seen; overloads are told apart by argument count only, so two of the same count share one "
+    "choice (#291); receivers are resolved through declared types, smart pointers, members, one level of chaining and TEST_F/TEST_P "
+    "fixtures, but there is no general type inference (a call through `auto`, an alias or an untyped receiver is not attributed); "
+    "a constructor call written `T x(args)` or `new T(args)` is not linked to the constructor (#119); template instantiation is not "
+    "followed (a call on a template's parameter type is not attributed); vendored and generated paths are not read; "
+    "error-return codes (`return -EINVAL`, `return Status::Corruption(...)`) are not attributed; "
+    "pybind11 class bindings (`py::class_`) are not read."
 )
 
 # The C profile's limits (ADR-DEVKB-009 §2): what a C pack cannot see. No overloads or receivers here: C has none.
 C_LIMITS_TEXT = (
-    "C limits: no preprocessor expansion (macro-generated definitions and calls are not seen); a call through a "
+    "C limits: a repository macro's calls are expanded at its uses, but a definition a macro generates is not seen; a call through a "
     "function pointer or an ops table is not followed (the table entry is an indirect reference); a `static` function "
     "is resolved inside its own file only; vendored and generated paths are not read; error-return codes "
     "(`return -EINVAL`) are not attributed."

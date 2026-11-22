@@ -137,7 +137,7 @@ def test_c_and_cpp_packs_state_different_limits(tmp_path, monkeypatch):
     assert cpp_symbols.C_LIMITS_TEXT in c_pack and cpp_symbols.CXX_LIMITS_TEXT not in c_pack
     for word in ("overload", "receiver"):
         assert word not in c_pack.lower()
-    for word in ("macro-generated", "function pointer", "ops table"):
+    for word in ("macro generates", "function pointer", "ops table"):
         assert word in c_pack
     assert cpp_symbols.CXX_LIMITS_TEXT in cpp_pack and cpp_symbols.C_LIMITS_TEXT not in cpp_pack
     assert cpp_symbols.CXX_LIMITS_TEXT not in py_pack and cpp_symbols.C_LIMITS_TEXT not in py_pack
@@ -200,7 +200,7 @@ def test_the_compiler_appears_only_as_verification_flags():
 def test_the_readme_names_each_c_limit_and_each_is_demonstrated():
     row = next(ln for ln in (ROOT / "README.md").read_text().splitlines() if ln.startswith("| C, C++"))
     assert "ops table" in row and "ops table" in cpp_symbols.C_LIMITS_TEXT          # demonstrated: the ops-table tests above
-    assert "no preprocessor expansion" in row and "no preprocessor expansion" in cpp_symbols.C_LIMITS_TEXT
+    assert "a definition a macro generates is not seen" in row and "a definition a macro generates is not seen" in cpp_symbols.C_LIMITS_TEXT
     assert "Complete only for the languages read" in row
 
 

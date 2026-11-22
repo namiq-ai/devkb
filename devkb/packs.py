@@ -329,6 +329,14 @@ class Packer:
     def _run(self, files: list[str]) -> str:
         return self.api._run_line(sorted(files)) if files else ""
 
+    def _run_lines(self, files: list[str]) -> list[str]:
+        """The `Run:` line for these test files, or a line saying no command is known: never an empty command (#292). Only pytest files
+        have a command the graph can name; a C or C++ test is built and run by the project's own test target."""
+        cmd = self._run(files)
+        if cmd:
+            return ["", f"Run: `{cmd}`"]
+        return ["", "Run: no command is known for these test files (the graph names pytest commands only); use the project's own test target."] if files else []
+
     # ── the three packs ───────────────────────────────────────────────────────
     def error(self, message: str) -> str:
         r = self.api.rca_trace(message)
@@ -359,8 +367,7 @@ class Packer:
         if not hs and self.idx.ep_by_owner:
             out.append("- none: no route handler reaches it through calls the graph resolves")
         out += ["", f"## Test files on those paths ({len(tests)})"] + self._tests_section(tests)
-        if tests:
-            out += ["", f"Run: `{self._run(list(tests))}`"]
+        out += self._run_lines(list(tests))
         out += ["", "## Coverage", self.coverage(sorted(closure, key=self.api._key)[:40], set(tests) | {self.api._key(x).split('::')[0] for x in closure})]
         return "\n".join(out + ["", HOW_TO_USE])
 
@@ -494,8 +501,7 @@ class Packer:
             out.append("- none: no route handler reaches it through calls the graph resolves")
         out += ["", f"## Test files to run ({len(tests)}): every test calling it or a function on those paths"] + self._tests_section(tests) \
             + self._unfollowed_note(self.api._key(i).split("::")[0], tests)
-        if tests:
-            out += ["", f"Run: `{self._run(list(tests))}`"]
+        out += self._run_lines(list(tests))
         cov = self.coverage(sorted(closure, key=self.api._key)[:40], set(tests) | {self.api._key(x).split('::')[0] for x in closure})
         out += ["", "## Coverage", star_coverage(cov, star)]
         return "\n".join(out + ["", HOW_TO_USE])
@@ -535,8 +541,7 @@ class Packer:
         out += ["", f"## Tests that exercise it, directly or through callers ({len(tests) + len(named)})"] \
             + (self._tests_section(tests, set(syms)) if tests or not named else []) + self._path_lines(named) \
             + self._unfollowed_note(path, {**tests, **named})
-        if tests or named:
-            out += ["", f"Run: `{self._run(list(tests) + list(named))}`"]
+        out += self._run_lines(list(tests) + list(named))
         out += self._config_section(path, syms)
         out += ["", "## Coverage", self.coverage(sorted(syms, key=self.api._key)[:40], set(dependants) | set(tests))]
         return "\n".join(out + ["", HOW_TO_USE])

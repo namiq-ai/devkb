@@ -8,8 +8,11 @@ import cpp_support as S
 from devkb.cpp_symbols import CXX_LIMITS_TEXT
 
 README = (Path(__file__).resolve().parents[1] / "README.md").read_text()
-# the three limits the README row names, each with the phrase that carries it
-LIMITS = {"preprocessor": "no preprocessor expansion", "overload": "no overload resolution", "type inference": "no type inference"}
+# the limits the README row names, each with the phrase that carries it (0.2.15: what #118, #120 and #203 resolve is stated, and what is still not seen)
+LIMITS = {"macro generated definition": "a definition a macro generates is not seen", "overload": "argument count only",
+          "type inference": "no general type inference", "constructor": "constructor calls", "template": "template instantiation"}
+CPP_TEXT = {"macro generated definition": "a definition a macro generates is not seen", "overload": "argument count only",
+            "type inference": "no general type inference", "constructor": "constructor call", "template": "template instantiation"}
 
 CPP = {
     "src/box.cc": "class Box { public: int size() const; };\nint Box::size() const { return 1; }\nint peek(Box* b) { return b->size(); }\n",
@@ -23,13 +26,13 @@ def _row() -> str:
     return rows[0]
 
 
-def test_readme_row_is_partial_and_names_all_three_limits():
+def test_readme_row_is_partial_and_names_every_limit():
     row = _row()
     assert "Partial" in row and "Not yet" not in row
     for limit in LIMITS.values():
         assert limit in row, limit
-    for limit in LIMITS.values():
-        assert limit in CXX_LIMITS_TEXT, "the pack statement and the README name the same limits"
+    for name, limit in CPP_TEXT.items():
+        assert limit in CXX_LIMITS_TEXT, f"the pack statement and the README name the same limits: {name}"
 
 
 def test_only_the_cpp_pack_carries_the_limit_statement(tmp_path, monkeypatch):
@@ -71,9 +74,22 @@ def test_limit_type_inference_a_call_through_auto_is_unresolved_not_guessed(tmp_
     assert S.symbols(g)["t.cc::W.run"].props["unresolved_calls"] == 1
 
 
+def test_limit_constructor_a_declaration_or_new_is_not_linked_to_the_constructor(tmp_path):
+    files = {"c.cc": "struct T { T(int v); };\nT::T(int v) {}\nvoid go() { T x(1); T* p = new T(2); }\n"}
+    assert not S.calls(S.build(tmp_path, files)), "no edge go -> T.T until #119"
+
+
+def test_limit_template_a_call_on_a_parameter_type_is_not_attributed(tmp_path):
+    files = {"t.cc": "struct A { void go() {} };\ntemplate <class T> void run(T& t) { t.go(); }\nvoid main2() { A a; run(a); }\n"}
+    calls = S.calls(S.build(tmp_path, files))
+    assert ("t.cc::main2", "t.cc::run") in calls and ("t.cc::run", "t.cc::A.go") not in calls
+
+
 def test_every_limit_named_in_the_readme_has_a_test_in_this_file():
     names = {n for n in globals() if n.startswith("test_limit_")}
     assert {"test_limit_preprocessor_a_macro_generated_definition_is_not_seen",
             "test_limit_overload_resolution_callers_of_every_overload_land_on_one_node",
-            "test_limit_type_inference_a_call_through_auto_is_unresolved_not_guessed"} == names
+            "test_limit_type_inference_a_call_through_auto_is_unresolved_not_guessed",
+            "test_limit_constructor_a_declaration_or_new_is_not_linked_to_the_constructor",
+            "test_limit_template_a_call_on_a_parameter_type_is_not_attributed"} == names
     assert len(LIMITS) == len(names) and all(re.search(k, " ".join(names).replace("_", " ")) for k in LIMITS)
