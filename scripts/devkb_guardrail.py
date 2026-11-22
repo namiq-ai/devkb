@@ -495,6 +495,68 @@ def repo_of(paths: list[Path]) -> tuple[Path | None, str | None]:
     return repos.pop(), None
 
 
+MAX_CHANGED = 20          # more changed code files than this: the graph is stale, no per-name check (#409)
+CITED = re.compile(r"(?<![\w/.-])(/?(?:[\w.-]+/)*[\w.-]+\.[A-Za-z0-9]+):\d+")
+
+
+def changed_code_files(repo: Path, scope: list[str] | None) -> set[str] | None:
+    """The code files, in the searched scope, that may differ from what the graph was built from: changed since the commit it was built at
+    (committed, staged or edited) and new files. None when that cannot be told (no known build commit, git fails): stale (#409)."""
+    from devkb import misses
+    built, _head = misses.graph_state(repo)
+    if not built:
+        return None
+    sc = scope or ["."]
+    try:
+        d = subprocess.run(["git", "-C", str(repo), "diff", "--name-only", "--relative", "--no-renames", built, "--", *sc], capture_output=True, text=True, timeout=5)
+        u = subprocess.run(["git", "-C", str(repo), "ls-files", "--others", "--exclude-standard", "--", *sc], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if d.returncode or u.returncode:
+        return None
+    return {x for x in d.stdout.splitlines() + u.stdout.splitlines() if Path(x).suffix.lower() in CODE_EXTS}
+
+
+def _mentions(repo: Path, rel: str, built: str, names: list[str]) -> bool:
+    """Whether a changed file, as it is now or as the graph saw it, holds any of the names: a change that never touches a name cannot
+    change the graph's answer for it (a caller added, removed or moved)."""
+    texts = []
+    try:
+        texts.append((repo / rel).read_text(errors="replace"))
+    except OSError:
+        pass
+    b = subprocess.run(["git", "-C", str(repo), "show", f"{built}:./{rel}"], capture_output=True, text=True, timeout=5)
+    if b.returncode == 0:
+        texts.append(b.stdout)
+    return any(n in t for n in names for t in texts)
+
+
+def cites_changed(repo: Path, scope: list[str] | None, text: str) -> bool:
+    """Whether an answer's `path:line` cites a code file changed since the build: its line numbers cannot be trusted (#409)."""
+    changed = changed_code_files(repo, scope)
+    if changed is None:
+        return True
+    root = str(repo).rstrip("/") + "/"
+    return bool(changed & {m.removeprefix(root) for m in CITED.findall(text)})
+
+
+def stale_for(repo: Path, scope: list[str] | None, names: list[str], answers: list[str]) -> bool:
+    """`graph_stale`, narrowed to what the answer depends on (#409). A graph that has not seen some changed files still answers a search
+    for names that no changed file mentions, as long as the answer cites no changed file (its line numbers would be wrong)."""
+    if not graph_stale(repo, scope):
+        return False
+    from devkb import misses
+    changed = changed_code_files(repo, scope)
+    if changed is None or len(changed) > MAX_CHANGED:
+        return True
+    root = str(repo).rstrip("/") + "/"
+    cited = {m.removeprefix(root) for a in answers for m in CITED.findall(a)}
+    if changed & cited:
+        return True
+    built = misses.graph_state(repo)[0]
+    return any(_mentions(repo, f, built, names) for f in changed)
+
+
 def scope_of(paths: list[Path], repo: Path) -> list[str] | None:
     """The repository-relative folders the search is limited to; None when it covers the whole repository."""
     out = []
@@ -1379,8 +1441,8 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
             queries.append({"name": n, "verdict": r[0], "detail": r[1],
                             "query": f"devkb pack {QUESTION} {shlex.quote(n)} --project {shlex.quote(str(repo))}"})
             answers.append(r[2].strip())
-    if graph_stale(repo, scope_of(paths or [], repo)):
-        # #182, #273: a graph that has not seen the working tree's code gives no answer at all, beside grep or instead
+    if stale_for(repo, scope_of(paths or [], repo), all_names, answers):
+        # #182, #273, #409: a graph that has not seen the working tree's code gives no answer at all, beside grep or instead
         # of it: its line numbers and its callers may be wrong, and grep has the answer
         log_decision(ev, repo, tool, "pass-through", names, queries, 0, "stale-graph")
         record_pending(ev, key, repo, tool, inp, pattern, names, queries)
@@ -1390,6 +1452,8 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
     if dname and why is None:
         scope = scope_of(paths or [], repo)
         ans = None if asks_context(tool, inp) else definition_answer(repo, dname, scope, search_globs(tool, inp), body=False)
+        if ans and cites_changed(repo, scope, ans[0]):
+            ans = None                           # its lines come from a file edited since the build (#409)
         if ans:                                  # one name, found in the graph: the answer does not need the caller pack
             if again(ev, inp):
                 log_decision(ev, repo, tool, "repeat", names, queries, len(ans[0]), "repeat", scope)
