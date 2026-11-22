@@ -304,8 +304,31 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False, compar
     return "\n".join(lines)
 
 
+def review_section(rows: list[dict]) -> list[str]:
+    """The release report's review section (#316): per arm, over the reviewed pull requests, what a review with devkb's packs and one without found and
+    cost. Rows are `bench/review/results.jsonl` (one per PR and arm)."""
+    if not rows:
+        return ["", "No pull request was reviewed both ways in this release."]
+    prs = sorted({r["pr"] for r in rows})
+    out = ["", f"Pull request reviews, with and without devkb, {len(prs)} PR(s) ({', '.join('#' + str(p) for p in prs)}); findings count only when their "
+           "reproduction exited 1 twice on a clean checkout:", "",
+           "| arm | PRs | findings | reproduced (high / medium / low) | defect groups only this arm found | cost $ per review | model calls | context k | wall min | devkb queries | hook decisions |",
+           "|---|---|---|---|---|---|---|---|---|---|---|"]
+    for arm in ("nodevkb", "devkb"):
+        rs = [r for r in rows if r["arm"] == arm]
+        if not rs:
+            continue
+        sev = [sum(r["by_severity"].get(s, 0) for r in rs) for s in ("high", "medium", "low")]
+        out.append(f"| {arm} | {len(rs)} | {sum(r['findings'] for r in rs)} | {sum(r['reproduced'] for r in rs)} ({' / '.join(map(str, sev))}) | "
+                   f"{sum(r['only_this_arm'] for r in rs)} | {st.mean(r['cost'] for r in rs):.2f} | {st.mean(r['model_calls'] for r in rs):.0f} | "
+                   f"{st.mean(r['ctx_tokens'] for r in rs) / 1e3:.0f} | {st.mean(r['seconds'] for r in rs) / 60:.1f} | "
+                   f"{st.mean(r['devkb_queries'] for r in rs):.1f} | {st.mean(r['hook_decisions'] for r in rs):.1f} |")
+    return out
+
+
 def main(argv: list[str]) -> int:
     allow = "--allow-mixed-checks" in argv
+    reviews = next((a.split("=", 1)[1] for a in argv if a.startswith("--reviews=")), None)        # --reviews=bench/review/results.jsonl
     compare = next((tuple(a.split("=", 1)[1].split(":")) for a in argv if a.startswith("--compare=")), None)    # --compare=ctxhid:rmainhid
     pairs = []
     for a in argv:
@@ -314,6 +337,9 @@ def main(argv: list[str]) -> int:
         t, f = a.split("=", 1)
         pairs.append((t, [json.loads(l) for l in open(B / f if not Path(f).is_absolute() else f) if l.strip()]))
     print(table(pairs, allow, compare))
+    if reviews:
+        path = Path(reviews)
+        print("\n".join(review_section([json.loads(l) for l in path.read_text().splitlines() if l.strip()] if path.exists() else [])))
     return 0
 
 
