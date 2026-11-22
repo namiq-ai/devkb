@@ -177,6 +177,58 @@ VALUE_OPTIONS = {"--include", "--exclude", "--exclude-dir", "--type", "-t", "--g
                  "--after-context", "--before-context", "--context", "-A", "-B", "-C", "--type-not", "-T", "-f", "--file"}
 
 
+# What may follow a one-file grep and still leave its output as `N:text` lines of that file: a window onto the same lines (#285).
+KEEPS_LINES = {"head", "tail", "cat"}
+REDIRECT = re.compile(r"\d*(?:>>?|>&|&>|>\|)|<")
+
+
+def grep_segment(words: list[str], cwd: Path) -> tuple[list[str] | None, Path]:
+    """The words of the command's grep, and the directory it runs in: `cd DIR && grep ...` searches DIR; a stderr redirect (`2>&1`, `2>/dev/null`)
+    and a pipe into `head`, `tail` or `cat` leave the output as the file's own lines. Any other pipe, a redirect of stdout, a subshell or a
+    second command that changes the output: None (#285)."""
+    segs: list[list[str]] = [[]]
+    for w in words:
+        if w in ("&&", "||", ";", "|"):
+            segs.append([w])
+            segs.append([])
+        else:
+            segs[-1].append(w)
+    segs = [s for s in segs if s]
+    for i, s in enumerate(segs):
+        if s[0] in ("&&", "||", ";", "|"):
+            continue
+        if s[0] == "cd" and len(s) == 2:                     # `cd lib && grep ...`: the search runs in lib
+            cwd = (cwd / s[1]).resolve() if not Path(s[1]).is_absolute() else Path(s[1])
+            continue
+        cmd = s[1] if s[0] == "git" and len(s) > 1 else s[0]
+        if cmd not in ("grep", "egrep", "rg"):
+            if s[0] in ("echo", "true", "export", "set") or re.fullmatch(r"\w+=\S*", s[0]):
+                continue
+            return None, cwd
+        out: list[str] = []
+        j = 0
+        while j < len(s):                                    # strip redirections, keep what stdout still prints
+            w = s[j]
+            if REDIRECT.fullmatch(w):
+                target = s[j + 1] if j + 1 < len(s) else ""
+                fd = out.pop() if out and out[-1].isdigit() else ""        # `2` of `2>&1`: lexed apart from its operator
+                if fd == "2" and (w in (">", ">>") or (w == ">&" and target in ("1", "2"))):
+                    j += 2                                   # stderr only: stdout is untouched
+                    continue
+                return None, cwd                             # stdout (or stdin) is redirected: its lines are not what grep printed
+            out.append(w)
+            j += 1
+        for t in segs[i + 1:]:                               # what the output is piped into
+            if t[0] == "|":
+                continue
+            if t[0] in ("&&", "||", ";"):
+                return None, cwd                             # another command follows: its output is mixed into grep's
+            if t[0] not in KEEPS_LINES:
+                return None, cwd
+        return out, cwd
+    return None, cwd
+
+
 def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
     """Resolve an explicit file operand for a search that requests numbered output."""
     try:
@@ -184,6 +236,9 @@ def single_bash_file(command: str, cwd: Path, repo: Path) -> str | None:
         lexer.whitespace_split = True
         words = list(lexer)
     except ValueError:
+        return None
+    words, cwd = grep_segment(words, cwd)
+    if words is None:
         return None
     if words[:2] == ["git", "grep"]:
         words = words[1:]
