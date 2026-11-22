@@ -508,7 +508,7 @@ def changed_code_files(repo: Path, scope: list[str] | None) -> set[str] | None:
         return None
     sc = scope or ["."]
     try:
-        d = subprocess.run(["git", "-C", str(repo), "diff", "--name-only", "--no-renames", built, "--", *sc], capture_output=True, text=True, timeout=5)
+        d = subprocess.run(["git", "-C", str(repo), "diff", "--name-only", "--relative", "--no-renames", built, "--", *sc], capture_output=True, text=True, timeout=5)
         u = subprocess.run(["git", "-C", str(repo), "ls-files", "--others", "--exclude-standard", "--", *sc], capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -525,7 +525,7 @@ def _mentions(repo: Path, rel: str, built: str, names: list[str]) -> bool:
         texts.append((repo / rel).read_text(errors="replace"))
     except OSError:
         pass
-    b = subprocess.run(["git", "-C", str(repo), "show", f"{built}:{rel}"], capture_output=True, text=True, timeout=5)
+    b = subprocess.run(["git", "-C", str(repo), "show", f"{built}:./{rel}"], capture_output=True, text=True, timeout=5)
     if b.returncode == 0:
         texts.append(b.stdout)
     return any(n in t for n in names for t in texts)

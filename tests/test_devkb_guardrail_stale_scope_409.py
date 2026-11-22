@@ -116,3 +116,19 @@ def test_many_changed_files_are_stale_without_a_scan(repo, tmp_path):
 
 def test_cited_paths_are_read_from_answers():
     assert g.CITED.findall("pkg/a.py:3:def helper\n/abs/x.py:9: y\nno path here 12:30") == ["pkg/a.py", "/abs/x.py"]
+
+
+def test_a_project_in_a_subdirectory_of_the_git_repository(built, tmp_path):      # found by the two-way review of #410
+    top = tmp_path / "top"
+    proj = top / "proj"
+    shutil.copytree(built, proj, ignore=shutil.ignore_patterns(".git"))
+    git(top, "init", "-q")
+    git(top, "add", ".")
+    git(top, "commit", "-qm", "x")
+    env = dict(os.environ, PYTHONPATH=str(ROOT), PYTHONWARNINGS="ignore")
+    subprocess.run([sys.executable, "-P", "-m", "devkb.cli", "build", "--project", str(proj)], cwd=proj, env=env, check=True, capture_output=True)
+    (proj / "pkg" / "b.py").write_text("def other():\n    return 2\n")
+    assert answered(hook(proj, tmp_path)), "an unrelated edit must not stale it"
+    (proj / "pkg" / "b.py").write_text("from pkg.a import helper\n\n\ndef other():\n    return helper(2)\n")
+    assert not answered(hook(proj, tmp_path)), "a changed file that mentions the name must (the paths are relative to the project)"
+    assert g.changed_code_files(proj, None) == {"pkg/b.py"}
