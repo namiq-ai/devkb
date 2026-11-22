@@ -1,25 +1,23 @@
 """#195: extracting module constants is linear (0.2.12 scanned every symbol of the file per constant), and a name
 assigned twice is still one symbol."""
-import time
 from pathlib import Path
+
+import work_counter
 
 from devkb import build_symbols
 
 
-def _secs(path: Path) -> float:
-    t = time.perf_counter()
-    build_symbols._parse_python_file(path, [])
-    return time.perf_counter() - t
+def _work(path: Path) -> int:
+    """Lines of build_symbols.py executed while one file is parsed: the same on every run, unlike seconds (#377)."""
+    return work_counter.lines_executed(lambda: build_symbols._parse_python_file(path, []), build_symbols.__file__)[0]
 
 
-def test_three_times_the_constants_take_about_three_times_as_long(tmp_path):
+def test_three_times_the_constants_take_about_three_times_the_work(tmp_path):
     small, large = tmp_path / "s.py", tmp_path / "l.py"
-    small.write_text("\n".join(f"NAME_{i} = {i}" for i in range(6000)) + "\n")
-    large.write_text("\n".join(f"NAME_{i} = {i}" for i in range(18000)) + "\n")
-    _secs(small)
-    # best of three for each size, so a busy machine (the benchmark runs agents in parallel) does not flake it
-    ratio = min(_secs(large) for _ in range(3)) / min(_secs(small) for _ in range(3))
-    assert ratio < 5.5, ratio                     # linear is about 3; 0.2.12 gave 7 at these sizes
+    small.write_text("\n".join(f"NAME_{i} = {i}" for i in range(2000)) + "\n")
+    large.write_text("\n".join(f"NAME_{i} = {i}" for i in range(6000)) + "\n")
+    ratio = _work(large) / _work(small)
+    assert ratio < 4.5, ratio                     # linear is 3.0 exactly; a scan of every symbol of the file per constant gives about 9
 
 
 def test_a_name_assigned_twice_and_a_repeated_field_are_one_symbol_each(tmp_path):
