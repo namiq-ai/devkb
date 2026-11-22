@@ -443,6 +443,9 @@ def _blank_span(s: str, a: int, b: int) -> str:
     return s[:a] + _blank(s[a:b]) + s[b:]
 
 
+_LEADING_MACRO = re.compile(r"\s*([A-Z][A-Z0-9_]{2,})\b(?!\s*\()(?=\s+(?:namespace|class|struct|union|enum|template|extern|inline)\b)")
+
+
 def _strip_decor(h: str) -> str:
     """Attributes, access specifiers and a leading `template<...>` blanked, offsets preserved."""
     for m in list(_ATTR.finditer(h)):
@@ -452,7 +455,13 @@ def _strip_decor(h: str) -> str:
     while True:
         m = re.match(r"\s*template\s*<", h)
         if not m:
-            break
+            # a project's namespace or export macro written before a declaration keyword (`FMT_BEGIN_NAMESPACE namespace detail`,
+            # `FMT_EXPORT class K`): the macro is decoration, and left in it turns the head into one unknown construct (#121)
+            mm = _LEADING_MACRO.match(h)
+            if not mm:
+                break
+            h = _blank_span(h, 0, mm.end(1))
+            continue
         depth, k = 1, m.end()
         while k < len(h) and depth:
             depth += {"<": 1, ">": -1}.get(h[k], 0)
