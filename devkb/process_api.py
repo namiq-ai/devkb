@@ -53,7 +53,7 @@ STOP = frozenset("the and for add with that this from into how new use when why 
 
 def message_run(text: str) -> list[str]:
     """The words of an error message in order, lower case: letters, digits and apostrophes, so punctuation and `{}` placeholders do not break a run."""
-    return re.findall(r"[a-z0-9']+", (text or "").lower())
+    return [w for w in (x.strip("'") for x in re.findall(r"[a-z0-9']+", (text or "").lower())) if w]      # a quoted message keeps no quote marks
 
 
 def query_words(text: str) -> list[str]:
@@ -1025,7 +1025,7 @@ class ProcessAPI:
         run = message_run(symptom)                      # the message as typed, as words: a pasted message is often a prefix of the template (`bad regular expression` for `bad regular expression: {}`)
         exact = [e for e in score if (len(m := " ".join((self.idx.props[e].get("message_template") or "").lower().split())) >= 12
                                       and m.replace("{}", "") and all(part.strip() in said for part in m.split("{}") if part.strip()))
-                 or (len(run) >= 3 and " ".join(run) in " ".join(message_run((self.idx.props[e].get("message_template") or "").replace("{}", " "))))]
+                 or (len(run) >= 3 and f" {' '.join(run)} " in f" {' '.join(message_run((self.idx.props[e].get('message_template') or '').replace('{}', ' ')))} ")]   # whole words: `not find` is not inside `cannot find`
         if exact:
             sigs = sorted(exact, key=self._key)[:3]
         elif len(run) >= 3:
@@ -1036,7 +1036,7 @@ class ProcessAPI:
             def explained(e: int) -> float:
                 t = set(query_words((self.idx.props[e].get("message_template") or self.idx.props[e].get("label") or "").replace("{}", " ")))
                 return len(t & said_words) / len(t) if t else 0.0
-            sigs = [e for e in sigs if explained(e) >= 0.6]
+            sigs = [e for e in sigs if explained(e) >= 0.75]
         raisers = sorted({s for e in sigs for verb in ("RAISES", "LOGS") for s in self.idx.sources(verb, e)}, key=self._key)
         how = "error message"
         if not raisers:

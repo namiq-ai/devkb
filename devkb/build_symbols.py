@@ -1141,14 +1141,14 @@ def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> lis
 
     # #400: `a, b = helper(...)` where a function of this file returns a tuple of constructed objects: each name gets that class
     tuple_returns: dict[str, list[str | None]] = {}
-    for fn in ast.walk(tree):
+    for fn in tree.body:        # module-level functions only: a method or nested function of the same name must not stand in for the helper
         if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
             built = {n.targets[0].id: _constructed(n.value) for n in _own_body(fn)
                      if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
             rets = [r.value for r in _own_body(fn) if isinstance(r, ast.Return) and isinstance(r.value, ast.Tuple)]
             if len(rets) == 1:
                 kinds_ = [_constructed(e) or (built.get(e.id) if isinstance(e, ast.Name) else None) for e in rets[0].elts]
-                if returns is not None and fn in tree.body:      # for callers in other files (resolved in this file's context)
+                if returns is not None:      # for callers in other files (resolved in this file's context)
                     returns[f"{fn.name}#tuple"] = "|".join(k or "" for k in kinds_)
                 tuple_returns[fn.name] = [_constructed(e) or (built.get(e.id) if isinstance(e, ast.Name) else None) for e in rets[0].elts]
 
