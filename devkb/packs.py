@@ -397,10 +397,46 @@ class Packer:
         ms = r["matches"]
         if r["n"] == 1:
             return ms[0]["i"], []
+        ids = {m["i"] for m in ms}
+        if len(ids) == 1:                            # #291: overloads share one graph node and the read table lists one match per definition;
+            i = next(iter(ids))                      # that is one symbol, not a choice. Their lines are said in the pack (`_overload_note`).
+            self.__dict__.setdefault("_overloads", {})[i] = sorted((m["ls"], m["le"]) for m in ms if m.get("ls"))
+            return i, []
         code = [m for m in ms if m.get("kind") not in ("field", "constant")]
         if len(code) == 1 and r["n"] <= len(ms):     # a function and a field of the same name: a change pack means the
             return code[0]["i"], []                  # function, which is what can be called (#193)
         return None, [m["k"] for m in ms]
+
+    def _overload_note(self, i: int) -> list[str]:
+        """#291: a name with several definitions in one graph node (C++ overloads): where each is, and what the node's callers mean."""
+        spans = self.__dict__.get("_overloads", {}).get(i) or []
+        if len(spans) < 2:
+            return []
+        key = self.api._key(i)
+        rel, short = key.split("::")[0], key.split("::")[-1].rsplit(".", 1)[-1]
+        lines = self._file(rel)
+        out = ["", f"## Overloads ({len(spans)} share this node)",
+               f"`{key.split('::')[-1]}` is defined {len(spans)} times. The graph keeps one node for them, so the callers in this pack are those of "
+               "all of them. By argument count, which overload each caller reaches:"]
+        try:
+            from devkb.cpp_resolve import _arity  # noqa: PLC0415
+            from devkb.cpp_symbols import _argc  # noqa: PLC0415
+            calls = []
+            for c in sorted(set(self.idx.sources("CALLS", i)) - {i}, key=self.api._key):
+                site = self.call_site(c, short)
+                m = re.search(r"\b" + re.escape(short) + r"\s*\(", site.split(": ", 1)[-1])
+                if m:
+                    text = site.split(": ", 1)[-1]
+                    calls.append((self.api._key(c).split("::")[-1], site.split(": ")[0], _argc(text, m.end() - 1)))
+            for a, b in spans:
+                sig = lines[a - 1].strip().split("{")[0].strip() if 0 < a <= len(lines) else ""      # the declaration, not the body
+                p = re.search(r"\((.*)\)", sig)
+                lo, hi = _arity(p.group(1)) if p else (0, float("inf"))
+                who = [f"`{n}` ({loc}, {k} arg{'s' if k != 1 else ''})" for n, loc, k in calls if k < 0 or lo <= k <= hi]
+                out.append(f"- `{rel}:{a}` `{sig[:100]}` — " + ("reached by " + ", ".join(who) if who else "no caller with a matching argument count"))
+        except Exception:  # noqa: BLE001
+            out = out[:3] + [", ".join(f"`{rel}:{a}-{b}`" for a, b in spans) + " (the callers are not split: a call's argument count could not be read)"]
+        return out
 
     def _unresolved(self, pack: str, name: str, path: str, cands: list[str], tail: str) -> str:
         head = f"# Graph pack: {pack}\n\nThe graph cannot resolve `{name}`" + (f" in `{path}`" if path else "")
@@ -488,6 +524,9 @@ class Packer:
         tests = self.tests(closure)
         out = [f"# Graph pack: changing `{self.api._key(i)}`", "",
                self.freshness(sorted({self.api._key(x).split('::')[0] for x in closure})), "", f"Defined at `{self.def_line(i)}`."]
+        if self._overload_note(i):
+            out[-1] = f"Defined {len(self.__dict__['_overloads'][i])} times, at `{self.api._key(i).split('::')[0]}`: see Overloads."
+        out += self._overload_note(i)
         out += self._reachers(parent)
         out += self._references(i)
         if self.idx.ep_by_owner:
@@ -589,7 +628,9 @@ class Packer:
         blocked = sorted(f for f in files if any(f.startswith(p) for p in dnt))
         tests = sorted(f for f in files if self.api._is_test(f))
         out = [f"# Graph pack: changing the signature of `{self.api._key(i)}`" + (f" as role {role}" if role else ""), "",
-               self.freshness(files), "", f"Defined at `{self.def_line(i)}`.", "",
+               self.freshness(files), "",
+               (f"Defined {len(self.__dict__['_overloads'][i])} times, at `{self.api._key(i).split('::')[0]}`: see Overloads." if self._overload_note(i)
+                else f"Defined at `{self.def_line(i)}`.")] + self._overload_note(i) + ["",
                f"## Files with a direct caller ({len(files)}, tests included)"]
         for f in files:
             if f not in by_file:
