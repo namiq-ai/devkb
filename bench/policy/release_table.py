@@ -99,7 +99,7 @@ def contaminated(r: dict) -> list[str]:
     return [x for x in r.get("contaminated") or [] if "runs-archive/" not in x]
 
 
-# The repetition rule (#368, docs/BENCHMARK.md "How many runs a claim needs"). PROPOSED values, the bench owner's to confirm: they set what every ticket costs.
+# The repetition rule (#368, docs/BENCHMARK.md "How many runs a claim needs"). Confirmed by the owner on 2026-11-22 (7 / 40% / 6): they set what every ticket costs.
 MIN_RUNS_PER_ARM = 7          # a per-ticket claim about cost or context needs this many runs in each arm
 LARGE_EFFECT = 0.40           # the two-arm step of a ticket (3 runs) may name a direction only when the cost or context effect is larger than this
 MIN_POOLED_TICKETS = 6        # a release claim pools at least this many tickets, at 3 runs per arm
@@ -292,7 +292,7 @@ def table(pairs: list[tuple[str, list[dict]]], allow_mixed: bool = False, compar
         lines.append(f"| {a} | {n} | ${cost:.2f} | {ctx / 1e3:.0f}k | {dc} | {dk} |")
     tickets = len([1 for _t, rows in pairs if rows])
     per_cell = sorted({sum(1 for x in rows if x["arm"] == a) for _t, rows in pairs for a in {r["arm"] for r in rows}})
-    lines += ["", f"Repetition rule (#368, proposed): {tickets} ticket(s) pooled at {', '.join(map(str, per_cell))} run(s) per arm; "
+    lines += ["", f"Repetition rule (#368): {tickets} ticket(s) pooled at {', '.join(map(str, per_cell))} run(s) per arm; "
               + (f"enough to pool ({MIN_POOLED_TICKETS} tickets needed)." if tickets >= MIN_POOLED_TICKETS else
                  f"**below n for a release claim: {MIN_POOLED_TICKETS} tickets are needed, this has {tickets}.** Read the intervals above as a direction at most.")]
     lines += start_section(pairs)
