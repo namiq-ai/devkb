@@ -120,6 +120,8 @@ class Repo:
         self.namespaces: set[str] = set()
         self.macros: set[str] = set()
         self.definers: dict[str, set[str]] = {}    # macro name -> the files that `#define` it (#290)
+        self._reach_path, self._reach = "", set()
+        self.cur_path = ""                         # the file whose calls are being resolved: `class_by_type` prefers what it includes (#244)
         self.function_names: set[str] = set()
         self.non_ctor_names: set[str] = set()
         self.language: dict[str, str] = {u.path: u.rec.language for u in units}
@@ -234,6 +236,32 @@ class Repo:
             self.__dict__["_rev"] = rev
         return self.__dict__["_rev"]
 
+    def included_from(self, path: str) -> set[str]:
+        """The repository files `path` includes, at any depth (the forward closure of `_include_edges`)."""
+        cache = self.__dict__.setdefault("_fwd_cache", {})
+        if path not in cache:
+            if "_fwd" not in self.__dict__:
+                fwd: dict[str, set[str]] = {}
+                for target, includers in self._include_edges().items():
+                    for f in includers:
+                        fwd.setdefault(f, set()).add(target)
+                self.__dict__["_fwd"] = fwd
+            fwd = self.__dict__["_fwd"]
+            seen: set[str] = set()
+            todo = [path]
+            while todo:
+                for t in fwd.get(todo.pop(), ()):
+                    if t in seen:
+                        continue
+                    seen.add(t)
+                    done = cache.get(t)
+                    if done is not None:        # a header whose closure is already known: take it whole instead of walking it again
+                        seen |= done
+                    else:
+                        todo.append(t)
+            cache[path] = seen
+        return cache[path]
+
     def macro_scope(self, name: str) -> set[str]:
         """The files that see repository macro `name`: those that define it and those that include, at any depth, one that does."""
         cache = self.__dict__.setdefault("_scope", {})
@@ -257,7 +285,15 @@ class Repo:
         u = self._unit.get(path)
         if u is not None and u.rec.masked is not None and any(n == name and ln < line for n, ln in u.rec.masked.undefs):
             return False
-        return path in self.macro_scope(name)
+        definers = self.definers.get(name)
+        if not definers:
+            return False
+        if path in definers:
+            return True
+        if path != self._reach_path:                # the calls of one file are resolved together: its include closure is fetched once
+            self._reach_path, self._reach = path, self.included_from(path)
+        reach = self._reach
+        return any(d in reach for d in definers) if len(definers) <= len(reach) else not reach.isdisjoint(definers)
 
     # classes -------------------------------------------------------------------
     def class_by_type(self, t: str, from_ns: str | None = None) -> tuple[str, object] | None:
@@ -278,6 +314,13 @@ class Repo:
         found = exact if exact else self.class_suffix.get(key, [])
         if len(found) == 1:
             return found[0]
+        if len(found) > 1 and self.cur_path:
+            # alternate definitions of one name (a platform's `port_stdcxx.h` and a documentation `port_example.h`): the one the caller's file
+            # includes, at any depth, is the one the compiler would see (#244)
+            seen = self.included_from(self.cur_path)
+            visible = [c for c in found if c[0] == self.cur_path or c[0] in seen]
+            if len(visible) == 1:
+                return visible[0]
         if from_ns is None or len(exact) < 2 or self.class_suffix.get(key) or parts[-1] in self.aliases:
             return None
         return self._lookup(exact, lead, "" if absolute else from_ns)
@@ -326,10 +369,16 @@ class Repo:
         seen.add(c.qn + "@" + path)
         found = [(p, s) for p, s in self.by_qn.get(c.qn + "." + name, []) if s.kind == "method"]
         if len(self.classes.get(c.qn, [])) > 1 and found:
-            # a class name several namespaces share: only a method defined in this class's namespace is its own (#93)
-            if any(s.class_ns is None for _p, s in found):
-                return ("declared",)
-            found = [(p, s) for p, s in found if s.class_ns == c.namespace]
+            # alternate definitions of one class (one per platform header): a method defined in a file that includes this class's header is
+            # this class's (#244)
+            mine = [(p, s) for p, s in found if p == path or path in self.included_from(p)]
+            if mine and len(mine) < len(found):
+                found = mine
+            else:
+                # a class name several namespaces share: only a method defined in this class's namespace is its own (#93)
+                if any(s.class_ns is None for _p, s in found):
+                    return ("declared",)
+                found = [(p, s) for p, s in found if s.class_ns == c.namespace]
         if len(found) > 1:              # F5: same-named targets narrowed by the call's argument count
             keep = set(self.by_arity([f"{p}::{s.qn}" for p, s in found], argc))
             found = [(p, s) for p, s in found if f"{p}::{s.qn}" in keep] or found
@@ -363,6 +412,7 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
     unresolved: set[tuple[str, str, str]] = set()
     cross: list[Cross] = []
     for u in units:
+        repo.cur_path = u.path
         is_c = not u.rec.cpp
         lang = u.rec.language
         by_def_free = {s.short: s for s in u.syms.values() if s.kind == "function"}

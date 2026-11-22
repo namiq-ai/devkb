@@ -1143,9 +1143,12 @@ def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> lis
     tuple_returns: dict[str, list[str | None]] = {}
     for fn in tree.body:        # module-level functions only: a method or nested function of the same name must not stand in for the helper
         if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            built = {n.targets[0].id: _constructed(n.value) for n in _own_body(fn)
-                     if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
-            rets = [r.value for r in _own_body(fn) if isinstance(r, ast.Return) and isinstance(r.value, ast.Tuple)]
+            # a helper ends with `return a, b`: its last statement, and the names its top-level assignments bind. No walk of the body (Zephyr's
+            # Python scripts made two walks per function a fifth of the build)
+            last = fn.body[-1] if fn.body else None
+            rets = [last.value] if isinstance(last, ast.Return) and isinstance(last.value, ast.Tuple) else []
+            built = ({n.targets[0].id: _constructed(n.value) for n in fn.body
+                      if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)} if rets else {})
             if len(rets) == 1:
                 kinds_ = [_constructed(e) or (built.get(e.id) if isinstance(e, ast.Name) else None) for e in rets[0].elts]
                 if returns is not None:      # for callers in other files (resolved in this file's context)

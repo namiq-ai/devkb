@@ -917,12 +917,16 @@ class _Scanner:
         t = self._arg_type(d, text, open_i)
         return t == "" or t == type_name
 
-    def constructs_in(self, d: Def, lo: int, text: str, names: set[str]) -> None:
+    def constructs_in(self, d: Def, lo: int, text: str, names: set[str], expressions_only: bool = False) -> None:
         """Constructor calls written without a call's `name(`: `new T(args)`, `T x(args)` / `T x{args}`, `make_unique<T>(args)` / `make_shared<T>`
         (SPEC-DKB-004 F3, #119). Kept as a `construct` call of the type's short name; the resolver links it when `T` is the one repository class of
         that name, and to the one constructor its argument count selects."""
         line_of = self.m.line
+        if getattr(self, "has_ctor_filter", False) and (self.ctor_re is None or not self.ctor_re.search(text)):
+            return
         for rx, kind in ((_CTOR_NEW, "new"), (_CTOR_MAKE, "make"), (_CTOR_LOCAL, "local"), (_CTOR_DEFAULT, "default")):
+            if expressions_only and kind in ("local", "default"):
+                continue
             for cm in rx.finditer(text):
                 qual, name = cm.group(1), cm.group(2)
                 if name not in names or name in _NOT_FUNC or name in _NOT_TYPE or (kind == "local" and qual.strip() == "" and name in _NOT_TYPE):
@@ -945,12 +949,13 @@ class _Scanner:
         text = code[lo:hi]
         line_of = self.m.line
         members = _initialiser_names(text) if init else set()
+        has_mock = "EXPECT_CALL" in text or "ON_CALL" in text      # one substring test per body, not a regex search per call
         for cm in _CALL_RE.finditer(text):
             name = cm.group(1)
             is_init = cm.start(1) in members      # `: m(x), n(f(x))`: m and n are initialised, not called (#145); `f` is not at depth 0, so it is read
             if (name not in names and not is_init) or name in _NOT_FUNC:
                 continue            # a call to a name no repository symbol bears is never linked and never counted (an initialiser may name a data member: #119)
-            if _MOCK_EXPECT.search(text[max(0, cm.start() - 200):cm.start()]):
+            if has_mock and _MOCK_EXPECT.search(text[max(0, cm.start() - 200):cm.start()]):
                 continue            # `EXPECT_CALL(mock, allocate(1))`: the method the mock expects, not a call to a repository `allocate` (#146)
             chain, a = _qualifier_before(text, cm.start())
             k = a - 1
@@ -1033,8 +1038,8 @@ class _Scanner:
             if form == "member" and field_of is not None and recv is None:
                 c.field_of = field_of
             self.calls.append(c)
-        if not init and self.cpp:
-            self.constructs_in(d, lo, text, names)
+        if self.cpp:
+            self.constructs_in(d, lo, text, names, expressions_only=init)       # an initialiser list holds `new T(..)`, never a declaration
         self.errors_in(d, lo, text)
 
     def errors_in(self, d: Def, lo: int, text: str) -> None:
@@ -1313,9 +1318,12 @@ def extract_file(path: str, text: str, includer_languages: list[str] | None = No
                        {n for n, _b, _l in m.defines}, ns_seen, m.includes, m, sc, consumed)
 
 
-def scan_bodies(rec: FileRecords, names: set[str], function_names: set[str]) -> None:
-    """Pass 2: call sites of `names`, error sites, and indirect references to `function_names`."""
+def scan_bodies(rec: FileRecords, names: set[str], function_names: set[str], ctor_re: re.Pattern | None = None) -> None:
+    """Pass 2: call sites of `names`, error sites, and indirect references to `function_names`. `ctor_re` matches the names of the classes that have
+    a constructor (#119); without it, constructor calls are looked for in every body."""
     sc = rec.scanner
+    sc.ctor_re = ctor_re
+    sc.has_ctor_filter = True
     for d in rec.defs:
         for n, (lo, hi) in enumerate(d.spans):
             if hi > lo:

@@ -94,3 +94,9 @@ def test_a_default_initialised_local_links_to_a_declared_default_constructor_onl
     g = S.build(tmp_path, files)
     assert _targets(g, "a.cc::user") == {"a.cc::D.D"}, _targets(g, "a.cc::user")
     assert _targets(g, "a.cc::user2") == {"a.cc::OnlyArg.OnlyArg"}
+
+
+def test_a_new_expression_in_an_initialiser_list_is_a_constructor_call(tmp_path):
+    files = {"a.cc": ("class Cache {\n public:\n  Cache(int n);\n};\nCache::Cache(int n) {}\n"
+                      "class Owner {\n public:\n  Owner(int n) : cache_(new Cache(n)), count_(n) {}\n  Cache* cache_;\n  int count_;\n};\n")}
+    assert "a.cc::Cache.Cache" in _targets(S.build(tmp_path, files), "a.cc::Owner.Owner")
