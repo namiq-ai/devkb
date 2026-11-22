@@ -61,3 +61,19 @@ leveldb 36 of 77, fmt 25 of 48, yaml-cpp 120 of 160. Every figure below is there
 - Constructor scanning ran on C code and produced 277 bogus macro edges on cJSON; restricted to C++.
 - A bare call was turned into a constructor call whenever some class shared its name, which removed 31 real method edges on yaml-cpp; now only when every
   function bearing the name is a constructor.
+
+## Later in the same session: the three clauses that were open (2026-11-22)
+
+**#121, symbol recall on the C repositories** (compiler truth with `--std c11`, `-I .`, gcc's include directory; cJSON and Lua compile completely):
+
+| repository | truth definitions | recall by exact name | recall by position | edge recall | edge precision |
+|---|---|---|---|---|---|
+| cJSON | 353 | 0.992 | 0.992 | 0.966 | 1.000 |
+| Lua | 1,375 | 0.999 | 0.999 | 0.990 | 0.982 |
+| autoas (63 of 301 units compile) | 405 | 0.948 | 0.990 | not scored | not scored |
+
+autoas's exact-name figure is under 0.95 only because 16 definitions are renamed by macros (`#define crc_update crc16_update`, `#define Fls_Init Eep_Init`): the compiler names them after preprocessing, devkb has a symbol at the same lines under the source name. The other 5 misses are macro-generated (`RB_PUSH_FAST(U8, uint8_t)`), a documented limit. None of these figures changed with this batch. With the C++ numbers above, the clause holds on all six pinned repositories, with autoas measured on 21% of its translation units.
+
+**#244, Zephyr against the real v0.2.11:** 87.0 s (v0.2.11) against 115.9 s (candidate), **+33%**, not within +10%. v0.2.14 was already +24%. The profile (cumulative, v0.2.11 to now): `cpp_graph.add_to_graph` +55.7 s (resolve +24.5, `Repo.__init__` +14.8, `scan_bodies` +16.3) and `_parse_python_file` +25.8 s (of which `_uses_in_tree` +16.0). Filed as **#405** with the attribution.
+
+**#119, constructors:** 65% of the missed constructor edges found (268 to 93), bar 80%. The remainder is implicit construction that needs expression types (a `return` that converts, `T x = expr`, a call result as the argument): filed as **#406**.
