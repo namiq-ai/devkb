@@ -1056,6 +1056,24 @@ def definition_body(repo: Path, m: dict) -> dict:
     return {"lines": lines[ls - 1:le]} if le <= len(lines) else src
 
 
+PARTIAL_INTENTS = ("read-body", "in-file", "call-sites-filtered", "locate")      # #391
+
+
+def scoped_unique_definition(repo: Path, name: str, scope: list[str] | None, globs: list[str] | None) -> bool:
+    """A name several symbols share, searched in files (a file operand, a folder, --include, Grep's path or glob) that hold exactly one definition of
+    it: the search's own answer, resolved in those files (#390). False for a repository-wide search, none or several definitions, or a changed file."""
+    from devkb import misses
+    if not scope and not globs:
+        return False
+    defs = misses.run_definitions(repo, name) or []
+    if scope:
+        defs = [m for m in defs if any((f := m["k"].split("::", 1)[0]) == d or f.startswith(d + "/") for d in scope)]
+    if globs:
+        import fnmatch
+        defs = [m for m in defs if any(fnmatch.fnmatch((f := m["k"].split("::", 1)[0]), g) or fnmatch.fnmatch(Path(f).name, g) for g in globs)]
+    return len(defs) == 1 and bool(defs[0].get("ls")) and not misses.changed_since_build(repo, defs[0]["k"].split("::", 1)[0])
+
+
 def definition_answer(repo: Path, name: str, scope: list[str] | None, globs: list[str] | None = None,
                       body: bool = True) -> tuple[str, str] | None:
     """SPEC-DKB-006 R1-R3: (answer, reason) for a definition search, or None when the search should run. One definition in
@@ -1441,6 +1459,10 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
             queries.append({"name": n, "verdict": r[0], "detail": r[1],
                             "query": f"devkb pack {QUESTION} {shlex.quote(n)} --project {shlex.quote(str(repo))}"})
             answers.append(r[2].strip())
+    if intent in ("read-body", "in-file"):
+        for q in queries:
+            if q["verdict"] == "cannot-resolve" and scoped_unique_definition(repo, q["name"], scope_of(paths or [], repo), search_globs(tool, inp)):
+                q["verdict"], q["detail"] = "complete", "one definition in the searched files (#390)"
     if stale_for(repo, scope_of(paths or [], repo), all_names, answers):
         # #182, #273, #409: a graph that has not seen the working tree's code gives no answer at all, beside grep or instead
         # of it: its line numbers and its callers may be wrong, and grep has the answer
@@ -1463,6 +1485,16 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
                                            "permissionDecisionReason": READ_ANSWER.format(answers=ans[0])}}
     if lenient:                                  # the real reason, and the miss is still recorded for the post hook (#187)
         verdicts = {q["verdict"] for q in queries} - {"complete"}
+        if intent == "read-body" and not verdicts and queries and len(queries) == len(names) and dname:
+            # a body search with context lines whose names are complete (or one definition in the searched files, #390): the body beside grep
+            # when grep's context would cut it short, the same condition as for a search that is not lenient
+            scope = scope_of(paths or [], repo)
+            got = [definition_answer(repo, n, scope, search_globs(tool, inp)) for n in names]
+            if all(got) and all(context_lines(tool, inp) < body_lines(x[0]) for x in got):
+                body = "\n\n".join(x[0] for x in got)
+                body = body if len(body) <= MAX_ANSWER else body[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
+                log_decision(ev, repo, tool, "alongside", names, queries, len(body), f"body:{got[0][1]}", scope)
+                return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(body))}}
         reason = real_why if not verdicts else f"verdict:{sorted(verdicts)[0]}"
         # the search runs untouched, but an agent about to read a function body is told once where its body is (#358)
         out = teach_only(ev, inp, always=True) if (intent == "read-body" and not verdicts and teach_body()) else None
@@ -1530,6 +1562,23 @@ def answer_or_record(ev: dict, repo: Path, tool: str, inp: dict, pattern: str, p
         if text:
             text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
             log_decision(ev, repo, tool, "alongside", names, queries, len(text), f"ambiguous:{intent}", scope)
+            record_pending(ev, key, repo, tool, inp, pattern, names, queries)
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(text))}}
+    done = [q["name"] for q in queries if q["verdict"] == "complete"]
+    rest = [n for n in names if n not in done]
+    if intent in PARTIAL_INTENTS and done and rest:
+        # several names, some complete and some not (a word, a builtin, a name several symbols share): what devkb knows goes beside grep, which still
+        # runs and prints the rest; never instead of it (#391)
+        scope = scope_of(paths or [], repo)
+        if intent == "read-body":
+            parts = [definition_answer(repo, n, scope, search_globs(tool, inp)) for n in done]
+            text = "\n\n".join(x[0] for x in parts if x)
+        else:
+            text = shaped_answer(intent, repo, done, inp, paths, scope, tool)
+        if text:
+            text = text if len(text) <= MAX_ANSWER else text[:MAX_ANSWER].rsplit("\n", 1)[0] + "\n... (cut)"
+            text += f"\n(devkb answers {', '.join(done)} only; grep has {', '.join(rest)}.)"
+            log_decision(ev, repo, tool, "alongside", names, queries, len(text), f"partial:{intent}", scope)
             record_pending(ev, key, repo, tool, inp, pattern, names, queries)
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ALONGSIDE.format(answers=capped(text))}}
     log_decision(ev, repo, tool, "pass-through", names, queries, 0, "not-complete")
