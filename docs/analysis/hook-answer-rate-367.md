@@ -92,3 +92,12 @@ and #391, in that order (#393 alone gives 18 of 163, 11%).
   them: `devkb-benchmark-367-hook-replay-archive-v4.tar.gz`, beside the checkout.
 - Inputs: `devkb-benchmark-0.2.14-archive.tar.gz`, `devkb-benchmark-0.2.14-rerun-archive.tar.gz`,
   `devkb-benchmark-337-hide-start-archive.tar.gz`, and the #382/#383/#367 runs.
+
+## After #393 (a bare `| head` / `| tail` no longer crashes `output_limit`), replayed (2026-11-22)
+
+Same 36 recent streams, same bases, the fixed guardrail: **186 decisions, 20 answered (19 before), 14 searches and 6 span hints**. The 6 answers that were "built, not delivered" are not 6 new
+answers: of the rows whose search ends in a bare `head`/`tail`, one now delivers (`devkb symbol count_digits ... | head`, 230 characters) and most were never answerable for another
+reason: `not-complete` (several symbols share the name, #390), `duplicate:*` (grep prints the same lines), or a cut: a bare `head` is now a cut of 10 lines and an answer larger than that is left out
+(#281). So #393's expectation "those 9 rows turn into delivered answers" does not hold on this data; what holds is that the crash is gone (`tests/test_devkb_guardrail_bare_head_393.py`) and nothing is
+built and then lost. The path to the proposed 30% target is #390 and #391, not #393.
+Data: `~/.claude/jobs/d417ed39/tmp/replay393/out/` (one JSON file per ticket).

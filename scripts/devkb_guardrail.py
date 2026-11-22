@@ -721,9 +721,10 @@ def output_limit(tool: str, inp: dict) -> int | None:
     for st in (s.split() for s in cmd.split("|")[1:]):
         if is_trim_stage(st):
             m = re.search(r"(\+?)(\d+)", " ".join(st[1:]))
-            if not m.group(1):
-                n = int(m.group(2))
-                limit = n if limit is None else min(limit, n)
+            if m and m.group(1) and st[0] == "tail":
+                continue                                         # `tail -n +N` starts at a line: not a cap (`head -n +N` is N lines)
+            n = int(m.group(2)) if m else 10                      # a bare `head` / `tail` is a cut at their default of 10 lines (#393)
+            limit = n if limit is None else min(limit, n)
     return limit
 
 

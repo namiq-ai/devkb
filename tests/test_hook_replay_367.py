@@ -85,7 +85,7 @@ def test_only_delivered_text_counts_streams_are_isolated_and_edits_are_marked(tm
         d = tmp_path / "runs" / run
         d.mkdir(parents=True)
         events = [{"type": "system", "subtype": "init", "cwd": ORIG, "session_id": "same"},
-                  _tool(1, "Bash", {"command": f"grep -rn 'compute_total(' {ORIG}/pkg | head"}),   # a bare head (#393)
+                  _tool(1, "Bash", {"command": f"grep -rn 'compute_total(' {ORIG}/pkg | head -1"}),   # (a bare `| head` once stood here as the lost answer of #393; it is delivered now: tests/test_devkb_guardrail_bare_head_393.py)
                   _tool(2, "Edit", {"file_path": f"{ORIG}/pkg/core.py", "old_string": "a", "new_string": "b"}),
                   _tool(3, "Grep", {"pattern": "compute_total", "path": ORIG, "output_mode": "content"}),
                   {"type": "system", "subtype": "hook_response", "hook_event": "PreToolUse", "hook_name": "PreToolUse:Grep",
