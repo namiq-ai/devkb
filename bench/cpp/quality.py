@@ -19,6 +19,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import CORPUS, is_vendored, vendored_prefixes
 
+OVERLOAD_AWARE = os.environ.get("QUALITY_OVERLOAD", "1") != "0"      # QUALITY_OVERLOAD=0: the older convention, a node maps to the overload at its first line only
+
 CODE = textwrap.dedent('''
     import json, sys, time
     from pathlib import Path
@@ -26,7 +28,7 @@ CODE = textwrap.dedent('''
     t = time.time(); g = build_symbols.extract(Path(sys.argv[1])); dt = time.time() - t
     nodes = {n.uid: n for n in g.nodes("Symbol")}
     cpp = (".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".inl", ".ipp", ".tpp")
-    syms = [{"uid": u, "key": n.natural_key, "kind": n.props.get("kind"), "ls": n.props.get("line_start"), "le": n.props.get("line_end"), "lang": n.props.get("language")}
+    syms = [{"uid": u, "key": n.natural_key, "kind": n.props.get("kind"), "ls": n.props.get("line_start"), "le": n.props.get("line_end"), "lang": n.props.get("language"), "spans": n.props.get("overload_spans") or []}
             for u, n in nodes.items() if n.natural_key.split("::")[0].lower().endswith(cpp)]
     edges = [[e.from_uid, e.to_uid, e.confidence, e.source, e.evidence_ref] for e in g.edges("CALLS") if e.from_uid in nodes and nodes[e.from_uid].natural_key.split("::")[0].lower().endswith(cpp)]
     print(json.dumps({"secs": dt, "syms": syms, "edges": edges}))
@@ -83,6 +85,11 @@ def classify_edges(out, truth, repo_name, corpus=CORPUS):
         hit = set(by_name.get((f, qn), ()))
         if not hit and s["ls"]:
             hit = {u for st, en, u in by_file.get(f, []) if st <= s["ls"] <= en}
+        if OVERLOAD_AWARE and s.get("spans"):
+            # the graph keeps one node for all overloads of a name and records each one's span: the node stands for every overload, so an edge to it is
+            # correct when the truth has an edge to any of them (otherwise an edge to `Slice` is "wrong" whenever the compiler picked another overload)
+            for sp in s["spans"]:
+                hit |= {u for st, en, u in by_file.get(f, []) if sp and st <= sp[0] <= en}
         if hit:
             mapping[s["uid"]] = hit
     key_of = {x["uid"]: x["key"] for x in out["syms"]}

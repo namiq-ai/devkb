@@ -924,15 +924,15 @@ class _Scanner:
         line_of = self.m.line
         if getattr(self, "has_ctor_filter", False) and (not self.ctor_re or self.ctor_re.isdisjoint(_IDENT_RE.findall(text))):
             return
-        for rx, kind in ((_CTOR_NEW, "new"), (_CTOR_MAKE, "make"), (_CTOR_LOCAL, "local"), (_CTOR_DEFAULT, "default")):
+        for rx, kind in ((_CTOR_NEW, "new"), (_CTOR_NEW_BARE, "newbare"), (_CTOR_MAKE, "make"), (_CTOR_LOCAL, "local"), (_CTOR_DEFAULT, "default")):
             if expressions_only and kind in ("local", "default"):
                 continue
             for cm in rx.finditer(text):
                 qual, name = cm.group(1), cm.group(2)
                 if name not in names or name in _NOT_FUNC or name in _NOT_TYPE or (kind == "local" and qual.strip() == "" and name in _NOT_TYPE):
                     continue
-                if kind == "default":      # `T x;`: the default constructor, written nowhere; `extern T x;` declares, it does not construct
-                    if re.search(r"\bextern\b", cm.group(0)):
+                if kind in ("default", "newbare"):      # `T x;`, `new T;`, `new T[n]`: the default constructor, written nowhere; `extern T x;` declares, it does not construct
+                    if kind == "default" and re.search(r"\bextern\b", cm.group(0)):
                         continue
                     c = Call(d.index, name, "construct", re.sub(r"\s", "", qual).rstrip(":"), None, None, line_of(lo + cm.start(2)), 0)
                     self.calls.append(c)
@@ -1126,6 +1126,7 @@ def _in_mock_method_slot(prefix: str) -> bool:
 
 _QUAL = r"((?:[A-Za-z_]\w*\s*::\s*)*)([A-Za-z_]\w*)"                       # `ns::T`: (qualifier with `::`, short name)
 _CTOR_NEW = re.compile(r"\bnew\s+(?:\([^()]*\)\s*)?(?:::\s*)?" + _QUAL + r"\s*(?:<[^;{}()]*>)?\s*([({])")                    # `new T(args)`, `new T{args}`
+_CTOR_NEW_BARE = re.compile(r"\bnew\s+(?:\([^()]*\)\s*)?(?:::\s*)?" + _QUAL + r"\s*(?:<[^;{}()]*>)?\s*(?=[;,)\]}:?\[]|$)")     # `new T;`, `new T[n]`, `, tmp_(new T),`: the default constructor, written nowhere (#119)
 _CTOR_MAKE = re.compile(r"\b(?:std\s*::\s*)?make_(?:unique|shared)\s*<\s*(?:::\s*)?" + _QUAL + r"[^<>;{}]*(?:<[^;{}]*>)?\s*>\s*(\()")   # `make_unique<T>(args)`
 _CTOR_LOCAL = re.compile(r"(?:^|(?<=[;{}]))\s*(?:(?:const|static|constexpr|volatile)\s+)*(?:::\s*)?" + _QUAL
                     + r"\s*(?:<[^;{}()]*>)?\s+(?:[&*]\s*)*[A-Za-z_]\w*\s*([({])")                                              # `T x(args);`, `T x{args};`
