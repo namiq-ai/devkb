@@ -429,7 +429,13 @@ class Packer:
                     text = site.split(": ", 1)[-1]
                     calls.append((self.api._key(c).split("::")[-1], site.split(": ")[0], _argc(text, m.end() - 1)))
             for a, b in spans:
-                sig = lines[a - 1].strip().split("{")[0].strip() if 0 < a <= len(lines) else ""      # the declaration, not the body
+                sig = ""
+                if 0 < a <= len(lines):
+                    for k in range(a - 1, min(len(lines), a + 7)):         # a declaration can run over several lines: up to its closing `)`
+                        sig = (sig + " " + lines[k].strip()).strip()
+                        if sig.count("(") and sig.count("(") == sig.count(")"):
+                            break
+                    sig = sig.split("{")[0].strip()                         # the declaration, not the body
                 p = re.search(r"\((.*)\)", sig)
                 lo, hi = _arity(p.group(1)) if p else (0, float("inf"))
                 who = [f"`{n}` ({loc}, {k} arg{'s' if k != 1 else ''})" for n, loc, k in calls if k < 0 or lo <= k <= hi]

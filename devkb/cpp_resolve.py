@@ -283,8 +283,10 @@ class Repo:
         if name not in self.macros:
             return False
         u = self._unit.get(path)
-        if u is not None and u.rec.masked is not None and any(n == name and ln < line for n, ln in u.rec.masked.undefs):
-            return False
+        if u is not None and u.rec.masked is not None:
+            undef = max((ln for n, ln in u.rec.masked.undefs if n == name and ln < line), default=0)
+            if undef and not any(n == name and undef < ln < line for n, _b, ln in u.rec.masked.defines):
+                return False                      # `#undef X` with no `#define X` after it and before this use (`#undef X` / `#define X ...` is a redefinition)
         definers = self.definers.get(name)
         if not definers:
             return False

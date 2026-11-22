@@ -151,7 +151,7 @@ def add_to_graph(g: DevKBGraph, repo_root: Path, error_sig_key: Callable[[str, s
     # the classes with a constructor: a body that names none of them has no constructor call to look for (#119)
     ctor_names = {s.short for _r, _rec, syms, _q in pending for s in syms.values()
                   if s.kind == "method" and len(s.qn.split(".")) >= 2 and s.qn.split(".")[-2] == s.short}
-    ctor_re = re.compile(r"\b(?:" + "|".join(sorted(map(re.escape, ctor_names), key=len, reverse=True)) + r")\b") if ctor_names else None
+    ctor_re = frozenset(ctor_names)       # a set, scanned by identifier: a regex alternation over thousands of classes is quadratic in the text
     units: list[cpp_resolve.Unit] = []
     bnd: dict[str, cpp_boundary.FileBoundary] = {}
     for rel, rec, syms, qn_of_def in pending:      # pass 2: calls, errors, indirect references

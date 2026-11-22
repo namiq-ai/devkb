@@ -922,7 +922,7 @@ class _Scanner:
         (SPEC-DKB-004 F3, #119). Kept as a `construct` call of the type's short name; the resolver links it when `T` is the one repository class of
         that name, and to the one constructor its argument count selects."""
         line_of = self.m.line
-        if getattr(self, "has_ctor_filter", False) and (self.ctor_re is None or not self.ctor_re.search(text)):
+        if getattr(self, "has_ctor_filter", False) and (not self.ctor_re or self.ctor_re.isdisjoint(_IDENT_RE.findall(text))):
             return
         for rx, kind in ((_CTOR_NEW, "new"), (_CTOR_MAKE, "make"), (_CTOR_LOCAL, "local"), (_CTOR_DEFAULT, "default")):
             if expressions_only and kind in ("local", "default"):
@@ -955,7 +955,7 @@ class _Scanner:
             is_init = cm.start(1) in members      # `: m(x), n(f(x))`: m and n are initialised, not called (#145); `f` is not at depth 0, so it is read
             if (name not in names and not is_init) or name in _NOT_FUNC:
                 continue            # a call to a name no repository symbol bears is never linked and never counted (an initialiser may name a data member: #119)
-            if has_mock and _MOCK_EXPECT.search(text[max(0, cm.start() - 200):cm.start()]):
+            if has_mock and _in_mock_method_slot(text[max(0, cm.start() - 300):cm.start()]):
                 continue            # `EXPECT_CALL(mock, allocate(1))`: the method the mock expects, not a call to a repository `allocate` (#146)
             chain, a = _qualifier_before(text, cm.start())
             k = a - 1
@@ -1027,7 +1027,8 @@ class _Scanner:
                 elif prev in ">*&" and self.cpp and _DECL_PREFIX.match(text, _stmt_start(text, k), a):
                     continue      # `std::vector<int> x(3)`, `Foo *x(p)`, `const Bar& x(y)`: a declaration, not a call (#65)
                 form, qualifier, recv, rl = "bare", "", None, None
-                if name == d.short and d.kind == "method" and re.search(r"\b[A-Z][A-Z0-9_]*\s*\(\s*$", text[max(0, cm.start() - 80):cm.start()]):
+                if name == d.short and d.kind == "method" and (mm := re.search(r"\b([A-Z][A-Z0-9]*_[A-Z0-9_]*)\s*\(\s*$", text[max(0, cm.start() - 80):cm.start()])) \
+                        and not mm.group(1).startswith(("ASSERT_", "EXPECT_", "CHECK_", "DCHECK_", "VERIFY_", "LIKELY", "UNLIKELY")):
                     form = "qualified"      # `FMT_POSIX(close(fd))` inside a method `close`: a macro adapts the global call; not the method itself (#95)
             c = Call(d.index, name, form, qualifier, recv, rl, line_of(lo + cm.start()), _argc(text, cm.end() - 1))
             c.init = is_init
@@ -1099,7 +1100,28 @@ class _Scanner:
         return "".join(out)
 
 
-_MOCK_EXPECT = re.compile(r"\b(?:EXPECT_CALL|ON_CALL)\s*\(\s*[^,;{}]*,\s*$")   # `EXPECT_CALL(mock, ` right before a name (#146)
+_MOCK_START = re.compile(r"\b(?:EXPECT_CALL|ON_CALL)\s*\(")
+_IDENT_RE = re.compile(r"[A-Za-z_]\w*")
+
+
+def _in_mock_method_slot(prefix: str) -> bool:
+    """Is the text right after `prefix` the second argument of `EXPECT_CALL(mock, ` / `ON_CALL(mock, `: the one top-level comma of the macro's
+    own argument list so far, however many commas the mock expression's inner calls hold (#146)."""
+    starts = list(_MOCK_START.finditer(prefix))
+    if not starts:
+        return False
+    rest = prefix[starts[-1].end():]
+    depth, commas = 0, 0
+    for ch in rest:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth < 0:
+                return False
+        elif ch == "," and depth == 0:
+            commas += 1
+    return depth == 0 and commas == 1 and rest.rstrip().endswith(",")
 
 
 _QUAL = r"((?:[A-Za-z_]\w*\s*::\s*)*)([A-Za-z_]\w*)"                       # `ns::T`: (qualifier with `::`, short name)
@@ -1318,8 +1340,8 @@ def extract_file(path: str, text: str, includer_languages: list[str] | None = No
                        {n for n, _b, _l in m.defines}, ns_seen, m.includes, m, sc, consumed)
 
 
-def scan_bodies(rec: FileRecords, names: set[str], function_names: set[str], ctor_re: re.Pattern | None = None) -> None:
-    """Pass 2: call sites of `names`, error sites, and indirect references to `function_names`. `ctor_re` matches the names of the classes that have
+def scan_bodies(rec: FileRecords, names: set[str], function_names: set[str], ctor_re: frozenset | None = None) -> None:
+    """Pass 2: call sites of `names`, error sites, and indirect references to `function_names`. `ctor_re` is the set of names of the classes that have
     a constructor (#119); without it, constructor calls are looked for in every body."""
     sc = rec.scanner
     sc.ctor_re = ctor_re
@@ -1327,7 +1349,9 @@ def scan_bodies(rec: FileRecords, names: set[str], function_names: set[str], cto
     for d in rec.defs:
         for n, (lo, hi) in enumerate(d.spans):
             if hi > lo:
-                sc.scan_body(d, lo, hi, names, init=n == 0)
+                # the first of a function's two spans lies between its `)` and `{` (an initialiser list); a macro body such as TEST(..) has one span
+                # that is all body, where a `:` is a ternary or a label (#145)
+                sc.scan_body(d, lo, hi, names, init=n == 0 and len(d.spans) == 2)
     m = rec.masked
     for im in _IND.finditer(m.code):
         ref = im.group("ref")

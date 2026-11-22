@@ -137,8 +137,11 @@ def clean_config() -> Path:
     cfg = CLEAN / "cfg"
     cfg.mkdir(parents=True, exist_ok=True)
     cred = cfg / ".credentials.json"
-    if not cred.exists():
-        cred.symlink_to(Path.home() / ".claude" / ".credentials.json")
+    if not (cred.is_symlink() or cred.exists()):
+        try:
+            cred.symlink_to(Path.home() / ".claude" / ".credentials.json")
+        except FileExistsError:            # another worker made it first
+            pass
     return cfg
 
 

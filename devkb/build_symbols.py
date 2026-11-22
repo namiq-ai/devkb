@@ -1081,6 +1081,27 @@ def _own_body(node: ast.AST, into_lambdas: bool = False):
             stack.extend(ast.iter_child_nodes(n))
 
 
+def _stmt_returns(body: list) -> tuple[list, dict]:
+    """The tuple `return`s of a function and the names its plain assignments bind to a constructed object, found by walking its statement lists
+    (if / for / while / try / with bodies), never its expressions or nested defs: the cost is the number of statements, not of nodes (#400)."""
+    rets: list = []
+    built: dict = {}
+    stack = list(body)
+    while stack:
+        n = stack.pop()
+        if isinstance(n, ast.Return):
+            if isinstance(n.value, ast.Tuple):
+                rets.append(n.value)
+        elif isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+            built.setdefault(n.targets[0].id, _constructed(n.value))
+        elif isinstance(n, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith, ast.Try)):
+            for fld in ("body", "orelse", "finalbody"):
+                stack.extend(getattr(n, fld, None) or [])
+            for h in getattr(n, "handlers", None) or []:
+                stack.extend(h.body)
+    return rets, built
+
+
 def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> list[tuple[str, str, str, str]]:
     """[(caller_qualname, class_ref, method)] for calls on a receiver whose class the code states. `returns` collects
     `Cls.method` -> the class that method hands back, for a call on its result (`ret:Cls#method`)."""
@@ -1145,10 +1166,7 @@ def _typed_calls(tree: ast.Module, returns: dict[str, str] | None = None) -> lis
         if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # a helper ends with `return a, b`: its last statement, and the names its top-level assignments bind. No walk of the body (Zephyr's
             # Python scripts made two walks per function a fifth of the build)
-            last = fn.body[-1] if fn.body else None
-            rets = [last.value] if isinstance(last, ast.Return) and isinstance(last.value, ast.Tuple) else []
-            built = ({n.targets[0].id: _constructed(n.value) for n in fn.body
-                      if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)} if rets else {})
+            rets, built = _stmt_returns(fn.body)
             if len(rets) == 1:
                 kinds_ = [_constructed(e) or (built.get(e.id) if isinstance(e, ast.Name) else None) for e in rets[0].elts]
                 if returns is not None:      # for callers in other files (resolved in this file's context)

@@ -17,6 +17,7 @@ def load(name):
 
 def test_the_clean_root_names_neither_the_tool_nor_an_arm(monkeypatch, tmp_path):
     monkeypatch.delenv("EXT_CLEAN_ROOT", raising=False)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "u"))      # the default root is under $HOME: not this machine's
     eb = load("extbench")
     assert not [x for x in eb.LEAKS if x in str(eb.CLEAN / "w0123abcd").lower()], eb.CLEAN
 
