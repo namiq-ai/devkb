@@ -58,11 +58,20 @@ result.
      against the PyPI and OSV advisory databases; any known vulnerability stops the release. pip-audit checks
      dependencies, not devkb's own code.
    - **test**: the test suite.
+   - **graph**: devkb's own graph at the tag, built by the code being released, with the GitHub layer
+     (`python -m devkb.cli build --project . --github`, the workflow's read-only token). A build that fails, or whose
+     `.devkb/manifest.json` does not name the tag's commit in `git_head`, fails the release (#315).
    - **build**: the tag must equal the version; wheel and sdist; `twine check --strict`.
-   - **release**: a GitHub release with the wheel, the sdist and both audit reports.
+   - **release**: a GitHub release with the wheel, the sdist, `devkb-graph-<tag>.tar.gz` (the `.devkb/` store, manifest
+     included: anyone can start from the release's exact graph) and both audit reports.
    - **pypi**: only when enabled (below).
 
-Run `release` by hand from the Actions tab to rehearse: it audits, tests and builds, and publishes nothing.
+4. After tagging, rebuild your own checkout's graph with the checkout's own devkb and the GitHub layer, as the hooks of #158
+   do on every merge: `git switch main && git pull && .venv/bin/devkb build --project . --github`. A graph that sits at an
+   older commit gives wrong hook answers (#273).
+
+Run `release` by hand from the Actions tab to rehearse: it audits, tests, builds the graph and the package, and publishes nothing.
+Its `graph` job shows the manifest's `git_head` equal to the run's commit when it passes.
 
 ## DOI (Zenodo)
 

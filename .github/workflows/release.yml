@@ -60,6 +60,39 @@ jobs:
       - name: Tests
         run: .venv/bin/python -m pytest -q tests
 
+  graph:
+    # devkb's own graph at this commit, with the GitHub layer (tickets, pull requests), built by the code being released (#315). A build that fails, or
+    # whose manifest names another commit, fails the release. A tag publishes the graph as a release asset; a manual run only proves it builds.
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read        # the GitHub layer reads issues and pull requests with the workflow's token: read-only
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # the graph reads the commit history
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e .
+      - name: Build the graph with the GitHub layer
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: .venv/bin/python -m devkb.cli build --project . --github
+      - name: The manifest names this commit
+        run: |
+          head=$(git rev-parse HEAD)
+          built=$(.venv/bin/python -c "import json; print(json.load(open('.devkb/manifest.json'))['git_head'])")
+          [ "$built" = "$head" ] || { echo "the graph was built at $built, not at $head"; exit 1; }
+          echo "graph at $head: $(wc -c < .devkb/nodes.jsonl) bytes of nodes"
+      - name: Pack the graph
+        run: tar -czf "devkb-graph-${GITHUB_REF_NAME//\//-}.tar.gz" .devkb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: graph
+          path: devkb-graph-*.tar.gz
+
   build:
     needs: test
     runs-on: ubuntu-latest
@@ -81,7 +114,7 @@ jobs:
           path: dist/
 
   release:
-    needs: build
+    needs: [build, graph]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -96,7 +129,7 @@ jobs:
         run: |
           for p in 3.10 3.12; do cp "artifacts/pip-audit-py$p/pip-audit.json" "pip-audit-py$p.json"; done
           gh release create "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --title "${GITHUB_REF_NAME}" \
-            --generate-notes artifacts/dist/* pip-audit-py3.10.json pip-audit-py3.12.json
+            --generate-notes artifacts/dist/* artifacts/graph/devkb-graph-*.tar.gz pip-audit-py3.10.json pip-audit-py3.12.json
 
   pypi:
     needs: [build, release]
