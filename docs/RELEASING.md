@@ -51,6 +51,10 @@ result.
 
 ## A release
 
+0. **Before tagging, run the performance check** (free, about 25 minutes on an idle machine): `python bench/perf_release.py PREVIOUS_TAG HEAD click=... prefect=... leveldb=... fmt=... zephyr=... mediatr=... mealie=...`
+   on the repositories and pins of `docs/analysis/performance-0.2.14-build.md` (which lists them), and compare with that baseline. Proposed rule (the release owner confirms it): no
+   build time, peak memory or query median beyond the noise pass, except where a ticket says why; a change beyond it gets its own ticket before the tag (#370). Record the run
+   as a section of that note.
 1. Set `version` in `pyproject.toml`, merge to `main`.
 2. `git tag v0.2.0 && git push origin v0.2.0`.
 3. `release` then runs, in order, each step needing the one before:
