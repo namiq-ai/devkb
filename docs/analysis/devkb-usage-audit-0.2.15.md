@@ -1,5 +1,7 @@
 # How devkb was used in 0.2.15: an audit (2026-11-22)
 
+> **Correction (2026-11-22):** section 3's window started at 20:00 on 11-20, but the v0.2.14 tag is at 01:59 that day, so it left out 18 hours. Over the full window `stale-graph` is 465 of 1,516 decisions (31%), 33% of pass-throughs (not 46%), and the answered share is 7.2% overall. The corrected figures, grouped by the fixes that change what an agent sees, are in `devkb-usage-0.2.15-by-period.md`; where the two differ, that one is right.
+
 **Scope.** Everything recorded since the v0.2.14 tag (2026-11-20 evening) to 2026-11-22: the two working sessions that built 0.2.15, the guardrail log for every Claude Code session on this machine
 (working and benchmark), devkb's own telemetry, the graph-miss log, and the benchmark arms of 0.2.15. The numbers are from the logs listed under Sources; each can be recomputed.
 **Not covered:** the audit and fix sub-agents of 0.2.14 (see `bench/audit/toolmix-results.md`); any use outside this machine.
