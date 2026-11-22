@@ -26,7 +26,7 @@ def commands_only(c):
     out, i, n = [], 0, len(c)
     while i < n:
         ch = c[i]
-        if ch in "'\"":
+        if ch in "'\"" and not (ch == "'" and i and c[i - 1].isalnum() and "'" not in c[i + 1:]):       # `don't` is an apostrophe, not a quote
             j = i + 1
             while j < n and c[j] != ch:
                 j += 2 if (ch == '"' and c[j] == "\\") else 1

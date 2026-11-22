@@ -223,7 +223,7 @@ def grep_segment(words: list[str], cwd: Path) -> tuple[list[str] | None, Path]:
                 continue
             if t[0] in ("&&", "||", ";"):
                 return None, cwd                             # another command follows: its output is mixed into grep's
-            if t[0] not in KEEPS_LINES:
+            if t[0] not in KEEPS_LINES or (t[0] == "cat" and len(t) > 1):      # `cat -n` / `cat -b` number the lines again; a bare `cat` copies them
                 return None, cwd
         return out, cwd
     return None, cwd

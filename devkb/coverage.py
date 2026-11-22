@@ -152,4 +152,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    from devkb.service import GraphNotBuilt
+
+    try:
+        sys.exit(main())
+    except GraphNotBuilt as exc:                # `python -m devkb.coverage` too: one line, exit 2, never a traceback (#293)
+        print(f"devkb: {exc}", file=sys.stderr)
+        sys.exit(2)
