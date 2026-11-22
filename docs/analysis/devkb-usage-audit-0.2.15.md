@@ -15,7 +15,7 @@
 | 0.2.15 milestone-4 chain (this one) | 26 | 330 | 231 | 552 | 4% | 3% |
 
 - The devkb MCP tools were called 3 times in the first session and 15 times in the second (symbol 12, outline 2, pack 1, uses 1); the rest was the CLI.
-- **Reading it:** in the sessions that built a tool whose rule 1 is "ask devkb first", devkb answered 4-5% of the navigation calls and 3% of the text. The AGENTS.md checklist (pack before the first edit of a file) was followed in part: telemetry shows `pack` 110 times in the repository's log, mostly on 2026-11-21, 2 times on 2026-11-22.
+- **Reading it:** in the sessions that built a tool whose rule 1 is "ask devkb first", devkb answered 4-5% of the navigation calls and 3% of the text. The repository's telemetry shows `pack` 110 times in total (section 2); whether each was run before the first edit of a file was not checked.
   The author of this audit is the agent in these sessions; this is a finding about that agent, not an outside observation.
 - Ticket-level usage on the 0.2.15 tickets is not recorded per ticket (no ticket id is logged with a query); the per-ticket checklist steps 2 and 3 were skipped for most tickets (see the Execution-result comments).
 
@@ -26,7 +26,7 @@ It does not record who asked or for which ticket, so it cannot be split by sessi
 
 ## 3. The guardrail's decisions since v0.2.14 (`~/.claude/hooks/devkb-guardrail.log`)
 
-1,207 decisions in 227 sessions (2 working, 221 benchmark runs, the rest probes):
+1,207 decisions in 223 sessions (2 working, 221 benchmark runs):
 
 | | decisions | answered (`alongside`, `substitute`, `span-hint`, `read-answer`) | share |
 |---|---|---|---|
