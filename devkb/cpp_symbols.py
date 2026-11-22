@@ -28,7 +28,7 @@ MAX_FILE_BYTES = 2 * 1024 * 1024
 
 # The sole source of the limit statement (ADR-DEVKB-008 §4, AD-7). Read by packs.py and by the README test.
 CXX_LIMITS_TEXT = (
-    "C/C++ limits: a repository macro's calls are expanded at its uses (in any file, also where its header is not included, #290), but a "
+    "C/C++ limits: a repository macro's calls are expanded at its uses in the files that define it or include its header, until an `#undef` (#290), but a "
     "definition a macro generates is not seen; overloads are told apart by argument count only, so two of the same count share one "
     "choice (#291); receivers are resolved through declared types, smart pointers, members, one level of chaining and TEST_F/TEST_P "
     "fixtures, but there is no general type inference (a call through `auto`, an alias or an untyped receiver is not attributed); "
@@ -102,6 +102,7 @@ class Masked:
     guards: list[tuple[int, int]] = field(default_factory=list)   # spans inside `#ifdef __cplusplus` (SPEC-DKB-002 R2)
     conds: list[tuple[int, str]] = field(default_factory=list)    # (line, text) of `#if/#ifdef/#ifndef/#elif` (SPEC-DKB-002 R15)
     alts: list[tuple[int, int]] = field(default_factory=list)     # sorted spans of `#elif`/`#else` branches (not of `#if 0`); nested ones too
+    undefs: list[tuple[str, int]] = field(default_factory=list)   # (name, 1-based line) of each `#undef` (#290)
 
     def line(self, offset: int) -> int:
         return bisect_right(self.line_starts, offset)
@@ -127,6 +128,7 @@ def mask_source(text: str) -> Masked:
     # `#include "x"` keeps its literal under the quote offset; angle includes are plain text.
     includes: list[str] = []
     defines: list[tuple[str, str, int]] = []
+    undefs: list[tuple[str, int]] = []
     spans: list[tuple[int, int]] = []
     stack: list[bool] = []
     gstack: list[int | None] = []      # per open conditional: start of a positive `__cplusplus` region, else None
@@ -181,6 +183,10 @@ def mask_source(text: str) -> Masked:
             dm = _DEFINE.match(body.replace("\\\n", " \n"))
             if dm:
                 defines.append((dm.group(1), dm.group(3), bisect_right(line_starts, d.start())))
+        elif word == "undef":
+            um = re.match(r"\s*#\s*undef\s+([A-Za-z_]\w*)", body)
+            if um:
+                undefs.append((um.group(1), bisect_right(line_starts, d.start())))
         spans.append((d.start(), d.end()))
     if skipping is not None:
         spans.append((skip_from, len(code)))
@@ -199,7 +205,7 @@ def mask_source(text: str) -> Masked:
         code = "".join(out)
     code = _blank_dialect(code)
     alts.sort()
-    return Masked(code, literals, defines, includes, line_starts, guards, conds, alts)
+    return Masked(code, literals, defines, includes, line_starts, guards, conds, alts, undefs)
 
 
 # ── dialect keywords (ADR-DEVKB-009 §2, SPEC-DKB-002 R6): the one closed table, read without any compiler ─────────

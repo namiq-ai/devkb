@@ -31,6 +31,7 @@ define (a system header's) is never expanded.
 """
 from __future__ import annotations
 
+import posixpath
 import re
 from dataclasses import dataclass
 
@@ -118,6 +119,7 @@ class Repo:
         self.class_suffix: dict[str, list[tuple[str, object]]] = {}
         self.namespaces: set[str] = set()
         self.macros: set[str] = set()
+        self.definers: dict[str, set[str]] = {}    # macro name -> the files that `#define` it (#290)
         self.function_names: set[str] = set()
         self.language: dict[str, str] = {u.path: u.rec.language for u in units}
         self.c_linkage: dict[str, list[tuple[str, Symbolic]]] = {}     # non-static functions with C linkage, by short name
@@ -128,6 +130,8 @@ class Repo:
             self.aliases |= getattr(u.rec.scanner, "aliases", set())
             self.namespaces |= u.rec.namespaces
             self.macros |= u.rec.define_names
+            for dn in u.rec.define_names:
+                self.definers.setdefault(dn, set()).add(u.path)
             for dname, body, _line in (u.rec.masked.defines if u.rec.masked is not None else ()):
                 self.macro_bodies.setdefault(dname, []).append(body)
             for qn, s in u.syms.items():
@@ -202,6 +206,54 @@ class Repo:
             walk(name, 1, False)
             cache[name] = [(q, n, v) for (q, n), v in seen.items()]
         return cache[name]
+
+    # macro scope (#290) --------------------------------------------------------
+    def _include_edges(self) -> dict[str, set[str]]:
+        """path -> the paths that include it (an `#include` names a repository file next to the includer first, else the one whose path ends the
+        same way). Built once."""
+        if "_rev" not in self.__dict__:
+            paths = {u.path for u in self.units}
+            by_base: dict[str, list[str]] = {}
+            for p in paths:
+                by_base.setdefault(p.rsplit("/", 1)[-1], []).append(p)
+            rev: dict[str, set[str]] = {}
+            for u in self.units:
+                for inc in u.rec.includes:
+                    inc = inc.strip()
+                    cands = by_base.get(inc.rsplit("/", 1)[-1], []) if inc else []
+                    if not cands:
+                        continue
+                    near = posixpath.normpath(posixpath.join(posixpath.dirname(u.path), inc))
+                    norm = re.sub(r"^(?:\.{1,2}/|/)+", "", posixpath.normpath(inc))
+                    for t in ([near] if near in paths else [c for c in cands if c == norm or c.endswith("/" + norm)]):
+                        rev.setdefault(t, set()).add(u.path)
+            self.__dict__["_rev"] = rev
+        return self.__dict__["_rev"]
+
+    def macro_scope(self, name: str) -> set[str]:
+        """The files that see repository macro `name`: those that define it and those that include, at any depth, one that does."""
+        cache = self.__dict__.setdefault("_scope", {})
+        if name not in cache:
+            rev = self._include_edges()
+            seen = set(self.definers.get(name, ()))
+            todo = list(seen)
+            while todo:
+                for f in rev.get(todo.pop(), ()):
+                    if f not in seen:
+                        seen.add(f)
+                        todo.append(f)
+            cache[name] = seen
+        return cache[name]
+
+    def sees(self, path: str, name: str, line: int = 0) -> bool:
+        """Is `name`, written in `path` at `line`, a repository macro there: defined in that file or a header it includes, and not `#undef`ed
+        earlier in it. A name that is also a function elsewhere stays a plain call in a file that never sees the macro (#290)."""
+        if name not in self.macros:
+            return False
+        u = self._unit.get(path)
+        if u is not None and u.rec.masked is not None and any(n == name and ln < line for n, ln in u.rec.masked.undefs):
+            return False
+        return path in self.macro_scope(name)
 
     # classes -------------------------------------------------------------------
     def class_by_type(self, t: str, from_ns: str | None = None) -> tuple[str, object] | None:
@@ -314,11 +366,11 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
         for s in u.syms.values():
             if s.kind == "function":
                 free_count[s.short] = free_count.get(s.short, 0) + 1
-        for call, via in _with_expansions(u.rec.calls, repo):
+        for call, via in _with_expansions(u.rec.calls, repo, u.path):
             caller_qn = u.qn_of_def[call.caller]
             if caller_qn is None:
                 continue
-            if via is None and call.name in repo.macros:
+            if via is None and repo.sees(u.path, call.name, call.line):
                 # A macro use: never an edge. But a name that is also a repository function (a `#define` stub in an
                 # `#else` branch, as Zephyr's net_if does) may be a real call under another configuration, so it is
                 # counted, never ignored: a pack must not say Complete beside it.
@@ -484,11 +536,12 @@ def _fixture(repo: "Repo", d) -> tuple[str, object] | None:
     return repo.class_by_type(first, d.namespace) if first else None
 
 
-def _with_expansions(calls, repo: Repo):
-    """Each call, and after a call to a repository macro the calls its expansion makes there: (call, (macro, variant))."""
+def _with_expansions(calls, repo: Repo, path: str = ""):
+    """Each call, and after a call to a repository macro the calls its expansion makes there: (call, (macro, variant)). A macro is expanded
+    only in the files that see it (#290)."""
     for call in calls:
         yield call, None
-        if call.name in repo.macros and call.name in repo.macro_bodies:
+        if call.name in repo.macro_bodies and (repo.sees(path, call.name, call.line) if path else call.name in repo.macros):
             for q, n, variant in repo.expand(call.name):
                 yield Call(call.caller, n, "qualified" if q else "bare", q, None, None, call.line), (call.name, variant)
 
