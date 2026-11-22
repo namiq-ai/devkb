@@ -367,6 +367,56 @@ def dry_judged() -> dict:
         return {}
 
 
+# ---- failed items back off (#294) ---------------------------------------------------------------------------------------
+BACKOFF_HOURS = float(os.environ.get("TRIAGE_BACKOFF_HOURS", "4"))       # after the first failure; doubles with each, to MAX
+MAX_BACKOFF_HOURS = float(os.environ.get("TRIAGE_MAX_BACKOFF_HOURS", "72"))
+GIVE_UP_AFTER = int(os.environ.get("TRIAGE_GIVE_UP_AFTER", "6"))        # failures after which only an edit by the author brings it back
+
+
+def failures_path() -> Path:
+    return HOME / "failures.json"
+
+
+def failures() -> dict:
+    try:
+        d = json.loads(failures_path().read_text())
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def now_ts() -> float:
+    return dt.datetime.now().timestamp()
+
+
+def note_failure(key: str, updated: str) -> None:
+    """An item (or a feedback comment) the model could not judge: remember when and how often, for the same content (`updated`)."""
+    d = failures()
+    e = d.get(key) or {}
+    n = e.get("n", 0) + 1 if e.get("updated") == updated else 1
+    d[key] = {"n": n, "at": now_ts(), "updated": updated}
+    failures_path().parent.mkdir(parents=True, exist_ok=True)
+    failures_path().write_text(json.dumps(d))
+
+
+def clear_failure(key: str) -> None:
+    d = failures()
+    if d.pop(key, None) is not None:
+        failures_path().write_text(json.dumps(d))
+
+
+def backed_off(key: str, updated: str, d: dict | None = None) -> bool:
+    """Is this item still waiting out its back-off? Edited since it failed: no, it is a new question. Failed GIVE_UP_AFTER times on this
+    content: yes, until it is edited (a maintainer's decision, not a model call per run)."""
+    e = (d if d is not None else failures()).get(key)
+    if not e or e.get("updated") != updated:
+        return False
+    if e.get("n", 0) >= GIVE_UP_AFTER:
+        return True
+    wait = min(BACKOFF_HOURS * 2 ** (e.get("n", 1) - 1), MAX_BACKOFF_HOURS) * 3600
+    return now_ts() - e.get("at", 0) < wait
+
+
 def dry_record(key: str, updated: str) -> None:
     d = dry_judged()
     d[key] = updated
@@ -429,6 +479,8 @@ def feedback_pass(apply: bool, everything: list[dict]) -> None:
     if not apply:
         dj = dry_judged()
         todo = [(t, c) for t, c in todo if f"c{c['id']}" not in dj]
+    waiting = failures()
+    todo = [(t, c) for t, c in todo if not backed_off(f"c{c['id']}", "", waiting)]
     for t, c in todo[:MAX_FEEDBACK]:
         if not apply:
             dry_record(f"c{c['id']}", "")
@@ -439,6 +491,8 @@ def feedback_pass(apply: bool, everything: list[dict]) -> None:
         except (RuntimeError, ValueError, TypeError, KeyError, AttributeError) as e:      # a malformed answer fails its item, never the run
             print(f"comment {c['id']}: no verdict ({e})")
             log("feedback", {"thread": t["number"], "comment": c["id"], "error": str(e)})
+            if apply:
+                note_failure(f"c{c['id']}", "")
             continue
         url = None
         print(f"comment {c['id']} by {c['author']}: {v['action']} {v['type']} {v['priority']} dup={v['duplicate_of']} (${cost:.3f})")
@@ -501,6 +555,9 @@ def cmd_triage(apply: bool, only: int | None) -> int:
     if not apply and not only:
         dj = dry_judged()
         todo = [(it, th) for it, th in todo if dj.get(str(it["number"])) != it.get("updated")]
+    if not only:
+        waiting = failures()           # items that failed are backed off, so they do not take every slot and starve the rest (#294)
+        todo = [(it, th) for it, th in todo if not backed_off(str(it["number"]), it.get("updated"), waiting)]
     print(f"{len(todo)} item(s) to triage (limit {MAX_TRIAGE}); {'APPLY' if apply else 'dry run'}")
     for it, thread in todo[:MAX_TRIAGE]:
         if not apply:
@@ -514,7 +571,10 @@ def cmd_triage(apply: bool, only: int | None) -> int:
         except (RuntimeError, ValueError, TypeError, KeyError, AttributeError) as e:      # a malformed answer fails its item, never the run
             print(f"#{it['number']}: no verdict ({e})")
             log("triage", {"number": it["number"], "error": str(e)})
+            if apply:
+                note_failure(str(it["number"]), it.get("updated"))
             continue
+        clear_failure(str(it["number"])) if apply else None
         add, remove = labels_for(v, it["pr"])
         print(f"#{it['number']} {it['title'][:60]!r}: {v['validity']} {v['type']} {v['priority']} handling={v['handling']} "
               f"dup={v['duplicate_of']} (${cost:.3f})\n" + textwrap.indent(comment_text(v), "    "))
