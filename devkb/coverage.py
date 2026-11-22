@@ -57,8 +57,8 @@ def _tracked(repo_root: Path) -> list[str]:
 
 def _load_nodes(ctx: ProjectContext) -> list[dict]:
     path = ctx.devkb_dir / "nodes.jsonl"
-    if not path.exists():
-        raise SystemExit(f"no graph at {path}; run: python3 devkb/build.py --project {ctx.code}")
+    from devkb.service import require_graph  # noqa: PLC0415
+    require_graph(ctx.devkb_dir, ctx.repo_root)       # the same one line as every query command (#293)
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 

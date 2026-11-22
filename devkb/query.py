@@ -29,8 +29,7 @@ from devkb.module_file_bridge import file_to_module
 from devkb.project_context import resolve, ProjectContext
 
 _STALE_HINT = (
-    "no .devkb/ store found for this project -- run "
-    "`python3 devkb/build.py --project {code}` first"
+    "the graph's manifest is missing -- run `devkb build --project {code}` first"
 )
 
 
@@ -234,6 +233,8 @@ def main() -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
+    from devkb.service import require_graph  # noqa: PLC0415
+    require_graph(ctx.devkb_dir, ctx.repo_root)   # the same one line as every query command; the CLI prints it and exits 2 (#293)
     if not (ctx.devkb_dir / "manifest.json").exists():
         print(f"Error: {_STALE_HINT.format(code=args.project)}", file=sys.stderr)
         return 1

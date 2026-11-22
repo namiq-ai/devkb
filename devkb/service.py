@@ -27,6 +27,12 @@ class GraphNotBuilt(FileNotFoundError):
     """The project has no graph yet; the message says which command builds it."""
 
 
+def require_graph(devkb_dir: Path, repo_root: Path | str | None = None) -> None:
+    """Raise GraphNotBuilt, with the one line every query command prints (#212, #293), when the project has no graph yet."""
+    if not (Path(devkb_dir) / "nodes.jsonl").exists():
+        raise GraphNotBuilt(f"no devkb graph at {devkb_dir}: run `devkb build --project {repo_root or Path(devkb_dir).parent}` first")
+
+
 CACHE_VERSION = 14  # ref_sites/ref_count/key_reads/key_writes (#143, #148); 13: value_refs/value_ref_count kept (#69); 12: language/linkage/abi_exported/boundary_kind (ADR-DEVKB-009)
 CACHE_NAME = ".process-index.pkl"
 BOUNDARY_MECHANISMS = ("extern-c", "ctypes", "cffi", "pyc-api", "pybind11")
