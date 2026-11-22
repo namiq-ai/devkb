@@ -10,13 +10,18 @@ from `git log`. Arms: `none` (no devkb on the PATH), and devkb arms named by a c
 arm gets that commit's `devkb` (bench/policy/toolenv.py), its graph built by it, its AGENTS.md policy block and its guardrail hooks.
 
   extbench.py validate [TICKET ...]                 the hidden check fails at the base and passes at the fix
-  extbench.py run --arms none,orig=SHA,ship=SHA [--reps 3] [--parallel 4] [--resume] [TICKET ...]
+  extbench.py run --arms none,orig=SHA,ship=SHA [--reps 3] [--parallel 4] [--resume] [--clean] [TICKET ...]
+
+--clean: the checkout is under a root whose path names neither devkb nor an arm (EXT_CLEAN_ROOT, default ~/.cache/ext-clean/wXXXXXXXX), and
+Claude runs with an isolated config directory (no user plugins, skills, hooks or memory; the login is linked, not copied). Found necessary
+when an arm's label in the checkout path could not be ruled out as the cause of a 10% to 47% jump in devkb use (docs/analysis/cpp-yaml-benchmark.md).
   extbench.py table --arms ...                      the table, from ~/.cache/devkb/ext/results.jsonl
 
 Runs and clones live under ~/.cache/devkb/ext (never in this repository); the rows keep no local paths."""
 from __future__ import annotations
 
 import concurrent.futures as cf
+import hashlib
 import json
 import os
 import random
@@ -39,6 +44,8 @@ REPO = EXT / "yaml-cpp"
 RUNS = EXT / "runs"
 WORK = EXT / "work"
 RESULTS = EXT / "results.jsonl"
+CLEAN = Path(os.environ.get("EXT_CLEAN_ROOT") or Path.home() / ".cache" / "ext-clean")   # --clean: a root whose path names neither devkb nor an arm
+LEAKS = ("devkb", "orig", "ship", "none", "main", "claude", "bench")                       # words an agent could read the arm or the tool from
 BUILD = "cmake -S . -B build -DYAML_CPP_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release && cmake --build build -j8 && ./build/test/yaml-cpp-tests"
 TIMEOUT = 2400
 
@@ -110,7 +117,7 @@ def prepare(t: dict, arm: str, env: dict | None, w: Path) -> dict:
     checkout(t["base"], w)
     path = os.environ["PATH"]
     if env:
-        (w.parent / (w.name + ".bin")).mkdir(exist_ok=True)
+        (w.parent / (w.name + ".bin")).mkdir(parents=True, exist_ok=True)
         wrap = w.parent / (w.name + ".bin") / "devkb"
         wrap.write_text(f'#!/bin/sh\nexec "{env["bin"]}" "$@"\n')
         wrap.chmod(0o755)
@@ -125,14 +132,28 @@ def prepare(t: dict, arm: str, env: dict | None, w: Path) -> dict:
     return {"PATH": path}
 
 
-def run_one(t: dict, spec: str, rep: int) -> str:
+def clean_config() -> Path:
+    """An isolated Claude config directory: no user plugins, skills, hooks, memory or MCP connectors; the existing login is linked, not copied."""
+    cfg = CLEAN / "cfg"
+    cfg.mkdir(parents=True, exist_ok=True)
+    cred = cfg / ".credentials.json"
+    if not cred.exists():
+        cred.symlink_to(Path.home() / ".claude" / ".credentials.json")
+    return cfg
+
+
+def run_one(t: dict, spec: str, rep: int, clean: bool = False) -> str:
     arm, env = arm_env(spec)
     tag = f"{t['id']}-{arm}-r{rep}"
     out = RUNS / tag
     if (out / "score.json").exists():
         return f"skip {tag}"
     out.mkdir(parents=True, exist_ok=True)
-    w = WORK / tag
+    opaque = "w" + hashlib.sha1(f"{tag}:{time.time()}".encode()).hexdigest()[:8]           # not the tag: it names the arm
+    w = (CLEAN / opaque) if clean else WORK / tag
+    leaks = [x for x in LEAKS if x in str(w).lower()] if clean else None
+    if leaks:
+        return f"refused {tag}: the checkout path {w} contains {leaks}"
     t0 = time.time()
     try:
         e = prepare(t, arm, env, w)
@@ -143,7 +164,8 @@ def run_one(t: dict, spec: str, rep: int) -> str:
                "--permission-mode", "acceptEdits", "--strict-mcp-config", "--mcp-config", str(mcp), "--include-hook-events",
                "--allowedTools", "Bash", "Read", "Edit", "Write", "Grep", "Glob", "--disallowedTools", *deny]
         with open(out / "stream.jsonl", "w") as so, open(out / "stderr.log", "w") as se:
-            p = subprocess.run(cmd, cwd=w, env={**os.environ, **e}, input=prompt(t), text=True, stdout=so, stderr=se, timeout=TIMEOUT)
+            run_env = {**os.environ, **e, **({"CLAUDE_CONFIG_DIR": str(clean_config())} if clean else {})}
+            p = subprocess.run(cmd, cwd=w, env=run_env, input=prompt(t), text=True, stdout=so, stderr=se, timeout=TIMEOUT)
         code = p.returncode
     except subprocess.TimeoutExpired:
         code = "timeout"
@@ -152,6 +174,7 @@ def run_one(t: dict, spec: str, rep: int) -> str:
         return f"error {tag}: {ex}"
     check = hidden_check(w, t) if w.exists() else {"pass": False}
     row = {"run": tag, "ticket": t["id"], "arm": arm, "rep": rep, "exit": code, "seconds": round(time.time() - t0), "devkb_commit": (env or {}).get("commit", "")[:7] or None,
+           "clean": ({"cwd_has": [x for x in LEAKS if x in str(w).lower()], "config_isolated": True} if clean else None),
            "pass": check["pass"], "built": check.get("built"), "failed": check.get("failed", []), **sb.transcript(out / "stream.jsonl")}
     row.pop("hook_first_output", None)
     (out / "score.json").write_text(json.dumps(row))
@@ -198,8 +221,9 @@ def main(a: list[str]) -> int:
         for s in arms:
             arm_env(s)                                                    # build the tool environments before any run starts
         random.Random(5).shuffle(jobs)
+        clean = "--clean" in a
         with cf.ThreadPoolExecutor(par) as ex:
-            for f in cf.as_completed([ex.submit(run_one, *j) for j in jobs]):
+            for f in cf.as_completed([ex.submit(run_one, *j, clean) for j in jobs]):
                 print(f.result(), flush=True)
     return 0
 
