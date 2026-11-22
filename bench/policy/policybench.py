@@ -579,10 +579,24 @@ def run_one(issue: str, arm: str, rep: int) -> str:
         return f"error {tag}: {type(e).__name__}: {e}"
 
 
+def setup_error(out: Path) -> str | None:
+    """The line that says why a run died before it reached the model: no stream at all and a stderr that names an error (#379), e.g.
+    `Error: Invalid MCP configuration`. Such a run is never scored; it is run again."""
+    stream, err = out / "stream.jsonl", out / "stderr.log"
+    if (stream.exists() and stream.stat().st_size > 0) or not err.exists():
+        return None
+    for line in err.read_text(errors="replace").splitlines():
+        if line.strip().startswith("Error:"):
+            return line.strip()[:200]
+    return None
+
+
 def finished(issue: str, arm: str, rep: int) -> bool:
-    """The run has ended and is kept: not an error and not a refused red base, which are set up again (#305)."""
-    end = B / "runs" / f"p{issue}-{arm}-r{rep}" / "end"
-    return end.exists() and json.loads(end.read_text()).get("exit") not in ("error", "base-red")
+    """The run has ended and is kept: not an error and not a refused red base, which are set up again (#305), and not a run that died of a
+    setup error before the model (#379)."""
+    run_dir = B / "runs" / f"p{issue}-{arm}-r{rep}"
+    end = run_dir / "end"
+    return end.exists() and json.loads(end.read_text()).get("exit") not in ("error", "base-red") and setup_error(run_dir) is None
 
 
 def check_collisions(jobs: list[tuple[str, str, int]], resume: bool) -> list[str]:
@@ -626,8 +640,12 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
         cfg["mcpServers"]["devkb"]["command"] = TOOL.get(arm, sb.DEVKB)
         Path(mcp).write_text(json.dumps(cfg, indent=2) + "\n")
     else:
-        mcp = str(B / "no-mcp.json")
-        Path(mcp).write_text(json.dumps({"mcpServers": {}}))
+        # one file per run, in its own directory, written whole and moved into place: a shared file rewritten while other runs' `claude` processes read it
+        # through `--mcp-config` was read half-written ("MCP config is not a valid JSON") (#379)
+        mcp = str(out / "no-mcp.json")
+        tmp = out / f".no-mcp.{os.getpid()}.tmp"
+        tmp.write_text(json.dumps({"mcpServers": {}}))
+        os.replace(tmp, mcp)
     prompt = run_prompt(issue, tag.split("-")[1], w)
     if arm == "inject":                              # #366: the answer up front instead of advice
         prompt = injected_context(issue, w, tool_of(arm, toolenv.build(ENV_REF[arm]()))) + prompt
@@ -758,13 +776,17 @@ def score(issues):
             if ex in ("base-red", "error"):
                 print(out.name, "REFUSED (red base, not scored)" if ex == "base-red" else "ERROR (not scored; run again)", flush=True)
                 continue
+            why = setup_error(out)
+            if why:
+                print(out.name, f"SETUP ERROR (not scored; run again): {why}", flush=True)
+                continue
             saved = json.loads((out / "score.json").read_text()) if (out / "score.json").exists() else None
             r = saved if saved and saved.get("accept_sha256") == sha and os.environ.get("POLICY_RESCORE") != "1" else score_run(issue, out)
             if not r:
                 continue
             rows.append(r)
             print(r["run"], "pass" if r["acceptance"].get("pass") else "FAIL", "suite" if r["suite_pass"] else "SUITE-RED",
-                  f"${r['cost']:.2f}", "devkb", r["devkb_queries"], "guard", r["guardrail_fired"], "log", r["dogfood_log"], flush=True)
+                  f"${r['cost']:.2f}" if r.get("cost") is not None else "cost ?", "devkb", r["devkb_queries"], "guard", r["guardrail_fired"], "log", r["dogfood_log"], flush=True)
     only = set(arms_for(list(filter(None, os.environ.get("POLICY_ARMS", "").split(",")))))
     scored = {r["run"] for r in rows}
 
