@@ -38,7 +38,7 @@ I had not read `devkb + Claude Code Integration Specification & Repository Wirin
 | Router costs `+2.6` turns and `+$0.09` | Superseded in `docs/analysis/workflow-router-benchmark.md:206`: **+0.8 turns and +13% cost against `rmain`**; the +2.6 compared against a different baseline. |
 | `1,231` tests | 1,506 pass on main. |
 | Recall `0.74 -> 0.83` | QB1 `pack file` 0.74 (0.69-0.80) to `pack file` + `pack refactor` with mentions 0.83 (0.77-0.88), precision 0.63 (`docs/analysis/qb1-baseline.md:62`); the intervals nearly touch, so it is a pointer, not a settled gain. |
-| `.mcp.json` runs `python -m devkb.mcp_server` | This repository deliberately has no default MCP use (12 tool definitions cost about 3k tokens per call; agents chose the shell anyway: `docs/analysis/devkb-none-mcp-cli.md`); the shipped `.mcp.json` uses `devkb mcp --toolset lean-pack`. |
+| `.mcp.json` runs `python -m devkb.mcp_server` | That module has a `__main__` and runs. The repository tracks no `.mcp.json` on purpose (12 tool definitions cost about 3k tokens per call; agents chose the shell anyway: `docs/analysis/devkb-none-mcp-cli.md`); a local untracked file uses `devkb mcp --toolset lean-pack`. The guide's configuration is a prescription the repository decided against, not a description. |
 
 I did not verify its `96 live runs`, `-18% context`, `+0.15 held-out symbol recall` or `12-13 s` index time against a source; treat them as unchecked. Recommendation: **correct the guide to the repository (do not implement subcommands the guide invents), and keep its two real ideas as 0.2.16 candidates:** a `SessionStart` index-status check (Layer 5) and a pre-edit pack with the 800-token cap (the shipped `pre-edit` hook has a 6,000-character limit).
 
