@@ -2238,7 +2238,7 @@ def extract(repo_root: Path) -> DevKBGraph:
             g.add_node(
                 "Symbol", natural_key, source="ast-ts",
                 kind=s["kind"], docstring_summary=None, decorators=[], is_public=True,
-                line_start=s["line_start"], line_end=s["line_start"],
+                line_start=s["line_start"], line_end=s["line_end"],
             )
             g.add_edge(
                 "DEFINED_IN", "Symbol", natural_key, "File", rel_path,
