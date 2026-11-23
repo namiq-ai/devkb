@@ -476,7 +476,14 @@ def _uses_in_tree(tree: ast.Module) -> tuple[list[tuple[str, str | None, str, in
     return refs, keys
 
 
-def _safe_module_runs(tree: ast.AST) -> list:
+_RUNS_MARK = re.compile(r"run_module|[\"']-m[\"']")
+
+
+def _safe_module_runs(tree: ast.AST, text: str | None = None) -> list:
+    """`_module_runs`, skipped for a file whose text holds neither a `run_module` call nor a `"-m"` constant: `_run_args`, which every
+    result starts from, finds nothing else, and the walks cost +20% of a Python build (0.2.15 release check, click +22%)."""
+    if text is not None and not _RUNS_MARK.search(text):
+        return []
     try:
         return _module_runs(tree)
     except RecursionError:
@@ -1737,7 +1744,7 @@ def _parse_python_file(
                 sym["tuple_returns"] = returns[f"{sym['qualified_name']}#tuple"]
         return (v.symbols, v.calls, _imports(tree), v.routes, module_docstring, v.raises, v.logs,
                 _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree, rel),
-                _py_literals(tree), typed, _safe_value_refs(tree), *_safe_uses(tree), _safe_module_runs(tree))
+                _py_literals(tree), typed, _safe_value_refs(tree), *_safe_uses(tree), _safe_module_runs(tree, text))
     except RecursionError:
         # a generated file nested deeper than the tree walks can follow: skip it, say so, keep the rest (#106)
         _skip(path, "nested too deeply to read", skipped)
