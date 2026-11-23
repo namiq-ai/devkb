@@ -26,9 +26,9 @@ def _row() -> str:
     return rows[0]
 
 
-def test_readme_row_is_partial_and_names_every_limit():
+def test_readme_row_is_supported_and_names_every_limit():
     row = _row()
-    assert "Partial" in row and "Not yet" not in row
+    assert "Supported" in row and "Partial" not in row and "Not yet" not in row
     for limit in LIMITS.values():
         assert limit in row, limit
     for name, limit in CPP_TEXT.items():

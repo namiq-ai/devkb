@@ -119,6 +119,8 @@ def score(out, truth, repo_name, examples=False, corpus=CORPUS):
     key_of = {x["uid"]: x["key"] for x in out["syms"]}
     lang_of = {x["uid"]: x["lang"] for x in out["syms"]}
     matched_defs = set().union(*mapping.values()) if mapping else set()
+    # a definition inside a lambda (its operator(), a macro-made conversion operator) has no declaration of its own to find: excluded from symbol recall (SPEC-DKB-004 F6)
+    lambda_internal = {u for u, d in defs.items() if "(lambda at" in d[3]}
     unmapped_syms = vendored_syms = not_compiled_syms = 0
     for s in out["syms"]:
         if s["kind"] not in callable_kinds:
@@ -191,8 +193,10 @@ def score(out, truth, repo_name, examples=False, corpus=CORPUS):
         "repo": repo_name, "build_secs": round(out["secs"], 1),
         "truth_defs": len(defs), "truth_edges": len(truth_edges), "truth_recursive_edges": sum(1 for a, b in truth_edges if a == b),
         "truth_edges_only_via_macro": len(macro_only),
-        "symbol_recall": round(len(matched_defs) / max(1, len(defs)), 3),
-        "symbol_recall_by_name": round(len({(defs[u][0], defs[u][3]) for u in matched_defs}) / max(1, len({(d[0], d[3]) for d in defs.values()})), 3),
+        "symbol_recall": round(len(matched_defs - lambda_internal) / max(1, len(defs) - len(lambda_internal)), 3),
+        "symbol_recall_by_name": round(len({(defs[u][0], defs[u][3]) for u in matched_defs - lambda_internal})
+                                       / max(1, len({(d[0], d[3]) for u, d in defs.items() if u not in lambda_internal})), 3),
+        "truth_defs_inside_lambdas_excluded": len(lambda_internal),
         "devkb_callable_symbols": total_syms, "symbols_without_a_truth_definition": unmapped_syms,
         "symbols_vendored_excluded": vendored_syms, "symbols_not_measured": not_compiled_syms,
         "not_compiled_files": sorted(not_compiled), "vendored_prefixes": vendored,

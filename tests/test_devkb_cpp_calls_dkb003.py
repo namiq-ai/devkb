@@ -49,13 +49,25 @@ def test_bare_call_never_links_to_another_classs_method(tmp_path):
     assert S.symbols(g)["a.cc::B.Add"].props["unresolved_calls"] == 1
 
 
-def test_c_library_names_are_never_linked_across_files(tmp_path):
+def test_c_library_names_are_not_linked_from_host_side_code_or_to_a_cpp_definition(tmp_path):
     files = {
         "lib/shim.c": "void exit(int c) {}\nvoid *memcpy(void *d, const void *s, int n) { return d; }\nint printf(const char *f) { return 0; }\n",
-        "app/main.c": "int main(void) {\n  exit(1);\n  memcpy(0, 0, 1);\n  printf(\"192.0.2.1\");\n  return 0;\n}\n",
+        "tools/main.c": "int main(void) {\n  exit(1);\n  memcpy(0, 0, 1);\n  printf(\"192.0.2.1\");\n  return 0;\n}\n",
+        "cxx/shim.cc": "int strlen(const char *s) { return 0; }\n",
+        "app/use.cc": "int use(void) { return strlen(\"x\"); }\n",
     }
     g = S.build(tmp_path, files)
-    assert not [e for e in S.calls(g) if e[0] == "app/main.c::main"]
+    assert not [e for e in S.calls(g) if e[0] in ("tools/main.c::main", "app/use.cc::use")]
+
+
+def test_a_c_library_name_the_repository_defines_once_in_c_is_linked_from_firmware_code(tmp_path):
+    files = {
+        "lib/shim.c": "void exit(int c) {}\nvoid *memcpy(void *d, const void *s, int n) { return d; }\n",
+        "app/main.c": "int main(void) {\n  exit(1);\n  memcpy(0, 0, 1);\n  return 0;\n}\n",
+    }
+    g = S.build(tmp_path, files)
+    got = {e for e in S.calls(g) if e[0] == "app/main.c::main"}
+    assert got == {("app/main.c::main", "lib/shim.c::exit"), ("app/main.c::main", "lib/shim.c::memcpy")}, got
 
 
 def test_c_static_function_links_within_its_file_among_ten_same_named(tmp_path):

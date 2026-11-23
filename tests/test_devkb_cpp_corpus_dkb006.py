@@ -16,7 +16,7 @@ from devkb.bench import cpp_corpus, cpp_truth
 ROOT = Path(__file__).resolve().parents[1]
 FAULT_FILES = {
     "lib/shim.c": "void exit(int code) {}\n",
-    "app/main.c": "int main(void) {\n  exit(1);\n  return 0;\n}\n",
+    "tools/main.c": "int main(void) {\n  exit(1);\n  return 0;\n}\n",
 }
 CLEAN_FILES = {
     "core.c": "int core_init(void) { return 0; }\nint core_run(void) { return core_init(); }\n",

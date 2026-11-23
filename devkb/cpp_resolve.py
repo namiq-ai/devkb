@@ -19,7 +19,8 @@ The C profile (ADR-DEVKB-009 §2) is its own, shorter order: no class, receiver 
 A call between C and C++ is never linked here: it is handed to the boundary resolver (`cross` records), which links
 it only through `extern "C"` linkage and a unique name (`boundaries.py`).
 
-Never: a bare call to another class's method, a C library name linked across files, a link made because a method
+Never: a bare call to another class's method, a C library name linked across files (except to the one C definition of it the
+repository supplies itself, from outside the host-side directories of `_HOST_DIRS`: a freestanding libc), a link made because a method
 name is unique, or an edge to a name `#define`d as a macro.
 
 Calls through repository macros (SPEC-DKB-004 F2, #118): a call to a macro `#define`d in the repository is expanded,
@@ -34,6 +35,7 @@ never expanded.
 """
 from __future__ import annotations
 
+import functools
 import posixpath
 import re
 from dataclasses import dataclass
@@ -49,6 +51,16 @@ C_LIBRARY = frozenset(
     "rand srand time clock getenv system assert isalpha isdigit isspace isalnum isupper islower toupper tolower "
     "setjmp longjmp signal raise open close read write unlink stat sleep usleep perror".split()
 )
+# Directories whose C programs are built for the host and use the system's C library, not a freestanding one the repository supplies
+# (autoas's `tools/libraries/rs232` calls glibc's strcpy, while its firmware calls `misclib.c`'s).
+_HOST_DIRS = frozenset({"tools", "tool", "test", "tests", "util", "utils", "example", "examples", "sample", "samples", "bench", "benchmark",
+                        "benchmarks", "fuzz", "fuzzing"})
+
+
+def _host_side(path: str) -> bool:
+    return bool(_HOST_DIRS & set(path.lower().split("/")[:-1]))
+
+
 _EXTERNAL_ROOTS = frozenset({"std", "boost", "absl", "testing", "__gnu_cxx"})
 
 
@@ -91,7 +103,8 @@ _NOT_CALLED = frozenset("if while for switch return sizeof defined do else case 
 _BODY_CALL = re.compile(r"(?<![\w.>#])(?:((?:[A-Za-z_]\w*\s*::\s*)+))?([A-Za-z_]\w*)\s*\(")
 
 
-def _macro_calls(body: str) -> list[tuple[str, str]]:
+@functools.lru_cache(maxsize=None)
+def _macro_calls(body: str) -> tuple[tuple[str, str], ...]:
     """(qualifier, name) of each call a `#define` body writes: not member calls, not the macro's parameters, not names
     pasted with `##`. A function-like macro's text starts with its parameter list (no space after the name)."""
     params: set[str] = set()
@@ -105,7 +118,7 @@ def _macro_calls(body: str) -> list[tuple[str, str]]:
         if name in params or name in _NOT_CALLED or "##" in body[max(0, m.start() - 3):m.start()] + body[m.end(2):m.end(2) + 3]:
             continue
         out.append((re.sub(r"\s+", "", m.group(1) or "").rstrip(":"), name))
-    return out
+    return tuple(out)
 
 
 class Repo:
@@ -204,10 +217,15 @@ class Repo:
         cache = self.__dict__.setdefault("_expanded", {})
         key = (name, path)
         if key not in cache:
-            reach = self.included_from(path) if path else None
+            reach: list[set[str] | None] = []         # the include closure of `path`, built only when two definitions of a macro differ
 
             def bodies_seen(m: str) -> list[str]:
-                return [b for p, b in self.macro_defs.get(m, []) if reach is None or p == path or p in reach]
+                defs = self.macro_defs.get(m, [])
+                if not path or len({b for _p, b in defs}) <= 1:     # one body, or the same body everywhere: who sees which makes no difference
+                    return [defs[0][1]] if defs else []
+                if not reach:
+                    reach.append(self.included_from(path))
+                return [b for p, b in defs if p == path or p in reach[0]]
 
             def calls_of(m: str, depth: int, stack: frozenset[str]) -> set[tuple[str, str]]:
                 per_body = []
@@ -533,7 +551,8 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                         continue
                     if not free_count.get(n):
                         own = [(p, x) for p, x in repo.c_linkage.get(n, []) if repo.language[p] == "c"]
-                        if len(own) == 1 and n not in C_LIBRARY:
+                        # a C library name the repository defines itself, once, with external linkage (a freestanding libc: autoas's misclib.c) is that definition
+                        if len(own) == 1 and (n not in C_LIBRARY or (own[0][1].linkage == "c" and not _host_side(u.path))):
                             link(f"{own[0][0]}::{own[0][1].qn}", "cpp-unique-free", n)
                             continue
                         if hand_over():

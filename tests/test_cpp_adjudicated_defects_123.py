@@ -32,3 +32,29 @@ def test_a_copy_of_this_is_not_a_constructor_call(tmp_path):
     got = _calls(tmp_path, {"a.cpp": src})
     assert [k for k in got if k[0] == "Iter.make" and k[1] == "Iter.Iter"], "a constructor call with an argument of another type still links"
     assert not [k for k in got if k[0] == "Iter.dec" and k[1] == "Iter.Iter"], "`Iter pre(*this)` copies"
+
+
+def test_a_defaulted_destructor_is_a_symbol_in_the_class_and_outside_it(tmp_path):
+    src = ("namespace N {\nclass A {\n public:\n  virtual ~A() = default;\n};\nclass B { public: ~B(); };\n"
+           "B::~B() noexcept = default;\n}\n")
+    g = S.build(tmp_path, {"a.cpp": src})
+    names = {n.props.get("qualified_name") for n in g.nodes("Symbol")}
+    assert {"A.~A", "B.~B"} <= names, names
+
+
+def test_a_c_library_name_the_repository_defines_once_is_linked_to_that_definition(tmp_path):
+    files = {"misclib.c": "void *memset(void *s, int c, unsigned n) { return s; }\n",
+             "use.c": "void *memset(void *s, int c, unsigned n);\nvoid clear(char *p) { memset(p, 0, 4); }\n"}
+    got = _calls(tmp_path, files)
+    assert ("clear", "memset", "cpp-unique-free") in got, got
+    none = _calls(tmp_path / "x", {"use.c": files["use.c"]})
+    assert not [k for k in none if k[1] == "memset"], none
+
+
+def test_a_host_side_program_calls_the_system_c_library_not_the_repositorys_own(tmp_path):
+    files = {"fw/misclib.c": "void *memset(void *s, int c, unsigned n) { return s; }\n",
+             "fw/use.c": "void *memset(void *s, int c, unsigned n);\nvoid clear(char *p) { memset(p, 0, 4); }\n",
+             "tools/send.c": "void *memset(void *s, int c, unsigned n);\nvoid wipe(char *p) { memset(p, 0, 4); }\n"}
+    got = _calls(tmp_path, files)
+    assert ("clear", "memset", "cpp-unique-free") in got, got
+    assert not [k for k in got if k[0] == "wipe"], got

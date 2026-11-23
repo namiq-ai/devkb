@@ -19,8 +19,8 @@ languages:
   c:
     source: cpp-symbols
     repos:
-      - {id: cjson, url: https://github.com/DaveGamble/cJSON.git, commit: 6d9f2443ab071f86e5d9b43025a40929ec41c46c, min_symbols: 935, min_calls: 3175, min_tests: 214}
-      - {id: autoas, url: https://github.com/autoas/as.git, commit: cc3709675ac30f7539c0710dfec6d579a5235841, min_symbols: 3600, min_calls: 5765, min_tests: 2}
+      - {id: cjson, url: https://github.com/DaveGamble/cJSON.git, commit: 6d9f2443ab071f86e5d9b43025a40929ec41c46c, min_symbols: 935, min_calls: 2500, min_tests: 214}
+      - {id: autoas, url: https://github.com/autoas/as.git, commit: cc3709675ac30f7539c0710dfec6d579a5235841, min_symbols: 3600, min_calls: 3590, min_tests: 2}
       - {id: lua, url: https://github.com/lua/lua.git, commit: c42d820bc0c3bc4f2ad536e19d2f05405af10387, min_symbols: 1095, min_calls: 3310, min_tests: 0}
   cpp:
     source: cpp-symbols

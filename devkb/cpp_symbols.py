@@ -776,11 +776,34 @@ class _Scanner:
         return d
 
     # a declaration (no body) -------------------------------------------------
+    _DEFAULTED = re.compile(r"(?:^|[\s;}])(?:(?:virtual|inline|constexpr)\s+)*(?:(?P<qual>(?:" + _IDENT + r"\s*(?:<[^<>]*>)?\s*::\s*)+))?"
+                            r"(?P<name>~\s*" + _IDENT + r")\s*\(\s*\)\s*(?:noexcept(?:\s*\([^()]*\))?|override|final|[A-Z][A-Z0-9_]*)*\s*=\s*default\s*$", re.S)
+
+    def defaulted(self, start: int, end: int, scope: _Scope, h: str) -> bool:
+        """`~X() = default;` (in the class, or `X::~X() = default;` outside it) is a definition the compiler reports, with no body."""
+        m = self._DEFAULTED.search(h)
+        if m is None:
+            return False
+        name = re.sub(r"\s", "", m.group("name"))
+        qparts = [re.sub(r"<[^<>]*>", "", p).strip() for p in (m.group("qual") or "").split("::") if p.strip()]
+        qparts = [p for p in qparts if p not in self.ns_seen and p not in scope.ns]
+        chain = scope.classes + tuple(qparts)
+        if not chain or name[1:] != chain[-1]:
+            return False
+        line = self.m.line(start + (m.start("name") if m.start("name") >= 0 else 0))
+        pub = scope.access == "public" and not scope.anon
+        self.add_def(Def(".".join(chain + (name,)), name, "method", "::".join(scope.ns), line, line, is_public=pub,
+                         virtual=bool(re.search(r"\bvirtual\b|\boverride\b", h)), class_chain=chain, body=(end, end), linkage="cpp",
+                         class_ns=None))
+        return True
+
     def decl(self, start: int, end: int, scope: _Scope) -> None:
+        h = _strip_decor(self.code[start:end])
+        if "default" in h and "~" in h and self.cpp and self.defaulted(start, end, scope, h):
+            return
         rec = scope.rec
         if rec is None:
             return
-        h = _strip_decor(self.code[start:end])
         _set_access(self.code[start:end], scope)
         if re.match(r"\s*(?:typedef|using|friend|static_assert|template\s*<[^>]*>\s*(?:class|struct)|enum|class|struct|union)\b", h):
             return
