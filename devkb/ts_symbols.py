@@ -146,7 +146,8 @@ def _method(tail: str, default: str = "GET") -> str:
     return m.group(1).upper() if m else default
 
 
-_REGEX_AFTER_WORD = frozenset("return typeof instanceof in of new delete void throw case do else yield await".split())
+_REGEX_AFTER_WORD = frozenset("return typeof instanceof in of new delete void throw case do else yield await )if".split())
+_PAREN_KEYWORDS = frozenset(("if", "while", "for", "with"))      # `if (a) /x/.test(s)`: after the `)` of one of these a slash starts a regular expression
 _IDENT = re.compile(r"[A-Za-z_$][\w$]*")
 
 
@@ -255,6 +256,17 @@ class _Masker:
                     k = self.n if k < 0 else k + 2
                     self.blank(j, k)
                     j = k
+                elif c == "<":                                     # type arguments: `<Foo<string> x="1" />`; their `>` does not end the tag
+                    depth, k = 0, j
+                    while k < self.n:
+                        if self.t[k] == "<":
+                            depth += 1
+                        elif self.t[k] == ">" and self.t[k - 1] != "=":
+                            depth -= 1
+                            if depth == 0:
+                                break
+                        k += 1
+                    j = k + 1
                 else:
                     j += 1
             if self.t[j:j + 2] == "/>":
@@ -282,6 +294,7 @@ class _Masker:
         """Scan code from `i`; with `stop_at_brace`, return the index of the `}` that closes the expression the scan started inside."""
         t, n, depth = self.t, self.n, 0
         prev_char, prev_word = "", ""
+        parens: list[bool] = []                              # for each open `(`: did `if`, `while`, `for` or `with` precede it
         while i < n:
             c = t[i]
             if c in " \t\r\n":
@@ -308,6 +321,12 @@ class _Masker:
                 i = j
             elif c == "<" and self.jsx_ok(i, prev_char, prev_word):
                 i, prev_char, prev_word = self.element(i), ">", ""
+            elif c == "(":
+                parens.append(prev_word in _PAREN_KEYWORDS)
+                i, prev_char, prev_word = i + 1, c, ""
+            elif c == ")":
+                after_keyword = parens.pop() if parens else False
+                i, prev_char, prev_word = i + 1, c, ")if" if after_keyword else ""
             elif c == "{":
                 depth += 1
                 i, prev_char, prev_word = i + 1, c, ""

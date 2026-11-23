@@ -101,3 +101,15 @@ def test_outline_and_symbol_say_exact_for_ts_and_tsx(tmp_path, monkeypatch):
     assert "range=exact" in read_tools.render_outline(a.call("outline", path="src/V.tsx"))
     sym = read_tools.render_symbol(a.call("symbol", query="second", source=True))
     assert "L5-7" in sym and "end unknown" not in sym, sym
+
+
+def test_a_regular_expression_after_the_paren_of_an_if_is_not_a_division_found_by_the_review_of_419(tmp_path):
+    src = ("export function r(a: boolean, s: string) {\n  if (a) /x}/.test(s);\n  while (a) /y{/.test(s);\n  return (a) / 2 + (s.length) / 4;\n}\n\n"
+           "export function after() {\n  return 1;\n}\n")
+    assert spans(tmp_path, "r.ts", src) == {"r": (1, 5), "after": (7, 9)}
+
+
+def test_a_generic_jsx_element_is_one_tag_found_by_the_review_of_419(tmp_path):
+    src = ("export function V() {\n  return (\n    <Foo<string> x=\"1\">\n      <Bar<number, Map<string, number>> y={{ a: 1 }} />\n    </Foo>\n  );\n}\n\n"
+           "export function After() {\n  return 1;\n}\n")
+    assert spans(tmp_path, "V.tsx", src) == {"V": (1, 7), "After": (9, 11)}
