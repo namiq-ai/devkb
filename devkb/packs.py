@@ -335,9 +335,10 @@ class Packer:
                 for dotted, lines in (props.get("module_runs") or {}).items():
                     runs.setdefault(dotted, []).extend((self.idx.keys[i].split("::")[0], ln) for ln in lines)
         mod = path.removesuffix(".py").removesuffix("/__init__").replace("/", ".")
+        mods = {mod, mod.removesuffix(".__main__")} if mod.endswith(".__main__") else {mod}      # `-m pkg` runs pkg/__main__.py
         out: dict[str, int] = {}
         for dotted, sites in runs.items():
-            if dotted == mod or ("." in dotted and mod.endswith("." + dotted)):
+            if any(dotted == m or ("." in dotted and m.endswith("." + dotted)) for m in mods):
                 for f, ln in sites:
                     if f != path and (f not in out or ln < out[f]):
                         out[f] = ln

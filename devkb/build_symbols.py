@@ -965,7 +965,8 @@ def _module_runs(tree: ast.AST) -> list[tuple[str, str, int]]:
                 out.append((where, mod, a.lineno))
         if isinstance(n, ast.Call):
             f = n.func
-            name = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else ""
+            # a local helper is called by its name, or as a method of its own class (`self._run(...)`): `config.run("x")` is some other `run`
+            name = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id in ("self", "cls") else ""
             i = helpers.get(name)
             if i is not None and i < len(n.args) and literal(n.args[i]):
                 out.append((where, literal(n.args[i]) or "", n.args[i].lineno))

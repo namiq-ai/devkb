@@ -45,3 +45,19 @@ def test_pack_file_lists_the_runners_with_the_line(tmp_path, monkeypatch):
     assert "`tools/a.py` — runs it by name: `tools/a.py:5:" in dep and "`tools/b.py` — runs it by name: `tools/b.py:2:" in dep, dep
     assert "tools/c.py" not in dep, "`git commit -m mod` runs nothing"
     assert "tools/d.py" in packer.file("src/lib/pkg2/thing.py"), "a dotted name matches a module under a source root"
+
+
+def test_a_call_of_another_objects_method_with_a_helper_s_name_is_not_a_run_found_by_the_review_of_416():
+    got = runs("import runpy\n\n\ndef run(module):\n    runpy.run_module(module)\n\n\ndef f(config):\n    config.run('pkg.mod')\n    run('pkg.real')\n")
+    assert [(w, m) for w, m, _ in got] == [("f", "pkg.real")], got
+    method = runs("import runpy\n\n\nclass C:\n    def _go(self, module):\n        runpy.run_module(module)\n\n    def f(self):\n        self._go('pkg.mod')\n")
+    assert [(w, m) for w, m, _ in method] == [("C.f", "pkg.mod")], method
+
+
+def test_dash_m_a_package_runs_its_main_module_found_by_the_review_of_416(tmp_path, monkeypatch):
+    files = {"pkg/__init__.py": "", "pkg/__main__.py": "def main():\n    return 1\n",
+             "tools/a.py": "import subprocess, sys\nsubprocess.run([sys.executable, '-m', 'pkg'])\n",
+             "tools/b.py": "import runpy\nrunpy.run_module('pkg.__main__')\n"}
+    _api, packer = S.api(tmp_path, files, monkeypatch)
+    dep = packer.file("pkg/__main__.py").split("## Files that depend on it")[1].split("\n## ")[0]
+    assert "`tools/a.py` — runs it by name" in dep and "`tools/b.py` — runs it by name" in dep, dep
