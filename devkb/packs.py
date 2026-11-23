@@ -322,6 +322,28 @@ class Packer:
                 out[rel] = hits[0]
         return out
 
+    def _runners(self, path: str) -> dict[str, int]:
+        """{file: line} of the files that run `path`'s module by name (#389): `runpy.run_module("pkg.mod")`, a `-m pkg.mod` command, a helper that
+        does either. The graph keeps the dotted name each function (or file) runs, `module_runs`; it is matched to the path here, by its full dotted
+        form or, for a dotted name, by its tail (`src/pkg/mod.py` is `pkg.mod`). A bare one-word name matches only a top-level module."""
+        if not path.endswith(".py"):
+            return {}
+        runs = self.__dict__.get("_module_runs")
+        if runs is None:                                   # once per Packer
+            runs = self.__dict__["_module_runs"] = {}
+            for i, props in enumerate(self.idx.props):
+                for dotted, lines in (props.get("module_runs") or {}).items():
+                    runs.setdefault(dotted, []).extend((self.idx.keys[i].split("::")[0], ln) for ln in lines)
+        mod = path.removesuffix(".py").removesuffix("/__init__").replace("/", ".")
+        mods = {mod, mod.removesuffix(".__main__")} if mod.endswith(".__main__") else {mod}      # `-m pkg` runs pkg/__main__.py
+        out: dict[str, int] = {}
+        for dotted, sites in runs.items():
+            if any(dotted == m or ("." in dotted and m.endswith("." + dotted)) for m in mods):
+                for f, ln in sites:
+                    if f != path and (f not in out or ln < out[f]):
+                        out[f] = ln
+        return out
+
     def _path_lines(self, named: dict[str, int]) -> list[str]:
         return [f"- `{rel}` — names it by path: `{rel}:{line}: {self._file(rel)[line - 1].strip()[:160]}`"
                 for rel, line in sorted(named.items())]
@@ -571,6 +593,8 @@ class Packer:
         used = sorted((r for r in rows if r[1]), key=lambda r: (-len(r[1]), self.api._key(r[0])))
         tests = self.tests(set(syms) | set(self.up(set(syms))))  # tests that reach the file through calls at any depth
         dependants = sorted({f for _, o in used for f in o})
+        runners = {f: ln for f, ln in self._runners(path).items() if f not in dependants}      # files that run it by name (#389)
+        dependants = sorted(set(dependants) | set(runners))
         out = [f"# Graph pack: before editing `{path}`", "", self.freshness([path] + dependants[:40]), "",
                f"## Functions other files call ({len(used)} of {len(syms)})"]
         for i, outside in used[:cap]:
@@ -581,7 +605,9 @@ class Packer:
             out.append(f"- … {len(used) - cap} more")
         if not used:
             out.append("- none: nothing outside this file calls into it through calls the graph resolves")
-        out += ["", f"## Files that depend on it ({len(dependants)})"] + [f"- `{f}`" for f in dependants[:40]]
+        out += ["", f"## Files that depend on it ({len(dependants)})"] + [
+            f"- `{f}` — runs it by name: `{f}:{runners[f]}: {self._file(f)[runners[f] - 1].strip()[:160]}`" if f in runners else f"- `{f}`"
+            for f in dependants[:40]]
         named = self._named_by_path(path, tests)
         out += ["", f"## Tests that exercise it, directly or through callers ({len(tests) + len(named)})"] \
             + (self._tests_section(tests, set(syms)) if tests or not named else []) + self._path_lines(named) \

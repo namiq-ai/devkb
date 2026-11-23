@@ -33,7 +33,7 @@ def require_graph(devkb_dir: Path, repo_root: Path | str | None = None) -> None:
         raise GraphNotBuilt(f"no devkb graph at {devkb_dir}: run `devkb build --project {repo_root or Path(devkb_dir).parent}` first")
 
 
-CACHE_VERSION = 14  # ref_sites/ref_count/key_reads/key_writes (#143, #148); 13: value_refs/value_ref_count kept (#69); 12: language/linkage/abi_exported/boundary_kind (ADR-DEVKB-009)
+CACHE_VERSION = 15  # module_runs (#389); 14: ref_sites/ref_count/key_reads/key_writes (#143, #148); 13: value_refs/value_ref_count kept (#69); 12: language/linkage/abi_exported/boundary_kind (ADR-DEVKB-009)
 CACHE_NAME = ".process-index.pkl"
 BOUNDARY_MECHANISMS = ("extern-c", "ctypes", "cffi", "pyc-api", "pybind11")
 TELEMETRY_NAME = "process-api-telemetry.jsonl"
@@ -49,6 +49,7 @@ KEEP_PROPS = {
                "unresolved_calls", "unresolved_files", "unresolved_file_count",  # ODSF-313: what a list answer cannot see
                "module_callers",   # calls made outside any function (import time, class bodies)
                "ref_sites", "ref_count", "key_reads", "key_writes",   # #143: constant uses; #148: string keys per function
+               "module_runs",      # #389: modules the function runs by name (runpy, -m), {dotted name: [lines]}
                "value_refs", "value_ref_count",  # #69: named without a call (a callback), so callers are not all visible
                "incomplete_reasons", "unattributed_errors",  # ADR-DEVKB-008 §2: C/C++ coverage beyond unresolved calls
                "framework", "namespace", "overload_count", "overload_spans", "near_files",
@@ -60,7 +61,7 @@ KEEP_PROPS = {
     "Flow": ("touch_point_kind", "step_count"),
     "Warning": ("rule", "severity", "detail"),
     "WorkPackage": ("title", "status"),
-    "File": ("language", "consumed_by_cpp", "key_reads", "key_writes"),                  # ADR-DEVKB-009 §2
+    "File": ("language", "consumed_by_cpp", "key_reads", "key_writes", "module_runs"),                  # ADR-DEVKB-009 §2
     "ConfigKey": ("kind",),                                   # ADR-SDP-DEVKB-005 (ODSF-312)
     "Component": ("kind", "label", "file", "image", "ports", "exec", "path"),
     "Repository": ("role",),
