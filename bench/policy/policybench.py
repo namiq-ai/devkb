@@ -133,7 +133,8 @@ def _sections(body: str):
     plain = _FENCED.sub(lambda m: " " * len(m.group(0)), body)     # a bold line inside a fence is not a section
     out = [((m.group("h") or m.group("g") or "").strip().lower(), m.start(), m.end()) for m in _SECTION.finditer(plain)]
     if not any(h.startswith("where to start") for h, _a, _b in out):
-        m = re.search(r"\*\*Where to start:?\*\*:?.*?(?=\n\s*\n|\Z)", plain, re.S)
+        m = re.search(r"\*\*Where to start:?\*\*:?.*?(?=\n\s*\n|\Z)", plain, re.S) \
+            or re.search(r"^[ \t]*Where to start[ \t]*:.*?(?=\n\s*\n|\Z)", plain, re.I | re.M | re.S)   # a plain line at a line start (#386)
         if m:
             out.append(("where to start", m.start(), m.end()))
     return out
@@ -202,6 +203,22 @@ def in_own_code(w: Path | None, name: str) -> bool:
     return False
 
 
+class LocationNotWithheld(ValueError):
+    """A ticket says "where to start" in a form `without_location` does not recognise as a section (#386): the location would reach the agent in a run
+    scored as location-withheld. The run is refused, not run."""
+
+
+WITHHELD_LINE = "**Where to start:** (withheld for this benchmark run)"
+_INLINE_START = re.compile(r"\*\*Where to start:?\*\*:?.*?(?=\n\s*\n|\Z)", re.S)                                  # `**Expected:** ok. **Where to start:** ...`
+_PLAIN_START = re.compile(r"^[ \t]*Where to start[ \t]*:.*?(?=\n\s*\n|\Z)", re.I | re.M | re.S)                    # `Where to start: ...` at a line start
+
+
+def _withhold_outside_fences(rx: "re.Pattern[str]", text: str) -> str:
+    """Replace each match of `rx` that is not inside a code fence by the withheld line (a fenced block is a reproduction, not a section)."""
+    fences = [(m.start(), m.end()) for m in _FENCED.finditer(text)]
+    return rx.sub(lambda m: m.group(0) if any(a <= m.start() < b for a, b in fences) else WITHHELD_LINE, text)
+
+
 def without_location(title: str, body: str, w: Path | None = None) -> tuple[str, str]:
     """(title, body) with the location withheld (#337): the "Where to start" section is replaced by one line; every name
     `location_names` gives is masked wherever title and body repeat it, with what qualifies it (`Packer._resolve`,
@@ -217,6 +234,13 @@ def without_location(title: str, body: str, w: Path | None = None) -> tuple[str,
         last = b
     pieces.append(body[last:])
     body = "".join(pieces)
+    # a "where to start" written inline or as a plain line sits inside another section's span (the `**Expected:**` paragraph it follows), so the
+    # section loop above leaves it: withheld here, by its own pattern (#386)
+    body = _withhold_outside_fences(_PLAIN_START, _withhold_outside_fences(_INLINE_START, body))
+    leftover = _FENCED.sub("", body.replace(WITHHELD_LINE, ""))
+    if re.search(r"where\s+to\s+start", leftover, re.I):
+        raise LocationNotWithheld("the ticket says 'where to start' in a form no section catches (not a `**Where to start:**` section, an inline "
+                                  "bold phrase or a plain `Where to start:` line): its location would reach the agent in a location-withheld run")
 
     def mask(text: str) -> str:
         for n in names:
@@ -646,7 +670,11 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
         tmp = out / f".no-mcp.{os.getpid()}.tmp"
         tmp.write_text(json.dumps({"mcpServers": {}}))
         os.replace(tmp, mcp)
-    prompt = run_prompt(issue, tag.split("-")[1], w)
+    try:
+        prompt = run_prompt(issue, tag.split("-")[1], w)
+    except LocationNotWithheld as e:                  # a location-withheld run whose ticket cannot be withheld is refused, never run as one (#386)
+        (out / "end").write_text(json.dumps({"exit": "error", "seconds": 0, "error": f"setup: {e}"[-400:]}))
+        return f"error {tag}: setup failed: {e}"
     if arm == "inject":                              # #366: the answer up front instead of advice
         prompt = injected_context(issue, w, tool_of(arm, toolenv.build(ENV_REF[arm]()))) + prompt
     if os.environ.get("POLICY_PREREGISTER_POST") == "1":
