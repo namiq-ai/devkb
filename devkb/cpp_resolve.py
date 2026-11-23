@@ -19,18 +19,23 @@ The C profile (ADR-DEVKB-009 §2) is its own, shorter order: no class, receiver 
 A call between C and C++ is never linked here: it is handed to the boundary resolver (`cross` records), which links
 it only through `extern "C"` linkage and a unique name (`boundaries.py`).
 
-Never: a bare call to another class's method, a C library name linked across files, a link made because a method
+Never: a bare call to another class's method, a C library name linked across files (except to the one C definition of it the
+repository supplies itself, from outside the host-side directories of `_HOST_DIRS`: a freestanding libc), a link made because a method
 name is unique, or an edge to a name `#define`d as a macro.
 
 Calls through repository macros (SPEC-DKB-004 F2, #118): a call to a macro `#define`d in the repository is expanded,
 once per build, into the bare and qualified calls its body writes (nested repository macros followed to depth 4, the
 macro's own parameters and `##`-pasted names left out). Each is resolved by the rules above as if written at the
-invocation, from the invoking function's scope, and linked with source `cpp-macro`. A macro defined more than once
-(`#if` variants) gives the union of its bodies, and its edges are marked `variant`. A macro the repository does not
-define (a system header's) is never expanded.
+invocation, from the invoking function's scope, and linked with source `cpp-macro`. Only the definitions the invoking file
+sees count (its own, and those of the headers it includes at any depth): another file's macro of the same name does not leak
+in. A macro seen with several definitions (`#if` variants) links only the calls every definition makes: a call that exists in
+one configuration and not in another (`DET_VALIDATE` is empty without `USE_DET`) is not a call of the function (0.2.15, the
+adjudicated precision of `cpp-macro` was 10 of 29 on autoas). A macro the repository does not define (a system header's) is
+never expanded.
 """
 from __future__ import annotations
 
+import functools
 import posixpath
 import re
 from dataclasses import dataclass
@@ -46,6 +51,16 @@ C_LIBRARY = frozenset(
     "rand srand time clock getenv system assert isalpha isdigit isspace isalnum isupper islower toupper tolower "
     "setjmp longjmp signal raise open close read write unlink stat sleep usleep perror".split()
 )
+# Directories whose C programs are built for the host and use the system's C library, not a freestanding one the repository supplies
+# (autoas's `tools/libraries/rs232` calls glibc's strcpy, while its firmware calls `misclib.c`'s).
+_HOST_DIRS = frozenset({"tools", "tool", "test", "tests", "util", "utils", "example", "examples", "sample", "samples", "bench", "benchmark",
+                        "benchmarks", "fuzz", "fuzzing"})
+
+
+def _host_side(path: str) -> bool:
+    return bool(_HOST_DIRS & set(path.lower().split("/")[:-1]))
+
+
 _EXTERNAL_ROOTS = frozenset({"std", "boost", "absl", "testing", "__gnu_cxx"})
 
 
@@ -88,7 +103,8 @@ _NOT_CALLED = frozenset("if while for switch return sizeof defined do else case 
 _BODY_CALL = re.compile(r"(?<![\w.>#])(?:((?:[A-Za-z_]\w*\s*::\s*)+))?([A-Za-z_]\w*)\s*\(")
 
 
-def _macro_calls(body: str) -> list[tuple[str, str]]:
+@functools.lru_cache(maxsize=None)
+def _macro_calls(body: str) -> tuple[tuple[str, str], ...]:
     """(qualifier, name) of each call a `#define` body writes: not member calls, not the macro's parameters, not names
     pasted with `##`. A function-like macro's text starts with its parameter list (no space after the name)."""
     params: set[str] = set()
@@ -102,7 +118,7 @@ def _macro_calls(body: str) -> list[tuple[str, str]]:
         if name in params or name in _NOT_CALLED or "##" in body[max(0, m.start() - 3):m.start()] + body[m.end(2):m.end(2) + 3]:
             continue
         out.append((re.sub(r"\s+", "", m.group(1) or "").rstrip(":"), name))
-    return out
+    return tuple(out)
 
 
 class Repo:
@@ -111,6 +127,7 @@ class Repo:
     def __init__(self, units: list[Unit]) -> None:
         self.units = units
         self.macro_bodies: dict[str, list[str]] = {}
+        self.macro_defs: dict[str, list[tuple[str, str]]] = {}      # name -> [(defining file, body)]: what a caller sees is decided per file
         self.by_qn: dict[str, list[tuple[str, Symbolic]]] = {}
         self.short_names: set[str] = set()
         self.free: dict[str, list[tuple[str, Symbolic]]] = {}
@@ -137,6 +154,7 @@ class Repo:
                 self.definers.setdefault(dn, set()).add(u.path)
             for dname, body, _line in (u.rec.masked.defines if u.rec.masked is not None else ()):
                 self.macro_bodies.setdefault(dname, []).append(body)
+                self.macro_defs.setdefault(dname, []).append((u.path, body))
             for qn, s in u.syms.items():
                 self.by_qn.setdefault(qn, []).append((u.path, s))
                 bits = qn.split(".")
@@ -192,26 +210,37 @@ class Repo:
         return [k for k in keys if any(lo <= argc <= hi for lo, hi in self.arity.get(k, [(0, float("inf"))]))]
 
     # macros --------------------------------------------------------------------
-    def expand(self, name: str) -> list[tuple[str, str, bool]]:
-        """(qualifier, name, variant) of the non-macro calls a call to repository macro `name` makes, nested macros
-        followed to MACRO_DEPTH levels; computed once per macro."""
+    def expand(self, name: str, path: str = "") -> list[tuple[str, str, bool]]:
+        """(qualifier, name, False) of the non-macro calls a call to repository macro `name` makes in file `path`, nested macros followed to
+        MACRO_DEPTH levels: the calls that every definition of the macro seen from `path` makes (see the module note). Without a path, every
+        definition counts. Computed once per macro and file."""
         cache = self.__dict__.setdefault("_expanded", {})
-        if name not in cache:
-            seen: dict[tuple[str, str], bool] = {}
+        key = (name, path)
+        if key not in cache:
+            reach: list[set[str] | None] = []         # the include closure of `path`, built only when two definitions of a macro differ
 
-            def walk(m: str, depth: int, variant: bool) -> None:
-                bodies = self.macro_bodies.get(m, [])
-                variant = variant or len(bodies) > 1
-                for body in bodies:
+            def bodies_seen(m: str) -> list[str]:
+                defs = self.macro_defs.get(m, [])
+                if not path or len({b for _p, b in defs}) <= 1:     # one body, or the same body everywhere: who sees which makes no difference
+                    return [defs[0][1]] if defs else []
+                if not reach:
+                    reach.append(self.included_from(path))
+                return [b for p, b in defs if p == path or p in reach[0]]
+
+            def calls_of(m: str, depth: int, stack: frozenset[str]) -> set[tuple[str, str]]:
+                per_body = []
+                for body in bodies_seen(m):
+                    mine: set[tuple[str, str]] = set()
                     for q, n in _macro_calls(body):
                         if not q and n in self.macros:
-                            if depth < MACRO_DEPTH and n != m:
-                                walk(n, depth + 1, variant)
+                            if depth < MACRO_DEPTH and n != m and n not in stack:
+                                mine |= calls_of(n, depth + 1, stack | {m})
                             continue
-                        seen[(q, n)] = seen.get((q, n), True) and variant
-            walk(name, 1, False)
-            cache[name] = [(q, n, v) for (q, n), v in seen.items()]
-        return cache[name]
+                        mine.add((q, n))
+                    per_body.append(mine)
+                return set.intersection(*per_body) if per_body else set()
+            cache[key] = [(q, n, False) for q, n in sorted(calls_of(name, 1, frozenset()))]
+        return cache[key]
 
     # macro scope (#290) --------------------------------------------------------
     def _include_edges(self) -> dict[str, set[str]]:
@@ -522,7 +551,8 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                         continue
                     if not free_count.get(n):
                         own = [(p, x) for p, x in repo.c_linkage.get(n, []) if repo.language[p] == "c"]
-                        if len(own) == 1 and n not in C_LIBRARY:
+                        # a C library name the repository defines itself, once, with external linkage (a freestanding libc: autoas's misclib.c) is that definition
+                        if len(own) == 1 and (n not in C_LIBRARY or (own[0][1].linkage == "c" and not _host_side(u.path))):
                             link(f"{own[0][0]}::{own[0][1].qn}", "cpp-unique-free", n)
                             continue
                         if hand_over():
@@ -559,6 +589,9 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                         continue
                     if r:
                         stop_unresolved = True
+                if not stop_unresolved and n in getattr(u.rec.scanner, "aliases", ()):
+                    unresolved.add((u.path, caller_qn, n))      # a name this file also brings in by `using` (`using std::use_facet;` and a fallback of its own
+                    continue                                    # under another `#if`): which one the call means depends on the configuration (#123)
                 if not stop_unresolved:
                     if free_count.get(n) == 1:
                         s = by_def_free[n]
@@ -654,7 +687,7 @@ def _with_expansions(calls, repo: Repo, path: str = ""):
     for call in calls:
         yield call, None
         if call.form != "construct" and call.name in repo.macro_bodies and (repo.sees(path, call.name, call.line) if path else call.name in repo.macros):
-            for q, n, variant in repo.expand(call.name):
+            for q, n, variant in repo.expand(call.name, path):
                 yield Call(call.caller, n, "qualified" if q else "bare", q, None, None, call.line), (call.name, variant)
 
 

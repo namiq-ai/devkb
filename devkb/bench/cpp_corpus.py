@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from devkb.bench import cpp_truth  # noqa: E402
+from devkb.cpp_resolve import _host_side  # noqa: E402
 
 CORPUS = Path(__file__).with_name("cpp_corpus.json")
 ALLOWED_DEPENDENCIES = ["pyyaml>=6"]
@@ -127,7 +128,9 @@ def measure(path: Path, sample: int = 100, seed: int = 20261116, graph=None, tru
     by_source: dict[str, dict] = {}
     for src, dst in sorted(edges):
         name, sfile, dfile = _short(dst), src.split("::", 1)[0], dst.split("::", 1)[0]
-        if name in cpp_truth.LIBC and sfile != dfile:
+        # a C library name linked across files is wrong, except from firmware code to the one definition a freestanding libc of the
+        # repository gives it (ADR-DEVKB-008 §3, amended 2026-11-23): that is a C file called from outside a host-side directory
+        if name in cpp_truth.LIBC and sfile != dfile and (not dfile.endswith(".c") or _host_side(sfile)):
             forbidden.append((src, dst))
         p = syms[src]
         sites = [s for s in truth.sites.get(name, []) if s.file == sfile and p["line_start"] <= s.line <= p["line_end"]]

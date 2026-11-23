@@ -94,3 +94,30 @@ python bench/cpp/adjudicate.py show fmt.jsonl --repo corpus/fmt                 
 python bench/cpp/adjudicate.py judge fmt.jsonl 12=correct:why 13=wrong:why
 python bench/cpp/adjudicate.py report docs/specs/cpp-samples/*.jsonl --markdown                 # the tables above
 ```
+
+## 0.2.15 adjudication, six repositories (#123, #124)
+
+Seed 117, 100 edges per repository, `bench/cpp/samples/<repo>.jsonl` (the files `adjudicate.py` reads). Truth-confirmed edges are
+recorded correct; the other sampled edges were judged by hand against the source.
+
+| Repository | Frame | Correct / 100 | 95% interval | Judged by hand | Wrong |
+|---|---|---|---|---|---|
+| cJSON | 813 | 100 | 0.963-1.000 | 0 | 0 |
+| Lua | 4,054 | 100 | 0.963-1.000 | 5 | 0 |
+| autoas | 622 | 100 | 0.963-1.000 | 51 | 0 |
+| leveldb | 1,754 | 100 | 0.963-1.000 | 1 | 0 |
+| yaml-cpp | 1,453 | 100 | 0.963-1.000 | 16 | 0 |
+| fmt | 1,415 | 99 | 0.946-0.998 | 60 | 1 |
+
+By source over the six samples: `cpp-same-file` 161/162, every other source 100% (`cpp-unique-free` 161/161, `cpp-typed-receiver` 85/85,
+`cpp-same-class` 71/71, `cpp-constructor` 40/40, `cpp-macro` 34/34, `cpp-qualified` 31/31, `extern-c` 7/7, `cpp-same-class-base` 5/5,
+`cpp-typed-receiver-base` 4/4). The one wrong edge is fmt `for_each_codepoint -> copy`, a 3-argument call linked to the 2-argument overload in
+the same file.
+
+**The first round failed** (cpp-macro in Lua, fmt and autoas; fmt cpp-same-file; yaml-cpp cpp-constructor) and was fixed in the extractor, each fix with a
+test: a macro expands only through definitions the calling file sees, and only to the callees every visible definition makes; a call through a
+local `auto x = [` lambda is not linked; a name the file also brings in by `using` is not linked to its own same-file fallback; `T x(*this)` is a copy.
+The samples were then redrawn from the fixed graph and every edge judged again, carrying earlier verdicts over for edges that were still there.
+
+**Limit: one judge, who is not independent.** The agent that wrote the extractor drew the sample and wrote the verdicts (134 by hand in total), and two of
+its first fmt verdicts were wrong and were corrected from the source. An independent re-judgement of those edges is still owed.

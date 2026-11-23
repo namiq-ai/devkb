@@ -584,6 +584,9 @@ def _parse_params(text: str) -> dict[str, set]:
     return out
 
 
+_LAMBDA_LOCAL = re.compile(r"\bauto\s*[*&]*\s*(" + _IDENT + r")\s*=\s*\[")
+
+
 def _parse_locals(body: str, into: dict[str, set]) -> None:
     for m in _LOCAL.finditer(body):
         if m.group("type") in _TYPE_KEYWORDS or m.group("type") == "auto":
@@ -773,11 +776,34 @@ class _Scanner:
         return d
 
     # a declaration (no body) -------------------------------------------------
+    _DEFAULTED = re.compile(r"(?:^|[\s;}])(?:(?:virtual|inline|constexpr)\s+)*(?:(?P<qual>(?:" + _IDENT + r"\s*(?:<[^<>]*>)?\s*::\s*)+))?"
+                            r"(?P<name>~\s*" + _IDENT + r")\s*\(\s*\)\s*(?:noexcept(?:\s*\([^()]*\))?|override|final|[A-Z][A-Z0-9_]*)*\s*=\s*default\s*$", re.S)
+
+    def defaulted(self, start: int, end: int, scope: _Scope, h: str) -> bool:
+        """`~X() = default;` (in the class, or `X::~X() = default;` outside it) is a definition the compiler reports, with no body."""
+        m = self._DEFAULTED.search(h)
+        if m is None:
+            return False
+        name = re.sub(r"\s", "", m.group("name"))
+        qparts = [re.sub(r"<[^<>]*>", "", p).strip() for p in (m.group("qual") or "").split("::") if p.strip()]
+        qparts = [p for p in qparts if p not in self.ns_seen and p not in scope.ns]
+        chain = scope.classes + tuple(qparts)
+        if not chain or name[1:] != chain[-1]:
+            return False
+        line = self.m.line(start + (m.start("name") if m.start("name") >= 0 else 0))
+        pub = scope.access == "public" and not scope.anon
+        self.add_def(Def(".".join(chain + (name,)), name, "method", "::".join(scope.ns), line, line, is_public=pub,
+                         virtual=bool(re.search(r"\bvirtual\b|\boverride\b", h)), class_chain=chain, body=(end, end), linkage="cpp",
+                         class_ns=None))
+        return True
+
     def decl(self, start: int, end: int, scope: _Scope) -> None:
+        h = _strip_decor(self.code[start:end])
+        if "default" in h and "~" in h and self.cpp and self.defaulted(start, end, scope, h):
+            return
         rec = scope.rec
         if rec is None:
             return
-        h = _strip_decor(self.code[start:end])
         _set_access(self.code[start:end], scope)
         if re.match(r"\s*(?:typedef|using|friend|static_assert|template\s*<[^>]*>\s*(?:class|struct)|enum|class|struct|union)\b", h):
             return
@@ -906,6 +932,8 @@ class _Scanner:
         moved = re.match(r"(?:std\s*::\s*)?(?:move|forward)\s*(?:<[^>]*>)?\s*\((.*)\)\s*$", arg, re.S)
         if moved:
             arg = moved.group(1).strip()
+        if re.fullmatch(r"\*\s*this", arg) and d.class_chain:
+            return d.class_chain[-1]            # `T copy(*this)` in a method of T: a copy (#123)
         m = re.fullmatch(r"\*?\s*([A-Za-z_]\w*)", arg)
         types = self.locals_of(d).get(m.group(1)) if m else None
         if types and len(types) == 1 and next(iter(types)) is not None:
@@ -950,6 +978,7 @@ class _Scanner:
         line_of = self.m.line
         members = _initialiser_names(text) if init else set()
         has_mock = "EXPECT_CALL" in text or "ON_CALL" in text      # one substring test per body, not a regex search per call
+        lambdas = set(_LAMBDA_LOCAL.findall(text)) if "[" in text and "auto" in text else ()      # `auto write = [=](...) {...};`
         for cm in _CALL_RE.finditer(text):
             name = cm.group(1)
             is_init = cm.start(1) in members      # `: m(x), n(f(x))`: m and n are initialised, not called (#145); `f` is not at depth 0, so it is read
@@ -1027,6 +1056,8 @@ class _Scanner:
                 elif prev in ">*&" and self.cpp and _DECL_PREFIX.match(text, _stmt_start(text, k), a):
                     continue      # `std::vector<int> x(3)`, `Foo *x(p)`, `const Bar& x(y)`: a declaration, not a call (#65)
                 form, qualifier, recv, rl = "bare", "", None, None
+                if name in lambdas:
+                    continue      # `auto write = [=](...) {...}; write(x)`: a call of the local lambda, not of a function of that name (#123)
                 if name == d.short and d.kind == "method" and (mm := re.search(r"\b([A-Z][A-Z0-9]*_[A-Z0-9_]*)\s*\(\s*$", text[max(0, cm.start() - 80):cm.start()])) \
                         and not mm.group(1).startswith(("ASSERT_", "EXPECT_", "CHECK_", "DCHECK_", "VERIFY_", "LIKELY", "UNLIKELY")):
                     form = "qualified"      # `FMT_POSIX(close(fd))` inside a method `close`: a macro adapts the global call; not the method itself (#95)
