@@ -123,3 +123,21 @@ def test_a_checkouts_own_suite_does_not_see_the_benchmarks_settings(monkeypatch)
     monkeypatch.setenv("KEEP_ME", "1")
     env = pb.suite_env()
     assert "POLICY_ARMS" not in env and "POLICY_MAIN" not in env and env["KEEP_ME"] == "1"
+
+
+def test_the_bothuser_arm_has_a_users_policy_the_hook_and_the_mcp_server(tmp_path, monkeypatch):
+    """`both` in devkb's own repository keeps the repository's rule "use the shell, this repository has no MCP server on purpose", which steers the model
+    away from the tool; `bothuser` has what `devkb init` writes instead, with the hook and the MCP server."""
+    assert pb.ENTRY_POINTS["bothuser"] == (True, True, True) and pb.USER_POLICY["bothuser"] == "full" and pb.HIDE_LOCATION["bothuserhid"] == "bothuser"
+    w = tmp_path / "w"
+    (w / ".claude").mkdir(parents=True)
+    (w / "AGENTS.md").write_text("repo text\n## Developing devkb: devkb first, logged\nThis repository has no MCP server on purpose\n")
+    binp = tmp_path / "toolenv" / "bin"
+    binp.mkdir(parents=True)
+    (binp / "python").write_text("#!/bin/sh\nexit 0\n")
+    (binp / "python").chmod(0o755)
+    monkeypatch.setattr(pb, "user_mcp", lambda env: '{"mcpServers": {"devkb": {"command": "devkb", "args": ["mcp"]}}}')
+    pb.arm_files(w, "bothuser", {"bin": str(binp / "devkb"), "src": str(ROOT)})
+    text = (w / "AGENTS.md").read_text()
+    assert "no MCP server on purpose" not in text and "devkb:begin" in text and "mcp" in (w / ".mcp.json").read_text()
+    assert pb.permissions("bothuser") == pb.permissions("both")

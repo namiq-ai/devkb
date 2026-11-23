@@ -47,7 +47,8 @@ BASES = {"before": "origin/main", "after": "ce284c4", "after2": os.environ.get("
          "router": "origin/main",                                 # the same, plus the prompt router (devkb hook prompt)
          "ctx": "origin/main",                                    # the same, plus the silent task-recording hook (devkb hook context)
          "userinit": "origin/main",                               # everything `devkb init` writes: + its MCP server, no guardrail
-         "both": "origin/main"}                                   # main's policy and hook (the shell entry point) + the devkb MCP server (the tool entry point)
+         "both": "origin/main",                                   # main's policy and hook (the shell entry point) + the devkb MCP server (the tool entry point)
+         "bothuser": "origin/main"}                               # the same three entry points with the policy text a user's repository gets from `devkb init`
 # Tri-mode arms take their devkb (CLI, graph build, hook) from a tool environment built from an exact commit, never
 # from the checkout the agent edits (#225). POLICY_RELEASE / POLICY_MAIN override the refs.
 ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest_release(),
@@ -60,17 +61,17 @@ ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest
            "teachall": lambda: os.environ["POLICY_TEACHALL"],
            # rmain and router differ in one thing, the UserPromptSubmit hook: same devkb commit (POLICY_ROUTER), same checkout
            **{a: (lambda: os.environ["POLICY_ROUTER"]) for a in ("rmain", "router", "ctx")},
-           **{a: (lambda: os.environ.get("POLICY_MAIN") or "origin/main") for a in ("userpolicy", "short", "inject", "userinit", "both")}}
+           **{a: (lambda: os.environ.get("POLICY_MAIN") or "origin/main") for a in ("userpolicy", "short", "inject", "userinit", "both", "bothuser")}}
 # Every devkb arm keeps the answers its agents were given (#218); D1 and D2 are the two direct-path candidates.
 ARM_ENV = {"release": {"DEVKB_GUARDRAIL_KEEP": "1"}, "main": {"DEVKB_GUARDRAIL_KEEP": "1"},
            "noteach": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH": "0"},   # main without D1 (on by default, #267)
            "outline": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_OUTLINE": "1"},
            "hookmain": {"DEVKB_GUARDRAIL_KEEP": "1"},
            "teachall": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH_ALL": "1"},   # the setting, off by default (#375)
-           **{a: {"DEVKB_GUARDRAIL_KEEP": "1"} for a in ("userpolicy", "short", "inject", "userinit", "rmain", "router", "ctx", "both")}}
+           **{a: {"DEVKB_GUARDRAIL_KEEP": "1"} for a in ("userpolicy", "short", "inject", "userinit", "rmain", "router", "ctx", "both", "bothuser")}}
 # #366: the policy text of the user-facing arms. "full" is the block `devkb init` writes (devkb.init.AGENTS_BLOCK of the
 # arm's devkb), "short" the candidate below; the checkout's CLAUDE.md is then `@AGENTS.md`, as init writes it.
-USER_POLICY = {"userpolicy": "full", "short": "short", "inject": "full", "userinit": "full"}
+USER_POLICY = {"userpolicy": "full", "short": "short", "inject": "full", "userinit": "full", "bothuser": "full"}
 USER_INIT = "lean-pack"                    # the toolset `devkb init` registers by default (devkb/init.py, --toolset)
 SHORT_BLOCK = """## devkb: ask the graph before you search or read code
 
@@ -118,7 +119,7 @@ def without_missing_data(body: str, w: Path) -> str:
 
 # The same arms with the ticket's location withheld (#337): "Where to start" removed, the files in "Scope" and every file or
 # name it gave masked wherever the ticket repeats them. Set up exactly as their base arm (same template); only the text differs.
-HIDE_LOCATION = {"nonehid": "none", "mainhid": "main", "rmainhid": "rmain", "routerhid": "router", "ctxhid": "ctx", "bothhid": "both"}
+HIDE_LOCATION = {"nonehid": "none", "mainhid": "main", "rmainhid": "rmain", "routerhid": "router", "ctxhid": "ctx", "bothhid": "both", "bothuserhid": "bothuser"}
 WITHHELD = "(withheld)"
 _SECTION = re.compile(r"(?ms)^(?:\*\*(?P<h>[^*\n]+?):?\*\*:?|#{1,6}[ \t]+(?P<g>[^\n]+?)[ \t]*$)(?P<t>.*?)"
                       r"(?=^\*\*[^*\n]+?:?\*\*|^#{1,6}[ \t]|\Z)")
@@ -393,7 +394,7 @@ def permissions(arm: str) -> tuple[list[str], list[str]]:
 # that answers or reminds before a grep, so the agent does not have to ask) and `tool` (an MCP tool in the model's own tool list, which it picks
 # like `Grep`). An arm not listed is not checked. A run records what it really had (`entry_points`) and what differs from this (#entry-points).
 ENTRY_POINTS = {"none": (False, False, False), "nonekeep": (False, False, False),
-                "main": (True, True, False), "both": (True, True, True), "userinit": (True, False, True)}
+                "main": (True, True, False), "both": (True, True, True), "bothuser": (True, True, True), "userinit": (True, False, True)}
 
 
 def init_tools(stream: Path) -> list[str]:
@@ -549,7 +550,7 @@ def arm_files(w: Path, arm: str, env: dict | None) -> None:
     this repository's own process text; the other arms keep the checkout's files."""
     if arm in USER_POLICY:
         write_user_policy(w, env, USER_POLICY[arm])
-    if arm in ("userinit", "both"):                  # and the rest of what a default `devkb init` writes: the MCP server
+    if arm in ("userinit", "both", "bothuser"):      # and the rest of what a default `devkb init` writes: the MCP server
         py = Path(env["bin"]).parent / "python"           # the server needs devkb's `mcp` extra, as a user installs it
         if subprocess.run([str(py), "-c", "import mcp"], capture_output=True).returncode:
             sb.sh(["uv", "pip", "install", "-q", "--python", str(py), "mcp>=1.23,<2"])
@@ -684,7 +685,7 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     except Exception as e:  # noqa: BLE001  a setup that fails is recorded, never a run that silently disappears
         (out / "end").write_text(json.dumps({"exit": "error", "seconds": 0, "error": f"setup: {type(e).__name__}: {e}"[-400:]}))
         return f"error {tag}: setup failed: {e}"       # not a red base: run again in the next batch (#305)
-    if arm in ("userinit", "both"):                  # init's own MCP server, as committed: its `devkb` is the arm's,
+    if arm in ("userinit", "both", "bothuser"):      # init's own MCP server, as committed: its `devkb` is the arm's,
         mcp = str(w / ".mcp.json")                   # first on PATH (below), so the checkout stays clean (#366 review)
     elif arm.startswith("after"):                    # "cli": no MCP server, devkb only through the shell
         mcp = str(w / ".mcp.json")
