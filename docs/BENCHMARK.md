@@ -83,6 +83,18 @@ Runs recorded before these fields existed (the paper's) show input and cache wri
   or a new repository, and say which runs came before and after a fix.
 - **Report everything**: arms that cost more, tasks the graph got wrong, runs that failed.
 
+## The ways an agent reaches devkb: shell, hook, tool
+
+A policy-benchmark arm (`bench/policy/policybench.py`) gives an agent up to three entry points to devkb, and each run records which it really had:
+
+| entry point | what it is | `none` | `main` | `both` | `userinit` |
+|---|---|---|---|---|---|
+| **shell** | a `devkb ...` command run through `Bash`, taught by the policy files (`AGENTS.md` imported by `CLAUDE.md`) | no (denied) | yes | yes | yes |
+| **hook** | the guardrail (`.claude/settings.json`, PreToolUse) that answers or reminds before a `grep`, so the agent does not have to ask | no | yes | yes | no |
+| **tool** | an `mcp__devkb__*` tool in the model's own tool list, picked like `Grep` (the `.mcp.json` a `devkb init` writes, toolset `lean-pack`) | no | no | **yes** | yes |
+
+`main` is the shell and hook arm (the benchmark runs use `--strict-mcp-config` with an empty config, so the tool list holds no devkb tool). **`both`** adds the MCP server to `main`, so one arm has the entry point the model picks organically and the one that reaches it without asking. A run's `end` file and its row in `results-N.jsonl` carry `entry_points` (`tool`: an `mcp__devkb*` name in the stream's `init` tool list; `shell`: devkb on the run's PATH and not denied; `hook`: the checkout wires the guardrail and the run did not switch it off; `policy`: the checkout's `AGENTS.md` has the devkb block) and `entry_point_problems` (what differs from the table). A run with a problem is printed `ENTRY POINTS DIFFER FROM THE ARM` when it ends. The checkout's own suite runs without the batch's `POLICY_*` settings (`suite_env`), because the suite tests the harness and a one-arm batch made its own base red.
+
 ## Permission denials (#369)
 
 A refused command costs the agent a turn and a retry in whichever arm it falls, so it is noise in the cost columns.
