@@ -46,7 +46,8 @@ BASES = {"before": "origin/main", "after": "ce284c4", "after2": os.environ.get("
          "rmain": "origin/main",                                  # workflow router: the router commit's devkb and guardrail, no router
          "router": "origin/main",                                 # the same, plus the prompt router (devkb hook prompt)
          "ctx": "origin/main",                                    # the same, plus the silent task-recording hook (devkb hook context)
-         "userinit": "origin/main"}                               # everything `devkb init` writes: + its MCP server, no guardrail
+         "userinit": "origin/main",                               # everything `devkb init` writes: + its MCP server, no guardrail
+         "both": "origin/main"}                                   # main's policy and hook (the shell entry point) + the devkb MCP server (the tool entry point)
 # Tri-mode arms take their devkb (CLI, graph build, hook) from a tool environment built from an exact commit, never
 # from the checkout the agent edits (#225). POLICY_RELEASE / POLICY_MAIN override the refs.
 ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest_release(),
@@ -59,14 +60,14 @@ ENV_REF = {"release": lambda: os.environ.get("POLICY_RELEASE") or toolenv.latest
            "teachall": lambda: os.environ["POLICY_TEACHALL"],
            # rmain and router differ in one thing, the UserPromptSubmit hook: same devkb commit (POLICY_ROUTER), same checkout
            **{a: (lambda: os.environ["POLICY_ROUTER"]) for a in ("rmain", "router", "ctx")},
-           **{a: (lambda: os.environ.get("POLICY_MAIN") or "origin/main") for a in ("userpolicy", "short", "inject", "userinit")}}
+           **{a: (lambda: os.environ.get("POLICY_MAIN") or "origin/main") for a in ("userpolicy", "short", "inject", "userinit", "both")}}
 # Every devkb arm keeps the answers its agents were given (#218); D1 and D2 are the two direct-path candidates.
 ARM_ENV = {"release": {"DEVKB_GUARDRAIL_KEEP": "1"}, "main": {"DEVKB_GUARDRAIL_KEEP": "1"},
            "noteach": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH": "0"},   # main without D1 (on by default, #267)
            "outline": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_OUTLINE": "1"},
            "hookmain": {"DEVKB_GUARDRAIL_KEEP": "1"},
            "teachall": {"DEVKB_GUARDRAIL_KEEP": "1", "DEVKB_GUARDRAIL_TEACH_ALL": "1"},   # the setting, off by default (#375)
-           **{a: {"DEVKB_GUARDRAIL_KEEP": "1"} for a in ("userpolicy", "short", "inject", "userinit", "rmain", "router", "ctx")}}
+           **{a: {"DEVKB_GUARDRAIL_KEEP": "1"} for a in ("userpolicy", "short", "inject", "userinit", "rmain", "router", "ctx", "both")}}
 # #366: the policy text of the user-facing arms. "full" is the block `devkb init` writes (devkb.init.AGENTS_BLOCK of the
 # arm's devkb), "short" the candidate below; the checkout's CLAUDE.md is then `@AGENTS.md`, as init writes it.
 USER_POLICY = {"userpolicy": "full", "short": "short", "inject": "full", "userinit": "full"}
@@ -117,7 +118,7 @@ def without_missing_data(body: str, w: Path) -> str:
 
 # The same arms with the ticket's location withheld (#337): "Where to start" removed, the files in "Scope" and every file or
 # name it gave masked wherever the ticket repeats them. Set up exactly as their base arm (same template); only the text differs.
-HIDE_LOCATION = {"nonehid": "none", "mainhid": "main", "rmainhid": "rmain", "routerhid": "router", "ctxhid": "ctx"}
+HIDE_LOCATION = {"nonehid": "none", "mainhid": "main", "rmainhid": "rmain", "routerhid": "router", "ctxhid": "ctx", "bothhid": "both"}
 WITHHELD = "(withheld)"
 _SECTION = re.compile(r"(?ms)^(?:\*\*(?P<h>[^*\n]+?):?\*\*:?|#{1,6}[ \t]+(?P<g>[^\n]+?)[ \t]*$)(?P<t>.*?)"
                       r"(?=^\*\*[^*\n]+?:?\*\*|^#{1,6}[ \t]|\Z)")
@@ -388,6 +389,56 @@ def permissions(arm: str) -> tuple[list[str], list[str]]:
     return list(sb.ALLOW), sb.DENY + (["Bash(devkb:*)", "Bash(.venv/bin/devkb:*)"] if base in ("none", "nonekeep") else [])
 
 
+# The ways an agent can reach devkb, per arm: `shell` (a `devkb ...` command run through Bash, which the policy text teaches), `hook` (the guardrail
+# that answers or reminds before a grep, so the agent does not have to ask) and `tool` (an MCP tool in the model's own tool list, which it picks
+# like `Grep`). An arm not listed is not checked. A run records what it really had (`entry_points`) and what differs from this (#entry-points).
+ENTRY_POINTS = {"none": (False, False, False), "nonekeep": (False, False, False),
+                "main": (True, True, False), "both": (True, True, True), "userinit": (True, False, True)}
+
+
+def init_tools(stream: Path) -> list[str]:
+    """The tool names the model was given, from the stream's first `init` event; empty when there is none."""
+    try:
+        for line in stream.read_text().splitlines():
+            if line.startswith("{") and '"subtype":"init"' in line.replace(" ", ""):
+                return list(json.loads(line).get("tools") or [])
+    except (OSError, ValueError):
+        pass
+    return []
+
+
+def entry_points_observed(arm: str, w: Path, env: dict, stream: Path) -> dict:
+    """What a run really had: `tool` = an `mcp__devkb*` tool in the model's tool list; `shell` = `devkb` runnable by the agent (on its PATH and not denied);
+    `hook` = the checkout wires the guardrail into PreToolUse and the run did not switch it off; `policy` = the checkout's AGENTS.md has the devkb block."""
+    tools = init_tools(stream)
+    try:
+        settings = json.loads((w / ".claude" / "settings.json").read_text())
+        wired = any("devkb_guardrail" in h.get("command", "") for g in settings.get("hooks", {}).get("PreToolUse", []) for h in g.get("hooks", []))
+    except (OSError, ValueError):
+        wired = False
+    denied = any("devkb" in d for d in permissions(arm)[1])
+    on_path = shutil.which("devkb", path=env.get("PATH")) is not None
+    try:
+        policy = "devkb:begin" in (w / "AGENTS.md").read_text()
+    except OSError:
+        policy = False
+    return {"tools_listed": len(tools), "tool": any(t.startswith("mcp__devkb") for t in tools), "shell": on_path and not denied,
+            "hook": wired and env.get("DEVKB_GUARDRAIL", "1") != "0", "policy": policy}
+
+
+def entry_point_problems(arm: str, observed: dict) -> list[str]:
+    """What differs from the arm's design (ENTRY_POINTS), as lines to print; none for an arm that is not listed."""
+    want = ENTRY_POINTS.get(split_arm(arm)[0])
+    if want is None:
+        return []
+    names = ("shell", "hook", "tool")
+    problems = [f"{n}: expected {'present' if w_ else 'absent'}, the run had it {'present' if observed.get(n) else 'absent'}"
+                for n, w_ in zip(names, want) if bool(observed.get(n)) != w_]
+    if observed.get("tools_listed", 0) == 0:
+        problems.append("the stream has no init event, so the tool list could not be read")
+    return problems
+
+
 def claude_cmd(issue: str, arm: str, prompt: str, mcp: str) -> list[str]:
     """The `claude` command of a run. Only `arm` decides the deny list's devkb entries (permissions); everything else is
     the same in every arm (#369)."""
@@ -498,12 +549,13 @@ def arm_files(w: Path, arm: str, env: dict | None) -> None:
     this repository's own process text; the other arms keep the checkout's files."""
     if arm in USER_POLICY:
         write_user_policy(w, env, USER_POLICY[arm])
-    if arm == "userinit":                            # and the rest of what a default `devkb init` writes
+    if arm in ("userinit", "both"):                  # and the rest of what a default `devkb init` writes: the MCP server
         py = Path(env["bin"]).parent / "python"           # the server needs devkb's `mcp` extra, as a user installs it
         if subprocess.run([str(py), "-c", "import mcp"], capture_output=True).returncode:
             sb.sh(["uv", "pip", "install", "-q", "--python", str(py), "mcp>=1.23,<2"])
         (w / ".mcp.json").write_text(user_mcp(env))
-        (w / ".claude" / "settings.json").unlink(missing_ok=True)   # init writes none without --claude-hook
+    if arm == "userinit":
+        (w / ".claude" / "settings.json").unlink(missing_ok=True)   # init writes none without --claude-hook; `both` keeps the checkout's hooks
 
 
 def user_mcp(env: dict) -> str:
@@ -632,7 +684,7 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
     except Exception as e:  # noqa: BLE001  a setup that fails is recorded, never a run that silently disappears
         (out / "end").write_text(json.dumps({"exit": "error", "seconds": 0, "error": f"setup: {type(e).__name__}: {e}"[-400:]}))
         return f"error {tag}: setup failed: {e}"       # not a red base: run again in the next batch (#305)
-    if arm == "userinit":                            # init's own MCP server, as committed: its `devkb` is the arm's,
+    if arm in ("userinit", "both"):                  # init's own MCP server, as committed: its `devkb` is the arm's,
         mcp = str(w / ".mcp.json")                   # first on PATH (below), so the checkout stays clean (#366 review)
     elif arm.startswith("after"):                    # "cli": no MCP server, devkb only through the shell
         mcp = str(w / ".mcp.json")
@@ -672,14 +724,18 @@ def _run_one(issue: str, arm: str, rep: int) -> str:
             code = "timeout"
     after = harness_state()
     touched = sorted(set(after.splitlines()) ^ set(before.splitlines()))     # the lines that appeared or went away (#340)
-    (out / "end").write_text(json.dumps({"exit": code, "seconds": round(time.time() - t0), **({"contaminated": touched} if touched else {})}))
+    ep = entry_points_observed(arm, w, env, out / "stream.jsonl")
+    ep_problems = entry_point_problems(arm, ep)
+    (out / "end").write_text(json.dumps({"exit": code, "seconds": round(time.time() - t0), "entry_points": ep, "entry_point_problems": ep_problems,
+                                         **({"contaminated": touched} if touched else {})}))
     try:                                              # scored now, while other agents run, not in a tail after the batch
         r = score_run(issue, out)
         if r:
             (out / "score.json").write_text(json.dumps(r) + "\n")
     except Exception as e:  # noqa: BLE001  `score` scores it later
         (out / "score-error.txt").write_text(str(e)[-2000:])
-    return f"done {tag} exit={code} {round(time.time() - t0)}s" + (f" CONTAMINATED the harness repository: {touched}" if touched else "")
+    return (f"done {tag} exit={code} {round(time.time() - t0)}s" + (f" CONTAMINATED the harness repository: {touched}" if touched else "")
+            + (f" ENTRY POINTS DIFFER FROM THE ARM: {ep_problems}" if ep_problems else ""))
 
 
 def _failed_ids(stdout: str) -> list[str]:
@@ -754,6 +810,7 @@ def score_run(issue: str, out: Path) -> dict | None:
             "tests_collected": arm_meta.get("tests_collected"),                                    # #331
             "router": router_log(w),                                                               # what the prompt router did
             "contaminated": end.get("contaminated") or [],                                         # #340
+            "entry_points": end.get("entry_points"), "entry_point_problems": end.get("entry_point_problems") or [],   # which of shell, hook, tool the run had
             "devkb_commit": arm_meta.get("devkb_commit"), "hook_sha": arm_meta.get("hook_sha"),   # #225
             "telemetry": sum(len((d / ".devkb" / "process-api-telemetry.jsonl").read_text().splitlines())
                              for d in [w, *(w / "corpus" / r for r in sb.CORPUS_REPOS)]
