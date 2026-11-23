@@ -25,9 +25,12 @@ name is unique, or an edge to a name `#define`d as a macro.
 Calls through repository macros (SPEC-DKB-004 F2, #118): a call to a macro `#define`d in the repository is expanded,
 once per build, into the bare and qualified calls its body writes (nested repository macros followed to depth 4, the
 macro's own parameters and `##`-pasted names left out). Each is resolved by the rules above as if written at the
-invocation, from the invoking function's scope, and linked with source `cpp-macro`. A macro defined more than once
-(`#if` variants) gives the union of its bodies, and its edges are marked `variant`. A macro the repository does not
-define (a system header's) is never expanded.
+invocation, from the invoking function's scope, and linked with source `cpp-macro`. Only the definitions the invoking file
+sees count (its own, and those of the headers it includes at any depth): another file's macro of the same name does not leak
+in. A macro seen with several definitions (`#if` variants) links only the calls every definition makes: a call that exists in
+one configuration and not in another (`DET_VALIDATE` is empty without `USE_DET`) is not a call of the function (0.2.15, the
+adjudicated precision of `cpp-macro` was 10 of 29 on autoas). A macro the repository does not define (a system header's) is
+never expanded.
 """
 from __future__ import annotations
 
@@ -111,6 +114,7 @@ class Repo:
     def __init__(self, units: list[Unit]) -> None:
         self.units = units
         self.macro_bodies: dict[str, list[str]] = {}
+        self.macro_defs: dict[str, list[tuple[str, str]]] = {}      # name -> [(defining file, body)]: what a caller sees is decided per file
         self.by_qn: dict[str, list[tuple[str, Symbolic]]] = {}
         self.short_names: set[str] = set()
         self.free: dict[str, list[tuple[str, Symbolic]]] = {}
@@ -137,6 +141,7 @@ class Repo:
                 self.definers.setdefault(dn, set()).add(u.path)
             for dname, body, _line in (u.rec.masked.defines if u.rec.masked is not None else ()):
                 self.macro_bodies.setdefault(dname, []).append(body)
+                self.macro_defs.setdefault(dname, []).append((u.path, body))
             for qn, s in u.syms.items():
                 self.by_qn.setdefault(qn, []).append((u.path, s))
                 bits = qn.split(".")
@@ -192,26 +197,32 @@ class Repo:
         return [k for k in keys if any(lo <= argc <= hi for lo, hi in self.arity.get(k, [(0, float("inf"))]))]
 
     # macros --------------------------------------------------------------------
-    def expand(self, name: str) -> list[tuple[str, str, bool]]:
-        """(qualifier, name, variant) of the non-macro calls a call to repository macro `name` makes, nested macros
-        followed to MACRO_DEPTH levels; computed once per macro."""
+    def expand(self, name: str, path: str = "") -> list[tuple[str, str, bool]]:
+        """(qualifier, name, False) of the non-macro calls a call to repository macro `name` makes in file `path`, nested macros followed to
+        MACRO_DEPTH levels: the calls that every definition of the macro seen from `path` makes (see the module note). Without a path, every
+        definition counts. Computed once per macro and file."""
         cache = self.__dict__.setdefault("_expanded", {})
-        if name not in cache:
-            seen: dict[tuple[str, str], bool] = {}
+        key = (name, path)
+        if key not in cache:
+            reach = self.included_from(path) if path else None
 
-            def walk(m: str, depth: int, variant: bool) -> None:
-                bodies = self.macro_bodies.get(m, [])
-                variant = variant or len(bodies) > 1
-                for body in bodies:
+            def bodies_seen(m: str) -> list[str]:
+                return [b for p, b in self.macro_defs.get(m, []) if reach is None or p == path or p in reach]
+
+            def calls_of(m: str, depth: int, stack: frozenset[str]) -> set[tuple[str, str]]:
+                per_body = []
+                for body in bodies_seen(m):
+                    mine: set[tuple[str, str]] = set()
                     for q, n in _macro_calls(body):
                         if not q and n in self.macros:
-                            if depth < MACRO_DEPTH and n != m:
-                                walk(n, depth + 1, variant)
+                            if depth < MACRO_DEPTH and n != m and n not in stack:
+                                mine |= calls_of(n, depth + 1, stack | {m})
                             continue
-                        seen[(q, n)] = seen.get((q, n), True) and variant
-            walk(name, 1, False)
-            cache[name] = [(q, n, v) for (q, n), v in seen.items()]
-        return cache[name]
+                        mine.add((q, n))
+                    per_body.append(mine)
+                return set.intersection(*per_body) if per_body else set()
+            cache[key] = [(q, n, False) for q, n in sorted(calls_of(name, 1, frozenset()))]
+        return cache[key]
 
     # macro scope (#290) --------------------------------------------------------
     def _include_edges(self) -> dict[str, set[str]]:
@@ -559,6 +570,9 @@ def resolve(units: list[Unit]) -> tuple[list[Edge], set[tuple[str, str, str]], l
                         continue
                     if r:
                         stop_unresolved = True
+                if not stop_unresolved and n in getattr(u.rec.scanner, "aliases", ()):
+                    unresolved.add((u.path, caller_qn, n))      # a name this file also brings in by `using` (`using std::use_facet;` and a fallback of its own
+                    continue                                    # under another `#if`): which one the call means depends on the configuration (#123)
                 if not stop_unresolved:
                     if free_count.get(n) == 1:
                         s = by_def_free[n]
@@ -654,7 +668,7 @@ def _with_expansions(calls, repo: Repo, path: str = ""):
     for call in calls:
         yield call, None
         if call.form != "construct" and call.name in repo.macro_bodies and (repo.sees(path, call.name, call.line) if path else call.name in repo.macros):
-            for q, n, variant in repo.expand(call.name):
+            for q, n, variant in repo.expand(call.name, path):
                 yield Call(call.caller, n, "qualified" if q else "bare", q, None, None, call.line), (call.name, variant)
 
 

@@ -584,6 +584,9 @@ def _parse_params(text: str) -> dict[str, set]:
     return out
 
 
+_LAMBDA_LOCAL = re.compile(r"\bauto\s*[*&]*\s*(" + _IDENT + r")\s*=\s*\[")
+
+
 def _parse_locals(body: str, into: dict[str, set]) -> None:
     for m in _LOCAL.finditer(body):
         if m.group("type") in _TYPE_KEYWORDS or m.group("type") == "auto":
@@ -906,6 +909,8 @@ class _Scanner:
         moved = re.match(r"(?:std\s*::\s*)?(?:move|forward)\s*(?:<[^>]*>)?\s*\((.*)\)\s*$", arg, re.S)
         if moved:
             arg = moved.group(1).strip()
+        if re.fullmatch(r"\*\s*this", arg) and d.class_chain:
+            return d.class_chain[-1]            # `T copy(*this)` in a method of T: a copy (#123)
         m = re.fullmatch(r"\*?\s*([A-Za-z_]\w*)", arg)
         types = self.locals_of(d).get(m.group(1)) if m else None
         if types and len(types) == 1 and next(iter(types)) is not None:
@@ -950,6 +955,7 @@ class _Scanner:
         line_of = self.m.line
         members = _initialiser_names(text) if init else set()
         has_mock = "EXPECT_CALL" in text or "ON_CALL" in text      # one substring test per body, not a regex search per call
+        lambdas = set(_LAMBDA_LOCAL.findall(text)) if "[" in text and "auto" in text else ()      # `auto write = [=](...) {...};`
         for cm in _CALL_RE.finditer(text):
             name = cm.group(1)
             is_init = cm.start(1) in members      # `: m(x), n(f(x))`: m and n are initialised, not called (#145); `f` is not at depth 0, so it is read
@@ -1027,6 +1033,8 @@ class _Scanner:
                 elif prev in ">*&" and self.cpp and _DECL_PREFIX.match(text, _stmt_start(text, k), a):
                     continue      # `std::vector<int> x(3)`, `Foo *x(p)`, `const Bar& x(y)`: a declaration, not a call (#65)
                 form, qualifier, recv, rl = "bare", "", None, None
+                if name in lambdas:
+                    continue      # `auto write = [=](...) {...}; write(x)`: a call of the local lambda, not of a function of that name (#123)
                 if name == d.short and d.kind == "method" and (mm := re.search(r"\b([A-Z][A-Z0-9]*_[A-Z0-9_]*)\s*\(\s*$", text[max(0, cm.start() - 80):cm.start()])) \
                         and not mm.group(1).startswith(("ASSERT_", "EXPECT_", "CHECK_", "DCHECK_", "VERIFY_", "LIKELY", "UNLIKELY")):
                     form = "qualified"      # `FMT_POSIX(close(fd))` inside a method `close`: a macro adapts the global call; not the method itself (#95)
