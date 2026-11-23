@@ -1126,7 +1126,7 @@ def _in_mock_method_slot(prefix: str) -> bool:
 
 _QUAL = r"((?:[A-Za-z_]\w*\s*::\s*)*)([A-Za-z_]\w*)"                       # `ns::T`: (qualifier with `::`, short name)
 _CTOR_NEW = re.compile(r"\bnew\s+(?:\([^()]*\)\s*)?(?:::\s*)?" + _QUAL + r"\s*(?:<[^;{}()]*>)?\s*([({])")                    # `new T(args)`, `new T{args}`
-_CTOR_NEW_BARE = re.compile(r"\bnew\s+(?:\([^()]*\)\s*)?(?:::\s*)?" + _QUAL + r"\s*(?:<[^;{}()]*>)?\s*(?=[;,)\]}:?\[]|$)")     # `new T;`, `new T[n]`, `, tmp_(new T),`: the default constructor, written nowhere (#119)
+_CTOR_NEW_BARE = re.compile(r"\bnew\s+(?:\([^()]*\)\s*)?(?:::\s*)?" + _QUAL + r"\s*(?:<[^;{}()]*>)?\s*(?=[;,)\]}?\[]|:(?!:)|$)")     # `new T;`, `new T[n]`, `, tmp_(new T),`: the default constructor, written nowhere (#119)
 _CTOR_MAKE = re.compile(r"\b(?:std\s*::\s*)?make_(?:unique|shared)\s*<\s*(?:::\s*)?" + _QUAL + r"[^<>;{}]*(?:<[^;{}]*>)?\s*>\s*(\()")   # `make_unique<T>(args)`
 _CTOR_LOCAL = re.compile(r"(?:^|(?<=[;{}]))\s*(?:(?:const|static|constexpr|volatile)\s+)*(?:::\s*)?" + _QUAL
                     + r"\s*(?:<[^;{}()]*>)?\s+(?:[&*]\s*)*[A-Za-z_]\w*\s*([({])")                                              # `T x(args);`, `T x{args};`
