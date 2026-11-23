@@ -102,5 +102,6 @@ def test_userinit_gets_no_guardrail_hook_and_runs_its_committed_mcp_config():
     co = src[src.index("def checkout("):src.index("\ndef ", src.index("def checkout(") + 5)]
     assert 'if env and arm != "userinit":' in co                         # the hook step skips userinit
     run = src[src.index("def _run_one"):src.index("\ndef ", src.index("def _run_one") + 5)]
-    branch = run[run.index('if arm == "userinit":'):run.index("elif", run.index('if arm == "userinit":'))]
+    head = 'if arm in ("userinit", "both", "bothuser"):'                              # `both` reads the same committed MCP config (the tool entry point)
+    branch = run[run.index(head):run.index("elif", run.index(head))]
     assert 'mcp = str(w / ".mcp.json")' in branch and "write_text" not in branch   # the checkout's file, unchanged
