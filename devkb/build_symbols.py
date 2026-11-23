@@ -476,6 +476,13 @@ def _uses_in_tree(tree: ast.Module) -> tuple[list[tuple[str, str | None, str, in
     return refs, keys
 
 
+def _safe_module_runs(tree: ast.AST) -> list:
+    try:
+        return _module_runs(tree)
+    except RecursionError:
+        return []
+
+
 def _safe_uses(tree: ast.Module) -> tuple[list, list]:
     try:
         return _uses_in_tree(tree)
@@ -895,6 +902,78 @@ def _could_reach(sym: dict, sym_file: str, rec: tuple[str, str, str, str | None]
         return True                                    # a receiver whose type is not known may be an instance of its class
     stem = sym_file.rsplit("/", 1)[-1].removesuffix(".py")
     return receiver.isidentifier() and receiver == stem  # a module loaded by path and bound to a variable of its name
+
+
+_DOTTED_NAME = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
+_PY_MARK = re.compile(r"(?:^|[/\\._])(?:py|python[\d.]*|executable)$", re.I)
+
+
+def _run_args(n: ast.AST) -> list[ast.expr]:
+    """The expressions that name a module a node runs (#389): the first argument of `runpy.run_module(...)`, and the element after a `"-m"` in a command
+    list (which holds the interpreter: `sys.executable`, `"python3"`, a variable called `py`). The caller decides what to do with a name or a literal."""
+    out: list[ast.expr] = []
+    if isinstance(n, ast.Call):
+        f = n.func
+        if (f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else "") == "run_module" and n.args:
+            out.append(n.args[0])
+    elif isinstance(n, (ast.List, ast.Tuple)):
+        for i, e in enumerate(n.elts[:-1]):
+            if isinstance(e, ast.Constant) and e.value == "-m":
+                out.append(n.elts[i + 1])
+    return out
+
+
+def _has_python_mark(lst: ast.AST) -> bool:
+    for e in getattr(lst, "elts", ()):
+        text = e.id if isinstance(e, ast.Name) else e.attr if isinstance(e, ast.Attribute) else e.value if isinstance(e, ast.Constant) and isinstance(e.value, str) else ""
+        if text and _PY_MARK.search(text):
+            return True
+    return False
+
+
+def _module_runs(tree: ast.AST) -> list[tuple[str, str, int]]:
+    """(scope, dotted module, line) for each module this file runs by name (#389), which no import shows: `runpy.run_module("pkg.mod")`, a
+    `[sys.executable, "-m", "pkg.mod"]` command, and a call of a local helper (a function or a lambda bound to a name) that does either with one of its
+    parameters, `_run("pkg.mod", argv)` / `cmd("pkg.mod", ...)`. A dynamic name is not followed. The scope is the enclosing function's qualified name,
+    or MODULE_CALLER, as for the string keys (#148)."""
+    helpers: dict[str, int] = {}
+    for n in ast.walk(tree):
+        fn, name = None, None
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            fn, name = n, n.name
+        elif isinstance(n, ast.Assign) and isinstance(n.value, ast.Lambda) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+            fn, name = n.value, n.targets[0].id
+        if fn is None:
+            continue
+        params = [a.arg for a in [*fn.args.posonlyargs, *fn.args.args] if a.arg not in ("self", "cls")]
+        for sub in ast.walk(fn):
+            for a in _run_args(sub):
+                if isinstance(a, ast.Name) and a.id in params:
+                    helpers.setdefault(name, params.index(a.id))
+    out: list[tuple[str, str, int]] = []
+
+    def literal(a: ast.expr) -> str | None:
+        return a.value if isinstance(a, ast.Constant) and isinstance(a.value, str) and _DOTTED_NAME.fullmatch(a.value) else None
+
+    def visit(n: ast.AST, scope: list[str]) -> None:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            scope = [*scope, n.name]
+        where = ".".join(scope) or MODULE_CALLER
+        for a in _run_args(n):
+            mod = literal(a)
+            if mod and (isinstance(n, ast.Call) or _has_python_mark(n)):       # `-m x` in a list that holds no interpreter may be anything (`git commit -m msg`)
+                out.append((where, mod, a.lineno))
+        if isinstance(n, ast.Call):
+            f = n.func
+            name = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else ""
+            i = helpers.get(name)
+            if i is not None and i < len(n.args) and literal(n.args[i]):
+                out.append((where, literal(n.args[i]) or "", n.args[i].lineno))
+        for c in ast.iter_child_nodes(n):
+            visit(c, scope)
+
+    visit(tree, [])
+    return sorted(set(out), key=lambda x: (x[2], x[1]))
 
 
 def _py_literals(tree: ast.AST) -> list[str]:
@@ -1624,12 +1703,12 @@ def _parse_python_file(
            list[tuple[str, str, str]], str | None, list[tuple[str, str, str | None, int | None]],
            list[tuple[str, str, str | None]], list[tuple[str, str]], str, list[str],
            list[tuple[int, str, str | None, str]], list[str], list[tuple[str, str, str]],
-           list[tuple[str, str | None, str, int]], list, list]:
+           list[tuple[str, str | None, str, int]], list, list, list]:
     """Returns (symbols, calls, imports, routes, module_docstring, raises,
     logs, middleware_registrations, router_prefix, daemon_entries,
-    import_descriptors, path_literals, typed_calls, value_refs, name_refs, key_uses) for one file. An unparseable file yields all-empty,
+    import_descriptors, path_literals, typed_calls, value_refs, name_refs, key_uses, module_runs) for one file. An unparseable file yields all-empty,
     not a crash, and is named (and recorded in `skipped`, path -> reason)."""
-    empty = [], [], [], [], None, [], [], [], "", [], [], [], [], [], [], []
+    empty = [], [], [], [], None, [], [], [], "", [], [], [], [], [], [], [], []
     try:
         text = path.read_text(errors="replace")
         tree = ast.parse(text, filename=str(path))
@@ -1657,7 +1736,7 @@ def _parse_python_file(
                 sym["tuple_returns"] = returns[f"{sym['qualified_name']}#tuple"]
         return (v.symbols, v.calls, _imports(tree), v.routes, module_docstring, v.raises, v.logs,
                 _middleware_registrations(tree), v.router_prefix, _daemon_entries(tree), _import_descriptors(tree, rel),
-                _py_literals(tree), typed, _safe_value_refs(tree), *_safe_uses(tree))
+                _py_literals(tree), typed, _safe_value_refs(tree), *_safe_uses(tree), _safe_module_runs(tree))
     except RecursionError:
         # a generated file nested deeper than the tree walks can follow: skip it, say so, keep the rest (#106)
         _skip(path, "nested too deeply to read", skipped)
@@ -1693,6 +1772,7 @@ def extract(repo_root: Path) -> DevKBGraph:
     per_file_value_refs: dict[str, list[tuple[str, str | None, str, int]]] = {}
     per_file_name_refs: dict[str, list[tuple[str, str | None, str, int]]] = {}
     per_file_key_uses: dict[str, list[tuple[str, str, str, int]]] = {}
+    per_file_module_runs: dict[str, list[tuple[str, str, int]]] = {}       # modules a file runs by name (#389)
     route_index: dict[str, str] = {}  # "METHOD /path" -> Symbol natural_key
     reexports: dict[str, dict[str, tuple[str, str]]] = {}  # every parsed file's from-imports, symbols or not
     star_modules: dict[str, list[str]] = {}  # file -> modules it imports with `from m import *`
@@ -1701,7 +1781,8 @@ def extract(repo_root: Path) -> DevKBGraph:
     skipped: dict[str, str] = {}   # absolute path -> why the file could not be read (#109)
     for rel_path in _list_python_files(repo_root):
         (symbols, calls, imports, routes, module_doc, raises, logs, middleware, router_prefix,
-         daemon_entries, descriptors, literals, typed_calls, value_refs, name_refs, key_uses) = _parse_python_file(repo_root / rel_path, skipped, rel_path)
+         daemon_entries, descriptors, literals, typed_calls, value_refs, name_refs, key_uses, module_runs) = _parse_python_file(repo_root / rel_path, skipped, rel_path)
+        per_file_module_runs[rel_path] = module_runs
         # `@typing.overload` signatures and the implementation share one qualified name, and so one Symbol key: keep
         # one entry (the last, the implementation), or every lookup by name sees several and resolves nothing
         # (click's `prompt`: all 13 call sites were left unattributed).
@@ -2127,6 +2208,20 @@ def extract(repo_root: Path) -> DevKBGraph:
                 lines_.append(line)
         for (ntype, nkey, prop), keyed in grouped.items():
             g.add_node(ntype, nkey, source="ast", **{prop: keyed})
+
+    # ── #389: modules a function (a File for module level) runs by name, `runpy.run_module("pkg.mod")`, `-m pkg.mod`, a helper that does either:
+    # {dotted name: [lines]}. No edge, for the reason the string keys have none: the target is a name, resolved when a pack asks. ───────────
+    for rel_path, runs in per_file_module_runs.items():
+        in_file = {s["qualified_name"] for s in per_file_symbols.get(rel_path, [])}
+        grouped_runs: dict[tuple[str, str], dict[str, list[int]]] = {}
+        for scope, dotted, line in runs:
+            nkey = f"{rel_path}::{scope}" if scope in in_file else rel_path
+            ntype = "Symbol" if scope in in_file else "File"
+            lines_ = grouped_runs.setdefault((ntype, nkey), {}).setdefault(dotted, [])
+            if len(lines_) < 5 and line not in lines_:
+                lines_.append(line)
+        for (ntype, nkey), by_module in grouped_runs.items():
+            g.add_node(ntype, nkey, source="ast", module_runs=by_module)
 
     # ── BL-3c: TypeScript/TSX Symbols + their own route-call sites ─────────
     ts_route_calls: list[tuple[str, str, str, str]] = []  # (file, symbol_qn, method, path)
