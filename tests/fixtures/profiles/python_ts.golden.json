@@ -64,7 +64,7 @@
    "from_uid": "devkb:symbol:cc9f4cff608abba8",
    "properties": {
     "confidence": 1.0,
-    "evidence_ref": "src/calc.ts:4",
+    "evidence_ref": "src/calc.ts:5",
     "source": "ast-ts"
    },
    "to_uid": "devkb:file:20aa09f6b1075fbc",
@@ -219,7 +219,7 @@
     "decorators": [],
     "is_public": true,
     "kind": "function",
-    "line_end": 1,
+    "line_end": 3,
     "line_start": 1
    },
    "source": "ast-ts",
@@ -232,8 +232,8 @@
     "decorators": [],
     "is_public": true,
     "kind": "class",
-    "line_end": 4,
-    "line_start": 4
+    "line_end": 9,
+    "line_start": 5
    },
    "source": "ast-ts",
    "type": "Symbol",

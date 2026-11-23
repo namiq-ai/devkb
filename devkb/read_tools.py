@@ -37,7 +37,7 @@ LANG = {".py": "Python", ".pyi": "Python", ".ts": "TypeScript", ".tsx": "TypeScr
         ".mjs": "JavaScript", ".cjs": "JavaScript", ".cs": "C#", ".c": "C", ".h": "C or C++", ".cc": "C++", ".cpp": "C++",
         ".cxx": "C++", ".hpp": "C++", ".hh": "C++", ".hxx": "C++", ".xml": "Odoo XML", ".vue": "Vue"}
 APPROX_WINDOW = 40        # lines shown from the start of a symbol whose end is unknown
-START_ONLY = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".xml")   # extractors that do not store an end line
+START_ONLY = (".js", ".jsx", ".mjs", ".cjs", ".vue", ".xml")   # extractors that do not store an end line (.ts and .tsx do since #418)
 CXX_SUFFIX = (".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".inl", ".ipp", ".tpp")
 DOC_SUFFIX = (".md", ".markdown", ".rst", ".txt", ".adoc")
 NOT_CODE = (".md", ".markdown", ".rst", ".txt", ".adoc", ".lock", ".json", ".svg", ".min.js", ".map", ".csv", ".ipynb",
