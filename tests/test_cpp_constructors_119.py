@@ -100,3 +100,26 @@ def test_a_new_expression_in_an_initialiser_list_is_a_constructor_call(tmp_path)
     files = {"a.cc": ("class Cache {\n public:\n  Cache(int n);\n};\nCache::Cache(int n) {}\n"
                       "class Owner {\n public:\n  Owner(int n) : cache_(new Cache(n)), count_(n) {}\n  Cache* cache_;\n  int count_;\n};\n")}
     assert "a.cc::Cache.Cache" in _targets(S.build(tmp_path, files), "a.cc::Owner.Owner")
+
+
+def test_new_without_parentheses_and_new_arrays_call_the_default_constructor_119(tmp_path):
+    import cpp_support as S
+    files = {"a.h": "class W { public: W(); };\nclass R { public: R(); };\nclass E2 { public: E2(int n); };\nstruct P { int v; };\n",
+             "a.cc": '#include "a.h"\nW::W() {}\nR::R() {}\nE2::E2(int n) {}\nvoid f1() { W* a = new W; }\nvoid f2(int n) { R* r = new R[n]; }\n'
+                     "struct Holder { Holder() : w_(new W), q_(new E2(3)) {} W* w_; E2* q_; };\n"
+                     "void f3() { int* z = new int; P* p = new P; char* c = new char[4]; }\n"}
+    got = S.calls(S.build(tmp_path, files))
+    assert ("a.cc::f1", "a.cc::W.W") in got and ("a.cc::f2", "a.cc::R.R") in got and ("a.cc::Holder.Holder", "a.cc::W.W") in got
+    assert ("a.cc::Holder.Holder", "a.cc::E2.E2") in got
+    assert not any(src == "a.cc::f3" for src, _dst in got), "a type with no constructor, and a builtin, are not constructions"
+
+
+def test_a_qualified_new_does_not_construct_its_qualifier_found_by_the_review_of_414(tmp_path):
+    import cpp_support as S
+    files = {"a.h": "class Outer { public: Outer(); class Inner { public: Inner(int a); }; };\nclass W { public: W(); };\n",
+             "a.cc": '#include "a.h"\nOuter::Outer() {}\nOuter::Inner::Inner(int a) {}\nW::W() {}\n'
+                     "void f1() { Outer::Inner* i = new Outer::Inner(3); }\n"
+                     "void f2(bool b) { W* w = b ? new W : nullptr; }\n"}
+    got = S.calls(S.build(tmp_path, files))
+    assert not any(src == "a.cc::f1" and dst.endswith("Outer.Outer") for src, dst in got), got
+    assert ("a.cc::f2", "a.cc::W.W") in got, "a `new T` before a ternary's colon is still a default construction"

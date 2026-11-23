@@ -96,3 +96,21 @@ The earlier attribution (`_uses_in_tree` +16 s, `resolve` +24.5 s, `Repo.__init_
 - **Not done:** the bar is at most 95.7 s on the ticket's method (v0.2.11 87.0 s x 1.10; on this table's method 85.2 x 1.10 = 93.7 s). 109.6 s is 14 to 16 s above it. What is left: `resolve` 17.5 s against 5.8 s (a third of the edges are new, so some of it is the new work), `scan_bodies` +4 s, Python parsing +6 s (`_uses_in_tree` 3.8 s of it is a feature added since 0.2.11). Reaching the bar needs a sampling profiler (py-spy is not installed here), or removing work that finds edges. **#405 stays open.**
 
 **Owner decision (2026-11-22): the Zephyr bar for #405 is 120 s** (the code base is large), not 95.7 s (v0.2.11 x 1.10). Against it, 109.6 s passes: **#405 and #244's Zephyr clause are met**; the other #244 clauses were met earlier (leveldb recall 0.800, method misses 88, typed-receiver precision 0.98). This is an amended bar, not a measured +10%: v0.2.11's 85.2 s (this table's method) would make 120 s about +41%. `docs/specs/SPEC-DKB-004` N3 still says "at most +10% on Zephyr against 0.2.11"; the spec is the owner's to amend (the review gate never merges `docs/specs/*`), so it is not edited here.
+
+## #119 / #406 constructors, re-measured with an overload-aware scorer (2026-11-22)
+
+**Finding: most of the 93 "missed" constructor edges of #404 were in the graph and scored as misses by the scorer.** The graph keeps one node for all overloads of a name (`Slice.Slice`) and records each overload's span (`overload_spans`). `bench/cpp/quality.py` mapped that node to the one compiler definition at its first line, so an edge to `Slice` was a miss (and the edge itself "wrong") whenever the compiler picked another overload, e.g. `Slice(buffer_)` against the first overload `Slice()`. The scorer now maps a node to every overload it stands for (`OVERLOAD_AWARE`, default on; `QUALITY_OVERLOAD=0` gives the older convention). Test: `tests/test_cpp_quality_overloads_119.py`.
+
+leveldb, compiler truth regenerated this session (41 of 77 translation units; same flags as above), constructor edges:
+
+| | scorer convention | missed of 268 | found | constructor edges correct / wrong | edge recall | edge precision |
+|---|---|---|---|---|---|---|
+| `main` f1c1502 (before #404) | either | 268 | 0% | | 0.662 | 0.988 |
+| 0.2.15 (#404, #413) | first overload only (older) | 93 | 65% | 212 / 68 | 0.800 | 0.950 |
+| 0.2.15 (#404, #413) | **overload-aware** | 29 | 89% | 278 / 2 | 0.847 | 0.990 |
+| + `new T;` / `new T[n]` (this change) | first overload only | 91 | 66% | 214 / 68 | 0.800 | 0.950 |
+| + `new T;` / `new T[n]` (this change) | **overload-aware** | **27** | **89.9% (241 of 268)** | 280 / 2 | 0.848 | 0.990 |
+
+- **The extractor change** (`_CTOR_NEW_BARE`: `new T;`, `new T[n]`, `new T` in a member initialiser link the default constructor) adds 2 correct edges on leveldb, 4 edges in all there and 17 on yaml-cpp; fmt, cJSON and autoas graphs are byte-identical, Zephyr's edge count is unchanged and its build is 110.6 s (109.6 s before; the bar is 120 s). Test: `tests/test_cpp_constructors_119.py`.
+- **The scorer change** accounts for the rest (66% -> 89.9%). It is a change of measurement convention, applied to every repository, and it also moves the other numbers (recall 0.800 -> 0.848, precision 0.950 -> 0.990, wrong constructor edges 68 -> 2): the "60 overload target picks" of #404 were exactly this. Whether to accept the convention is the owner's call; both sets of numbers are in the table.
+- **Still missed (27):** `Slice x = other;` and `Slice x(other)`-style copies and conversions whose type needs an expression's type (about 13), explicit `Slice(...)` inside a call whose edge is on another overload's node, a defaulted `Footer() = default;` the graph has no symbol for, `new Outer::Inner(args)` that links the class node and not its constructor, and a qualified nested class in a member initialiser. Not attempted: they need expression types, and a wrong guess adds a wrong edge.
