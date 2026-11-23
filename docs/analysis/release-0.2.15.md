@@ -38,9 +38,23 @@ Searches piped into a bare `head` or `tail` are answered (#393); a search of a c
 
 ## Performance (v0.2.14 against main, `bench/perf_release.py`)
 
-PERF_PLACEHOLDER
+Run: `bench/perf_release.py v0.2.14 main` (main at 922b879), passes NEW, OLD, NEW; load before the passes 2.00, 1.85, 1.95 (the machine was not idle: other `devkb build` processes ran, so the load gate of 2.0 was met, not passed with room). Full table: `~/.cache/devkb/perf-release/v0.2.14-vs-0.2.15/v0.2.14-vs-main/compare.md`. **The check found changes beyond the noise pass; the release rule (docs/RELEASING.md step 0) requires a ticket for each, so before the tag:**
+
+| Repository | Build s (old, new a/b) | Change | Other changes beyond noise | Ticket |
+|---|---|---|---|---|
+| click (Python) | 4.74, 5.84 / 5.71 | **+22%** | `pack file` +22%, `pack change` +14% | #432, #433 |
+| prefect (Python) | 105.4, 129.5 / 125.6 | **+21%** | `pack file` +28%, `pack change` +22%, peak memory +3% | #432, #433 |
+| mealie (Python + TS) | 15.1, 18.5 / 17.9 | **+20%** | `pack file` and `pack change` +28% | #432, #433 |
+| leveldb (C++) | 1.49, 1.68 / 1.69 | +13% | peak +7%, graph +9%, `symbol` and `uses` +15% | #435 |
+| fmt (C++) | 2.61, 2.91 / 2.91 | +11% | peak +7%, graph +11% | #435 |
+| zephyr (C) | 172.5, 173.1 / 168.7 | -1% (within noise) | `pack change` **+48%**, peak +9%, `outline` +10%; graph **-22%**, `query about` -21% | #434 |
+| mediatr (C#) | 1.48, 1.45 / 1.49 | -1% (within noise) | `symbol` +19% | #435 |
+
+Cause found for the Python build: `_module_runs` (#389) does five AST walks per file for a result only a file naming `run_module` or `"-m"` can have (1.85 s of the 2.55 s profiled increase on click). PR #441 skips it for other files: click extract 3.2 s (v0.2.14), 3.8 s (main), 3.5 s (fix); the remaining +9% is spread over small new passes. `pack file` pays `_named_by_path` (+0.079 s) and an import of `build_symbols` (+0.072 s) on a 0.4 s call (#433). Two measures of Zephyr differ and must not be mixed: the harness's whole `devkb build` is 172 s for both versions; the 120 s bar of #405 was met with `extract` alone (113.5 s).
 
 ## Not done, and carried to 0.2.16
+
+Filed for 0.2.16 on 2026-11-23: hook answers (#422 question by intent, #423 candidate lists, #424 partial answers, #426 text searches), pre-edit (#425 pack keeps its Incomplete note, #427 measured effect), graph (#428 constants and keys in `symbol`), staleness (#429 detached refresh; #411 incremental update), telemetry (#430 hook commit per row, #431 `Read` hints), performance (#432 Python build, #433 `pack file`, #434 Zephyr, #435 C/C++ and C#), documentation (#436 commands that exist), C/C++ caveats (#437 independent re-judgement, #438 removed Zephyr macro edges, #439 host directories), harness (#440 guards). #313 (TypeScript/JavaScript Supported) moved to 0.2.16 by the owner.
 
 #313 (TypeScript/JavaScript Supported; SPEC-DKB-008 is still `proposed`); an independent re-judgement of the C/C++ hand verdicts; a sample of Zephyr's removed macro
 edges; #411 (incremental graph update); the harness change to build the graph after the policy commit (not filed).
