@@ -133,10 +133,17 @@ def test_a_class_too_long_to_print_lists_its_members_instead(api):
     assert s["too_long"] > 3 and {"pkg/models.py::Store.add", "pkg/models.py::Store.get"} <= {m["k"] for m in s["members"]}
 
 
-def test_a_typescript_symbol_says_its_end_is_unknown_and_shows_a_window_not_a_range(api):
+def test_a_typescript_symbol_has_its_real_range_418(api):
     m = sym(api, "getRequests", source=True)["matches"][0]
-    assert m["range"] == "end unknown" and m["source"]["approx"] is True and len(m["source"]["lines"]) <= read_tools.APPROX_WINDOW + 1
-    assert "(end unknown)" in read_tools.render_symbol(sym(api, "getRequests", source=True))
+    assert m["range"] == "exact" and not m["source"].get("approx")
+    assert "(end unknown)" not in read_tools.render_symbol(sym(api, "getRequests", source=True))
+
+
+def test_a_symbol_in_a_start_only_language_says_its_end_is_unknown_and_a_one_line_one_says_so():
+    for path in ("a.js", "a.jsx", "a.mjs", "a.cjs", "a.vue"):
+        assert read_tools.range_state(path, 5, 5) == "end unknown", path       # the extractor stored a start line only
+    assert read_tools.range_state("a.py", 5, 5) == "one line" and read_tools.range_state("a.ts", 5, 5) == "one line"   # .ts stores a real end since #418
+    assert read_tools.range_state("a.ts", 5, 9) == "exact"
 
 
 def test_c_and_csharp_symbols_carry_real_ranges_and_a_one_line_function_says_so(api):
