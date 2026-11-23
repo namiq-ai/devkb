@@ -335,7 +335,7 @@ def checkout(w: Path, arm: str, issue: str | None = None):
         sb.sh(["git", "add", "-A"], cwd=w)
         sb.sh(["git", "-c", "user.name=bench", "-c", "user.email=bench@example.com", "commit", "-qm", "register the PostToolUse hook"], cwd=w)
     base_suite = subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-x"], cwd=w,
-                                capture_output=True, text=True, timeout=1800)
+                                capture_output=True, text=True, timeout=1800, env=suite_env())
     failed = [l.split(" - ")[0] for l in base_suite.stdout.splitlines() if l.startswith(("FAILED ", "ERROR "))]
     n_tests = collected(subprocess.run([str(w / ".venv/bin/python"), "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
                                        cwd=w, capture_output=True, text=True, timeout=600).stdout)
@@ -758,6 +758,12 @@ def router_log(w: Path) -> list[dict]:
         return []
 
 
+def suite_env() -> dict:
+    """The environment a checkout's own suite runs in: the benchmark's settings (`POLICY_ARMS`, `POLICY_MAIN`, ...) are left out. The suite has tests of the
+    harness itself, and they read those variables (`score` filters its rows by `POLICY_ARMS`), so a batch of one arm made the base of that arm red."""
+    return {k: v for k, v in os.environ.items() if not k.startswith("POLICY_")}
+
+
 def run_suite(w: Path, timeout: int = 1800) -> dict:
     """The checkout's full suite, with the ids of what failed. A red suite is run in full once more (#301): a failed
     test is flaky (load-sensitive, recorded, not held against the change) only when the whole suite passes the second
@@ -765,13 +771,13 @@ def run_suite(w: Path, timeout: int = 1800) -> dict:
     failure, so the suite stays red. (#260 re-ran the failed tests alone, which let an order dependence pass as flaky.)"""
     py = str(w / ".venv/bin/python")
     cmd = [py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"]
-    t = subprocess.run(cmd, cwd=w, capture_output=True, text=True, timeout=timeout)
+    t = subprocess.run(cmd, cwd=w, capture_output=True, text=True, timeout=timeout, env=suite_env())
     last = (t.stdout.strip().splitlines() or [""])[-1]
     failed = _failed_ids(t.stdout)
     row = {"suite_pass": t.returncode == 0, "suite": last, "suite_failed": failed, "suite_flaky": []}
     if t.returncode == 0 or not failed:                 # green, or red with nothing to re-run (a crash): as it is
         return row
-    r = subprocess.run(cmd, cwd=w, capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run(cmd, cwd=w, capture_output=True, text=True, timeout=timeout, env=suite_env())
     if r.returncode == 0:                               # green on the second full run: the first failures were flaky
         row.update(suite_failed=[], suite_flaky=failed, suite_pass=True, suite_first=last)
         return row

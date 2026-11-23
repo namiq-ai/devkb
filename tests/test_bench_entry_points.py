@@ -115,3 +115,11 @@ def test_the_both_arm_writes_the_mcp_server_and_keeps_the_hook(tmp_path, monkeyp
     w2 = _checkout(other)
     pb.arm_files(w2, "userinit", {"bin": str(binp / "devkb"), "src": str(ROOT)})
     assert not (w2 / ".claude" / "settings.json").exists(), "userinit has the tool without the hook"
+
+
+def test_a_checkouts_own_suite_does_not_see_the_benchmarks_settings(monkeypatch):
+    monkeypatch.setenv("POLICY_ARMS", "both")
+    monkeypatch.setenv("POLICY_MAIN", "abc")
+    monkeypatch.setenv("KEEP_ME", "1")
+    env = pb.suite_env()
+    assert "POLICY_ARMS" not in env and "POLICY_MAIN" not in env and env["KEEP_ME"] == "1"
