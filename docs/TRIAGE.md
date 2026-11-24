@@ -35,6 +35,8 @@ Issues labelled `user-result` (today #25, "Tell us what you tried devkb on") col
 also reads the **new comments by outsiders** on those threads (a comment is answered once; the ids are kept in
 `~/devkb-triage/feedback-seen.json`) and, per comment, chooses:
 
+`TRIAGE_HOME` (default `~/devkb-triage`) holds all of the daemon's state. On the maintainer's machine the units set it to `/home/namiq/orchestra/runtime/devkb/devkb-triage`. That directory is inside a git repository (the factory's), and the agent must start outside any, so `agent-cwd` there is a symbolic link to `~/.cache/devkb-triage/agent-cwd`; `neutral_cwd()` refuses a `TRIAGE_HOME` whose `agent-cwd` resolves into a repository.
+
 | Action | What happens |
 |---|---|
 | ticket | the comment reports a defect or asks for a capability that fits the scope, and the model checked it against the code: a new issue is filed (labels `from-feedback`, type, priority; at most `handle:plan`, never an automatic fix) with the comment's link and the reporter's words quoted; the thread gets a reply that links it |
