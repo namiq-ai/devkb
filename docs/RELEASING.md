@@ -20,6 +20,7 @@ extraction shows up the next morning, at no model cost.
 key is stored anywhere. Each night it updates its own worktree to `origin/main` (never a working copy someone edits),
 runs the free stage on every registry repository, then the agent arms on the chosen repositories, and writes
 `~/devkb-nightly/runs/YYYY-MM-DD/` (summary, logs, pack checks, runs, reports; kept 30 days, never committed).
+The location is `NIGHTLY_HOME` (default `~/devkb-nightly`). On the maintainer's machine the systemd unit sets it to `/home/namiq/orchestra/runtime/devkb/devkb-nightly` (the factory's per-project runtime directory), and the repository itself lives at `/home/namiq/orchestra/devkb`.
 
 ```bash
 bench/nightly.sh install    # install and start the timer (once)

@@ -7,7 +7,7 @@ import json, os, re, subprocess, sys, tempfile
 from pathlib import Path
 
 W = Path(sys.argv[1]).resolve()
-SHARED = Path("/home/namiq/orchestra/ip/devkb/.venv/bin/python")
+SHARED = Path("/home/namiq/orchestra/devkb/.venv/bin/python")
 py = str(W / ".venv/bin/python") if (W / ".venv/bin/python").exists() else (str(SHARED) if SHARED.exists() else sys.executable)
 ACTIONS = ("substitute", "read-answer", "alongside", "span-hint", "teach", "remind", "pass-through", "repeat")
 res = {}

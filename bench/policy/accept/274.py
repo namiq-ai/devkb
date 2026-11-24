@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory() as td:
         subprocess.run(["git", *c], cwd=A, check=True, capture_output=True, env=genv)
     py = str(W / ".venv/bin/python")
     if not Path(py).exists():
-        py = "/home/namiq/orchestra/ip/devkb/.venv/bin/python"
+        py = "/home/namiq/orchestra/devkb/.venv/bin/python"
     if not Path(py).exists():
         py = sys.executable
     env = dict(os.environ, HOME=str(home), PYTHONPATH=str(W), PYTHONWARNINGS="ignore", DEVKB_GUARDRAIL="1")

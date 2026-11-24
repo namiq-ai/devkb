@@ -19,7 +19,7 @@ for f in sorted(glob.glob(E+"/hop/*.jsonl")):
                 for k,v in u.items():
                     if isinstance(v,(int,float)): best[k]=max(best.get(k,0),v)
     open(SP+"/ans.txt","w").write(res.get("result") or "")
-    sc=float(subprocess.run(["python3","bench/readtools/hop_score.py",E+"/hop-tasks.json",tid,SP+"/ans.txt","/home/namiq/orchestra/ip/devkb/bench-work/click/checkout"],capture_output=True,text=True).stdout.strip() or 0)
+    sc=float(subprocess.run(["python3","bench/readtools/hop_score.py",E+"/hop-tasks.json",tid,SP+"/ans.txt","/home/namiq/orchestra/devkb/bench-work/click/checkout"],capture_output=True,text=True).stdout.strip() or 0)
     u,size=usage(f)
     ctx=best.get("inputTokens",0)+best.get("cacheCreationInputTokens",0)+best.get("cacheReadInputTokens",0)
     rows.append(dict(arm=arm,tid=tid,rep=rep,score=sc,turns=turns,msgs=len(msgs),cost=cost,ctx=ctx,out=best.get("outputTokens",0),grep=u.get("grep",0),load=u.get("file load",0),

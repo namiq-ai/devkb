@@ -5,7 +5,7 @@ import json, subprocess, sys, tempfile
 from pathlib import Path
 
 W = Path(sys.argv[1]).resolve()
-SHARED = Path("/home/namiq/orchestra/ip/devkb/.venv/bin/python")
+SHARED = Path("/home/namiq/orchestra/devkb/.venv/bin/python")
 py = str(W / ".venv/bin/python") if (W / ".venv/bin/python").exists() else (str(SHARED) if SHARED.exists() else sys.executable)
 CASES = {
     "plain_line": "**Expected:** it works.\n\nWhere to start: `foo_bar` in `devkb/x.py`.\n\n**Done when:** the test passes.\n",

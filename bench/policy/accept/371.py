@@ -10,7 +10,7 @@ import json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 W = Path(sys.argv[1]).resolve()
-SHARED = Path("/home/namiq/orchestra/ip/devkb/.venv/bin/python")
+SHARED = Path("/home/namiq/orchestra/devkb/.venv/bin/python")
 py = str(W / ".venv/bin/python") if (W / ".venv/bin/python").exists() else (str(SHARED) if SHARED.exists() else sys.executable)
 TEST = "tests/test_csharp_symbols.py::test_lambda_parameter_lookup_stays_linear_in_a_long_fluent_method"
 GUARDED = "9527a9d"
