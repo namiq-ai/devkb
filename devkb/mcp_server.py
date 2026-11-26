@@ -85,9 +85,10 @@ def _compact(reply: dict) -> str:
 
 # Claude Code defers MCP tools behind a ToolSearch call, which costs the agent a turn before its first lookup (measured: 15 of 16
 # runs began with ToolSearch). A tool that carries this annotation is loaded with the prompt instead. Only the tools agents reach for
-# first are marked, so the prompt grows by four definitions, not by the whole set. `uses` is one of them because the instructions name
-# it for "who calls this" and all 5 default runs of the structural probe (#447) spent a ToolSearch call to reach it (#448); `callers`
-# was called 2 times to `uses`' 14 when both were loaded, and stays deferred.
+# first are marked, so the prompt grows by four definitions, not by the whole set. `uses` is one of them (#448): the block `devkb init`
+# writes names it to "find who calls a function", and in all 5 default runs of the structural probe (#447) the agent spent a ToolSearch
+# call loading it, asking for `callers` in the same call and then never calling that. `callers` stays deferred: when both were loaded,
+# in a server cut down to `symbol`, `outline`, `pack`, `uses` and `callers`, it was called 2 times to `uses`' 14.
 ALWAYS_LOAD = {"symbol", "outline", "pack", "uses"}
 ALWAYS_LOAD_META = {"anthropic/alwaysLoad": True}
 
