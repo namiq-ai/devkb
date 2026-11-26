@@ -284,16 +284,17 @@ def test_symbol_batch_and_nav_toolset():
 
 
 def test_first_lookup_tools_are_loaded_with_the_prompt():
-    """Claude Code defers MCP tools behind ToolSearch unless the tool says otherwise; symbol, outline and pack must say so."""
+    """Claude Code defers MCP tools behind ToolSearch unless the tool says otherwise; symbol, outline, pack and uses (#448) must say so,
+    in every toolset that serves them, and no other tool may."""
     import asyncio
-    from devkb.mcp_server import ALWAYS_LOAD, TOOLSETS, build
+    from devkb.mcp_server import TOOLSETS, build
     from devkb.process_api import ProcessAPI
-    srv = build(ProcessAPI.__new__(ProcessAPI), "lean-pack")
-    tools = {t.name: t for t in asyncio.run(srv.list_tools())}
-    assert ALWAYS_LOAD <= set(tools) and ALWAYS_LOAD <= set(TOOLSETS["lean-pack"])
-    for name in ALWAYS_LOAD:
-        assert (tools[name].meta or {}).get("anthropic/alwaysLoad") is True, name
-    assert not (tools["callers"].meta or {}).get("anthropic/alwaysLoad")
+    upfront = {"symbol", "outline", "pack", "uses"}      # spelled out: a change to what every session loads is a change to this test
+    assert upfront <= set(TOOLSETS["lean-pack"])         # the toolset `devkb init` registers
+    for toolset in TOOLSETS:
+        tools = asyncio.run(build(ProcessAPI.__new__(ProcessAPI), toolset).list_tools())
+        marked = {t.name for t in tools if (t.meta or {}).get("anthropic/alwaysLoad") is True}
+        assert marked == upfront & set(TOOLSETS[toolset]), toolset
 
 
 def test_uses_marks_definitions_spelled_in_another_case_as_symbol_does_396(tmp_path):

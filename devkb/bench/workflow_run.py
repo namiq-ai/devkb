@@ -37,7 +37,7 @@ sys.path.insert(0, str(HERE))
 import run as base  # noqa: E402  parse, norm, f1 and READ_TOOLS are shared with the lifecycle benchmark
 
 ARMS = tuple(os.environ.get("BENCH_ARMS", "plain,core,workflow").split(","))  # ODSF-313 adds lean and pack
-FORCE = " Use the devkb-sdlc tools first, then read only what they name."  # no ToolSearch hint: it cost every run a turn (symbol, outline and pack carry alwaysLoad)
+FORCE = " Use the devkb-sdlc tools first, then read only what they name."  # no ToolSearch hint: it cost every run a turn (symbol, outline, pack and uses carry alwaysLoad)
 
 
 def skill(name: str) -> str:
